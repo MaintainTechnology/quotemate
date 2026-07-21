@@ -94,6 +94,47 @@ describe('geminiProvider.renderImage', () => {
     ])
   })
 
+  it('attaches every labelled source image in order, then the reference last', async () => {
+    // Multi-image conditioning (roofing 3D synthesis): each capture needs its
+    // own preceding label so the model knows which view it is looking at.
+    await geminiProvider.renderImage({
+      system: 'SYS',
+      user: 'USER',
+      sourceImages: [
+        { image: { base64: 'F', mime: 'image/jpeg' }, label: 'FRONT capture' },
+        { image: { base64: 'L', mime: 'image/jpeg' }, label: 'LEFT capture' },
+      ],
+      reference: { image: { base64: 'R', mime: 'image/png' }, label: 'REFERENCE — front render' },
+    })
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.contents[0].parts).toEqual([
+      { text: 'USER' },
+      { text: 'FRONT capture' },
+      { inline_data: { mime_type: 'image/jpeg', data: 'F' } },
+      { text: 'LEFT capture' },
+      { inline_data: { mime_type: 'image/jpeg', data: 'L' } },
+      { text: 'REFERENCE — front render' },
+      { inline_data: { mime_type: 'image/png', data: 'R' } },
+    ])
+  })
+
+  it('prefers sourceImages over a single sourceImage when both are set', async () => {
+    await geminiProvider.renderImage({
+      system: 'SYS',
+      user: 'USER',
+      sourceImage: { base64: 'SINGLE', mime: 'image/jpeg' },
+      sourceImages: [{ image: { base64: 'MULTI', mime: 'image/jpeg' }, label: 'TOP capture' }],
+    })
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.contents[0].parts).toEqual([
+      { text: 'USER' },
+      { text: 'TOP capture' },
+      { inline_data: { mime_type: 'image/jpeg', data: 'MULTI' } },
+    ])
+  })
+
   it('appends extraStrict feedback to the user message', async () => {
     await geminiProvider.renderImage({
       system: 'SYS',
@@ -103,6 +144,27 @@ describe('geminiProvider.renderImage', () => {
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(init.body as string)
     expect(body.contents[0].parts[0].text).toBe('USER\n\nFIX THE COUNT')
+  })
+
+  it('honours a per-call top_p override, so a caller can pin determinism regardless of env', async () => {
+    await geminiProvider.renderImage({ system: 'SYS', user: 'USER', topP: 0.9 })
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string).generation_config.top_p).toBe(0.9)
+  })
+
+  it('lets a caller pin temperature + top_p to 0 for a deterministic render', async () => {
+    process.env.GEMINI_IMAGE_TOP_P = '0.8'
+    process.env.GEMINI_IMAGE_TEMPERATURE = '0.7'
+    try {
+      await geminiProvider.renderImage({ system: 'SYS', user: 'USER', temperature: 0, topP: 0 })
+      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const cfg = JSON.parse(init.body as string).generation_config
+      expect(cfg.temperature).toBe(0)
+      expect(cfg.top_p).toBe(0)
+    } finally {
+      delete process.env.GEMINI_IMAGE_TOP_P
+      delete process.env.GEMINI_IMAGE_TEMPERATURE
+    }
   })
 
   it('omits aspect_ratio by default (auto framing) even when one is passed', async () => {

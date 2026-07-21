@@ -55,14 +55,17 @@ export function normalizeAddressKey(address: string): string {
     .slice(0, 120)
 }
 
-/** What's cached per address+view: the polished capture, or the Gemini
- *  roof-anatomy annotation drawn over it (display-only, never fed to Tripo). */
-export type CacheKind = 'enhanced' | 'anatomy'
+/** What's cached per address+view: the polished capture, the Gemini
+ *  roof-anatomy annotation drawn over it (display-only, never fed to Tripo),
+ *  or the synthesised studio render of the whole house ('front'/'back' only,
+ *  the two images Tripo actually reconstructs from). */
+export type CacheKind = 'enhanced' | 'anatomy' | 'synth'
 
 // Cache schema version — bump when the enhancement contract changes so stale
 // images are never reused (v2: neighbour-removal / subject-property isolation;
-// v3: Nano Banana Pro polish + gutter lines in the anatomy overlay).
-const CACHE_VERSION = 'v3'
+// v3: Nano Banana Pro polish + gutter lines in the anatomy overlay; v4: the
+// synthesis pass — the polished captures are now also synthesis input).
+const CACHE_VERSION = 'v4'
 
 /** PURE — storage object path for one view's cached image. */
 export function cachePathFor(address: string, view: CaptureView, kind: CacheKind = 'enhanced'): string {

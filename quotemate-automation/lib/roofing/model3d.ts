@@ -1,19 +1,21 @@
 // ════════════════════════════════════════════════════════════════════
 // Roofing — interactive 3D model of the property (Track B: VISUAL only).
 //
-// Pipeline: the tradie's browser captures 4 orbit views (front/left/back/
-// right) of the Google Photorealistic 3D tiles → each capture is polished
-// by Gemini nano-banana (best-effort: raw capture on failure), which also
-// REMOVES neighbouring buildings so only the subject property reaches the
-// reconstruction → Tripo3D multiview-to-model reconstructs a textured GLB
-// → the GLB is re-hosted in the intake-photos bucket (Tripo output URLs
+// Pipeline: the tradie's browser captures 5 orbit views (front/left/back/
+// right + a nadir top) of the Google Photorealistic 3D tiles → each capture
+// is polished by Gemini nano-banana (best-effort: raw capture on failure),
+// which also REMOVES neighbouring buildings so only the subject property
+// reaches the reconstruction → the five polished captures are synthesised
+// into TWO studio renders of the whole house (front + back, plain backdrop)
+// → Tripo3D multiview-to-model reconstructs a textured GLB from that pair
+// → the GLB is re-hosted in the roof-models bucket (Tripo output URLs
 // expire after ~5 minutes) and served via a short-lived signed URL.
 //
 // The model NEVER feeds measurements or pricing. Ridge/hip/valley numbers
 // stay on the measured-geometry path (Geoscape + Google Solar) — an AI
-// reconstruction from 4 enhanced screenshots is visually convincing but not
-// dimensionally reliable, and nano-banana enhancement invents plausible
-// pixels by design.
+// reconstruction from enhanced screenshots is visually convincing but not
+// dimensionally reliable, and both the nano-banana enhancement and the
+// synthesis pass invent plausible pixels by design.
 //
 // Status lives on roofing_measurements (migration 173):
 //   model3d_status: null | 'generating' | 'ready' | 'failed'
@@ -23,7 +25,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
-import type { ImageBytes } from '@/lib/ig-engine/providers/base'
+import type { ImageBytes, ReferenceImage } from '@/lib/ig-engine/providers/base'
 import {
   CAPTURE_VIEWS,
   cachePathFor,
@@ -64,12 +66,19 @@ const TRIPO_FACE_LIMIT = () => {
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 300_000
 }
 
-// Image model for the polish + anatomy passes — Nano Banana Pro (2K output,
-// better texture fidelity and line adherence than Flash-Lite). Scoped to the
-// roofing 3D feature; the global GEMINI_IMAGE_MODEL default stays untouched
-// for the other trades' previews.
-const MODEL3D_IMAGE_MODEL = () =>
-  process.env.ROOFING_MODEL3D_IMAGE_MODEL ?? 'gemini-3-pro-image-preview'
+// Image model for the polish + anatomy + synthesis passes — Nano Banana Pro
+// (2K output, better texture fidelity and line adherence than Flash-Lite).
+// Scoped to the roofing 3D feature; the global GEMINI_IMAGE_MODEL default
+// stays untouched for the other trades' previews.
+//
+// ⚠ This was 'gemini-3-pro-image-preview', which Google SHUT DOWN on
+// 2026-06-25 (GA replacement 'gemini-3-pro-image', GA since 2026-05-28) —
+// every image call here was hitting a dead endpoint and silently degrading
+// to the best-effort fallbacks. Pin the GA id; override via env when a newer
+// snapshot ships, and check ai.google.dev/gemini-api/docs/deprecations when
+// renders start failing.
+export const MODEL3D_IMAGE_MODEL = () =>
+  process.env.ROOFING_MODEL3D_IMAGE_MODEL ?? 'gemini-3-pro-image'
 
 // Tripo's canonical multiview slots. 'top' (see CAPTURE_VIEWS) has no slot —
 // a top capture is enhanced + cached but never sent to Tripo.
@@ -88,9 +97,57 @@ export type Model3dState = {
   anatomy?: Record<string, string> | null
   /** Gemini-polished captures for this property: view → signed image URL. */
   polished?: Record<string, string> | null
+  /** The two synthesised studio renders Tripo reconstructed from:
+   *  'front'/'back' → signed image URL. Absent when synthesis was skipped. */
+  synth?: Record<string, string> | null
 }
 
 // ── pure helpers (unit-tested) ──────────────────────────────────────
+
+/** PURE — the text label that precedes a capture in the synthesis call, so
+ *  the model can tell which view each attached image is. */
+export function captureLabel(view: CaptureView): string {
+  return `${view.toUpperCase()} capture of the house`
+}
+
+/**
+ * PURE — the labelled five-capture set both synthesis calls are conditioned
+ * on, in canonical order. Returns null unless ALL five views are present:
+ * the prompts state that five captures are attached, so a partial set (a
+ * 3-photo manual upload) would make that a lie and invite the model to
+ * invent the missing elevations. Incomplete → no synthesis, and the
+ * polished captures go to Tripo as before.
+ */
+export function synthesisInputs(
+  polished: { view: CaptureView; image: ImageBytes }[],
+): ReferenceImage[] | null {
+  const set = CAPTURE_VIEWS.flatMap((view) => {
+    const hit = polished.find((p) => p.view === view)
+    return hit ? [{ image: hit.image, label: captureLabel(view) }] : []
+  })
+  return set.length === CAPTURE_VIEWS.length ? set : null
+}
+
+/**
+ * PURE — which images fill Tripo's view slots.
+ *
+ * Both synthesised renders present → those two alone (front + back). A
+ * studio-lit synthetic render beside a −50° aerial is a WORSE multiview
+ * prior than four consistent aerials, so a partial synthesis (one call
+ * failed) falls all the way back to the polished captures rather than
+ * mixing sources. 'top' never has a slot.
+ */
+export function selectTripoInputs(
+  polished: { view: CaptureView; image: ImageBytes }[],
+  synth: SynthPair | null,
+): Partial<Record<ViewName, ImageBytes>> {
+  if (synth?.front && synth.back) return { front: synth.front, back: synth.back }
+  const out: Partial<Record<ViewName, ImageBytes>> = {}
+  for (const { view, image } of polished) {
+    if ((VIEW_ORDER as readonly string[]).includes(view)) out[view as ViewName] = image
+  }
+  return out
+}
 
 /** Strip a data-URL prefix; returns base64 + mime (default jpeg). */
 export function parseDataUrl(input: string): ImageBytes {
@@ -129,16 +186,20 @@ export function buildMultiviewTaskBody(
 
 /**
  * PURE — orbit range (m) for the capture camera, from the footprint bbox
- * diagonal. TIGHT framing — the house should fill the shot: 0.8 × diagonal
- * + 8 m headroom for building height at the capture pitch (see the auto
- * orbit in Roof3DModelSection, tuned together with its aim-point pull),
- * floored at 21 m so small sheds don't go macro; 36 m when there is no
- * footprint. ~20% closer than the max(26, d + 10) framing it replaced —
- * the neighbours then occupy less of every capture too.
+ * diagonal: the whole footprint plus 10 m of margin, floored at 26 m so
+ * small sheds keep a sane standoff; 45 m when there is no footprint.
+ *
+ * This REVERTS the tight 0.8 × d + 8 framing. That existed so neighbours
+ * occupied less of each capture — a job now done twice downstream (the
+ * polish pass removes neighbouring buildings, and the synthesis pass drops
+ * the surroundings entirely for a plain backdrop). With that pressure gone,
+ * the remaining risk runs the other way: a too-close orbit clips eaves and
+ * ridge ends, and the synthesis pass can only reproduce the house it can
+ * actually see in all five captures.
  */
 export function captureOrbitRangeM(diagonalM: number | null): number {
-  if (typeof diagonalM !== 'number' || !Number.isFinite(diagonalM) || diagonalM <= 0) return 36
-  return Math.max(21, diagonalM * 0.8 + 8)
+  if (typeof diagonalM !== 'number' || !Number.isFinite(diagonalM) || diagonalM <= 0) return 45
+  return Math.max(26, diagonalM + 10)
 }
 
 /** PURE — pick status/progress/model URL out of a Tripo task response. */
@@ -300,6 +361,137 @@ async function annotateCapture(image: ImageBytes): Promise<ImageBytes | null> {
   }
 }
 
+// ── AI view synthesis (Nano Banana Pro, GEMINI_API_KEY) ─────────────
+//
+// Two calls, one shared system prompt. Inputs are ALWAYS the five POLISHED
+// captures (Gemini-enhanced, neighbours stripped) — never the raw Cesium
+// screenshots. Call 1 renders the front; call 2 renders the back from the
+// same five captures PLUS call 1's output as a labelled reference. That
+// chaining is what keeps both images the SAME house rather than two
+// plausible houses. Both renders then become Tripo's front/back slots.
+//
+// Off with ROOFING_MODEL3D_SYNTH=0. Any failure → null → the caller falls
+// back to today's four polished captures.
+
+export const SYNTH_SYSTEM =
+  'You are an architectural visualisation engine. Based on the screenshots of the house ' +
+  'provided, generate a high-quality full 3D view of the house, including front and back ' +
+  'perspectives. The result must be accurate and match exactly what is shown in the five ' +
+  'screenshots.\n\n' +
+  'You are rendering ONE single physical building across a set of images. Every image you ' +
+  'produce for a property must be recognisably the same house at the same address — same ' +
+  'building, same materials, same colours, same proportions, same light. You reproduce; you ' +
+  'do not design. The screenshots are the specification, and exact fidelity to them is the ' +
+  'acceptance test: every roof plane, opening, material and colour in your render must be ' +
+  'traceable to the captures. Every one of these is locked to the screenshots and must be ' +
+  'identical in every image you generate for this property:\n' +
+  '1. Storey count, overall footprint shape and proportions.\n' +
+  '2. Roof form (gable / hip / skillion / combination), pitch, number of planes, and the ' +
+  'ridge, hip and valley layout.\n' +
+  '3. Roof material and exact colour (tile, metal sheet, shingle).\n' +
+  '4. Wall cladding material and exact colour; gutter, fascia and barge colour.\n' +
+  '5. Window and door count, placement pattern and frame colour.\n' +
+  '6. Attached structures exactly as photographed — garage, carport, verandah, chimney, ' +
+  'vents, skylights, solar panels. Nothing added, nothing removed.\n' +
+  '7. Lighting: even, neutral studio lighting from the same direction in every image, with ' +
+  'soft consistent shadows on the building itself.\n' +
+  '8. Camera: the same elevation above the ground and the same distance in every image, with ' +
+  'the house occupying the same fraction of the frame. Only the compass heading changes ' +
+  'between images.\n' +
+  '9. Background: a plain, seamless, flat white or light neutral grey backdrop — the building ' +
+  'alone, isolated like a product shot. No grass, lawn, trees, shrubs, garden, landscaping, ' +
+  'fences, paths, driveways, kerbs, vehicles, people, neighbouring buildings, sky, horizon ' +
+  'line, ground plane, text or watermark. The building sits on its own slab or foundation ' +
+  'edge, which stays visible where the walls meet the base, with the plain backdrop ' +
+  'everywhere around it.\n\n' +
+  'Together, the images you produce must cover the full exterior of the building — a complete ' +
+  '360 degree read of the house from front and back. Where a detail is not visible in the ' +
+  'screenshots, infer the simplest continuation of what is visible. Never invent a decorative ' +
+  'feature to fill a gap. Output photorealistic architectural imagery — not illustration, not ' +
+  'stylised CGI.'
+
+export const SYNTH_USER_FRONT =
+  'The attached images are five aerial captures of one house: front, left, right, back and ' +
+  'top. Together they define the building. Render a single photorealistic image of that house ' +
+  'from a FRONT three-quarter view — camera at roughly 30 degrees above the ground, looking at ' +
+  'the front elevation and one side wall, so the front wall, the entry door, the front ' +
+  'windows, that side wall and the front roof planes are all clearly visible in one view. Show ' +
+  'the complete building from roof ridge down to the base, including walls, doors, windows and ' +
+  'the foundation edge where it meets the base. Reproduce the roof exactly as captured: same ' +
+  'form, same pitch, same plane layout, same material and colour. Isolate the house completely ' +
+  'on a plain, seamless white or light neutral grey background — no grass, plants, ' +
+  'landscaping, fences, driveways, vehicles, sky or horizon, nothing in the frame but the ' +
+  'building itself.'
+
+export const SYNTH_USER_BACK =
+  'The attached images are five aerial captures of one house: front, left, right, back and ' +
+  'top. The final attached image is a finished FRONT render of this same house. Render a ' +
+  'single photorealistic image of that same house from a REAR three-quarter view — the camera ' +
+  'rotated 180 degrees, at the same height above the ground and the same distance, looking at ' +
+  'the rear elevation and the opposite side wall to the one shown in the front render, so that ' +
+  'your image and the front render together show all four elevations of the building. The back ' +
+  'wall, back door, rear windows, that side wall and the rear roof planes must all be clearly ' +
+  'visible. Show the complete building from roof ridge down to the base, including walls, ' +
+  'doors, windows and the foundation edge. Isolate the house completely on the same plain, ' +
+  'seamless white or light neutral grey background as the front render — no grass, plants, ' +
+  'landscaping, fences, driveways, vehicles, sky or horizon, nothing in the frame but the ' +
+  'building itself.'
+
+export const SYNTH_FRONT_REFERENCE_LABEL =
+  'REFERENCE — the finished FRONT render of this same house. It is the ground truth for this ' +
+  'building’s appearance. Match it exactly: identical roof form, pitch, material and colour; ' +
+  'identical wall cladding colour and texture; identical gutter, fascia and window frame ' +
+  'colours; identical storey count and proportions; identical lighting direction and ' +
+  'intensity; identical camera height and distance; identical framing and image proportions; ' +
+  'identical plain background tone. The only difference between that image and the one you ' +
+  'produce is the camera heading — rotated to the rear. A viewer must see the two images as ' +
+  'the same house photographed from the front and from the back.'
+
+/** The pair Tripo reconstructs from. Either both renders or neither. */
+export type SynthPair = { front: ImageBytes | null; back: ImageBytes | null }
+
+/**
+ * Synthesise the front + back studio renders from the polished captures.
+ * BEST-EFFORT: returns null when synthesis is off, keyless, or either call
+ * fails — the caller then uses the polished captures unchanged. The back
+ * call is chained on the front render so both images are the same house.
+ */
+async function synthesizeViews(
+  polished: { view: CaptureView; image: ImageBytes }[],
+): Promise<SynthPair | null> {
+  if ((process.env.ROOFING_MODEL3D_SYNTH ?? '1') === '0') return null
+  if (!process.env.GEMINI_API_KEY?.trim()) return null
+  // Both calls see an identical, complete, canonically-ordered input set.
+  const sourceImages = synthesisInputs(polished)
+  if (!sourceImages) return null
+  // temperature + top_p pinned to 0 on BOTH calls rather than inherited: the
+  // pair must be reproducible and mutually consistent, and the global
+  // GEMINI_IMAGE_* knobs are shared with the other trades' previews — a tweak
+  // there must not make one house's front and back drift apart.
+  const deterministic = { temperature: 0, topP: 0, model: MODEL3D_IMAGE_MODEL() }
+  try {
+    const front = await geminiProvider.renderImage({
+      system: SYNTH_SYSTEM,
+      user: SYNTH_USER_FRONT,
+      sourceImages,
+      ...deterministic,
+    })
+    const back = await geminiProvider.renderImage({
+      system: SYNTH_SYSTEM,
+      user: SYNTH_USER_BACK,
+      sourceImages,
+      reference: { image: front, label: SYNTH_FRONT_REFERENCE_LABEL },
+      ...deterministic,
+    })
+    return { front, back }
+  } catch (e) {
+    console.warn('[roofing/model3d] view synthesis failed, using polished captures', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+    return null
+  }
+}
+
 // ── orchestration ───────────────────────────────────────────────────
 
 type Row = { id: string; address: string | null; model3d_status: string | null; model3d_task_id: string | null; model3d_glb_path: string | null; model3d_error: string | null; model3d_anatomy: Record<string, string> | null }
@@ -351,9 +543,12 @@ export async function claimModel3d(
  * The heavy start path — runs in after() once the route has fast-acked.
  * Per view: reuse the address-keyed cached enhancement when allowed, else
  * enhance via Gemini and store the result for the next generation of this
- * property (cross-tenant by design — the token saving is the point). Then
- * upload the Tripo-consumable views ('top' is cached only) and create the
- * task. Never throws; failures land on model3d_status.
+ * property (cross-tenant by design — the token saving is the point). The
+ * five polished captures are then synthesised into the front/back render
+ * pair (also address-cached) and that pair is uploaded to Tripo; without a
+ * complete five-view set, or with synthesis off or failing, the polished
+ * captures go to Tripo directly. Never throws; failures land on
+ * model3d_status.
  */
 export async function startModel3d(
   measureToken: string,
@@ -429,15 +624,55 @@ export async function startModel3d(
       }),
     )
 
-    const fileTokens: Partial<Record<ViewName, string>> = {}
-    await Promise.all(
-      polished
-        .filter((p) => (VIEW_ORDER as readonly string[]).includes(p.view))
-        .map(async (p) => {
-          fileTokens[p.view as ViewName] = await tripoUpload(p.image)
+    // The two synthesised studio renders — cached by address exactly like the
+    // polished captures, so a repeat generation for a known property costs no
+    // Gemini calls at all. Null (synthesis off / failed) → the polished
+    // captures go to Tripo unchanged, which is the pre-synthesis behaviour.
+    let synth: SynthPair | null = null
+    if (reuse) {
+      const [front, back] = await Promise.all([
+        getCachedEnhanced(address!, 'front', 'synth'),
+        getCachedEnhanced(address!, 'back', 'synth'),
+      ])
+      if (front && back) {
+        synth = { front, back }
+        console.log('[roofing/model3d] reused cached synthesis', { measureToken })
+      }
+    }
+    if (!synth) {
+      synth = await synthesizeViews(polished)
+      if (synth?.front && synth.back && address) {
+        await Promise.all([
+          putCachedEnhanced(address, 'front', synth.front, 'synth'),
+          putCachedEnhanced(address, 'back', synth.back, 'synth'),
+        ])
+      }
+    }
+
+    const startTask = async (inputs: Partial<Record<ViewName, ImageBytes>>) => {
+      const fileTokens: Partial<Record<ViewName, string>> = {}
+      await Promise.all(
+        Object.entries(inputs).map(async ([view, image]) => {
+          if (image) fileTokens[view as ViewName] = await tripoUpload(image)
         }),
-    )
-    const taskId = await tripoCreateMultiview(fileTokens)
+      )
+      return tripoCreateMultiview(fileTokens)
+    }
+    // One fallback: the synthesised pair fills only the front+back slots — an
+    // unverified combination. If that task can't be created (rejected shape,
+    // or a transient upload blip) the generation degrades to the four polished
+    // captures instead of failing outright. Logged, so a systematic rejection
+    // is visible rather than silently costing quality on every run.
+    let taskId: string
+    try {
+      taskId = await startTask(selectTripoInputs(polished, synth))
+    } catch (e) {
+      if (!synth) throw e
+      console.warn('[roofing/model3d] synthesised-pair task failed — retrying with the polished captures', {
+        error: e instanceof Error ? e.message : String(e),
+      })
+      taskId = await startTask(selectTripoInputs(polished, null))
+    }
     await supabaseClient()
       .from('roofing_measurements')
       .update({ model3d_task_id: taskId })
@@ -472,8 +707,9 @@ async function signedAnatomy(
 /**
  * Signed URLs (view → URL) for the property's address-keyed cache of one
  * kind — 'enhanced' = the Gemini-polished captures, 'anatomy' = the
- * annotated overlays drawn over them. createSignedUrl errors on missing
- * objects, so absent views drop out.
+ * annotated overlays drawn over them, 'synth' = the two studio renders
+ * ('front'/'back' only). createSignedUrl errors on missing objects, so
+ * absent views drop out.
  */
 async function signedFromCache(
   address: string | null,
@@ -507,22 +743,23 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
   // polished cache). The row-stamped copies are only a fallback when there
   // is no polished panel at all (e.g. no usable address) — never shown next
   // to polished captures they weren't drawn over.
-  const [cacheAnatomy, rowAnatomy, polished] = await Promise.all([
+  const [cacheAnatomy, rowAnatomy, polished, synth] = await Promise.all([
     signedFromCache(row.address, 'anatomy'),
     signedAnatomy(row.model3d_anatomy),
     signedFromCache(row.address, 'enhanced'),
+    signedFromCache(row.address, 'synth'),
   ])
   const anatomy = cacheAnatomy ?? (polished ? null : rowAnatomy)
   if (row.model3d_status === 'ready' && row.model3d_glb_path) {
-    return { status: 'ready', modelUrl: await signedModelUrl(row.model3d_glb_path), anatomy, polished }
+    return { status: 'ready', modelUrl: await signedModelUrl(row.model3d_glb_path), anatomy, polished, synth }
   }
   if (row.model3d_status === 'failed') {
-    return { status: 'failed', error: row.model3d_error, anatomy, polished }
+    return { status: 'failed', error: row.model3d_error, anatomy, polished, synth }
   }
-  if (row.model3d_status !== 'generating') return { status: 'idle', anatomy, polished }
+  if (row.model3d_status !== 'generating') return { status: 'idle', anatomy, polished, synth }
 
   // Task id not stamped yet — enhancement/upload still running in after().
-  if (!row.model3d_task_id) return { status: 'generating', progress: 0, anatomy, polished }
+  if (!row.model3d_task_id) return { status: 'generating', progress: 0, anatomy, polished, synth }
 
   let task: ReturnType<typeof parseTripoTask>
   try {
@@ -530,7 +767,7 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
   } catch (e) {
     // Transient poll failure — keep generating; the next poll retries.
     console.warn('[roofing/model3d] poll failed', { error: e instanceof Error ? e.message : String(e) })
-    return { status: 'generating', progress: null, anatomy, polished }
+    return { status: 'generating', progress: null, anatomy, polished, synth }
   }
 
   if (task.status === 'success' && task.modelUrl) {
@@ -552,18 +789,18 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
         .from('roofing_measurements')
         .update({ model3d_status: 'ready', model3d_glb_path: path })
         .eq('measure_token', measureToken)
-      return { status: 'ready', modelUrl: await signedModelUrl(path), anatomy, polished }
+      return { status: 'ready', modelUrl: await signedModelUrl(path), anatomy, polished, synth }
     } catch (e) {
       await markFailed(measureToken, e instanceof Error ? e.message : String(e))
-      return { status: 'failed', error: e instanceof Error ? e.message : String(e), anatomy, polished }
+      return { status: 'failed', error: e instanceof Error ? e.message : String(e), anatomy, polished, synth }
     }
   }
 
   if (task.status === 'failed' || task.status === 'cancelled' || task.status === 'banned' || task.status === 'expired') {
     const error = task.error ?? `Tripo task ${task.status}`
     await markFailed(measureToken, error)
-    return { status: 'failed', error, anatomy, polished }
+    return { status: 'failed', error, anatomy, polished, synth }
   }
 
-  return { status: 'generating', progress: task.progress, anatomy, polished }
+  return { status: 'generating', progress: task.progress, anatomy, polished, synth }
 }

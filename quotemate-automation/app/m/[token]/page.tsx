@@ -153,9 +153,10 @@ export default async function MeasurementResultsPage({
     if (!m3Err && m3) model3dStatus = (m3.model3d_status as string | null) ?? null
   }
 
-  // Capture target for the 3D model: primary structure centroid + a TIGHT
-  // orbit range from its footprint diagonal (captureOrbitRangeM — the house
-  // fills the shot; wide context margins belong to the fly-around viewer).
+  // Capture target for the 3D model: primary structure centroid + an orbit
+  // range from its footprint diagonal (captureOrbitRangeM — far enough that
+  // the whole house fits with margin, close enough that it still fills the
+  // shot; wide context margins belong to the fly-around viewer).
   const primaryPolygon =
     quote.structures.find((s) => s.role === 'primary')?.metrics?.polygon_geojson ??
     quote.structures[0]?.metrics?.polygon_geojson ??

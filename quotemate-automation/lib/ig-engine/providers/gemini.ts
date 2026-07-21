@@ -162,7 +162,14 @@ async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
   const userParts: GeminiPart[] = [
     { text: req.extraStrict ? `${req.user}\n\n${req.extraStrict}` : req.user },
   ]
-  if (req.sourceImage) {
+  if (req.sourceImages?.length) {
+    // Labelled set (multi-view conditioning) — the label precedes its image
+    // so the model can tell FRONT from LEFT. Wins over the single source.
+    for (const { image, label } of req.sourceImages) {
+      userParts.push({ text: label })
+      userParts.push({ inline_data: { mime_type: image.mime, data: image.base64 } })
+    }
+  } else if (req.sourceImage) {
     userParts.push({
       inline_data: {
         mime_type: req.sourceImage.mime,
@@ -185,7 +192,7 @@ async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
     contents: [{ role: 'user', parts: userParts }],
     generation_config: {
       temperature: req.temperature ?? IMAGE_TEMPERATURE,
-      top_p: IMAGE_TOP_P,
+      top_p: req.topP ?? IMAGE_TOP_P,
       response_modalities: ['IMAGE'],
       // High thinking = the Gemini-3 image adherence lever (complex /
       // negative-constraint prompts). Image output → never add

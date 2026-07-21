@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const key = process.env.GEMINI_API_KEY
-const model = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview'
+// gemini-3-pro-image-preview was shut down 2026-06-25 → GA id.
+const model = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image'
 if (!key) {
   console.error('GEMINI_API_KEY not set — run with: node --env-file=.env.local scripts/gen-quotemax-logos.mjs')
   process.exit(1)

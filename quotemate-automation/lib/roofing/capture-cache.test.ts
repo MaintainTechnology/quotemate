@@ -25,9 +25,9 @@ describe('normalizeAddressKey', () => {
 })
 
 describe('cachePathFor', () => {
-  it('builds version-segmented enhanced/v3/{key}/{view} so stale-contract images are never reused', () => {
+  it('builds version-segmented enhanced/v4/{key}/{view} so stale-contract images are never reused', () => {
     expect(cachePathFor('670 London Rd, Chandler QLD', 'front')).toBe(
-      'enhanced/v3/670-london-rd-chandler-qld/front',
+      'enhanced/v4/670-london-rd-chandler-qld/front',
     )
   })
 
@@ -37,10 +37,15 @@ describe('cachePathFor', () => {
 
   it('separates anatomy overlays from enhanced captures (same version segment)', () => {
     expect(cachePathFor('670 London Rd', 'front', 'anatomy')).toBe(
-      'anatomy/v3/670-london-rd/front',
+      'anatomy/v4/670-london-rd/front',
     )
     expect(cachePathFor('670 London Rd', 'front', 'enhanced')).toBe(
       cachePathFor('670 London Rd', 'front'),
     )
+  })
+
+  it('keeps the synthesised 3D renders in their own namespace', () => {
+    expect(cachePathFor('670 London Rd', 'front', 'synth')).toBe('synth/v4/670-london-rd/front')
+    expect(cachePathFor('670 London Rd', 'back', 'synth')).toBe('synth/v4/670-london-rd/back')
   })
 })

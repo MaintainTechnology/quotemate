@@ -205,6 +205,8 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const [anatomy, setAnatomy] = useState<Record<string, string> | null>(null)
   // Gemini-polished captures for this property — view → signed image URL.
   const [polished, setPolished] = useState<Record<string, string> | null>(null)
+  // The two synthesised studio renders the model was reconstructed from.
+  const [synth, setSynth] = useState<Record<string, string> | null>(null)
   const [roofColor, setRoofColor] = useState('#8a4b32')
   const [wallColor, setWallColor] = useState('#d8d2c4')
   const [tinting, setTinting] = useState({ roof: false, walls: false })
@@ -355,13 +357,14 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const fetchStateOnce = useCallback(async (opts: { metaOnly?: boolean } = {}): Promise<void> => {
     const res = await fetch(`/api/roofing/model3d/${encodeURIComponent(measureToken)}`)
     const json = (await res.json().catch(() => null)) as
-      | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null; anatomy?: Record<string, string> | null; polished?: Record<string, string> | null }
+      | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null; anatomy?: Record<string, string> | null; polished?: Record<string, string> | null; synth?: Record<string, string> | null }
       | null
     if (!json?.ok) return
     // Mirror the server, including null — keeping stale panels (e.g. anatomy
     // drawn over a previous generation's captures) is worse than a gap.
     setAnatomy(json.anatomy ?? null)
     setPolished(json.polished ?? null)
+    setSynth(json.synth ?? null)
     // Metadata-only (page mount): populate the image panels but never touch
     // the phase — an async response must not undo a click (e.g. Regenerate).
     if (opts.metaOnly) return
@@ -562,9 +565,10 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         )
       }
       const captures: { view: string; image: string }[] = []
+      const total = VIEWS.length + 1 // + the nadir top capture below
       for (let i = 0; i < VIEWS.length; i++) {
         const v = VIEWS[i]
-        setStage(`View ${i + 1}/4 (${v.name}) — loading tiles…`)
+        setStage(`View ${i + 1}/${total} (${v.name}) — loading tiles…`)
         const headingRad = Cesium.Math.toRadians(v.heading)
         viewer.camera.lookAt(
           aimFor(headingRad),
@@ -572,12 +576,28 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         )
         await waitForTiles(tileset)
         // Hold the view — tiles keep sharpening after they report loaded.
-        setStage(`View ${i + 1}/4 (${v.name}) — letting detail sharpen…`)
+        setStage(`View ${i + 1}/${total} (${v.name}) — letting detail sharpen…`)
         await sleep(CAPTURE_SETTLE_MS)
-        setStage(`View ${i + 1}/4 (${v.name}) — capturing…`)
+        setStage(`View ${i + 1}/${total} (${v.name}) — capturing…`)
         viewer.scene.render()
         captures.push({ view: v.name, image: cropCenterDataUrl(viewer.canvas) })
       }
+
+      // Nadir shot — the roof plan the synthesis pass needs to get the plane
+      // layout right. Straight down, aimed at the true centroid (no aim-point
+      // pull: there is no oblique foreshortening to correct). −89.9° rather
+      // than −90° keeps Cesium's up-vector well defined.
+      setStage(`View ${total}/${total} (top) — loading tiles…`)
+      viewer.camera.lookAt(
+        Cesium.Cartesian3.fromDegrees(center.lng, center.lat, groundH + 2),
+        new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-89.9), captureRangeM),
+      )
+      await waitForTiles(tileset)
+      setStage(`View ${total}/${total} (top) — letting detail sharpen…`)
+      await sleep(CAPTURE_SETTLE_MS)
+      setStage(`View ${total}/${total} (top) — capturing…`)
+      viewer.scene.render()
+      captures.push({ view: 'top', image: cropCenterDataUrl(viewer.canvas) })
 
       await submitCaptures(captures, 'auto')
     } catch (e) {
@@ -889,7 +909,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
             <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
               Polished captures (AI-enhanced)
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {MANUAL_VIEWS.filter((v) => polished[v]).map((v) => (
                 <figure key={v}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -918,7 +938,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
             <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
               Roof anatomy (AI-annotated)
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {MANUAL_VIEWS.filter((v) => anatomy[v]).map((v) => (
                 <figure key={v}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -948,6 +968,39 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
             <p className="mt-2 text-xs text-text-dim">
               Visual identification aid drawn by AI over the aerial captures. The hip and valley
               counts used for pricing come from the measured geometry, not these drawings.
+            </p>
+          </div>
+        )}
+
+        {/* Synthesised renders — the two studio images actually fed to the
+            reconstruction. Last in the strip: the captures above are the
+            inputs, these are what they became, and a wrong 3D model is
+            diagnosed here before anywhere else. */}
+        {synth && (synth.front || synth.back) && (
+          <div className="border-t border-ink-line px-5 py-4">
+            <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              3D renders (AI-generated)
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {(['front', 'back'] as const)
+                .filter((v) => synth[v])
+                .map((v) => (
+                  <figure key={v}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={synth[v]}
+                      alt={`AI-generated 3D ${v} view of the house`}
+                      className="w-full border border-ink-line object-cover"
+                    />
+                    <figcaption className="mt-1 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+                      {v}
+                    </figcaption>
+                  </figure>
+                ))}
+            </div>
+            <p className="mt-2 text-xs text-text-dim">
+              Built from the five polished captures above, then reconstructed into the 3D model.
+              These two images are what the model was made from.
             </p>
           </div>
         )}

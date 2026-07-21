@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const gemKey = process.env.GEMINI_API_KEY
-const model = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview'
+// gemini-3-pro-image-preview was shut down 2026-06-25 → GA id.
+const model = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image'
 if (!gemKey) { console.error('Missing GEMINI_API_KEY'); process.exit(1) }
 
 const here = dirname(fileURLToPath(import.meta.url))

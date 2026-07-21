@@ -30,6 +30,11 @@ export type RenderImageRequest = {
   user: string
   /** Source image to edit. Omit for text-to-image. */
   sourceImage?: ImageBytes
+  /** Several labelled source images, when the render is conditioned on a
+   *  SET of inputs (e.g. the five roof captures). Each carries its own
+   *  label so the model knows which view it is looking at. Takes
+   *  precedence over `sourceImage` when non-empty. */
+  sourceImages?: ReferenceImage[]
   /** Optional secondary reference image with its preceding label. */
   reference?: ReferenceImage
   /** Extra hard wording appended to the user message — the stricter
@@ -39,6 +44,9 @@ export type RenderImageRequest = {
   aspectRatio?: string
   /** Temperature override. Default low (0.1) — follow the brief tightly. */
   temperature?: number
+  /** top_p override. Pass 0 alongside temperature 0 when a render must be
+   *  deterministic regardless of the global GEMINI_IMAGE_TOP_P setting. */
+  topP?: number
   /** Override the provider's default model for this call. */
   model?: string
 }

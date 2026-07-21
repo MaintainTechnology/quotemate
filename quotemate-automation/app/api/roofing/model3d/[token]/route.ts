@@ -1,10 +1,11 @@
 // /api/roofing/model3d/[token] — the property's interactive 3D model
 // (Track B: visual only; never feeds measurements or pricing).
 //
-//   POST — body { captures: [front, left, back, right] } as JPEG data URLs
-//          captured client-side from the Google Photorealistic 3D view.
+//   POST — body { captures: [front, left, back, right, top] } as JPEG data
+//          URLs captured client-side from the Google Photorealistic 3D view.
 //          CAS-claims model3d_status then fast-acks; enhancement (Gemini
-//          nano-banana), Tripo upload and task creation run in after().
+//          nano-banana), front/back synthesis, Tripo upload and task
+//          creation run in after().
 //   GET  — poll. Proxies the Tripo task state; on success downloads the GLB
 //          (Tripo URLs expire in ~5 min) into storage and returns a signed
 //          URL the three.js viewer loads directly.
@@ -21,10 +22,11 @@ export const dynamic = 'force-dynamic'
 // needs more than Hobby's 10s (repo convention: Pro or Railway).
 export const maxDuration = 300
 
-// 2–5 labelled captures. Auto orbit sends front/left/back/right; manual mode
-// adds an optional 'top'. Tripo needs the front plus at least one side; 'top'
-// is enhanced + cached only. ~250 KB each as JPEG data URLs; 8 MB cap guards
-// against oversized canvases.
+// 2–5 labelled captures. Auto orbit sends front/left/back/right + top; manual
+// mode's top is optional. Tripo needs the front plus at least one side; 'top'
+// is enhanced, cached and fed to the synthesis pass, but never gets its own
+// Tripo slot. ~250 KB each as JPEG data URLs; 8 MB cap guards against
+// oversized canvases.
 const BodySchema = z
   .object({
     captures: z

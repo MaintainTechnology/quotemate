@@ -1,15 +1,23 @@
 // Roofing 3D model — pure helper tests (request builder + parsers).
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   ANATOMY_SYSTEM,
   ANATOMY_USER,
   ENHANCE_SYSTEM,
   ENHANCE_USER,
+  MODEL3D_IMAGE_MODEL,
+  SYNTH_FRONT_REFERENCE_LABEL,
+  SYNTH_SYSTEM,
+  SYNTH_USER_BACK,
+  SYNTH_USER_FRONT,
   buildMultiviewTaskBody,
+  captureLabel,
   captureOrbitRangeM,
   parseDataUrl,
   parseTripoTask,
+  selectTripoInputs,
+  synthesisInputs,
   VIEW_ORDER,
 } from './model3d'
 
@@ -70,29 +78,54 @@ describe('buildMultiviewTaskBody', () => {
 })
 
 describe('captureOrbitRangeM', () => {
-  it('floors at 21 m so small sheds do not go macro', () => {
-    expect(captureOrbitRangeM(5)).toBe(21)
-    expect(captureOrbitRangeM(10)).toBe(21)
+  it('floors at 26 m so small sheds keep a sane standoff', () => {
+    expect(captureOrbitRangeM(5)).toBe(26)
+    expect(captureOrbitRangeM(10)).toBe(26)
   })
 
-  it('scales linearly with the footprint diagonal (0.8 × d + 8)', () => {
-    expect(captureOrbitRangeM(20)).toBe(24)
-    expect(captureOrbitRangeM(30)).toBe(32)
-    expect(captureOrbitRangeM(50)).toBe(48)
+  it('scales with the footprint diagonal (d + 10 m of margin)', () => {
+    expect(captureOrbitRangeM(20)).toBe(30)
+    expect(captureOrbitRangeM(30)).toBe(40)
+    expect(captureOrbitRangeM(50)).toBe(60)
   })
 
-  it('falls back to 36 m when no footprint diagonal is available', () => {
-    expect(captureOrbitRangeM(null)).toBe(36)
-    expect(captureOrbitRangeM(Number.NaN)).toBe(36)
-    expect(captureOrbitRangeM(0)).toBe(36)
-    expect(captureOrbitRangeM(-4)).toBe(36)
+  it('falls back to 45 m when no footprint diagonal is available', () => {
+    expect(captureOrbitRangeM(null)).toBe(45)
+    expect(captureOrbitRangeM(Number.NaN)).toBe(45)
+    expect(captureOrbitRangeM(0)).toBe(45)
+    expect(captureOrbitRangeM(-4)).toBe(45)
   })
 
-  it('is strictly closer than the previous max(26, d + 10) framing for every footprint', () => {
+  it('always clears the whole footprint with margin — a clipped eave breaks the synthesis pass', () => {
     for (let d = 1; d <= 80; d++) {
-      expect(captureOrbitRangeM(d)).toBeLessThan(Math.max(26, d + 10))
+      expect(captureOrbitRangeM(d)).toBeGreaterThanOrEqual(d + 10)
     }
-    expect(captureOrbitRangeM(null)).toBeLessThan(45)
+  })
+
+  it('is wider than the tight 0.8×d + 8 framing it replaced, for every footprint', () => {
+    for (let d = 1; d <= 80; d++) {
+      expect(captureOrbitRangeM(d)).toBeGreaterThan(Math.max(21, d * 0.8 + 8))
+    }
+    expect(captureOrbitRangeM(null)).toBeGreaterThan(36)
+  })
+})
+
+describe('MODEL3D_IMAGE_MODEL', () => {
+  const prev = process.env.ROOFING_MODEL3D_IMAGE_MODEL
+
+  afterEach(() => {
+    if (prev === undefined) delete process.env.ROOFING_MODEL3D_IMAGE_MODEL
+    else process.env.ROOFING_MODEL3D_IMAGE_MODEL = prev
+  })
+
+  it('defaults to the GA Nano Banana Pro id — the -preview id was shut down 2026-06-25', () => {
+    delete process.env.ROOFING_MODEL3D_IMAGE_MODEL
+    expect(MODEL3D_IMAGE_MODEL()).toBe('gemini-3-pro-image')
+  })
+
+  it('is env-overridable so a newer snapshot needs no deploy', () => {
+    process.env.ROOFING_MODEL3D_IMAGE_MODEL = 'gemini-4-pro-image'
+    expect(MODEL3D_IMAGE_MODEL()).toBe('gemini-4-pro-image')
   })
 })
 
@@ -134,6 +167,155 @@ describe('anatomy prompt contract (annotate the polished captures)', () => {
   it('forbids altering the underlying photograph', () => {
     expect(ANATOMY_SYSTEM).toMatch(/never alter/i)
     expect(ANATOMY_USER).toMatch(/otherwise unchanged/i)
+  })
+})
+
+describe('captureLabel', () => {
+  it('labels each capture so the model knows which view it is looking at', () => {
+    expect(captureLabel('front')).toBe('FRONT capture of the house')
+    expect(captureLabel('top')).toBe('TOP capture of the house')
+  })
+})
+
+describe('synthesis prompt contract (two 3D renders of ONE house)', () => {
+  it('opens with the brief verbatim — full 3D view, front and back, matching the five screenshots', () => {
+    expect(SYNTH_SYSTEM).toContain(
+      'Based on the screenshots of the house provided, generate a high-quality full 3D view ' +
+        'of the house, including front and back perspectives. The result must be accurate and ' +
+        'match exactly what is shown in the five screenshots.',
+    )
+  })
+
+  it('locks the identity of the building across both renders', () => {
+    expect(SYNTH_SYSTEM).toMatch(/ONE single physical building/i)
+    expect(SYNTH_SYSTEM).toMatch(/same house at the same address/i)
+    expect(SYNTH_SYSTEM).toMatch(/reproduce; you do not design/i)
+  })
+
+  it('locks every attribute that could drift between the two images', () => {
+    for (const attr of [
+      'storey count',
+      'roof form',
+      'pitch',
+      'material and exact colour',
+      'frame colour',
+      'lighting',
+      'camera',
+    ]) {
+      expect(SYNTH_SYSTEM.toLowerCase()).toContain(attr.toLowerCase())
+    }
+  })
+
+  it('demands a plain white or grey backdrop with no surroundings at all', () => {
+    for (const prompt of [SYNTH_SYSTEM, SYNTH_USER_FRONT, SYNTH_USER_BACK]) {
+      expect(prompt).toMatch(/white or light (neutral )?grey/i)
+    }
+    for (const banned of ['grass', 'trees', 'fences', 'driveways', 'vehicles', 'sky', 'horizon']) {
+      expect(SYNTH_SYSTEM.toLowerCase()).toContain(banned)
+    }
+  })
+
+  it('keeps the foundation while removing the land', () => {
+    expect(SYNTH_SYSTEM).toMatch(/foundation edge/i)
+    expect(SYNTH_USER_FRONT).toMatch(/foundation edge/i)
+    expect(SYNTH_USER_BACK).toMatch(/foundation edge/i)
+  })
+
+  it('asks for a 360-degree read across the pair — opposite sides, rotated 180 degrees', () => {
+    expect(SYNTH_SYSTEM).toMatch(/360/)
+    expect(SYNTH_USER_FRONT).toMatch(/FRONT three-quarter/)
+    expect(SYNTH_USER_BACK).toMatch(/REAR three-quarter/)
+    expect(SYNTH_USER_BACK).toMatch(/rotated 180 degrees/i)
+    expect(SYNTH_USER_BACK).toMatch(/opposite side/i)
+    expect(SYNTH_USER_BACK).toMatch(/all four elevations/i)
+  })
+
+  it('forbids inventing detail that is not in the captures', () => {
+    expect(SYNTH_SYSTEM).toMatch(/Never invent/i)
+    expect(SYNTH_SYSTEM).toMatch(/Nothing added, nothing removed/i)
+  })
+
+  it('makes the front render the ground truth for the back render', () => {
+    expect(SYNTH_FRONT_REFERENCE_LABEL).toMatch(/ground truth/i)
+    expect(SYNTH_FRONT_REFERENCE_LABEL).toMatch(/only difference/i)
+    expect(SYNTH_FRONT_REFERENCE_LABEL).toMatch(/camera heading/i)
+    expect(SYNTH_FRONT_REFERENCE_LABEL).toMatch(/same house/i)
+  })
+})
+
+describe('synthesisInputs', () => {
+  const img = (base64: string) => ({ base64, mime: 'image/jpeg' })
+  const all = [
+    { view: 'back' as const, image: img('b') },
+    { view: 'front' as const, image: img('f') },
+    { view: 'top' as const, image: img('t') },
+    { view: 'left' as const, image: img('l') },
+    { view: 'right' as const, image: img('r') },
+  ]
+
+  it('labels every capture and emits them in the canonical order, whatever order they arrived in', () => {
+    expect(synthesisInputs(all)).toEqual([
+      { image: img('f'), label: 'FRONT capture of the house' },
+      { image: img('l'), label: 'LEFT capture of the house' },
+      { image: img('r'), label: 'RIGHT capture of the house' },
+      { image: img('b'), label: 'BACK capture of the house' },
+      { image: img('t'), label: 'TOP capture of the house' },
+    ])
+  })
+
+  it('refuses an incomplete set — the prompt promises five captures, so it must get five', () => {
+    for (const missing of ['front', 'left', 'right', 'back', 'top']) {
+      expect(synthesisInputs(all.filter((c) => c.view !== missing))).toBeNull()
+    }
+    expect(synthesisInputs([])).toBeNull()
+  })
+})
+
+describe('selectTripoInputs', () => {
+  const img = (base64: string) => ({ base64, mime: 'image/jpeg' })
+  const polished = [
+    { view: 'front' as const, image: img('pf') },
+    { view: 'left' as const, image: img('pl') },
+    { view: 'right' as const, image: img('pr') },
+    { view: 'back' as const, image: img('pb') },
+    { view: 'top' as const, image: img('pt') },
+  ]
+
+  it('uses ONLY the two synthesised renders when both exist', () => {
+    expect(selectTripoInputs(polished, { front: img('sf'), back: img('sb') })).toEqual({
+      front: img('sf'),
+      back: img('sb'),
+    })
+  })
+
+  it('falls back to the polished captures when synthesis is off', () => {
+    expect(selectTripoInputs(polished, null)).toEqual({
+      front: img('pf'),
+      left: img('pl'),
+      right: img('pr'),
+      back: img('pb'),
+    })
+  })
+
+  it('never mixes a synthesised view with aerial captures when only one render succeeded', () => {
+    // A studio-lit front render beside a −50° aerial side view is a worse
+    // multiview prior than four consistent aerials.
+    expect(selectTripoInputs(polished, { front: img('sf'), back: null })).toEqual(
+      selectTripoInputs(polished, null),
+    )
+    expect(selectTripoInputs(polished, { front: null, back: img('sb') })).toEqual(
+      selectTripoInputs(polished, null),
+    )
+  })
+
+  it('drops the top capture — Tripo has no top slot', () => {
+    expect(selectTripoInputs(polished, null)).not.toHaveProperty('top')
+  })
+
+  it('passes through whatever slots the fallback actually has', () => {
+    expect(selectTripoInputs([{ view: 'front', image: img('pf') }], null)).toEqual({
+      front: img('pf'),
+    })
   })
 })
 

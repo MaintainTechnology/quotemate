@@ -12,7 +12,8 @@ import { dirname, join } from 'node:path'
 
 const mapsKey = process.env.GOOGLE_MAPS_API_KEY
 const gemKey = process.env.GEMINI_API_KEY
-const model = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview'
+// gemini-3-pro-image-preview was shut down 2026-06-25 → GA id.
+const model = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image'
 if (!mapsKey || !gemKey) {
   console.error('Missing GOOGLE_MAPS_API_KEY or GEMINI_API_KEY')
   process.exit(1)
