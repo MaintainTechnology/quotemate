@@ -78,6 +78,7 @@ import {
   GoodToKnow,
   CredentialFooter,
   TrustVideo,
+  TradiePhoto,
   AddToCalendar,
   type Stat,
   type QuoteTier,
@@ -85,6 +86,7 @@ import {
   type Metric,
   type FooterRow,
 } from '../../_chrome/parts'
+import { tradieProfile } from '@/lib/quote/tradie-profile'
 
 export const dynamic = 'force-dynamic'
 
@@ -630,6 +632,13 @@ export default async function RoofingQuotePage({
     const videos = trustVideoUrls(identity)
     const websiteUrl = safeWebsiteUrl(identity?.website_url)
     const tradieName = identity?.business_name ?? 'Your roofer'
+    // Section 03 identity — the same resolver the quote PDF uses, so the photo
+    // and the sentence are identical on both surfaces (mig 180).
+    const roofTradie = tradieProfile({
+      businessName: tradieName,
+      photoUrl: identity?.photo_url,
+      trade: 'roofing',
+    })
     const roofSlotLabel = roofScheduledAt
       ? formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))
       : ''
@@ -724,18 +733,21 @@ export default async function RoofingQuotePage({
                 caption="A short introduction from your tradie"
               />
             </div>
-            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
-              {tradieName} is a licensed local roofing business.
-              {websiteUrl ? (
-                <>
-                  {' '}
-                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
-                    Visit their website
-                  </a>
-                  .
-                </>
-              ) : null}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <TradiePhoto src={roofTradie.photoSrc} alt={roofTradie.name} />
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+                {roofTradie.blurb}
+                {websiteUrl ? (
+                  <>
+                    {' '}
+                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                      Visit their website
+                    </a>
+                    .
+                  </>
+                ) : null}
+              </p>
+            </div>
           </div>
         ),
       },

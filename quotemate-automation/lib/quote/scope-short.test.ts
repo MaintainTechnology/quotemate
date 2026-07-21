@@ -4,7 +4,7 @@
 // and swallows a pre-migration-175 column error without throwing.
 
 import { describe, expect, it } from 'vitest'
-import { roofingScopeShort, stampScopeShort } from './scope-short'
+import { roofingScopeShort, stampScopeShort, jobDetailsSentence } from './scope-short'
 
 type Op = { op: string; args: unknown[] }
 
@@ -96,5 +96,45 @@ describe('roofingScopeShort — the recommended tier scope line (tierScopeLine o
   it('returns null when nothing usable exists', () => {
     expect(roofingScopeShort([], 'better')).toBeNull()
     expect(roofingScopeShort([{ tier: 'better', scope: '  ' }], 'better')).toBeNull()
+  })
+})
+
+// The "Job details" sentence (customer-view section 02). The quote page and
+// the quote PDF MUST resolve it the same way — every live roofing quote
+// predates the scope_short column, so a PDF that reads only scope_short would
+// print no job details while the page (which falls back) prints them.
+describe('jobDetailsSentence', () => {
+  it('prefers the persisted scope_short', () => {
+    expect(
+      jobDetailsSentence('Re-roof priced across 1 structure.', 'A much longer scope. And more.'),
+    ).toBe('Re-roof priced across 1 structure.')
+  })
+
+  it('falls back to the first sentence of the scope for pre-mig-175 quotes', () => {
+    expect(
+      jobDetailsSentence(null, 'Full roof replacement in Colorbond. Includes safety rail.'),
+    ).toBe('Full roof replacement in Colorbond.')
+  })
+
+  it('treats a blank scope_short as unset', () => {
+    expect(jobDetailsSentence('   ', 'Re-roof the main dwelling. Extra detail.')).toBe(
+      'Re-roof the main dwelling.',
+    )
+  })
+
+  it('uses the whole scope when it has no sentence terminator', () => {
+    expect(jobDetailsSentence(null, 'Re-roof the main dwelling')).toBe('Re-roof the main dwelling')
+  })
+
+  it('returns null when neither source has anything', () => {
+    expect(jobDetailsSentence(null, null)).toBeNull()
+    expect(jobDetailsSentence('', '   ')).toBeNull()
+    expect(jobDetailsSentence(undefined, undefined)).toBeNull()
+  })
+
+  it('trims surrounding whitespace', () => {
+    expect(jobDetailsSentence('  Re-roof priced across 1 structure.  ', null)).toBe(
+      'Re-roof priced across 1 structure.',
+    )
   })
 })

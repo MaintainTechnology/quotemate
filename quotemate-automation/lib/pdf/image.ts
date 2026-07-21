@@ -62,7 +62,16 @@ export async function prepareImage(
       const out =
         format === 'png'
           ? await pipeline.png({ compressionLevel: 9 }).toBuffer()
-          : await pipeline.jpeg({ quality, mozjpeg: true }).toBuffer()
+          : // JPEG carries no alpha and libvips flattens it onto BLACK, so an
+            // alpha-bearing source (the tradie photo accepts PNG/WEBP/SVG —
+            // lib/storage/upload ALLOWED_LOGO_MIME) would print a solid black
+            // tile in the PDF while the web page shows the cut-out correctly.
+            // Flatten onto white to match the warm-paper stock. No-op when the
+            // source is already opaque, so every existing caller is unchanged.
+            await pipeline
+              .flatten({ background: '#ffffff' })
+              .jpeg({ quality, mozjpeg: true })
+              .toBuffer()
       const mime = format === 'png' ? 'image/png' : 'image/jpeg'
       return `data:${mime};base64,${out.toString('base64')}`
     } catch (e) {

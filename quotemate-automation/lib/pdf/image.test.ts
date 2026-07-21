@@ -52,3 +52,66 @@ describe('prepareImage — silent-failure observability', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 })
+
+// The tradie photo (mig 180) goes through the JPEG branch, and the upload
+// allowlist accepts PNG/WEBP/SVG — so an alpha-bearing headshot reaches it.
+// libvips flattens alpha onto BLACK unconditionally on JPEG encode, which would
+// print a solid black tile in the PDF's "Your tradie" block while the web page
+// shows the cut-out correctly. Flatten onto WHITE instead: matches the PDF's
+// warm-paper stock and the .tradie-photo white backing.
+describe('prepareImage — alpha handling on the JPEG branch', () => {
+  /** Indirect specifier, same trick the source uses, so TS doesn't hard-require sharp. */
+  async function loadSharp() {
+    const spec: string = 'sharp'
+    return (await import(spec)).default
+  }
+
+  /** A fully transparent square whose RGB under the alpha is black. */
+  async function transparentPng(): Promise<Buffer> {
+    const sharp = await loadSharp()
+    return sharp({
+      create: { width: 64, height: 64, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .png()
+      .toBuffer()
+  }
+
+  function stubFetchWith(buf: Buffer) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'image/png' },
+        arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      }),
+    )
+  }
+
+  it('flattens transparency onto white, not black, when encoding JPEG', async () => {
+    stubFetchWith(await transparentPng())
+    const out = await prepareImage('https://cdn.example.com/cutout.png', { maxEdge: 320 })
+
+    expect(out).toMatch(/^data:image\/jpeg;base64,/)
+    const sharp = await loadSharp()
+    const bytes = Buffer.from(out!.split(',')[1], 'base64')
+    const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true })
+    expect(info.channels).toBe(3) // JPEG has no alpha
+    // Top-left pixel must be white-ish, never the black libvips defaults to.
+    const [r, g, b] = [data[0], data[1], data[2]]
+    expect(r).toBeGreaterThan(240)
+    expect(g).toBeGreaterThan(240)
+    expect(b).toBeGreaterThan(240)
+  })
+
+  it('still keeps transparency on the PNG branch (the logo path is unchanged)', async () => {
+    stubFetchWith(await transparentPng())
+    const out = await prepareLogo('https://cdn.example.com/logo.png')
+
+    expect(out).toMatch(/^data:image\/png;base64,/)
+    const sharp = await loadSharp()
+    const bytes = Buffer.from(out!.split(',')[1], 'base64')
+    const meta = await sharp(bytes).metadata()
+    expect(meta.hasAlpha).toBe(true)
+  })
+})

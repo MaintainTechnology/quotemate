@@ -28,6 +28,28 @@ export function roofingScopeShort(
 }
 
 /**
+ * PURE — the customer-view "Job details" sentence (section 02), resolved the
+ * ONE way for every surface: the persisted scope_short, else the first sentence
+ * of the scope paragraph (the same slice lib/sms/templates.ts pickScopeForSms
+ * takes) for quotes drafted before migration 175 stamped the column.
+ *
+ * Shared deliberately: the quote page had this fallback inline while the PDF
+ * read scope_short alone, so every live roofing quote (all of which predate the
+ * column) would have shown Job details on the page and nothing in the PDF.
+ */
+export function jobDetailsSentence(
+  scopeShort: string | null | undefined,
+  scopeOfWorks: string | null | undefined,
+): string | null {
+  const short = scopeShort?.trim()
+  if (short) return short
+  const scope = scopeOfWorks?.trim()
+  if (!scope) return null
+  const m = scope.match(/^[^.]+\./)
+  return (m ? m[0] : scope).trim()
+}
+
+/**
  * Persist quotes.scope_short — best-effort. Returns true when the update
  * succeeded, false when it was skipped (blank value or pre-175 schema).
  * Never throws.

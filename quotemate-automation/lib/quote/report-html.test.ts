@@ -10,6 +10,7 @@ import {
   type QuoteReportTier,
 } from './report-html'
 import { resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
+import { TRADIE_AVATAR_PLACEHOLDER } from './tradie-profile'
 
 const tier = (label: string, exGst: number): QuoteReportTier => ({
   label,
@@ -321,8 +322,8 @@ describe('buildQuoteReportHtml — propertyVisuals (spec quote-visual-parity R1)
     expect(omitted).not.toContain('Your roof, from above')
   })
 
-  it('REPORT_TEMPLATE_VERSION is bumped to 7 so cached PDFs regenerate (discount + GST awareness)', () => {
-    expect(REPORT_TEMPLATE_VERSION).toBe(7)
+  it('REPORT_TEMPLATE_VERSION is bumped to 8 so cached PDFs regenerate (job details + your tradie)', () => {
+    expect(REPORT_TEMPLATE_VERSION).toBe(8)
   })
 
   it('v7 — tier prices honour the realised early-booking discount (P7)', () => {
@@ -405,5 +406,116 @@ describe('buildQuoteReportHtmlFromBody', () => {
     expect(html).toContain('Acme Electrical')
     expect(html).toContain('GOOD')
     expect(html).toContain('Your quote')
+  })
+})
+
+// ─── Job details + Your tradie (customer-view parity) ───────────────
+//
+// The web customer view renders five numbered sections; sections 02 "Job
+// details" and 03 "Your tradie" existed ONLY on the page — the downloadable
+// PDF showed neither. These assert the PDF now carries both, from the same
+// data (quotes.scope_short + tenants.photo_url).
+const parityBase = {
+  businessName: 'Atomic Electrical',
+  jobType: 'reroof',
+  good: null,
+  better: { label: 'Full roof replacement', subtotal_ex_gst: 66838 } as QuoteReportTier,
+  best: null,
+  selectedTier: null,
+}
+
+describe('job details section (parity with customer-view section 02)', () => {
+  it('renders the scope_short sentence under a "Job details" heading', () => {
+    const html = buildQuoteReportHtml({
+      ...parityBase,
+      jobDetails: 'Re-roof priced across 1 structure.',
+    })
+    expect(html).toContain('<h2>Job details</h2>')
+    expect(html).toContain('Re-roof priced across 1 structure.')
+  })
+
+  it('omits the section entirely when the quote has no scope_short', () => {
+    expect(buildQuoteReportHtml(parityBase)).not.toContain('Job details')
+    expect(buildQuoteReportHtml({ ...parityBase, jobDetails: '   ' })).not.toContain('Job details')
+  })
+
+  it('escapes the job-details text', () => {
+    const html = buildQuoteReportHtml({
+      ...parityBase,
+      jobDetails: 'Re-roof <script>x</script> & more',
+    })
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).not.toContain('<script>x</script>')
+  })
+
+  it('places job details after the scope of works and before the price', () => {
+    const html = buildQuoteReportHtml({
+      ...parityBase,
+      scopeOfWorks: 'Roofing works at 670 London Road.',
+      jobDetails: 'Re-roof priced across 1 structure.',
+    })
+    // Match the headings, not the prose — the chrome's intro paragraph also
+    // says "Your quote is set out below" well above the body.
+    expect(html.indexOf('<h2>Scope of works</h2>')).toBeLessThan(
+      html.indexOf('<h2>Job details</h2>'),
+    )
+    expect(html.indexOf('<h2>Job details</h2>')).toBeLessThan(html.indexOf('<h2>Your quote</h2>'))
+  })
+})
+
+describe('your tradie section (parity with customer-view section 03)', () => {
+  it('renders the tradie photo and blurb under a "Your tradie" heading', () => {
+    const html = buildQuoteReportHtml({
+      ...parityBase,
+      tradie: {
+        name: 'Atomic Electrical',
+        photoSrc: 'data:image/jpeg;base64,AAAA',
+        hasPhoto: true,
+        blurb: 'Atomic Electrical is a licensed local roofing business.',
+      },
+    })
+    expect(html).toContain('<h2>Your tradie</h2>')
+    expect(html).toContain('src="data:image/jpeg;base64,AAAA"')
+    expect(html).toContain('Atomic Electrical is a licensed local roofing business.')
+  })
+
+  it('still renders the block with the placeholder avatar when no photo is set', () => {
+    const html = buildQuoteReportHtml({
+      ...parityBase,
+      tradie: {
+        name: 'Atomic Electrical',
+        photoSrc: TRADIE_AVATAR_PLACEHOLDER,
+        hasPhoto: false,
+        blurb: 'Atomic Electrical is a licensed local roofing business.',
+      },
+    })
+    expect(html).toContain('<h2>Your tradie</h2>')
+    expect(html).toContain('data:image/svg+xml')
+  })
+
+  it('omits the section when no tradie profile is supplied (back-compat)', () => {
+    const html = buildQuoteReportHtml(parityBase)
+    expect(html).not.toContain('<h2>Your tradie</h2>')
+    expect(html).not.toContain('class="tradie"')
+  })
+
+  it('escapes the tradie name and blurb', () => {
+    const html = buildQuoteReportHtml({
+      ...parityBase,
+      tradie: {
+        name: 'A & B <Roofing>',
+        photoSrc: TRADIE_AVATAR_PLACEHOLDER,
+        hasPhoto: false,
+        blurb: 'A & B <Roofing> is a licensed local roofing business.',
+      },
+    })
+    expect(html).toContain('A &amp; B &lt;Roofing&gt;')
+    expect(html).not.toContain('<Roofing>')
+  })
+})
+
+describe('REPORT_TEMPLATE_VERSION', () => {
+  it('is bumped past v7 so cached PDFs regenerate with the new sections', () => {
+    expect(REPORT_TEMPLATE_VERSION).toBeGreaterThanOrEqual(8)
   })
 })

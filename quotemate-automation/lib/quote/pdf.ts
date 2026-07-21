@@ -23,15 +23,22 @@ import {
 } from './report-html'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
 import { quotePropertyVisuals } from './property-visuals'
+import { tradieProfile } from './tradie-profile'
+import { jobDetailsSentence } from './scope-short'
+import { INSPECTION_FEE_AUD } from './money'
 import { hasPropertyVisuals, propertyVisualsImagePath } from './visuals-image-path'
-import { quotePdfIsStale, quotePdfSignature, hashReportContent } from './pdf-signature'
+import {
+  quotePdfIsStale,
+  quotePdfSignature,
+  hashReportContent,
+  embeddedImageMissing,
+} from './pdf-signature'
 import { solarPdfRev } from './pdf-rev'
 import { tradeRendersOwnQuotePdf } from './report-adapters/registry'
 import { exceedsMmsMediaCap, MMS_MEDIA_CAP_BYTES } from '@/lib/sms/send-quote-pdf'
 import { serializeReportDoc } from './report-doc/serialize'
 import type { ReportDoc } from './report-doc/types'
-import { buildRoofQuoteReportHtml, type RoofLayoutOverlay } from '@/lib/roofing/report-html'
-import { roofOutlineImageSrc, type RoofOutlineStructure } from '@/lib/roofing/roof-outline-svg'
+import { buildRoofCustomerReportHtml, type RoofLayoutOverlay } from '@/lib/roofing/report-html'
 import { structureImageRefs, structureStaticMapPath } from '@/lib/roofing/structure-images'
 import {
   combinedLayoutMetrics,
@@ -91,7 +98,12 @@ const PAINT_PDF_REV = '-v7'
 //   -v5 (2026-07-17): solar detach & reinstate applied to replacement-tier
 //   prices (applySolarToTiers) — regenerate every cached PDF so the printed
 //   dollars match the customer quote page.
-const ROOF_PDF_REV = '-v5'
+//   -v6 (2026-07-21): the roofing PDF is now the CUSTOMER view — the same five
+//   numbered sections /q/roof/[token] renders (buildRoofCustomerReportHtml) —
+//   not the tradie's detailed measurement report. Every cached -v5 PDF (the one
+//   already sent as MMS media / linked from the quote SMS) regenerates once on
+//   its next download.
+const ROOF_PDF_REV = '-v6'
 
 let _client: SupabaseClient | null = null
 function supabase(): SupabaseClient {
@@ -200,6 +212,9 @@ type QuotePdfRow = {
   best: QuoteReportTier
   selected_tier: 'good' | 'better' | 'best' | null
   scope_of_works: string | null
+  /** Mig 175 — the one-line job summary the customer page prints as section 02
+   *  "Job details". The PDF now prints it too (report template v8). */
+  scope_short: string | null
   assumptions: string[] | null
   estimated_timeframe: string | null
   needs_inspection: boolean | null
@@ -287,6 +302,10 @@ type QuoteReportContext = {
   recommendedTier: 'good' | 'better' | 'best' | null
   /** pricing_book.gst_registered for this quote's tenant+trade (P1). */
   gstRegistered: boolean
+  /** tenants.photo_url (mig 180) — the "Your tradie" photo. Null ⇒ the report
+   *  renders the placeholder avatar. Also folded into the PDF cache signature
+   *  so uploading a photo regenerates already-cached PDFs. */
+  tradiePhotoUrl: string | null
 }
 
 /**
@@ -299,7 +318,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const { data: quote } = await supabase()
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct, created_at',
+      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, scope_short, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct, created_at',
     )
     .eq('id', quoteId)
     .maybeSingle<QuotePdfRow>()
@@ -320,6 +339,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const intakeTrade = (intake?.trade as string | null) ?? 'electrical'
   let tierMode: QuoteTierMode = 'single'
   let gstRegistered = true
+  let tradiePhotoUrl: string | null = null
   if (quote.tenant_id) {
     const { data: pb } = await supabase()
       .from('pricing_book')
@@ -329,6 +349,14 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
       .maybeSingle<{ quote_tier_mode: string | null; gst_registered: boolean | null }>()
     tierMode = asQuoteTierMode(pb?.quote_tier_mode ?? null)
     gstRegistered = pb?.gst_registered ?? true
+    // Own best-effort select (the tenant-identity convention): a pre-mig-180
+    // deploy errors here and loses only the photo — never the branding/logo.
+    const { data: ph } = await supabase()
+      .from('tenants')
+      .select('photo_url')
+      .eq('id', quote.tenant_id)
+      .maybeSingle<{ photo_url: string | null }>()
+    tradiePhotoUrl = ph?.photo_url ?? null
   }
   const visibleTierKeys = resolveVisibleTiers({
     mode: tierMode,
@@ -338,7 +366,17 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const visibleTierSet = new Set(visibleTierKeys)
   const recommendedTier = visibleTierKeys.length > 1 ? quote.selected_tier : null
 
-  return { quote, intake, intakeTrade, tierMode, visibleTierKeys, visibleTierSet, recommendedTier, gstRegistered }
+  return {
+    quote,
+    intake,
+    intakeTrade,
+    tierMode,
+    visibleTierKeys,
+    visibleTierSet,
+    recommendedTier,
+    gstRegistered,
+    tradiePhotoUrl,
+  }
 }
 
 /**
@@ -448,6 +486,9 @@ function buildQuoteReportInput(
   branding: Awaited<ReturnType<typeof loadTenantBranding>>,
   visualsImageSrc: string | null = null,
   layoutOverlay: RoofLayoutOverlay | null = null,
+  /** Resolved "Your tradie" photo: a data: URI for the PDF, the raw public URL
+   *  for the live HTML preview. Null ⇒ the placeholder avatar. */
+  tradiePhotoSrc: string | null = null,
 ): QuoteReportInput {
   const { quote, intake, intakeTrade, visibleTierSet, recommendedTier } = ctx
   return {
@@ -456,6 +497,16 @@ function buildQuoteReportInput(
     customerName: intake?.caller?.name ?? null,
     jobType: intake?.job_type ?? 'job',
     scopeOfWorks: quote.scope_of_works,
+    // Customer-view parity (report template v8): the page's section 02 sentence
+    // and section 03 tradie block now print in the PDF too. Resolved through the
+    // SHARED helper — every live quote predates scope_short, so reading that
+    // column alone would print job details on the page and nothing here.
+    jobDetails: jobDetailsSentence(quote.scope_short, quote.scope_of_works),
+    tradie: tradieProfile({
+      businessName: branding.businessName,
+      photoUrl: tradiePhotoSrc,
+      trade: intakeTrade,
+    }),
     assumptions: quote.assumptions,
     estimatedTimeframe: quote.estimated_timeframe,
     propertyVisuals: quotePropertyVisuals(intakeTrade, intake?.scope ?? null, visualsImageSrc),
@@ -523,7 +574,9 @@ export async function renderQuoteReportHtml(quoteId: string): Promise<string | n
   const layoutOverlay =
     ctx.intakeTrade === 'roofing' ? await resolveRoofLayoutForQuote(ctx.quote.share_token) : null
   return renderQuoteDocumentHtml(
-    buildQuoteReportInput(ctx, branding, visualsImageSrc, layoutOverlay),
+    // Preview: reference the tradie photo by its public URL (the PDF embeds a
+    // data URI instead) — same treatment as the property visual above.
+    buildQuoteReportInput(ctx, branding, visualsImageSrc, layoutOverlay, ctx.tradiePhotoUrl),
     ctx.quote.report_doc,
   )
 }
@@ -581,6 +634,9 @@ export async function ensureQuotePdf(
       // GST flip must regenerate the cached download PDF so it never contradicts
       // the live page + the Stripe charge.
       gstRegistered: ctx.gstRegistered,
+      // v8 — a photo uploaded from the Account tab AFTER this PDF was cached
+      // must replace the placeholder avatar on the next download.
+      tradiePhotoUrl: ctx.tradiePhotoUrl,
     })
     if (
       !quotePdfIsStale({
@@ -612,21 +668,31 @@ export async function ensureQuotePdf(
     // not the quotes row).
     const layoutOverlay =
       intakeTrade === 'roofing' ? await resolveRoofLayoutForQuote(quote.share_token) : null
+    // "Your tradie" photo, embedded as a data URI (Gotenberg must not depend on
+    // a network fetch). Best-effort: null falls back to the placeholder avatar.
+    const tradiePhotoSrc = ctx.tradiePhotoUrl
+      ? await prepareImage(ctx.tradiePhotoUrl, { maxEdge: 320 })
+      : null
     const html = renderQuoteDocumentHtml(
-      buildQuoteReportInput(ctx, branding, visualsImageSrc, layoutOverlay),
+      buildQuoteReportInput(ctx, branding, visualsImageSrc, layoutOverlay, tradiePhotoSrc),
       quote.report_doc,
     )
     const pdf = await renderPdfFromHtml(html)
     const path = await storePdf(`quotes/${quoteId}.pdf`, pdf)
-    // RC-8 — if a property visual was EXPECTED (roofing/commercial aerial) but
-    // prepareImage returned null (a transient satellite-proxy blip), this PDF is
-    // image-less while the live HTML preview still shows the raw <img>. Storing a
-    // null signature marks it stale so the next download regenerates once the
-    // proxy recovers — rather than caching + serving the image-less PDF forever.
-    const propertyImageMissing = !!visualsPath && !visualsImageSrc
+    // RC-8 — if an image was EXPECTED but prepareImage returned null (a transient
+    // fetch blip), this PDF is missing it while the live HTML preview still shows
+    // the raw <img>. Storing a null signature marks it stale so the next download
+    // regenerates once the fetch recovers — rather than caching + serving the
+    // degraded PDF forever. Covers BOTH render-time images: the property visual
+    // (roofing/commercial aerial) and the tradie photo — a blip on the latter
+    // would otherwise cache the placeholder avatar permanently for a tradie who
+    // HAS uploaded a photo.
+    const imageMissing =
+      embeddedImageMissing(visualsPath, visualsImageSrc) ||
+      embeddedImageMissing(ctx.tradiePhotoUrl, tradiePhotoSrc)
     await supabase()
       .from('quotes')
-      .update({ pdf_path: path, pdf_signature: propertyImageMissing ? null : freshSignature })
+      .update({ pdf_path: path, pdf_signature: imageMissing ? null : freshSignature })
       .eq('id', quoteId)
     return path
   } catch (e) {
@@ -675,7 +741,7 @@ export async function ensureRoofQuotePdf(
     // pricing every detected structure into the shared cache. Explicit callers
     // (SMS send's finalQuote, the download route's pre-partitioned quote+rows)
     // still win verbatim.
-    const { quote, displayRows } = resolveRoofRenderSelection(
+    const { quote } = resolveRoofRenderSelection(
       {
         quote: row.quote,
         included_indices: row.included_indices,
@@ -710,67 +776,67 @@ export async function ensureRoofQuotePdf(
     })
 
     const branding = await loadTenantBranding(supabase(), row.tenant_id, 'roofing')
-    // Hero figure — the coloured roof outline tracing on a plain white
-    // background, drawn from the stored footprint polygon(s) (spec
-    // roof-pdf-outline-tracing). Draw EVERY detected structure when displayRows
-    // is supplied (included solid, excluded faint/dashed); else the narrowed
-    // quote's structures, all included. Self-contained data URI — no fetch.
-    const outlineStructures: RoofOutlineStructure[] =
-      displayRows && displayRows.length
-        ? displayRows.map((r) => ({
-            polygon: r.structure.metrics?.polygon_geojson,
-            form: r.structure.metrics?.form ?? 'unknown',
-            included: r.included,
-          }))
-        : quote.structures.map((s) => ({
-            polygon: s.metrics?.polygon_geojson,
-            form: s.metrics?.form ?? 'unknown',
-            included: true,
-          }))
-    const outlineImageSrc = roofOutlineImageSrc(outlineStructures, { width: 1000, height: 750 })
 
-    // Aerial photo(s). One per INCLUDED structure, each centred on its building
-    // via static-map ?b=. Map the rendered (narrowed/included) structures back
-    // to their 1-based index in the FULL stored quote (row.quote) by buildingId,
-    // because the static-map endpoint indexes the full quote and the rendered
-    // quote may be a re-ordered subset from a separate DB read. Deriving this
-    // INSIDE ensureRoofQuotePdf means every entry point (download route, SMS
-    // send, file-store) gets the multi-structure aerials, even those that pass a
-    // narrowed `quote` and no `displayRows`. Single structure → keep the legacy
-    // single no-?b aerial as the figure-pair thumb (byte-identical to before).
+    // Aerial photo(s) — section 01's figure. One per INCLUDED structure, each
+    // centred on its building via static-map ?b=. Map the rendered (narrowed/
+    // included) structures back to their 1-based index in the FULL stored quote
+    // (row.quote) by buildingId, because the static-map endpoint indexes the
+    // full quote and the rendered quote may be a re-ordered subset from a
+    // separate DB read. Deriving this INSIDE ensureRoofQuotePdf means every
+    // entry point (download route, SMS send, file-store) gets the
+    // multi-structure aerials, even those that pass a narrowed `quote` and no
+    // `displayRows`. Single structure → the page's single unlabelled aerial.
     // (spec roofing-pdf-multi-structure-images R2)
     const imageRefs = structureImageRefs(row.quote?.structures, quote.structures)
-    let structureImages: { label: string; src: string | null }[] | undefined
-    let mapImageSrc: string | null = null
-    if (imageRefs.length > 1) {
-      structureImages = await Promise.all(
-        imageRefs.map(async (r) => ({
-          label: r.label,
-          src: await prepareImage(`${APP_URL}${structureStaticMapPath(publicToken, r.index1Based)}`),
-        })),
-      )
-    } else {
-      mapImageSrc = await prepareImage(
-        `${APP_URL}/api/roofing/q/${publicToken}/static-map`,
-      )
+    const aerials =
+      imageRefs.length > 1
+        ? await Promise.all(
+            imageRefs.map(async (r) => ({
+              label: r.label,
+              src: await prepareImage(
+                `${APP_URL}${structureStaticMapPath(publicToken, r.index1Based)}`,
+              ),
+            })),
+          )
+        : [
+            {
+              label: '',
+              src: await prepareImage(`${APP_URL}/api/roofing/q/${publicToken}/static-map`),
+            },
+          ]
+
+    // "Your tradie" photo, embedded as a data URI (Gotenberg must not depend on
+    // a network fetch). Best-effort: null falls back to the placeholder avatar.
+    let tradiePhotoUrl: string | null = null
+    if (row.tenant_id) {
+      const { data: t } = await supabase()
+        .from('tenants')
+        .select('photo_url')
+        .eq('id', row.tenant_id)
+        .maybeSingle<{ photo_url: string | null }>()
+      tradiePhotoUrl = t?.photo_url ?? null
     }
+    const tradiePhotoSrc = tradiePhotoUrl
+      ? await prepareImage(tradiePhotoUrl, { maxEdge: 320 })
+      : null
 
-    // AI work-strategy layout map + estimated materials — CACHED plan only,
-    // selection-aware. Extracted (buildRoofLayoutOverlay) so the generic
-    // quotes-row PDF/HTML reuses the identical overlay.
-    const layoutOverlay = await buildRoofLayoutOverlay(row)
-
-    const html = buildRoofQuoteReportHtml({
+    // The CUSTOMER view — the same five numbered sections /q/roof/[token]
+    // renders for a confirmed customer. The tradie's detailed measurement
+    // report (buildRoofQuoteReportHtml) stays on the ?full=1 page; this is the
+    // document the customer receives over SMS/MMS/email, so the two agree.
+    const html = buildRoofCustomerReportHtml({
       businessName: branding.businessName,
       branding,
       address: row.address ?? '',
       quote,
       visibleTierKeys,
-      displayRows,
-      outlineImageSrc,
-      mapImageSrc,
-      structureImages,
-      layoutOverlay,
+      aerials,
+      tradie: tradieProfile({
+        businessName: branding.businessName,
+        photoUrl: tradiePhotoSrc,
+        trade: 'roofing',
+      }),
+      inspectionFeeAud: INSPECTION_FEE_AUD,
       quoteViewUrl: `${APP_URL}/q/roof/${publicToken}`,
     })
     const pdf = await renderPdfFromHtml(html)

@@ -3,7 +3,12 @@
 // rendered from; quotePdfIsStale decides when ensureQuotePdf must regenerate.
 
 import { describe, expect, it } from 'vitest'
-import { quotePdfSignature, quotePdfIsStale, hashReportContent } from './pdf-signature'
+import {
+  quotePdfSignature,
+  quotePdfIsStale,
+  hashReportContent,
+  embeddedImageMissing,
+} from './pdf-signature'
 
 describe('quotePdfSignature', () => {
   const base = {
@@ -37,6 +42,43 @@ describe('quotePdfSignature', () => {
     expect(quotePdfSignature({ ...base, recommendedTier: 'better' })).not.toBe(
       quotePdfSignature(base),
     )
+  })
+
+  // The "Your tradie" block embeds tenants.photo_url. A tradie who uploads (or
+  // replaces) their photo must not keep serving the cached placeholder PDF.
+  it('changes when the tradie photo changes', () => {
+    const withPhoto = quotePdfSignature({ ...base, tradiePhotoUrl: 'https://cdn/x/p1.jpg' })
+    expect(withPhoto).not.toBe(quotePdfSignature(base))
+    expect(quotePdfSignature({ ...base, tradiePhotoUrl: 'https://cdn/x/p2.jpg' })).not.toBe(
+      withPhoto,
+    )
+  })
+
+  it('keeps the pre-photo signature byte-identical when no photo is set', () => {
+    expect(quotePdfSignature({ ...base, tradiePhotoUrl: null })).toBe(quotePdfSignature(base))
+    expect(quotePdfSignature({ ...base, tradiePhotoUrl: '' })).toBe(quotePdfSignature(base))
+  })
+})
+
+// RC-8 generalised. ensureQuotePdf embeds two images that are fetched at render
+// time (the property aerial and the tradie photo). If one was EXPECTED but its
+// fetch blipped, the PDF is rendered without it — storing a fresh signature
+// would cache that degraded document forever. Storing null marks it stale so the
+// next download regenerates once the fetch recovers.
+describe('embeddedImageMissing', () => {
+  it('is true when an image was expected but did not resolve', () => {
+    expect(embeddedImageMissing('/api/roofing/q/abc/static-map', null)).toBe(true)
+    expect(embeddedImageMissing('https://cdn/photo.jpg', null)).toBe(true)
+  })
+
+  it('is false when the expected image resolved', () => {
+    expect(embeddedImageMissing('https://cdn/photo.jpg', 'data:image/jpeg;base64,AAA')).toBe(false)
+  })
+
+  it('is false when no image was expected in the first place', () => {
+    expect(embeddedImageMissing(null, null)).toBe(false)
+    expect(embeddedImageMissing(undefined, undefined)).toBe(false)
+    expect(embeddedImageMissing('', null)).toBe(false)
   })
 })
 

@@ -24,9 +24,11 @@ import { QuoteChrome, type StickyBar } from '../_chrome/QuoteChrome'
 import { tradeIcon } from '../_chrome/icons'
 import {
   QuoteSheet, Letterhead, HeroPhoto, QuoteHero, StatGrid, Scope,
-  SheetSection, TierCards, GoodToKnow, CredentialFooter, TrustVideo,
+  SheetSection, TierCards, GoodToKnow, CredentialFooter, TrustVideo, TradiePhoto,
   type QuoteTier, type Stat, type FooterRow, type ScopeItem,
 } from '../_chrome/parts'
+import { tradieProfile } from '@/lib/quote/tradie-profile'
+import { jobDetailsSentence } from '@/lib/quote/scope-short'
 import {
   INSPECTION_FEE_AUD,
   clampDepositPct,
@@ -98,6 +100,8 @@ type TenantIdentity = {
   website_url: string | null
   business_address: string | null
   logo_url: string | null
+  /** Mig 180 — the tradie's own photo for the "Your tradie" section. */
+  photo_url: string | null
   /** Mig 175 trust videos — tenant's own film, else the QuoteMax default. */
   intro_video_url: string | null
   thankyou_video_url: string | null
@@ -141,14 +145,9 @@ function asNumber(v: number | string | null | undefined): number {
 // number (spec customer-quote-five-sections R9).
 const fmt = fmtAud
 
-/** First full sentence of a scope paragraph — the same slice the customer
- *  SMS uses (lib/sms/templates.ts pickScopeForSms) as the Section 2 fallback
- *  for quotes drafted before migration 175 persisted scope_short. */
-function firstSentenceOf(s: string | null | undefined): string | null {
-  if (!s || !s.trim()) return null
-  const m = s.match(/^[^.]+\./)
-  return (m ? m[0] : s).trim()
-}
+// The Section 2 sentence (scope_short, else the scope's first sentence) now
+// resolves through the shared lib/quote/scope-short jobDetailsSentence, so this
+// page and the quote PDF print the SAME job details.
 
 export default async function PublicQuotePage(props: {
   params: Promise<{ token: string }>
@@ -312,6 +311,13 @@ export default async function PublicQuotePage(props: {
         .eq('id', quoteTenantId)
         .maybeSingle()
       const e = (ex ?? {}) as Record<string, string | null>
+      // Own best-effort select (mig 180): a pre-180 deploy loses only the
+      // photo — the letterhead columns above keep loading.
+      const { data: ph } = await supabase
+        .from('tenants')
+        .select('photo_url')
+        .eq('id', quoteTenantId)
+        .maybeSingle()
       tenantIdentity = {
         business_name: b.business_name ?? null,
         owner_first_name: b.owner_first_name ?? null,
@@ -322,6 +328,7 @@ export default async function PublicQuotePage(props: {
         website_url: e.website_url ?? null,
         business_address: e.business_address ?? null,
         logo_url: e.logo_url ?? null,
+        photo_url: ((ph ?? {}) as { photo_url?: string | null }).photo_url ?? null,
         intro_video_url: e.intro_video_url ?? null,
         thankyou_video_url: e.thankyou_video_url ?? null,
       }
@@ -904,9 +911,16 @@ export default async function PublicQuotePage(props: {
           : 0
     const roofTierLabel = tierLabelsForTrade('roofing')[featuredKey ?? 'better']
     const roofDeposit = !isInspection && roofTier ? tierDeposit(roofTier) : null
-    const jobSentence = scopeShort ?? firstSentenceOf(quote.scope_of_works as string | null)
+    const jobSentence = jobDetailsSentence(scopeShort, quote.scope_of_works as string | null)
     const websiteUrl = safeWebsiteUrl(tenantIdentity?.website_url)
     const tradieName = tenantIdentity?.business_name ?? 'Your roofer'
+    // Section 03 identity — the same resolver the quote PDF uses, so the photo
+    // and the sentence are identical on both surfaces (mig 180).
+    const roofTradie = tradieProfile({
+      businessName: tradieName,
+      photoUrl: tenantIdentity?.photo_url,
+      trade: 'roofing',
+    })
 
     const microNote: React.CSSProperties = {
       fontFamily: 'var(--font-mono)',
@@ -938,18 +952,21 @@ export default async function PublicQuotePage(props: {
                 caption="A short introduction from your tradie"
               />
             </div>
-            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
-              {tradieName} is a licensed local roofing business.
-              {websiteUrl ? (
-                <>
-                  {' '}
-                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
-                    Visit their website
-                  </a>
-                  .
-                </>
-              ) : null}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <TradiePhoto src={roofTradie.photoSrc} alt={roofTradie.name} />
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+                {roofTradie.blurb}
+                {websiteUrl ? (
+                  <>
+                    {' '}
+                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                      Visit their website
+                    </a>
+                    .
+                  </>
+                ) : null}
+              </p>
+            </div>
           </div>
         ),
       },

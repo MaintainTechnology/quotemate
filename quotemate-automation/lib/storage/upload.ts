@@ -111,8 +111,15 @@ export function sanitizeSvg(svg: string): string {
     .replace(/(href|xlink:href)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2')
 }
 
+/** Which tenant brand image is being stored. Both live in the same public
+ *  bucket under their own filename prefix — 'photo' is the tradie's own photo
+ *  for the customer quote's "Your tradie" section (mig 180). */
+export type TenantImageKind = 'logo' | 'photo'
+
+const KIND_NOUN: Record<TenantImageKind, string> = { logo: 'Logo', photo: 'Photo' }
+
 /**
- * Upload a tenant's logo to the public tenant-logos bucket and return its
+ * Upload a tenant brand image to the public tenant-logos bucket and return its
  * stable public URL + storage path. `ownerKey` scopes the object (the auth
  * user_id pre-activate, since the tenant row doesn't exist yet). SVGs are
  * sanitised before storage. Validates type + size; throws on violation so the
@@ -122,18 +129,22 @@ export async function uploadTenantLogo(opts: {
   ownerKey: string
   data: ArrayBuffer | Uint8Array
   contentType: string
+  /** Defaults to 'logo' — the pre-mig-180 behaviour, byte-for-byte. */
+  kind?: TenantImageKind
 }): Promise<{ path: string; publicUrl: string }> {
+  const kind = opts.kind ?? 'logo'
+  const noun = KIND_NOUN[kind]
   const mime = opts.contentType.split(';')[0].trim().toLowerCase()
   if (!(ALLOWED_LOGO_MIME as readonly string[]).includes(mime)) {
-    throw new Error('Logo must be a PNG, JPG, WEBP, or SVG image.')
+    throw new Error(`${noun} must be a PNG, JPG, WEBP, or SVG image.`)
   }
 
   let bytes = opts.data instanceof Uint8Array ? opts.data : new Uint8Array(opts.data)
   if (bytes.byteLength > MAX_LOGO_BYTES) {
-    throw new Error('Logo must be 2 MB or smaller.')
+    throw new Error(`${noun} must be 2 MB or smaller.`)
   }
   if (bytes.byteLength === 0) {
-    throw new Error('Logo file is empty.')
+    throw new Error(`${noun} file is empty.`)
   }
 
   // Harden SVGs before they land in a public bucket.
@@ -144,15 +155,15 @@ export async function uploadTenantLogo(opts: {
 
   const ext = logoMimeToExt(mime)
   const safeKey = (opts.ownerKey || 'pending').replace(/[^a-zA-Z0-9_-]/g, '') || 'pending'
-  const path = `${safeKey}/logo-${Date.now()}-${randomBytes(4).toString('hex')}.${ext}`
+  const path = `${safeKey}/${kind}-${Date.now()}-${randomBytes(4).toString('hex')}.${ext}`
 
   const { error: uploadErr } = await getClient().storage
     .from(TENANT_LOGO_BUCKET)
     .upload(path, bytes, { contentType: mime, upsert: true })
-  if (uploadErr) throw new Error(`Logo upload failed: ${uploadErr.message}`)
+  if (uploadErr) throw new Error(`${noun} upload failed: ${uploadErr.message}`)
 
   const { data: pub } = getClient().storage.from(TENANT_LOGO_BUCKET).getPublicUrl(path)
-  if (!pub?.publicUrl) throw new Error('Could not resolve the logo public URL.')
+  if (!pub?.publicUrl) throw new Error(`Could not resolve the ${kind} public URL.`)
 
   return { path, publicUrl: pub.publicUrl }
 }

@@ -41,6 +41,12 @@ export function quotePdfSignature(args: {
    *  default: only the non-registered case appends a segment, so existing
    *  registered PDFs keep a byte-identical signature and are NOT force-regen'd. */
   gstRegistered?: boolean | null
+  /** tenants.photo_url — the "Your tradie" block's photo (v8). Set/changed from
+   *  the dashboard Account tab AFTER the draft-time PDF was cached, so without
+   *  this the customer keeps downloading a PDF showing the placeholder avatar
+   *  (or the old headshot). Unset keeps the signature byte-identical to pre-v8,
+   *  so photo-less tenants' cached PDFs aren't force-regenerated. */
+  tradiePhotoUrl?: string | null
 }): string {
   let base = `v${args.templateVersion}|${args.tierMode}|t=${args.visibleTierKeys.join('+')}|r=${
     args.recommendedTier ?? ''
@@ -48,6 +54,10 @@ export function quotePdfSignature(args: {
   const pct = args.appliedDiscountPct ?? 0
   if (pct > 0) base = `${base}|disc=${pct}`
   if (args.gstRegistered === false) base = `${base}|g=0`
+  const photo = (args.tradiePhotoUrl ?? '').trim()
+  // Hash, not the raw URL: storage URLs are long and the signature is a stored
+  // column — the hash still changes on every re-upload (path carries a nonce).
+  if (photo) base = `${base}|p=${hashReportContent(photo, null)}`
   return args.docHash ? `${base}|d=${args.docHash}` : base
 }
 
@@ -66,6 +76,26 @@ export function quotePdfIsStale(args: {
   if (args.regenerate) return true
   if (!args.pdfPath) return true
   return args.storedSignature !== args.freshSignature
+}
+
+/**
+ * Whether an image the report EXPECTED to embed failed to resolve (RC-8).
+ *
+ * ensureQuotePdf fetches two images at render time — the property aerial and the
+ * tradie photo — and embeds each as a data URI. A transient fetch blip yields
+ * null, so the PDF renders without it (stats-only block / placeholder avatar).
+ * Caching that with a FRESH signature would serve the degraded document forever;
+ * the caller stores a NULL signature instead, which never matches, so the next
+ * download regenerates once the fetch recovers.
+ *
+ * Only "expected but absent" counts: a quote with no aerial and no photo is
+ * complete as rendered and must keep its normal signature.
+ */
+export function embeddedImageMissing(
+  expectedSource: string | null | undefined,
+  resolvedSrc: string | null | undefined,
+): boolean {
+  return !!expectedSource && !resolvedSrc
 }
 
 /**

@@ -119,6 +119,8 @@ export function renderPart(opts: {
   note?: string | null
   bullets?: string[]
   priceLines?: string[] // pre-built HTML strings (may contain <span> emphasis)
+  /** Raw HTML appended inside the card — figures, the tradie block, price rows. */
+  html?: string
   optional?: boolean
 }): string {
   const noteHtml = opts.note ? `<span class="part-note">${esc(opts.note)}</span>` : ''
@@ -138,7 +140,28 @@ export function renderPart(opts: {
     ${noteHtml ? `<p class="part-note-row">${noteHtml}</p>` : ''}
     ${bulletsHtml}
     ${priceHtml}
+    ${opts.html ?? ''}
   </section>`
+}
+
+/**
+ * The "Your tradie" identity block — the tradie's photo (or the placeholder
+ * avatar) beside the licensed-local-business sentence, as resolved by
+ * lib/quote/tradie-profile.ts. Lives here, next to its `.tradie` CSS, so the
+ * generic quote report and every trade-native one render section 03 identically.
+ */
+export function renderTradieBlock(
+  t: { name: string; photoSrc: string; blurb: string } | null | undefined,
+): string {
+  if (!t) return ''
+  return `
+  <div class="tradie">
+    <img class="tradie-photo" src="${esc(t.photoSrc)}" alt="${esc(t.name)}">
+    <div class="tradie-copy">
+      <div class="tradie-name">${esc(t.name)}</div>
+      <p class="note">${esc(t.blurb)}</p>
+    </div>
+  </div>`
 }
 
 /** A captioned image figure. Returns '' when there's no src (spec R6/edge). */
@@ -304,6 +327,15 @@ export function renderReportDocument(branding: TenantBranding, doc: ReportDocume
   .flag{ font-family:'JetBrains Mono','Courier New',monospace; font-size:9px;
     text-transform:uppercase; color:#B45309; border:1px solid #B45309; padding:1px 6px; }
   .note{ color:var(--sec); font-size:11px; }
+
+  /* ── Tradie identity block (customer-view section 03 parity) ── */
+  .tradie{ display:flex; align-items:center; gap:14px; border:1px solid var(--line);
+    background:var(--card); padding:12px 14px; margin-top:8px; page-break-inside:avoid; }
+  .tradie-photo{ width:72px; height:72px; flex:none; object-fit:cover;
+    border:1px solid var(--line); background:#fff; }
+  .tradie-name{ font-weight:800; font-size:13px; text-transform:uppercase;
+    letter-spacing:-0.01em; color:var(--pri); }
+  .tradie-copy .note{ margin:4px 0 0; }
 
   /* ── Figure ── */
   .figure{ margin:14px 0; page-break-inside:avoid; }

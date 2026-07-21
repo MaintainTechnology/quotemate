@@ -11,6 +11,7 @@
 
 import {
   renderReportDocument,
+  renderTradieBlock,
   brandingFromName,
   esc,
   aud2,
@@ -44,8 +45,11 @@ import { displayIncGst } from './money'
  *   (P7 — the PDF previously showed the full price while the page + Stripe
  *   charged the discounted one) and pricing_book.gst_registered (P1), both via
  *   the shared lib/quote/money.ts.
+ *   v8 (2026-07-21): customer-view parity — the PDF now carries the page's
+ *   "Job details" sentence (quotes.scope_short) and a "Your tradie" block with
+ *   the tradie's photo (tenants.photo_url, else the placeholder avatar).
  */
-export const REPORT_TEMPLATE_VERSION = 7
+export const REPORT_TEMPLATE_VERSION = 8
 
 export type QuoteReportLineItem = {
   description: string
@@ -71,6 +75,16 @@ export type QuoteReportPropertyVisuals = {
   disclaimer: string | null
 }
 
+/** The "Your tradie" block, as resolved by lib/quote/tradie-profile.ts. The PDF
+ *  receives `photoSrc` already embedded as a data: URI (lib/pdf/image prepareImage),
+ *  so the render never depends on the network. */
+export type QuoteReportTradie = {
+  name: string
+  photoSrc: string
+  hasPhoto: boolean
+  blurb: string
+}
+
 export type QuoteReportInput = {
   businessName: string
   /** Full white-label branding; when omitted, derived from businessName. */
@@ -78,6 +92,12 @@ export type QuoteReportInput = {
   customerName?: string | null
   jobType: string
   scopeOfWorks?: string | null
+  /** v8 — quotes.scope_short: the one-line job summary the customer page prints
+   *  as section 02 "Job details". Absent/blank ⇒ the section is omitted. */
+  jobDetails?: string | null
+  /** v8 — the customer page's section 03 "Your tradie" (lib/quote/tradie-profile).
+   *  Absent ⇒ the section is omitted (back-compat for callers that don't load it). */
+  tradie?: QuoteReportTradie | null
   assumptions?: string[] | null
   estimatedTimeframe?: string | null
   propertyVisuals?: QuoteReportPropertyVisuals | null
@@ -214,6 +234,22 @@ function propertyVisualsSection(v: QuoteReportPropertyVisuals | null | undefined
   return `<h2>Your property</h2>${img}${stats}${disclaimer}`
 }
 
+/** Section 02 "Job details" — the customer page's one-line scope sentence
+ *  (quotes.scope_short). Empty string when the quote carries none. */
+function jobDetailsSection(jobDetails: string | null | undefined): string {
+  const text = (jobDetails ?? '').trim()
+  if (!text) return ''
+  return `<h2>Job details</h2><div class="scope">${esc(text)}</div>`
+}
+
+/** Section 03 "Your tradie" — photo (or the placeholder avatar) beside the
+ *  licensed-local-business sentence, matching the customer page. */
+function tradieSection(t: QuoteReportTradie | null | undefined): string {
+  if (!t) return ''
+  return `
+  <h2>Your tradie</h2>${renderTradieBlock(t)}`
+}
+
 /** The default report body — scope of works + Good/Better/Best + assumptions,
  *  exactly as before the report-doc split. Used when a quote has no report_doc. */
 function buildDefaultQuoteBody(input: QuoteReportInput): string {
@@ -225,9 +261,13 @@ function buildDefaultQuoteBody(input: QuoteReportInput): string {
   if (input.scopeOfWorks) {
     body += `<h2>Scope of works</h2><div class="scope">${esc(input.scopeOfWorks)}</div>`
   }
+  // Customer-view order: overview (scope) → job details → property evidence →
+  // your tradie → your price. Keeps the PDF reading like the page it mirrors.
+  body += jobDetailsSection(input.jobDetails)
   body += propertyVisualsSection(input.propertyVisuals)
   // Roofing: the layout map + estimated materials (from the linked measurement).
   if (input.layoutOverlay) body += renderRoofLayoutSectionHtml(input.layoutOverlay)
+  body += tradieSection(input.tradie)
   body += `<h2>${multiTier ? 'Your options' : 'Your quote'}</h2>${tiers}`
   if (assumptions.length > 0) {
     body += `<h2>Assumptions</h2><ul class="bullets">${assumptions

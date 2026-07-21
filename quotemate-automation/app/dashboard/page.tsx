@@ -207,6 +207,11 @@ type Tenant = {
    *  Changeable from the Account tab; the quote page reads logo_url live. */
   logo_url: string | null
   logo_path: string | null
+  /** Migration 180 — the tradie's own photo, shown in the "Your tradie"
+   *  section of the customer quote page AND the quote PDF. Set from the
+   *  Account tab; null renders a placeholder avatar and prompts on Overview. */
+  photo_url: string | null
+  photo_path: string | null
   /** Migration 147 — default schedule availability (weekly working-hours
    *  template). Drives the customer-facing AM/PM booking windows. NULL for
    *  legacy tenants (falls back to available_slots / rolling window). */
@@ -749,23 +754,23 @@ export default function DashboardPage() {
     await refresh(token)
   }
 
-  // Logo change (migration 141). Uploads the new file to /api/tenant/logo
-  // (authenticated, multipart) which stores it + writes tenants.logo_url,
-  // then re-fetches so the Account-tab preview — and every customer quote
-  // letterhead — reflects the new logo.
-  async function uploadLogo(file: File): Promise<void> {
+  // Brand-image change — logo (migration 141) or the tradie's photo
+  // (migration 180). Uploads to /api/tenant/<kind> (authenticated, multipart)
+  // which stores it + writes tenants.<kind>_url, then re-fetches so the
+  // Account-tab preview — and every customer quote surface — reflects it.
+  async function uploadBrandImage(kind: 'logo' | 'photo', file: File): Promise<void> {
     const token = (await getAuthToken()) ?? accessToken
     if (!token) throw new Error('not signed in')
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch('/api/tenant/logo', {
+    const res = await fetch(`/api/tenant/${kind}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: fd,
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok || !body.ok) {
-      throw new Error(body?.error ?? `Logo upload failed (HTTP ${res.status})`)
+      throw new Error(body?.error ?? `Upload failed (HTTP ${res.status})`)
     }
     await refresh(token)
   }
@@ -1041,7 +1046,8 @@ export default function DashboardPage() {
                 onSaveTrades={saveTrades}
                 onListAvailableTrades={listAvailableTrades}
                 onActivateTrade={activateTrade}
-                onUploadLogo={uploadLogo}
+                onUploadLogo={(f) => uploadBrandImage('logo', f)}
+                onUploadPhoto={(f) => uploadBrandImage('photo', f)}
               />
             )}
             {tab === 'payouts' && (
@@ -3072,6 +3078,33 @@ function OverviewTab({
 
         {/* Right rail — attention · number · chats */}
         <div className="flex min-w-0 flex-col gap-[18px]">
+          {/* Add your photo (mig 180) — every customer quote shows a "Your
+              tradie" block; without a photo it falls back to a generic avatar
+              on both the quote page and the PDF. Disappears once one is set. */}
+          {!data.tenant.photo_url && (
+            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-ink-line border-l-2 border-l-warning-bright bg-ink-card p-[18px]">
+              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-warning-bright">
+                <span
+                  aria-hidden="true"
+                  className="h-1.5 w-1.5 rounded-full bg-warning-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
+                />
+                Add your photo
+              </div>
+              <p className="mt-2 text-[12.5px] leading-normal text-text-dim">
+                Your quotes show a generic avatar in the &ldquo;Your tradie&rdquo;
+                section. Add a photo once and customers see your face on every
+                quote page and PDF.
+              </p>
+              <button
+                type="button"
+                onClick={() => setTab('account')}
+                className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+              >
+                Add your photo →
+              </button>
+            </section>
+          )}
+
           {/* Needs your attention — the top review quote (or an all-clear). */}
           {attnQuote ? (
             <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-ink-line border-l-2 border-l-warning-bright bg-ink-card p-[18px]">
@@ -3830,66 +3863,75 @@ function SmsEstimatorCard({
   )
 }
 
-// Business-logo card (migration 141). Shows the current logo and lets the
-// tradie replace it. The upload + DB write happen in onUploadLogo (→
-// /api/tenant/logo); on success the parent re-fetches, so `tenant.logo_url`
-// updates here and on every customer quote letterhead. Validates type/size
+// Brand-image card — the business logo (migration 141) and the tradie's own
+// photo (migration 180). One component, two instances: both are "pick an image,
+// POST it, the customer quote surfaces update". The upload + DB write happen in
+// onUpload (→ /api/tenant/logo|photo); on success the parent re-fetches, so the
+// preview here and every customer quote reflect it. Validates type/size
 // client-side for a fast error before hitting the network.
 const LOGO_ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml'
 const LOGO_ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
 const LOGO_MAX_BYTES = 2 * 1024 * 1024
 
-function LogoCard({
-  tenant,
-  onUploadLogo,
+function BrandImageCard({
+  title,
+  subtitle,
+  noun,
+  currentUrl,
+  fit = 'contain',
+  onUpload,
 }: {
-  tenant: Tenant
-  onUploadLogo: (file: File) => Promise<void>
+  title: string
+  subtitle: string
+  /** Lowercase noun for the button + error copy, e.g. "logo" / "photo". */
+  noun: string
+  currentUrl: string | null
+  /** 'contain' suits a wordmark on white; 'cover' suits a headshot. */
+  fit?: 'contain' | 'cover'
+  onUpload: (file: File) => Promise<void>
 }) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const Noun = noun.charAt(0).toUpperCase() + noun.slice(1)
 
   async function handleFile(file: File | null) {
     if (!file) return
     setError(null)
     const mime = (file.type || '').split(';')[0].trim().toLowerCase()
     if (!LOGO_ALLOWED_MIME.includes(mime)) {
-      setError('Logo must be a PNG, JPG, WEBP, or SVG image.')
+      setError(`${Noun} must be a PNG, JPG, WEBP, or SVG image.`)
       return
     }
     if (file.size > LOGO_MAX_BYTES) {
-      setError('Logo must be 2 MB or smaller.')
+      setError(`${Noun} must be 2 MB or smaller.`)
       return
     }
     setUploading(true)
     try {
-      await onUploadLogo(file)
+      await onUpload(file)
       setSavedAt(Date.now())
     } catch (err: any) {
-      setError(err?.message ?? 'Logo upload failed')
+      setError(err?.message ?? `${Noun} upload failed`)
     } finally {
       setUploading(false)
     }
   }
 
   return (
-    <Card
-      title="Business logo"
-      subtitle="Shown on every customer quote — updating it changes the logo on all your quotes."
-    >
+    <Card title={title} subtitle={subtitle}>
       <div className="flex items-center gap-5">
         <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden border border-ink-line bg-white">
-          {tenant.logo_url ? (
+          {currentUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={tenant.logo_url}
-              alt="Your logo"
-              className="h-full w-full object-contain"
+              src={currentUrl}
+              alt={`Your ${noun}`}
+              className={`h-full w-full ${fit === 'cover' ? 'object-cover' : 'object-contain'}`}
             />
           ) : (
             <span className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-text-dim">
-              No logo
+              No {noun}
             </span>
           )}
         </div>
@@ -3902,7 +3944,7 @@ function LogoCard({
               onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
               disabled={uploading}
             />
-            {uploading ? 'Uploading…' : tenant.logo_url ? 'Change logo' : 'Upload logo'}
+            {uploading ? 'Uploading…' : currentUrl ? `Change ${noun}` : `Upload ${noun}`}
           </label>
           <p className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
             PNG, JPG, WEBP or SVG · max 2 MB
@@ -3992,6 +4034,7 @@ function AccountTab({
   onListAvailableTrades,
   onActivateTrade,
   onUploadLogo,
+  onUploadPhoto,
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
@@ -4011,6 +4054,7 @@ function AccountTab({
     trade: string,
   ) => Promise<{ ok: true; trade: string; warning?: string }>
   onUploadLogo: (file: File) => Promise<void>
+  onUploadPhoto: (file: File) => Promise<void>
 }) {
   const [form, setForm] = useState({
     business_name: data.tenant.business_name ?? '',
@@ -4068,7 +4112,21 @@ function AccountTab({
         primaryState={data.tenant.state ?? null}
       />
 
-      <LogoCard tenant={data.tenant} onUploadLogo={onUploadLogo} />
+      <BrandImageCard
+        title="Business logo"
+        subtitle="Shown on every customer quote — updating it changes the logo on all your quotes."
+        noun="logo"
+        currentUrl={data.tenant.logo_url}
+        onUpload={onUploadLogo}
+      />
+      <BrandImageCard
+        title="Your photo"
+        subtitle='Shown in the "Your tradie" section of every customer quote — on the web page and the PDF. A clear headshot builds trust; without one customers see a generic avatar.'
+        noun="photo"
+        currentUrl={data.tenant.photo_url}
+        fit="cover"
+        onUpload={onUploadPhoto}
+      />
 
       <Card
         title="Account details"
