@@ -39,6 +39,7 @@ import {
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { ensureRoofQuotePdf, roofQuotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { quotePdfMmsEnabled } from '@/lib/sms/send-quote-pdf'
+import { notifyRoofingTradie, type RoofingNotifyKind } from '@/lib/sms/roofing-notify'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
@@ -476,6 +477,46 @@ async function handleRoofingTurn(args: {
     }
   }
   const baseUrl = ROOFING_APP_BASE_URL
+  // US-002 — tell the tradie a roofing lead just happened (quote delivered /
+  // inspection booked). Best-effort, never blocks or breaks the customer
+  // send: before this, roofing leads landed in the DB and nobody was told.
+  const notifyTradie = async (
+    kind: RoofingNotifyKind,
+    address: string,
+    betterIncGst: number | null,
+    quoteUrl: string,
+  ) => {
+    try {
+      const { data: t } = tenantId
+        ? await supabase
+            .from('tenants')
+            .select('owner_mobile, owner_first_name, twilio_sms_number')
+            .eq('id', tenantId)
+            .maybeSingle()
+        : { data: null }
+      const row = (t as {
+        owner_mobile?: string | null
+        owner_first_name?: string | null
+        twilio_sms_number?: string | null
+      } | null) ?? null
+      await notifyRoofingTradie({
+        kind,
+        tenant: {
+          owner_mobile: row?.owner_mobile ?? null,
+          owner_first_name: row?.owner_first_name ?? null,
+          twilio_sms_number: row?.twilio_sms_number ?? null,
+        },
+        customerName: firstName,
+        customerPhone: fromNumber,
+        address,
+        betterIncGst,
+        quoteUrl,
+        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from }),
+      })
+    } catch (e) {
+      console.warn('[sms/inbound:roofing] tradie notify failed (non-fatal)', e)
+    }
+  }
   // Best-effort roof-photo MMS sent BEFORE the confirm SMS. One image for a
   // single building, one per building (capped) for several. Uses sendSms
   // directly (NOT dispatchQuoteMessage) so a failure or a non-MMS number
@@ -541,6 +582,16 @@ async function handleRoofingTurn(args: {
   if (decision.action === 'booking') {
     await sendReply(composeBookingMessage(firstName, decision.confirmed))
     await persist({ slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'done')
+    // US-002 — a confirmed inspection is a live lead; tell the tradie.
+    if (decision.confirmed) {
+      const token = prevState?.pending_quote_token ?? null
+      await notifyTradie(
+        'inspection_booked',
+        decision.slots.address ?? 'address not captured',
+        null,
+        token ? `${baseUrl}/q/roof/${token}` : `${baseUrl}/dashboard`,
+      )
+    }
     return true
   }
 
@@ -652,6 +703,14 @@ async function handleRoofingTurn(args: {
         pending_structure_count: totalStructures,
         last_served_structures: confirmedIndices,
       }, 'open')
+      // US-002 — the quote just went to the customer; tell the tradie,
+      // with the same solar-inclusive better total the dashboard shows.
+      await notifyTradie(
+        'quote_sent',
+        pending.address,
+        applySolarToTiers(finalQuote.combined.tiers, finalQuote.solar ?? null)[1]?.inc_gst ?? null,
+        servedUrl,
+      )
       // Per-tenant file-store ingest (best-effort, never blocks the send).
       // Archive the priced roofing quote PDF + minimized KB markdown.
       // Skipped for inspection-routed quotes (no priced doc to ingest).
@@ -763,8 +822,10 @@ async function handleRoofingTurn(args: {
         if (isInspection) {
           // Inspection: send the next-step + link, then PARK at
           // await_booking so a "yes" books it (instead of re-quoting).
+          // The token is KEPT so the booking-confirm notify (US-002) can
+          // link the tradie straight to the saved measurement.
           await sendReply(buildRoofingReplyMessage({ quote, address: reqInput.address.address, quoteUrl, firstName }))
-          await persist({ slots: decision.slots, last_step: 'await_booking', pending_quote_token: null, pending_structure_count: null }, 'open')
+          await persist({ slots: decision.slots, last_step: 'await_booking', pending_quote_token: token, pending_structure_count: null }, 'open')
           return true
         }
         // Quotable — send "is this your roof?" + link and PARK at
