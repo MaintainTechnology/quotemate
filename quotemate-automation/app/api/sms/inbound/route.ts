@@ -679,7 +679,11 @@ async function handleRoofingTurn(args: {
       }
       // Mig 142 — roofing tier presentation mode for this tenant (single-price
       // tradies get one option in the estimate SMS, not all three tiers).
-      let roofingTierMode: QuoteTierMode = 'good_better_best'
+      // US-009 (audit 2026-07-23): the no-tenant default must be the SAME
+      // canonical default the quote page uses (asQuoteTierMode(null) →
+      // 'single'); it was hardcoded 'good_better_best', so a shared-number
+      // SMS showed three tiers while the linked page rendered one.
+      let roofingTierMode: QuoteTierMode = asQuoteTierMode(null)
       if (tenantId) {
         const { data: rb } = await supabase
           .from('pricing_book')
