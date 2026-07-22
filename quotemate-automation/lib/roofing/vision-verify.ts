@@ -14,7 +14,7 @@
 // tested. The Claude call is thin I/O.
 // ════════════════════════════════════════════════════════════════════
 
-import type { RoofMaterial } from './types'
+import { ROOF_MATERIALS, type RoofMaterial } from './types'
 import { roofingVisionParsed, type VisionImage } from './vision-provider'
 
 const DEFAULT_MODEL = process.env.ROOFING_VISION_MODEL ?? 'claude-sonnet-4-6'
@@ -68,10 +68,20 @@ export function buildVisionPrompt(args: {
   }
   lines.push(
     `  2. What is the roof MATERIAL in the customer photo?`,
-    `     Choose ONE of: "colorbond_trimdek" (corrugated/Trimdek profile metal),`,
-    `     "colorbond_kliplok" (Klip-Lok/concealed-fix metal), "concrete_tile" (concrete tile),`,
-    `     "terracotta_tile" (terracotta tile), "cement_sheet" (asbestos-suspect`,
-    `     fibro / cement sheet), or "unknown" (can't tell from this photo).`,
+    `     Choose ONE of:`,
+    `       "colorbond_corrugated" — classic wavy/round corrugated steel ("Custom Orb"):`,
+    `          smooth repeating curves, no flat pans.`,
+    `       "colorbond_trimdek" — square-fluted steel: wide FLAT pans separated by tall,`,
+    `          narrow, square-topped ribs.`,
+    `       "colorbond_spandek" — like Trimdek but narrower pans / more closely spaced ribs.`,
+    `       "colorbond_kliplok" — concealed-fix steel: broad flat pans, NO visible screws.`,
+    `       "concrete_tile" — concrete roof tiles.`,
+    `       "terracotta_tile" — terracotta / clay roof tiles.`,
+    `       "cement_sheet" — asbestos-suspect fibro / cement sheet.`,
+    `       "unknown" — can't tell from this photo.`,
+    `     Round waves = corrugated; square ribs = Trimdek/Spandek; screws through the sheet`,
+    `     rule OUT kliplok. If you can see it is steel but CANNOT reliably tell the profile,`,
+    `     answer the closest profile and set material_confidence to "low" — never "high".`,
     `     If it's clearly an older cement-sheet roof or you suspect asbestos, classify it`,
     `     as cement_sheet and add an asbestos red flag.`,
   )
@@ -80,7 +90,7 @@ export function buildVisionPrompt(args: {
   lines.push(`{`)
   lines.push(`  "match": <true|false|null>,`)
   lines.push(`  "reason": "<one short sentence>",`)
-  lines.push(`  "material": "<colorbond_trimdek|colorbond_kliplok|concrete_tile|terracotta_tile|cement_sheet|unknown>",`)
+  lines.push(`  "material": "<${ROOF_MATERIALS.join('|')}>",`)
   lines.push(`  "material_confidence": "<high|medium|low>",`)
   lines.push(`  "red_flags": ["<short tag>", ...]   // empty array if none`)
   lines.push(`}`)
@@ -135,14 +145,9 @@ function coerceBoolOrNull(v: unknown): boolean | null {
   return null
 }
 
-const VALID_MATERIALS: ReadonlySet<RoofMaterial> = new Set([
-  'colorbond_trimdek',
-  'colorbond_kliplok',
-  'concrete_tile',
-  'terracotta_tile',
-  'cement_sheet',
-  'unknown',
-])
+// Derived, never hand-written: a subset satisfies ReadonlySet<RoofMaterial>,
+// so the old literal list silently outlived two new materials.
+const VALID_MATERIALS: ReadonlySet<RoofMaterial> = new Set(ROOF_MATERIALS)
 
 function coerceMaterial(v: unknown): RoofMaterial {
   if (typeof v !== 'string') return 'unknown'

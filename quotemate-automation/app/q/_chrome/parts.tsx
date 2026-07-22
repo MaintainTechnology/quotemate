@@ -8,6 +8,7 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { businessInitials } from '@/lib/brand/monogram'
+import { captionTrackSrc } from '@/lib/videos/captions'
 import { CheckIcon, QuoteMaxMark, DownloadIcon } from './icons'
 
 /* ── shared type primitives ──────────────────────────────────────────── */
@@ -551,16 +552,25 @@ export function TradiePhoto({ src, alt, size = 76 }: { src: string; alt: string;
  * Plays on arrival — the customer should meet the tradie without hunting for
  * a play button. `muted` is load-bearing, not cosmetic: every browser blocks
  * autoplay with sound, so without it the video sits frozen on frame 0.
- * `controls` stays so one tap unmutes. Locked by trust-video.test.ts. */
+ * `controls` stays so one tap unmutes. Locked by trust-video.test.ts.
+ *
+ * Because it autoplays MUTED, the captions ARE the message until the customer
+ * taps to unmute — so the track is `default` (showing from frame 0) rather
+ * than buried in the controls menu, where the same native control also
+ * toggles it back off. `script` is the line the video was generated from
+ * (lib/videos/captions resolves the QuoteMax default videos on their own). */
 export function TrustVideo({
   src,
   title,
   caption,
+  script,
 }: {
   src: string | null
   title: string
   caption?: string | null
+  script?: string | null
 }) {
+  const captions = captionTrackSrc(src, script)
   if (!src) return <MediaPlaceholder title={title} eyebrow="Video coming soon" caption={caption} />
   return (
     <figure
@@ -572,8 +582,9 @@ export function TrustVideo({
         overflow: 'hidden',
       }}
     >
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption -- spoken-word
-          placeholder briefs; captions land with the per-tradie films */}
+      {/* Captioned when we know the spoken words (see captionTrackSrc); a video
+          whose script we do not have gets no track rather than captions that
+          contradict its audio. */}
       <video
         src={src}
         autoPlay
@@ -582,7 +593,11 @@ export function TrustVideo({
         playsInline
         preload="metadata"
         style={{ display: 'block', width: '100%', aspectRatio: '16 / 9', background: 'var(--ink-card)' }}
-      />
+      >
+        {captions ? (
+          <track kind="captions" src={captions} srcLang="en" label="English" default />
+        ) : null}
+      </video>
       {caption ? (
         <figcaption
           style={{

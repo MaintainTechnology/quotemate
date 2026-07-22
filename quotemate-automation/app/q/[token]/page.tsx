@@ -39,7 +39,8 @@ import {
   displayIncGst,
   fmtAud,
 } from '@/lib/quote/money'
-import { safeWebsiteUrl, trustVideoUrls } from '@/lib/quote/tenant-identity'
+import { safeWebsiteUrl, trustVideoTrack } from '@/lib/quote/tenant-identity'
+import type { TrustVideoState } from '@/lib/videos/trust-video'
 import {
   roofScopeStats,
   commercialPaintScope,
@@ -108,6 +109,9 @@ type TenantIdentity = {
   /** Mig 175 trust videos — tenant's own film, else the QuoteMax default. */
   intro_video_url: string | null
   thankyou_video_url: string | null
+  /** Mig 178 — includes the script each film was generated FROM, which is
+   *  what its captions say (trustVideoTrack + lib/videos/captions). */
+  trust_video_state: TrustVideoState | null
 }
 
 const JOB_TYPE_LABEL: Record<string, string> = {
@@ -331,6 +335,13 @@ export default async function PublicQuotePage(props: {
         .select('photo_url')
         .eq('id', quoteTenantId)
         .maybeSingle()
+      // Same pattern again (mig 178): the trust-video script — what the
+      // welcome video actually says — is what its captions are built from.
+      const { data: tvs } = await supabase
+        .from('tenants')
+        .select('trust_video_state')
+        .eq('id', quoteTenantId)
+        .maybeSingle()
       tenantIdentity = {
         business_name: b.business_name ?? null,
         owner_first_name: b.owner_first_name ?? null,
@@ -344,6 +355,8 @@ export default async function PublicQuotePage(props: {
         photo_url: ((ph ?? {}) as { photo_url?: string | null }).photo_url ?? null,
         intro_video_url: e.intro_video_url ?? null,
         thankyou_video_url: e.thankyou_video_url ?? null,
+        trust_video_state:
+          ((tvs ?? {}) as { trust_video_state?: TrustVideoState | null }).trust_video_state ?? null,
       }
     }
   }
@@ -943,6 +956,10 @@ export default async function PublicQuotePage(props: {
       color: 'var(--text-dim)',
     }
 
+    // Video + the script it speaks, resolved together so the captions can
+    // never belong to a different film than the one playing.
+    const welcomeVideo = trustVideoTrack(tenantIdentity, 'welcome')
+
     const roofSections: ScopeItem[] = [
       {
         title: 'Overview',
@@ -962,7 +979,8 @@ export default async function PublicQuotePage(props: {
           <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
             <div className="qm-print-hide">
               <TrustVideo
-                src={trustVideoUrls(tenantIdentity).intro}
+                src={welcomeVideo.url}
+                script={welcomeVideo.script}
                 title={tradieName}
                 caption="A short introduction from your tradie"
               />

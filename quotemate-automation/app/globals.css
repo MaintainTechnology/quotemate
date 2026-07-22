@@ -46,6 +46,20 @@
   --noise-opacity: 0.045;                     /* film-grain strength */
   --canvas-radial: #2B2422;                   /* dashboard app-canvas glow */
   --logo-mono-invert: 1;   /* dark canvas: flip black logo artwork to bone */
+  /* Hero backdrop photo. Lower on charcoal — a bright photo LIFTS a
+     near-black canvas fast, where on paper it has to darken to register.
+     These are the PEAK values, reached across the right of the hero
+     (behind the demo panel); the horizontal mask below holds the photo to
+     roughly 15% of this over the copy column.
+     The ceiling is measured, not guessed, and it moved when the photo was
+     sharpened: at blur(30px) the image was smooth enough that its average
+     tone predicted contrast, but at blur(12px) individual dark patches
+     land under the text, and the worst 5% of them set the limit. Measured
+     ceiling is set by the horizontal mask, not by this number: steepening
+     the falloff LOWERS the alpha under the copy even as the peak climbs,
+     which is what allows a near-full-strength photo on the right.
+     Re-measure worst-case (not mean) contrast before raising either. */
+  --hero-photo-opacity: 0.85;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -83,6 +97,7 @@
     --noise-opacity: 0.03;
     --canvas-radial: rgba(255, 248, 235, 0.85);
     --logo-mono-invert: 0; /* paper canvas: black logo artwork stays black */
+    --hero-photo-opacity: 0.7;
   }
 }
 :root[data-theme="light"] {
@@ -111,6 +126,7 @@
   --noise-opacity: 0.03;
   --canvas-radial: rgba(255, 248, 235, 0.85);
   --logo-mono-invert: 0; /* paper canvas: black logo artwork stays black */
+  --hero-photo-opacity: 0.92;
 }
 
 @theme inline {
@@ -396,6 +412,70 @@ html {
   pointer-events: none;
 }
 
+/* The backdrop photograph. Blurred past recognition and held at a low
+   opacity, it reads as depth behind the hero rather than as a picture —
+   a suggestion that something physical sits back there.
+   Three details carry it:
+   1. The mask dissolves the photo downward so it never ends on a hard
+      edge. A plain <img> would read as a box pasted on the canvas; the
+      point is that it fades out as you scroll into the page.
+   2. The blur is on the IMAGE and the wrapper clips. Blurring an element
+      flush to its own bounds samples transparency at the edges and leaves
+      a pale halo on all four sides, so the image is scaled past the frame
+      and the overflow is cut away.
+   3. Source resolution and blur radius have to move together. The photo
+      is meant to be READ here — you should be able to tell it is a person
+      at work — so the source is fetched at 900px and upscaled only ~1.8x.
+      Serving it small and leaning on the upscale (as an earlier pass did)
+      abstracts the image away no matter what the CSS radius says. */
+/* Two masks multiplied together. The vertical one dissolves the photo as
+   you scroll into the page; the horizontal one holds it back over the
+   left column, where the copy lives.
+   That second axis is not decoration — it is what lets the photo be
+   VISIBLE at all. On paper the backdrop only reads because it darkens the
+   canvas, so "more visible" and "legible text" pull in opposite
+   directions: at a flat 0.30 the dim micro-proof line drops to 3.58:1 and
+   fails AA. Weighting the photo toward the periphery and the demo panel
+   buys back the contrast under the text while letting the rest of the
+   hero carry a much stronger image. */
+.hero-photo {
+  opacity: var(--hero-photo-opacity);
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 40%,
+      rgba(0, 0, 0, 0.5) 68%,
+      transparent 94%
+    ),
+    linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.3) 0%,
+      rgba(0, 0, 0, 0.42) 28%,
+      #000 64%
+    );
+  mask-image:
+    linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 40%,
+      rgba(0, 0, 0, 0.5) 68%,
+      transparent 94%
+    ),
+    linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.07) 0%,
+      rgba(0, 0, 0, 0.13) 32%,
+      #000 70%
+    );
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+.hero-photo img {
+  filter: blur(8px) saturate(0.95);
+  transform: scale(1.14);
+}
+
 .hero-grid {
   background-image:
     linear-gradient(
@@ -454,6 +534,69 @@ html {
 .logo-lift {
   filter: brightness(calc(1 + var(--logo-mono-invert) * 1.6))
     saturate(calc(1 + var(--logo-mono-invert) * 0.35));
+}
+
+/* Trade-carousel scrim. Hardcoded warm-black rather than token-driven, for
+   the same reason .photo-caption is: the copy sits on a photograph, so it
+   needs a dark backing in BOTH themes. A --ink-deep gradient would resolve
+   to cream on the light canvas and drop the white headline to ~1.1:1.
+   Left-weighted so the type column is dark and the photo stays readable on
+   the right, which is what the Caterpillar reference does. */
+.trade-slide-scrim {
+  background:
+    linear-gradient(
+      100deg,
+      rgba(12, 10, 8, 0.94) 0%,
+      rgba(12, 10, 8, 0.86) 34%,
+      rgba(12, 10, 8, 0.55) 58%,
+      rgba(12, 10, 8, 0.28) 100%
+    ),
+    linear-gradient(to top, rgba(12, 10, 8, 0.6) 0%, transparent 38%);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SMS DEMO PANEL (home hero)
+   The floating product panel beside the hero copy.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Lift. The brand prefers borders to shadows, but this panel is a floating
+   product surface on a photographic backdrop, so it needs to sit above the
+   canvas rather than be drawn on it. The shadow colour is hardcoded warm
+   charcoal on purpose: a shadow is absence of light, so it must NOT follow
+   --text-pri, which inverts to bone on the dark canvas and would glow. */
+.sms-demo {
+  box-shadow:
+    var(--lift),
+    0 14px 34px -20px rgba(28, 22, 18, 0.45);
+}
+
+/* The drafted-quote plate. Derived from the text colour rather than a
+   surface token so it reads as a tint in BOTH themes — charcoal at 4% on
+   paper, bone at 4% on charcoal. --ink-deep/50 was invisible here, because
+   on paper it is within 2% of the card it sits on. */
+.sms-demo__plate {
+  background: color-mix(in srgb, var(--text-pri) 4%, transparent);
+}
+
+/* (The highlighter-underline override for this panel lives with the other
+   .text-accent overrides, further down — it has to be declared after the
+   shim it overrides, since the two selectors tie on specificity.) */
+
+/* The typing indicator must retire when the quote lands. Left looping, the
+   panel claims to still be typing beside a finished quote. Collapsing the
+   grid row (1fr -> 0fr) removes it from flow with no hardcoded height, and
+   the negative margin swallows the flex gap it would otherwise leave. */
+.sms-typing-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: typing-retire 420ms cubic-bezier(0.22, 1, 0.36, 1) 3760ms forwards;
+}
+@keyframes typing-retire {
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    margin-top: -0.75rem;
+  }
 }
 
 /* Typing indicator dots in the live SMS demo — the receptionist is
@@ -643,6 +786,18 @@ html {
 :root .hero-display .text-accent {
   text-decoration-thickness: 0.055em;
   text-underline-offset: 0.07em;
+}
+
+/* No highlighter inside the SMS demo panel. There the shim fired on the
+   "quote drafted" label and read as a stray hyperlink, and the panel
+   already signals that idea with the yellow rail and the tint on the
+   recommended tier — three yellow cues for one idea is noise.
+   This ties with the shim on specificity (both 0,3,0), so it MUST stay
+   below it in the file. Declared up in the panel's own section it silently
+   lost, which is why both .text-accent overrides live here together. */
+:root .sms-demo .text-accent {
+  text-decoration-line: none;
+  text-underline-offset: 0;
 }
 
 /* A self-contained dark quote surface (.qm-quote[data-qm-theme="dark"]) can

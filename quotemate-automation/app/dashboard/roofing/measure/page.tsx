@@ -563,7 +563,6 @@ function RoofingMeasurePageInner() {
           quoteState={quoteState}
           quoteShareUrl={quoteShareUrl}
           quoteShareToken={quoteShareToken}
-          onMaterialDetected={setMaterial}
         />
       )}
 
@@ -616,7 +615,6 @@ function MultiResultBlock({
   quoteState,
   quoteShareUrl,
   quoteShareToken,
-  onMaterialDetected,
 }: {
   quote: MultiRoofQuote
   provider: 'geoscape' | 'lidar' | 'mock' | 'manual'
@@ -637,7 +635,6 @@ function MultiResultBlock({
   quoteState: 'idle' | 'saving' | 'saved' | 'error'
   quoteShareUrl: string | null
   quoteShareToken: string | null
-  onMaterialDetected: (m: RoofMaterial) => void
 }) {
   const keyOf = (i: number) => structureKey(quote.structures[i], i)
   const selectedIndex = quote.structures.findIndex((_s, i) => keyOf(i) === selectedId)
@@ -831,7 +828,7 @@ function MultiResultBlock({
 
       {/* AI photo verification — for the selected structure */}
       <div className="mt-6">
-        <PhotoVerify accessToken={accessToken} address={address} onMaterialDetected={onMaterialDetected} />
+        <PhotoVerify accessToken={accessToken} address={address} />
       </div>
 
       {/* Provider warnings */}

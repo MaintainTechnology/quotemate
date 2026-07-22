@@ -10,6 +10,7 @@ import {
   safeWebsiteUrl,
   trustVideoUrls,
   tradeVideoUrls,
+  trustVideoTrack,
 } from './tenant-identity'
 
 type Row = Record<string, unknown> | null
@@ -190,6 +191,84 @@ describe('tradeVideoUrls — per-trade video, else the tenant pair, else the def
     const withMap = { ...legacy, trade_videos: { roofing: { welcome: { url: 'r.mp4' } } } }
     expect(tradeVideoUrls(withMap, 'carpentry', SB).intro).toBe(legacy.intro_video_url)
     expect(tradeVideoUrls(withMap, null, SB).intro).toBe(legacy.intro_video_url)
+  })
+})
+
+// Captions are only honest if the script belongs to the video that is actually
+// playing. trustVideoTrack resolves BOTH in one branch so the two can never be
+// paired from different videos — a tenant's script over the QuoteMax default
+// video would caption it with words nobody says.
+describe('trustVideoTrack — the video that plays, and the words it speaks', () => {
+  const SB = 'https://proj.supabase.co'
+  const legacy = {
+    intro_video_url: 'https://cdn.example/tenant-intro.mp4',
+    thankyou_video_url: 'https://cdn.example/tenant-thanks.mp4',
+    trust_video_state: {
+      welcome: { status: 'ready' as const, script: 'Welcome, we are Ric Electrical.' },
+      thankyou: { status: 'ready' as const, script: 'Thanks for booking.' },
+    },
+  }
+
+  it("carries the tenant video's own generated script", () => {
+    expect(trustVideoTrack(legacy, 'welcome', null, SB)).toEqual({
+      url: 'https://cdn.example/tenant-intro.mp4',
+      script: 'Welcome, we are Ric Electrical.',
+    })
+    expect(trustVideoTrack(legacy, 'thankyou', null, SB).script).toBe('Thanks for booking.')
+  })
+
+  it('never lends a tenant script to the QuoteMax default video', () => {
+    const t = trustVideoTrack(
+      { intro_video_url: null, thankyou_video_url: null, trust_video_state: legacy.trust_video_state },
+      'welcome',
+      null,
+      SB,
+    )
+    expect(t.url).toBe(`${SB}/storage/v1/object/public/tenant-videos/defaults/welcome.mp4`)
+    expect(t.script).toBeNull()
+  })
+
+  it("takes the trade's video and the trade's script together", () => {
+    const t = trustVideoTrack(
+      {
+        ...legacy,
+        trade_videos: {
+          roofing: { welcome: { url: 'https://cdn.example/roof-w.mp4', script: 'Roofing line.' } },
+        },
+      },
+      'welcome',
+      'roofing',
+      SB,
+    )
+    expect(t).toEqual({ url: 'https://cdn.example/roof-w.mp4', script: 'Roofing line.' })
+  })
+
+  it('falls back to the tenant script when that trade has no video of its own', () => {
+    const t = trustVideoTrack(
+      {
+        ...legacy,
+        trade_videos: {
+          roofing: { welcome: { url: 'https://cdn.example/roof-w.mp4', script: 'Roofing line.' } },
+        },
+      },
+      'welcome',
+      'plumbing',
+      SB,
+    )
+    expect(t).toEqual({
+      url: 'https://cdn.example/tenant-intro.mp4',
+      script: 'Welcome, we are Ric Electrical.',
+    })
+  })
+
+  it('a video whose script was never stored gets no script at all', () => {
+    const t = trustVideoTrack(
+      { intro_video_url: 'https://cdn.example/filmed.mp4', thankyou_video_url: null },
+      'welcome',
+      null,
+      SB,
+    )
+    expect(t).toEqual({ url: 'https://cdn.example/filmed.mp4', script: null })
   })
 })
 

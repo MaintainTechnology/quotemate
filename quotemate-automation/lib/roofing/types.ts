@@ -17,16 +17,27 @@
 // cycle is purely structural and never a runtime dependency.
 import type { SolarQuoteAddon } from './solar'
 
-/** Roofing materials we price for. Phase 1 — adds-only. */
-export type RoofMaterial =
-  | 'colorbond_corrugated'
-  | 'colorbond_trimdek'
-  | 'colorbond_spandek'
-  | 'colorbond_kliplok'
-  | 'concrete_tile'
-  | 'terracotta_tile'
-  | 'cement_sheet' // asbestos-suspect on pre-1990 builds → forced inspection
-  | 'unknown'
+/**
+ * Roofing materials we price for. Phase 1 — adds-only.
+ *
+ * Single source of truth: every RUNTIME list of materials derives from this
+ * array. It exists as a value, not just a union, because a hand-written
+ * `ReadonlySet<RoofMaterial>` is satisfied by a SUBSET — which is how
+ * vision-verify.ts silently kept a 6-material vocabulary after corrugated and
+ * spandek were added, reporting every corrugated roof as Trimdek.
+ */
+export const ROOF_MATERIALS = [
+  'colorbond_corrugated',
+  'colorbond_trimdek',
+  'colorbond_spandek',
+  'colorbond_kliplok',
+  'concrete_tile',
+  'terracotta_tile',
+  'cement_sheet', // asbestos-suspect on pre-1990 builds → forced inspection
+  'unknown',
+] as const
+
+export type RoofMaterial = (typeof ROOF_MATERIALS)[number]
 
 /**
  * Where a merged measurement field's value came from, once Geoscape and the

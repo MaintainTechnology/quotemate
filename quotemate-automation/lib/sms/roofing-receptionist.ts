@@ -53,6 +53,7 @@ const ANSWERABLE_STEPS: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
   'confirm_address',
   'intent',
   'material',
+  'material_profile',
   'pitch',
 ])
 
@@ -179,6 +180,40 @@ export function parseStructureFollowup(
   return null
 }
 
+/** How many unrecognised answers a step gets before we stop asking and
+ *  route to the on-site inspection. Address gets one extra go: it's the
+ *  one answer the customer can always fix by retyping, and the retry
+ *  prompt spells out exactly what's needed. */
+function missBudget(step: RoofingStep): number {
+  return step === 'address' ? 3 : 2
+}
+
+/** PURE — did the customer's answer actually land in the slot we asked
+ *  about? A 'no' at confirm_address counts as landed: it's understood, and
+ *  it clears the address so we re-ask for a new one. */
+function answerLanded(after: RoofingSlots, step: RoofingStep): boolean {
+  switch (step) {
+    case 'address':
+      return !!after.address
+    case 'confirm_address':
+      return after.address_confirmed === true || !after.address
+    case 'intent':
+      return !!after.intent
+    case 'material':
+      // "It's Colorbond" landed even though it named no profile — we now ask
+      // WHICH. Counting it as a miss would burn the budget on an answer we
+      // actually understood.
+      return !!after.material || after.metal_hint === true
+    case 'material_profile':
+      // Always resolves: a named profile, or 'unknown' → inspection.
+      return !!after.material
+    case 'pitch':
+      return !!after.pitch
+    default:
+      return true
+  }
+}
+
 /**
  * PURE — advance the roofing conversation one turn.
  */
@@ -252,10 +287,43 @@ export function advanceRoofing(
   let nextSlots = slots
   if (lastStep && ANSWERABLE_STEPS.has(lastStep)) {
     nextSlots = applyRoofingAnswer(slots, lastStep, inbound)
-    // An address answer that didn't parse as an address → clarify, don't
-    // store junk (and don't silently re-send the same prompt).
-    if (lastStep === 'address' && !nextSlots.address) {
-      return { action: 'ask', slots: nextSlots, step: 'address', reply: ADDRESS_RETRY }
+
+    if (answerLanded(nextSlots, lastStep)) {
+      // Understood — clear the counter so misses never accumulate across
+      // steps (one bad material answer must not shorten the pitch budget).
+      delete nextSlots.misses
+    } else {
+      // NOT understood. Re-asking the identical question forever is how
+      // this flow used to dead-end ("iron", "25 degrees", "the brown
+      // stuff" all mapped to nothing). Give the customer a bounded number
+      // of goes, then fall back to the on-site inspection — the same safe
+      // failure mode the rest of QuoteMax uses when it can't price.
+      const misses = (slots.misses ?? 0) + 1
+      if (misses >= missBudget(lastStep)) {
+        delete nextSlots.misses
+        // For the three slots that HAVE an 'unknown' sentinel, set it and
+        // let the existing gates in nextRoofingStep route to inspection.
+        if (lastStep === 'material') nextSlots.material = 'unknown'
+        else if (lastStep === 'pitch') nextSlots.pitch = 'unknown'
+        else if (lastStep === 'intent') nextSlots.intent = 'unknown'
+        // Address is different: with no usable address there is nothing to
+        // measure AND nothing to put on a job sheet, so hand the lead to
+        // the tradie directly rather than pretending we can quote it.
+        else {
+          return {
+            action: 'inspection',
+            slots: nextSlots,
+            reason: "we couldn't confirm the property address",
+          }
+        }
+      } else {
+        nextSlots = { ...nextSlots, misses }
+        // An address answer that didn't parse as an address → clarify, don't
+        // store junk (and don't silently re-send the same prompt).
+        if (lastStep === 'address') {
+          return { action: 'ask', slots: nextSlots, step: 'address', reply: ADDRESS_RETRY }
+        }
+      }
     }
   } else {
     if (!nextSlots.intent) {

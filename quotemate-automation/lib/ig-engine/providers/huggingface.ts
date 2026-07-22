@@ -91,18 +91,17 @@ type HfClient = {
   ) => Promise<Blob>
 }
 
-/** DEPENDENCY-OPTIONAL runtime load of @huggingface/inference. Uses a NON-LITERAL
- *  specifier so tsc + the bundler stay green even when the package isn't installed
- *  — the HF image provider is opt-in and experimental. Install it with
- *  `npm i @huggingface/inference` to enable it (a missing package throws, which
- *  roof-after treats as a best-effort failure → falls back to the plain satellite). */
+/** LAZY load of @huggingface/inference — deferred so the SDK isn't parsed on the
+ *  cold start of every route that pulls in the provider registry.
+ *
+ *  ⚠ The specifier MUST stay a LITERAL. It used to be a variable (to keep the dep
+ *  "optional"), but the package is a declared dependency, and a non-literal
+ *  specifier is invisible to Next's build tracing — so @huggingface/inference was
+ *  never copied into the Vercel function bundle and every roof-after/paint-after
+ *  render failed in production with "is not installed" while working locally. */
 async function loadInferenceClient(token: string): Promise<HfClient> {
-  const pkg = '@huggingface/inference'
-  let mod: { InferenceClient: new (token: string) => HfClient }
-  try {
-    mod = (await import(/* webpackIgnore: true */ /* @vite-ignore */ pkg)) as typeof mod
-  } catch {
-    throw new Error('@huggingface/inference is not installed — run `npm i @huggingface/inference`')
+  const mod = (await import('@huggingface/inference')) as unknown as {
+    InferenceClient: new (token: string) => HfClient
   }
   return new mod.InferenceClient(token)
 }

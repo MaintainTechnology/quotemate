@@ -17,8 +17,11 @@ import { notFound, redirect } from 'next/navigation'
 import { QuoteChrome } from '@/app/q/_chrome/QuoteChrome'
 import { QuoteSheet, Letterhead, SheetSection, TrustVideo, AddToCalendar } from '@/app/q/_chrome/parts'
 import { BookedSummary } from '@/app/q/_chrome/BookedSummary'
+import { HouseShowcase } from '@/app/q/_chrome/HouseShowcase'
+import { resolveShowcasePayload, SHOWCASE_MATERIAL_LABELS } from '@/lib/roofing/showcase'
+import { signedShowcaseAssets } from '@/lib/roofing/showcase-assets'
 import { tradeIcon } from '@/app/q/_chrome/icons'
-import { loadTenantIdentity, contactDisplayName, trustVideoUrls } from '@/lib/quote/tenant-identity'
+import { loadTenantIdentity, contactDisplayName, trustVideoTrack } from '@/lib/quote/tenant-identity'
 import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { thanksPageTarget, bookingRef } from '@/lib/quote/thanks'
@@ -62,7 +65,7 @@ export default async function RoofThanksPage(props: {
   const { data: row } = await supabase
     .from('roofing_measurements')
     .select(
-      'public_token, tenant_id, address, state, paid_at, paid_tier, paid_amount_cents, scheduled_at, scheduled_window',
+      'public_token, tenant_id, address, state, paid_at, paid_tier, paid_amount_cents, scheduled_at, scheduled_window, quote, model3d_status, model3d_glb_path',
     )
     .eq('public_token', token)
     .maybeSingle()
@@ -108,8 +111,24 @@ export default async function RoofThanksPage(props: {
   const identity = await loadTenantIdentity(supabase, (row.tenant_id as string | null) ?? null)
   const tradieName = identity?.business_name ?? 'Your roofer'
   const tz = tzForState(identity?.state ?? (row.state as string | null) ?? null)
-  const videos = trustVideoUrls(identity)
+  // Video + the script it speaks, resolved together so the captions always
+  // belong to the film that is actually playing.
+  const thankyouVideo = trustVideoTrack(identity, 'thankyou')
   const placeLabel = [row.address, row.state].filter(Boolean).join(', ') || null
+
+  // 3D showcase — resolved server-side (no HTTP round-trip on first paint).
+  // The same resolver the public /api/q/roof/[token]/showcase route uses, so
+  // the page and the API can never disagree about entitlement. Signing is
+  // best-effort and read-only: it never generates, so opening this page cannot
+  // cost anything.
+  const showcase = resolveShowcasePayload(row)
+  const showcaseAssets =
+    showcase.status === 'ready'
+      ? await signedShowcaseAssets({
+          glbPath: showcase.glbPath,
+          address: (row.address as string | null) ?? null,
+        })
+      : null
   // scheduledAt is non-null here — thanksPageTarget only returns 'render' with
   // both a payment and a slot.
   const slotLabel = formatVisitSlot(scheduledAt!, scheduledWindow, tz)
@@ -150,7 +169,8 @@ export default async function RoofThanksPage(props: {
           <div style={{ marginTop: 14, display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center' }}>
             <div className="qm-print-hide" style={{ width: '100%', maxWidth: 720 }}>
               <TrustVideo
-                src={videos.thankyou}
+                src={thankyouVideo.url}
+                script={thankyouVideo.script}
                 title={tradieName}
                 caption="A thank-you message from your tradie"
               />
@@ -177,6 +197,26 @@ export default async function RoofThanksPage(props: {
             />
           </div>
         </SheetSection>
+
+        {/* c2. Your house in 3D — the model reconstructed from the aerial
+            survey, recolourable, with the two studio renders it was built
+            from. Absent entirely when no model was generated for this
+            property: an empty 3D section is worse than none. */}
+        {showcaseAssets?.modelUrl ? (
+          <SheetSection eyebrow="Your house in 3D" eyebrowAccent>
+            <div style={{ marginTop: 14 }}>
+              <HouseShowcase
+                token={token}
+                appUrl={(process.env.APP_URL ?? '').replace(/\/+$/, '')}
+                modelUrl={showcaseAssets.modelUrl}
+                images={showcaseAssets.images}
+                materialImages={showcaseAssets.materialImages}
+                material={showcase.material}
+                materialLabels={SHOWCASE_MATERIAL_LABELS}
+              />
+            </div>
+          </SheetSection>
+        ) : null}
 
         {/* d. add to calendar — null only if scheduled_at is unparseable. */}
         {calLinks ? (

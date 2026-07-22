@@ -10,7 +10,8 @@
 // quote page.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { tradeVideoUrl, type TradeVideoMap } from '@/lib/videos/trade-videos'
+import { tradeVideoUrl, readTradeSlot, type TradeVideoMap } from '@/lib/videos/trade-videos'
+import type { TrustVideoSlot, TrustVideoState } from '@/lib/videos/trust-video'
 
 export type TenantIdentity = {
   business_name: string | null
@@ -44,6 +45,11 @@ export type TenantIdentity = {
    *  Optional: loadTenantIdentity always sets it, but callers that build an
    *  identity by hand (tests, fixtures) predate it and must keep compiling. */
   trade_videos?: TradeVideoMap | null
+  /** Mig 178 — generation state for the tenant-wide pair above, including the
+   *  script each video was generated FROM. That script is what the captions
+   *  say (see trustVideoTrack + lib/videos/captions). Optional for the same
+   *  reason as trade_videos. */
+  trust_video_state?: TrustVideoState | null
 }
 
 export async function loadTenantIdentity(
@@ -76,7 +82,7 @@ export async function loadTenantIdentity(
   // query, nulling the letterhead (contact/logo) and the existing videos too.
   const { data: tv } = await supabase
     .from('tenants')
-    .select('trade_videos')
+    .select('trade_videos, trust_video_state')
     .eq('id', tenantId)
     .maybeSingle()
 
@@ -105,6 +111,8 @@ export async function loadTenantIdentity(
     intro_video_url: e.intro_video_url ?? null,
     thankyou_video_url: e.thankyou_video_url ?? null,
     trade_videos: ((tv ?? {}) as { trade_videos?: TradeVideoMap | null }).trade_videos ?? null,
+    trust_video_state:
+      ((tv ?? {}) as { trust_video_state?: TrustVideoState | null }).trust_video_state ?? null,
   }
 }
 
@@ -161,6 +169,39 @@ export function tradeVideoUrls(
     intro: tradeVideoUrl(map, trade, 'welcome') ?? fallback.intro,
     thankyou: tradeVideoUrl(map, trade, 'thankyou') ?? fallback.thankyou,
   }
+}
+
+type VideoIdentity = Pick<TenantIdentity, 'intro_video_url' | 'thankyou_video_url'> & {
+  trade_videos?: TradeVideoMap | null
+  trust_video_state?: TrustVideoState | null
+}
+
+/**
+ * One slot's video AND the script it speaks, resolved in a single branch so
+ * the two can never come from different videos — captioning the QuoteMax
+ * default video with a tenant's script would put words on screen that nobody
+ * says. Same chain as tradeVideoUrls: the trade's own video → the tenant-wide
+ * pair (mig 175) → the QuoteMax default.
+ *
+ * `script` is null for the defaults (they are produced clips, not generated
+ * from a script — they carry their own transcript in public/captions) and for
+ * any video whose script was never stored. lib/videos/captions turns this into
+ * a caption track, or into no track at all.
+ */
+export function trustVideoTrack(
+  t: VideoIdentity | null,
+  slot: TrustVideoSlot,
+  trade: string | null | undefined = null,
+  supabaseUrl: string | null | undefined = process.env.NEXT_PUBLIC_SUPABASE_URL,
+): { url: string | null; script: string | null } {
+  const forTrade = readTradeSlot(t?.trade_videos, trade, slot)
+  if (forTrade.url?.trim()) return { url: forTrade.url.trim(), script: forTrade.script?.trim() || null }
+
+  const own = (slot === 'welcome' ? t?.intro_video_url : t?.thankyou_video_url)?.trim()
+  if (own) return { url: own, script: t?.trust_video_state?.[slot]?.script?.trim() || null }
+
+  const key = slot === 'welcome' ? 'intro' : 'thankyou'
+  return { url: trustVideoUrls(t, supabaseUrl)[key], script: null }
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   isNegative,
   isStopRequest,
   looksLikeRoofingEnquiry,
+  isAmbiguousMetal,
   mapIntent,
   mapMaterial,
   mapPitch,
@@ -60,10 +61,57 @@ describe('looksLikeRoofingEnquiry', () => {
 })
 
 describe('mapMaterial', () => {
-  it('maps generic metal/colorbond synonyms to colorbond_trimdek', () => {
+  // A bare "Colorbond"/"metal" names no profile. Guessing one quoted a roof
+  // the customer never described — the SMS twin of the dashboard bug where a
+  // tradie's Corrugated came back as Trimdek. Unresolved → ask which profile.
+  it('does not guess a profile from a generic metal answer', () => {
     for (const s of ['colorbond', 'metal roof', 'tin', 'zincalume', 'colourbond']) {
-      expect(mapMaterial(s)).toBe('colorbond_trimdek')
+      expect(mapMaterial(s)).toBeNull()
+      expect(isAmbiguousMetal(s)).toBe(true)
     }
+  })
+  it('still maps an explicitly named profile', () => {
+    expect(mapMaterial('trimdek')).toBe('colorbond_trimdek')
+    expect(mapMaterial('colorbond trimdek')).toBe('colorbond_trimdek')
+  })
+  it('does not treat a named profile or a tile answer as ambiguous', () => {
+    for (const s of ['corrugated', 'trimdek', 'spandek', 'klip-lok', 'terracotta tiles', 'fibro']) {
+      expect(isAmbiguousMetal(s)).toBe(false)
+    }
+  })
+  it('asks which profile after a generic metal answer, then prices it', () => {
+    const base: RoofingSlots = {
+      address: '670 London Rd, Chandler QLD 4155',
+      address_confirmed: true,
+      intent: 'full_reroof',
+    }
+    // "Colorbond" alone → we understood it's metal, but not which profile.
+    const asked = applyRoofingAnswer(base, 'material', 'colorbond')
+    expect(asked.material).toBeFalsy()
+    expect(asked.metal_hint).toBe(true)
+
+    const step = nextRoofingStep(asked)
+    expect(step.step).toBe('material_profile')
+    expect(step.question).toMatch(/corrugated/i)
+    expect(step.question).toMatch(/trimdek/i)
+
+    // Their answer to THAT question resolves the profile.
+    const resolved = applyRoofingAnswer(asked, 'material_profile', 'corrugated')
+    expect(resolved.material).toBe('colorbond_corrugated')
+    expect(nextRoofingStep(resolved).step).toBe('pitch')
+  })
+  it('routes to inspection rather than guessing when the profile stays unclear', () => {
+    const asked: RoofingSlots = {
+      address: '670 London Rd, Chandler QLD 4155',
+      address_confirmed: true,
+      intent: 'full_reroof',
+      metal_hint: true,
+    }
+    // Still no profile named on the second go — never guess, look on site.
+    const stuck = applyRoofingAnswer(asked, 'material_profile', 'colorbond')
+    expect(stuck.material).toBe('unknown')
+    expect(nextRoofingStep(stuck).step).toBe('inspection')
+    expect(roofingReadiness({ ...stuck, pitch: 'standard' })).toBe('inspection')
   })
   it('maps corrugated synonyms to colorbond_corrugated', () => {
     for (const s of ['corrugated', 'corro', 'custom orb', 'corrugated iron']) {
@@ -177,11 +225,25 @@ describe('nextRoofingStep — gathering order', () => {
     slots = applyRoofingAnswer(slots, 'intent', 'full re-roof')
     expect(nextRoofingStep(slots).step).toBe('material')
 
+    // Bare "colorbond" names no profile → one targeted follow-up first.
     slots = applyRoofingAnswer(slots, 'material', 'colorbond')
+    expect(nextRoofingStep(slots).step).toBe('material_profile')
+
+    slots = applyRoofingAnswer(slots, 'material_profile', 'corrugated')
     expect(nextRoofingStep(slots).step).toBe('pitch')
 
     slots = applyRoofingAnswer(slots, 'pitch', 'standard')
     expect(nextRoofingStep(slots).step).toBe('ready')
+  })
+
+  it('goes straight to pitch when the material answer already names a profile', () => {
+    let slots: RoofingSlots = {}
+    slots = applyRoofingAnswer(slots, 'address', '670 London Rd, Chandler QLD 4155')
+    slots = applyRoofingAnswer(slots, 'confirm_address', 'yes')
+    slots = applyRoofingAnswer(slots, 'intent', 'full re-roof')
+    slots = applyRoofingAnswer(slots, 'material', 'corrugated iron')
+    expect(slots.material).toBe('colorbond_corrugated')
+    expect(nextRoofingStep(slots).step).toBe('pitch')
   })
 
   it('re-asks the address when the customer says the read-back is wrong', () => {
@@ -240,7 +302,7 @@ describe('toRoofingRequest', () => {
       '670 London Rd, Chandler QLD 4155',
       'yes',
       'full re-roof',
-      'colorbond',
+      'colorbond trimdek',
       'standard',
     ])
     const req = toRoofingRequest(slots)

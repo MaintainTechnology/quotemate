@@ -12,9 +12,8 @@ import { getAuthToken } from '@/lib/auth/client-token'
 //   4. Server fetches the photo + a Google Maps satellite snapshot +
 //      asks Claude vision the two questions ("is this the same
 //      building?" + "what material is the roof?")
-//   5. Verdict renders inline; when material confidence is high we
-//      fire `onMaterialDetected` so the parent can auto-fill the
-//      material dropdown
+//   5. Verdict renders inline as ADVICE — the tradie reads it and sets the
+//      material dropdown themselves. It deliberately does NOT auto-fill.
 //
 // Upload pattern matches the rest of the app — see lib/storage/upload
 // for the canonical helper.
@@ -39,14 +38,12 @@ type VerifyResponse =
 type Props = {
   accessToken: string | null
   address: string
-  /** Called when Claude classified the material with high confidence. */
-  onMaterialDetected?: (material: RoofMaterial) => void
 }
 
 const BUCKET = 'intake-photos'
 const MAX_BYTES = 12 * 1024 * 1024 // 12MB — phone photos are usually 3-8MB
 
-export function PhotoVerify({ accessToken, address, onMaterialDetected }: Props) {
+export function PhotoVerify({ accessToken, address }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [stage, setStage] = useState<'idle' | 'uploading' | 'verifying' | 'done' | 'error'>('idle')
   const [errMsg, setErrMsg] = useState<string | null>(null)
@@ -118,18 +115,21 @@ export function PhotoVerify({ accessToken, address, onMaterialDetected }: Props)
         setVerdict(json.verdict)
         setHadReference(json.hadReference)
         setStage('done')
-        if (
-          json.verdict.materialConfidence === 'high' &&
-          json.verdict.material !== 'unknown'
-        ) {
-          onMaterialDetected?.(json.verdict.material)
-        }
+        // ponytail: the vision material is ADVISORY — it renders in the verdict
+        // panel below and the tradie sets the dropdown themselves. It used to
+        // call onMaterialDetected() here and silently overwrite their pick,
+        // which is how a tradie's "Colorbond Corrugated" became "Trimdek" on a
+        // customer quote. Corrugated vs Trimdek is not reliably separable from
+        // a phone photo, and the licensed tradie carries the liability, so they
+        // are the authority — same doctrine as merge-metrics.ts's
+        // `suggested_material`. Re-wire only behind an explicit "apply this?"
+        // confirmation, never a silent setState.
       } catch (e) {
         setErrMsg(e instanceof Error ? e.message : String(e))
         setStage('error')
       }
     },
-    [accessToken, address, onMaterialDetected],
+    [accessToken, address],
   )
 
   const onPick = useCallback(

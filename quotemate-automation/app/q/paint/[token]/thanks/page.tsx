@@ -25,7 +25,7 @@ import { QuoteChrome } from '@/app/q/_chrome/QuoteChrome'
 import { QuoteSheet, Letterhead, SheetSection, TrustVideo, AddToCalendar } from '@/app/q/_chrome/parts'
 import { BookedSummary } from '@/app/q/_chrome/BookedSummary'
 import { tradeIcon } from '@/app/q/_chrome/icons'
-import { loadTenantIdentity, contactDisplayName, trustVideoUrls } from '@/lib/quote/tenant-identity'
+import { loadTenantIdentity, contactDisplayName, trustVideoTrack } from '@/lib/quote/tenant-identity'
 import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { thanksPageTarget, bookingRef } from '@/lib/quote/thanks'
@@ -130,7 +130,9 @@ export default async function PaintThanksPage(props: {
   const identity = await loadTenantIdentity(supabase, (row.tenant_id as string | null) ?? null)
   const tradieName = identity?.business_name ?? 'Your painter'
   const tz = tzForState(identity?.state ?? (row.state as string | null) ?? null)
-  const videos = trustVideoUrls(identity)
+  // Video + the script it speaks, resolved together so the captions always
+  // belong to the film that is actually playing.
+  const thankyouVideo = trustVideoTrack(identity, 'thankyou')
   const placeLabel = [row.address, row.state].filter(Boolean).join(', ') || null
   // scheduledAt is non-null here — thanksPageTarget only returns 'render' with
   // both a payment and a slot.
@@ -174,7 +176,8 @@ export default async function PaintThanksPage(props: {
           <div style={{ marginTop: 14, display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center' }}>
             <div className="qm-print-hide" style={{ width: '100%', maxWidth: 720 }}>
               <TrustVideo
-                src={videos.thankyou}
+                src={thankyouVideo.url}
+                script={thankyouVideo.script}
                 title={tradieName}
                 caption="A thank-you message from your tradie"
               />

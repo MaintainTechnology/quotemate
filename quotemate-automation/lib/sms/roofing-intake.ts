@@ -24,6 +24,9 @@ import type {
   RoofJobIntent,
   RoofMaterial,
 } from '@/lib/roofing/types'
+// Reuse the pricer's canonical degrees→bucket boundaries rather than
+// restating them here — one source of truth for what "25 degrees" means.
+import { pitchBucketFromDegrees } from '@/lib/roofing/pricing'
 
 export type AuState = RoofAddressInput['state']
 
@@ -40,6 +43,15 @@ export type RoofingSlots = {
   pitch?: PitchBucket | null
   intent?: RoofJobIntent | null
   year_built?: number | null
+  /** Customer said "metal"/"Colorbond" without naming a profile — we
+   *  understood the answer, we just need to know WHICH. Drives the
+   *  'material_profile' follow-up; cleared once the profile lands. */
+  metal_hint?: boolean
+  /** Consecutive unrecognised answers to the step we're currently asking.
+   *  Bounded by the receptionist so a reply we can't map routes to the
+   *  on-site inspection instead of re-asking the same question forever.
+   *  Cleared the moment an answer lands. */
+  misses?: number
 }
 
 /** Which input the receptionist is currently gathering. */
@@ -48,6 +60,8 @@ export type RoofingStep =
   | 'confirm_address'
   | 'intent'
   | 'material'
+  // Follow-up when the material answer was generic metal: which profile?
+  | 'material_profile'
   | 'pitch'
   | 'ready'
   | 'inspection'
@@ -102,6 +116,25 @@ export function looksLikeRoofingEnquiry(text: string): boolean {
 
 const UNSURE = /\b(not sure|unsure|no idea|dunno|don'?t know|do not know|no clue|couldn'?t say|hard to say)\b/
 
+/** Metal named generically, with no profile. */
+const GENERIC_METAL = /\b(colorbond|colourbond|metal|tin|steel|zincalume)\b/
+/** Any answer that DOES pin the profile down. */
+const NAMED_PROFILE =
+  /\b(corro|corrugated|custom ?orb|iron|galv|galvanised|galvanized|trimdek|trim ?dek|spandek|span ?deck|klip-?lok|kliplok|standing seam|concealed fix)\b/
+
+/**
+ * PURE — did the customer say "it's metal" without saying WHICH metal?
+ * Corrugated and Trimdek are priced differently ($90 vs $95/m²) and look
+ * nothing alike on a roof, so this gets a targeted follow-up rather than a
+ * guess. False for tiles, fibro, "not sure", and any named profile.
+ */
+export function isAmbiguousMetal(text: string): boolean {
+  const t = (text ?? '').toLowerCase()
+  if (!t.trim()) return false
+  if (UNSURE.test(t)) return false
+  return GENERIC_METAL.test(t) && !NAMED_PROFILE.test(t)
+}
+
 /** PURE — map a homeowner's words to a RoofMaterial (or null = re-ask). */
 export function mapMaterial(text: string): RoofMaterial | null {
   const t = (text ?? '').toLowerCase()
@@ -109,10 +142,21 @@ export function mapMaterial(text: string): RoofMaterial | null {
   if (UNSURE.test(t)) return 'unknown'
   // Asbestos-suspect first — safety wins over any metal/tile token.
   if (/\b(asbestos|fibro|cement sheet|super ?six|fibrolite|ac sheet)\b/.test(t)) return 'cement_sheet'
+  // Materials we do NOT price (not in ROOF_MATERIALS). Reading them as
+  // 'unknown' routes the job to an on-site inspection — the honest answer.
+  // Guessing the nearest priced material would quote the wrong roof.
+  if (/\b(slate|shingles?|asphalt|shake|thatch|polycarbonate|fibreglass)\b/.test(t)) return 'unknown'
   if (/\b(klip-?lok|kliplok|standing seam|concealed fix)\b/.test(t)) return 'colorbond_kliplok'
   if (/\b(spandek|span ?deck)\b/.test(t)) return 'colorbond_spandek'
-  if (/\b(corro|corrugated|custom ?orb)\b/.test(t)) return 'colorbond_corrugated'
-  if (/\b(colorbond|colourbond|metal|tin|steel|zincalume|trimdek)\b/.test(t)) return 'colorbond_trimdek'
+  // "Iron" / "galv" is AU vernacular for corrugated metal sheet — by far
+  // the most common way a homeowner names this roof.
+  if (/\b(corro|corrugated|custom ?orb|iron|galv|galvanised|galvanized)\b/.test(t)) return 'colorbond_corrugated'
+  if (/\b(trimdek|trim ?dek)\b/.test(t)) return 'colorbond_trimdek'
+  // A bare "Colorbond" / "metal" / "tin" names NO profile. This used to
+  // return Trimdek, quoting a roof the customer never described (and the
+  // SMS twin of the dashboard bug where a tradie's Corrugated came back as
+  // Trimdek). Return null so the receptionist asks WHICH profile.
+  if (GENERIC_METAL.test(t)) return null
   if (/\b(terracotta|terra ?cotta|clay tile|clay tiles)\b/.test(t)) return 'terracotta_tile'
   if (/\b(concrete tile|cement tile|concrete tiles)\b/.test(t)) return 'concrete_tile'
   // Generic "tiles" → concrete (the common AU default); document this.
@@ -125,8 +169,18 @@ export function mapPitch(text: string): PitchBucket | null {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return null
   if (UNSURE.test(t)) return 'unknown'
-  if (/\b(very steep|really steep|super steep|extremely steep|near vertical)\b/.test(t)) return 'very_steep'
-  if (/\b(steep|sharp|high pitch|high-pitched)\b/.test(t)) return 'steep'
+  // An explicit angle is the most precise answer a homeowner can give —
+  // classify it with the pricer's own boundaries.
+  const deg = t.match(/(\d{1,2}(?:\.\d+)?)\s*(?:°|deg\b|degs\b|degree|degrees)/)
+  if (deg) return pitchBucketFromDegrees(Number(deg[1]))
+  // "Not too steep" means standard — check the negation BEFORE the steep
+  // stem below, or the bare word wins and we price fall protection twice.
+  if (/\bnot\s+(too\s+|that\s+|very\s+|so\s+|really\s+)?steep\w*/.test(t)) return 'standard'
+  if (/\b(very|really|super|extremely)\s+steep\w*|\bnear vertical\b/.test(t)) return 'very_steep'
+  // Stem, not `\bsteep\b` — "steeper"/"steeply" must not fall through to
+  // the standard rule below and match the "normal" in "steeper than
+  // normal", which priced a steep roof at the standard rate.
+  if (/\bsteep\w*|\bsharp\b|\bhigh[- ]?pitch/.test(t)) return 'steep'
   if (/\b(flat|low|low pitch|low-pitched|shallow|barely|gentle|skillion)\b/.test(t)) return 'shallow'
   if (/\b(standard|normal|average|medium|regular|typical|usual|moderate)\b/.test(t)) return 'standard'
   return null
@@ -136,12 +190,22 @@ export function mapPitch(text: string): PitchBucket | null {
 export function mapIntent(text: string): RoofJobIntent | null {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return null
-  if (/\b(re-?roof|whole roof|entire roof|full roof|new roof|replace.*roof|roof.*replace|all of it)\b/.test(t)) return 'full_reroof'
+  // NOTE: match verb STEMS (replac\w*), never `…replace\b`. A trailing \b
+  // cannot match "replacement" / "replacing", which is exactly how "Roof
+  // replacement" read as unrecognised and re-asked the same question.
+  if (/\bre-?roof/.test(t)) return 'full_reroof'
+  if (/\b(whole|entire|full|new)\s+roof/.test(t)) return 'full_reroof'
+  if (/\broofs?\s+replac\w*/.test(t)) return 'full_reroof' // "roof replacement"
+  if (/\breplac\w*\s+(the\s+|my\s+|our\s+|that\s+|existing\s+)*roof/.test(t)) return 'full_reroof'
+  if (/\b(all of it|replace it all|the lot|whole thing|whole lot)\b/.test(t)) return 'full_reroof'
   if (/\b(leak|leaking|water coming|dripping)\b/.test(t)) return 'leak_trace'
   if (/\b(gutters?|downpipes?|down ?pipes?)\b/.test(t)) return 'gutter_replace'
   if (/\b(ridges?|caps?|repoint|rebed)\b/.test(t)) return 'ridge_cap'
   if (/\b(flashings?)\b/.test(t)) return 'flashing_repair'
   if (/\b(repairs?|patch|fix|broken|cracked|damaged|missing|few tiles)\b/.test(t)) return 'patch_repair'
+  // Bare "replacement" with no other cue — checked LAST so "gutter
+  // replacement" has already been claimed by the gutter rule above.
+  if (/\breplac\w*/.test(t)) return 'full_reroof'
   return null
 }
 
@@ -256,7 +320,26 @@ export function applyRoofingAnswer(
     }
     case 'material': {
       const v = mapMaterial(msg)
-      if (v) next.material = v
+      if (v) {
+        next.material = v
+        next.metal_hint = false
+      } else if (isAmbiguousMetal(msg)) {
+        // Understood ("it's metal") but under-specified — ask which profile.
+        next.metal_hint = true
+      }
+      break
+    }
+    case 'material_profile': {
+      const v = mapMaterial(msg)
+      if (v) {
+        next.material = v
+        next.metal_hint = false
+      } else {
+        // Second go and still no profile named. Never guess between two
+        // differently-priced sheets — look at it on site.
+        next.material = 'unknown'
+        next.metal_hint = false
+      }
       break
     }
     case 'pitch': {
@@ -306,6 +389,8 @@ const QUESTIONS: Record<
   confirm_address: '', // filled dynamically with the address read-back
   intent: 'What do you need done? A full re-roof, a repair or patch, a leak traced, or gutters and downpipes?',
   material: "What's the roof made of? For example Colorbond or metal, concrete or terracotta tiles, or fibro / cement sheet.",
+  material_profile:
+    'Righto — which Colorbond profile is it? Corrugated (the classic wavy sheets) or Trimdek (flat panels with square ribs)? If you\'re not sure, just say so and we\'ll check it on site.',
   pitch: 'Roughly how steep is the roof? Flat, standard, or steep?',
 }
 
@@ -327,6 +412,11 @@ export function nextRoofingStep(slots: RoofingSlots): {
     }
   }
   if (!slots.intent) return { step: 'intent', question: QUESTIONS.intent }
+  // The pricer has no rule for an unknown intent — it would silently price
+  // whatever the tiers default to. Route it on site instead.
+  if (slots.intent === 'unknown') {
+    return { step: 'inspection', reason: "we couldn't confirm what work is needed" }
+  }
 
   // Material gate: short-circuit to inspection the moment we learn it's
   // asbestos-suspect or unknown; no point asking pitch in that case.
@@ -335,6 +425,11 @@ export function nextRoofingStep(slots: RoofingSlots): {
   }
   if (slots.material === 'unknown') {
     return { step: 'inspection', reason: "we couldn't confirm the roof material" }
+  }
+  // They told us it's metal but not which profile — ask that, not the
+  // generic question again.
+  if (!slots.material && slots.metal_hint) {
+    return { step: 'material_profile', question: QUESTIONS.material_profile }
   }
   if (!slots.material) return { step: 'material', question: QUESTIONS.material }
 

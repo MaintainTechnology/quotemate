@@ -25,6 +25,8 @@ import {
 import { PricingTiers } from "./_components/PricingTiers"
 import { DuotoneImage } from "./_components/DuotoneImage"
 import CookieConsent from "./_components/CookieConsent"
+import { TradeCarousel } from "./_components/TradeCarousel"
+import { TRADES, TRADE_ORDER } from "./trades/_data"
 
 /* Load-time choreography classes. Tailwind scans for literal strings,
    so these stay static; per-element stagger is an inline
@@ -88,6 +90,25 @@ export default function Home() {
 function Hero() {
   return (
     <section className="hero-band relative overflow-hidden border-b border-ink-line">
+      {/* Backdrop photograph — bottom-most layer, under the topography,
+          grid and ember. Decorative only (alt=""), so it is invisible to
+          assistive tech; every photo that carries meaning on this page is
+          a real <DuotoneImage> with a written alt. `sizes` is deliberately
+          tiny: the blur destroys all detail, so a small source is
+          indistinguishable from a large one and costs a fraction. */}
+      <div
+        className="hero-photo pointer-events-none absolute inset-0 overflow-hidden"
+        aria-hidden="true"
+      >
+        <Image
+          src="/marketing/home-on-the-tools.jpg"
+          alt=""
+          fill
+          sizes="900px"
+          loading="eager"
+          className="object-cover"
+        />
+      </div>
       <Topography />
       {/* Command-centre field (see globals.css): an engineering grid that
           fades downward, plus one warm ember behind the demo panel. Both
@@ -434,6 +455,38 @@ function HowItWorks() {
 
 /* ─── Trades + scope ──────────────────────────────────────────── */
 
+// The home-page trade photography. Carried over verbatim — sources, alt text
+// and crop positions — from the two trade panels and three tiles the carousel
+// replaced, so the section keeps the imagery it was art-directed with rather
+// than inheriting the trade pages' own hero shots.
+const HOME_TRADE_PHOTOS: Record<
+  string,
+  { src: string; alt: string; position?: string }
+> = {
+  electrical: {
+    src: "/marketing/trade-electrical.jpg",
+    alt: "Australian electrician in a yellow hard hat testing a switchboard with a multimeter",
+    position: "center 25%",
+  },
+  plumbing: {
+    src: "/marketing/trade-plumbing.jpg",
+    alt: "Plumber at an open bathroom vanity, tightening a supply line with a shifting spanner",
+  },
+  roofing: {
+    src: "/marketing/trade-roofing.jpg",
+    alt: "Roofer driving a screw into new corrugated Colorbond sheeting with a cordless driver",
+  },
+  solar: {
+    src: "/marketing/trade-solar.jpg",
+    alt: "Installers carrying a solar panel to a rooftop array on a suburban home",
+    position: "center 42%",
+  },
+  painting: {
+    src: "/marketing/trade-painting.jpg",
+    alt: "Two painters rolling and cutting in fresh paint on an interior wall",
+  },
+}
+
 function Trades() {
   return (
     <section id="scope" className="border-b border-ink-line scroll-mt-20">
@@ -446,88 +499,35 @@ function Trades() {
             The tricky ones book a site visit.
           </h2>
         </Reveal>
-        <div className="mt-14 grid gap-8 md:grid-cols-2">
-          <Reveal>
-            <TradePanel
-              label="Electrical"
-              state="Live · NSW"
-              image={{
-                src: "/marketing/trade-electrical.jpg",
-                alt: "Australian electrician in a yellow hard hat testing a switchboard with a multimeter",
-                position: "center 25%",
-              }}
-              auto={[
-                "Downlights",
-                "Power points (GPOs)",
-                "Ceiling fans",
-                "Smoke alarms",
-                "Outdoor lighting",
-              ]}
-              inspection={[
-                "Switchboard upgrade",
-                "EV charger",
-                "Fault finding",
-                "Oven / cooktop",
-                "Renovation",
-              ]}
-            />
-          </Reveal>
-          <Reveal delay={130}>
-            <TradePanel
-              label="Plumbing"
-              state="Live · QLD"
-              image={{
-                src: "/marketing/trade-plumbing.jpg",
-                alt: "Plumber at an open bathroom vanity, tightening a supply line with a shifting spanner",
-              }}
-              auto={[
-                "Blocked drains",
-                "Hot water replacement",
-                "Tap repair",
-                "Tap replacement",
-                "Toilet repair",
-                "Toilet replacement",
-              ]}
-              inspection={["Gas fitting", "Burst pipe", "Bathroom renovation"]}
-            />
-          </Reveal>
-        </div>
-
-        {/* More trades on the same platform — roofing, solar and painting
-            are live too, each clickable through to its trade page. */}
-        <Reveal delay={120}>
-          <div className="mt-8">
-            <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-              More trades
-            </span>
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <TradeTile
-                href="/trades/roofing"
-                src="/marketing/trade-roofing.jpg"
-                alt="Roofer driving a screw into new corrugated Colorbond sheeting with a cordless driver"
-                label="Roofing"
-              />
-              <TradeTile
-                href="/trades/solar"
-                src="/marketing/trade-solar.jpg"
-                alt="Installers carrying a solar panel to a rooftop array on a suburban home"
-                label="Solar"
-                position="center 42%"
-              />
-              <TradeTile
-                href="/trades/painting"
-                src="/marketing/trade-painting.jpg"
-                alt="Two painters rolling and cutting in fresh paint on an interior wall"
-                label="Painting"
-              />
-            </div>
-          </div>
+        {/* One slide per live trade. Copy comes from the same module as the
+            trade pages (app/trades/_data.ts) so the two can never disagree,
+            but the PHOTOGRAPHY is the home-page marketing set below, not
+            _data.ts's heroImage — those /trades/* shots are framed for the
+            tall hero band on each trade page and crop poorly in a wide
+            slide. Positions carry over from the panels these replaced. */}
+        <Reveal className="mt-14">
+          <TradeCarousel
+            slides={TRADE_ORDER.map((slug) => {
+              const t = TRADES[slug]
+              const photo = HOME_TRADE_PHOTOS[slug]
+              return {
+                slug: t.slug,
+                name: t.name,
+                eyebrow: t.eyebrow,
+                body: t.scopeBody,
+                image: photo.src,
+                alt: photo.alt,
+                position: photo.position,
+                tags: t.scopeTags.slice(0, 6),
+              }
+            })}
+          />
         </Reveal>
 
         {/* Generic "request your trade" prompt. The workshop photo adds warmth
             without claiming a trade we don't yet support. */}
         <Reveal delay={180}>
-          <div className="edge-lit mt-6 grid items-stretch gap-0 overflow-hidden rounded-2xl border border-ink-line bg-ink-card md:grid-cols-[1fr_1.3fr]">
+          <div className="edge-lit mt-8 grid items-stretch gap-0 overflow-hidden rounded-2xl border border-ink-line bg-ink-card md:grid-cols-[1fr_1.3fr]">
             <DuotoneImage
               src="/marketing/workshop.jpg"
               alt="Tradesperson checking a finished part at a well-kept workshop bench"
@@ -885,60 +885,81 @@ function PlayGlyph() {
 // a timeline), ends on a typing indicator, then the drafted quote lands.
 function SmsDemo() {
   return (
-    <div className="edge-lit flex h-full flex-col overflow-hidden rounded-2xl border border-ink-line bg-ink-card">
+    <div className="sms-demo flex h-full flex-col overflow-hidden rounded-2xl border border-ink-line bg-ink-card">
       <div className="flex items-center justify-between border-b border-ink-line px-4 py-3 sm:px-5">
         <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
           Live example · SMS intake
         </span>
-        <span className="flex items-center gap-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-teal-glow">
-          <span className="h-1.5 w-1.5 rounded-full bg-teal-glow motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]" />
+        {/* Green, not the warm --teal-glow: that token resolves to a muted
+            brown on paper, and a brown status dot reads as offline. */}
+        <span className="flex items-center gap-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
+          <span className="h-1.5 w-1.5 rounded-full bg-success-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]" />
           Online
         </span>
       </div>
 
-      {/* The thread takes the slack so the card ends level with the pitch
-          column whatever the copy length. Bottom-anchored, like any real
-          messaging surface — the newest message sits against the quote. */}
-      <div className="flex flex-1 flex-col justify-end gap-3 px-4 py-5 sm:px-5">
-        <Bubble side="in" at={700}>
-          Hey mate, need 6 downlights in the lounge. What&rsquo;s it cost?
-        </Bubble>
-        <Bubble side="out" at={1500}>
-          All new fittings, or swapping existing? And is there roof-space
-          access?
-        </Bubble>
-        <Bubble side="in" at={2300}>
-          All new. Roof access is easy.
-        </Bubble>
-        <TypingBubble at={3100} />
+      {/* justify-between, not justify-end. The panel is stretched to match
+          the pitch column, and bottom-anchoring dumped every pixel of that
+          slack into one empty band above the first bubble. Pinning a thread
+          marker to the top and the messages to the bottom turns the same
+          slack into structure — which is what a real thread looks like. */}
+      <div className="flex flex-1 flex-col justify-between gap-4 px-4 py-4 sm:px-5">
+        <div className="flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-ink-line" />
+          <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+            Today · 7:42 am
+          </span>
+          <span className="h-px flex-1 bg-ink-line" />
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Bubble side="in" at={700}>
+            Hey mate, need 6 downlights in the lounge. What&rsquo;s it cost?
+          </Bubble>
+          <Bubble side="out" at={1500}>
+            All new fittings, or swapping existing? And is there roof-space
+            access?
+          </Bubble>
+          <Bubble side="in" at={2300}>
+            All new. Roof access is easy.
+          </Bubble>
+          {/* Retires itself as the quote lands — see .sms-typing-slot. */}
+          <div className="sms-typing-slot" aria-hidden="true">
+            <div className="min-h-0 overflow-hidden">
+              <TypingBubble at={3100} />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* The drafted quote. Three tiers, because Good/Better/Best is what
-          the pipeline actually writes — a single figure understated the
-          output and left the panel looking empty. Marked "Sample"; these
-          are illustrative numbers, not a quoted job. */}
+          the pipeline actually writes. Marked "Sample" — these are
+          illustrative numbers, not a quoted job. */}
       <div
-        className={`border-t border-ink-line bg-ink-deep/50 px-4 py-4 sm:px-5 ${RISE}`}
+        className={`sms-demo__plate border-t border-ink-line px-4 py-4 sm:px-5 ${RISE}`}
         style={{ animationDelay: "3900ms" }}
       >
         <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-accent">
+          <span className="flex items-center gap-2 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-accent">
+            <span className="h-3 w-0.5 shrink-0 bg-accent" aria-hidden="true" />
             Quote drafted · under a minute
           </span>
-          <span className="shrink-0 font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim">
+          <span className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
             Sample
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3.5 grid grid-cols-3 gap-2">
           <QuoteTier tier="Good" price="$890" at={4150} />
           <QuoteTier tier="Better" price="$1,140" at={4280} featured />
           <QuoteTier tier="Best" price="$1,460" at={4410} />
         </div>
+        {/* Sentence case: the brand reserves caps for short labels, and this
+            is a sentence. All-caps here just shouted at the reader. */}
         <p
-          className={`mt-3 font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim ${RISE}`}
+          className={`mt-3.5 text-[0.8125rem] leading-snug text-text-dim ${RISE}`}
           style={{ animationDelay: "4560ms" }}
         >
-          Sent to the customer with a deposit link
+          Sent to the customer with a deposit link.
         </p>
       </div>
     </div>
@@ -975,15 +996,21 @@ function QuoteTier({
           aria-hidden="true"
         />
       ) : null}
-      <div className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
-        {tier}
-      </div>
       <div
-        className={`mt-1.5 font-mono text-lg font-bold tabular-nums ${
-          featured ? "text-accent" : "text-text-pri"
+        className={`font-mono text-[0.7rem] font-semibold uppercase tracking-[0.1em] ${
+          featured ? "text-text-pri" : "text-text-dim"
         }`}
       >
+        {tier}
+      </div>
+      {/* Every price is ink. The recommended tier is already carried by the
+          rail, the tint and the label weight — colouring the number too
+          spent the accent four times on one idea. */}
+      <div className="mt-1 font-mono text-lg font-bold tabular-nums text-text-pri">
         {price}
+      </div>
+      <div className="mt-0.5 font-mono text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
+        inc GST
       </div>
     </div>
   )
@@ -1005,15 +1032,20 @@ function Bubble({
       className={`${inbound ? "flex justify-start" : "flex justify-end"} ${POP}`}
       style={{ animationDelay: `${at}ms` }}
     >
+      {/* The inbound fill is derived from the TEXT colour, not from a
+          surface token. bg-ink-deep is the page canvas, which on paper sits
+          within 2% of the card behind it — the customer's messages were
+          effectively invisible. A tint of the ink reads correctly on both
+          canvases without a second set of tokens. */}
       <div
-        className={`max-w-[86%] rounded-xl border px-3.5 py-2.5 text-sm leading-snug ${
+        className={`max-w-[88%] rounded-2xl border px-3.5 py-2.5 text-sm leading-snug ${
           inbound
-            ? "rounded-bl-sm border-ink-line bg-ink-deep text-text-sec"
-            : "rounded-br-sm border-accent/35 bg-accent/10 text-text-pri"
+            ? "rounded-bl-md border-text-pri/10 bg-text-pri/[0.055] text-text-sec"
+            : "rounded-br-md border-accent/40 bg-accent/[0.13] text-text-pri"
         }`}
       >
         {!inbound && (
-          <span className="mb-1 block font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-accent">
+          <span className="mb-1 block font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-accent">
             QuoteMax
           </span>
         )}
@@ -1031,11 +1063,10 @@ function TypingBubble({ at }: { at: number }) {
       className={`flex justify-end ${POP}`}
       style={{ animationDelay: `${at}ms` }}
     >
-      <div
-        className="flex items-center gap-1.5 rounded-xl rounded-br-sm border border-accent/35 bg-accent/10 px-3.5 py-3"
-        role="status"
-        aria-label="QuoteMax is drafting the quote"
-      >
+      {/* No role="status": the slot around this is aria-hidden, and the old
+          live region announced "QuoteMax is drafting the quote" on page load
+          to every screen-reader user, for a decorative sample. */}
+      <div className="flex items-center gap-1.5 rounded-2xl rounded-br-md border border-accent/40 bg-accent/[0.13] px-3.5 py-3">
         {[0, 1, 2].map((d) => (
           <span
             key={d}
@@ -1076,137 +1107,6 @@ function NumberedCard({
         </div>
       </div>
     </article>
-  )
-}
-
-function TradePanel({
-  label,
-  state,
-  image,
-  auto,
-  inspection,
-}: {
-  label: string
-  state: string
-  image?: { src: string; alt: string; position?: string }
-  auto: string[]
-  inspection: string[]
-}) {
-  return (
-    <div className="card-sweep edge-lit group h-full overflow-hidden rounded-2xl border border-ink-line bg-ink-card transition-colors duration-300 hover:border-accent/30">
-      {image ? (
-        <div className="relative">
-          <DuotoneImage
-            src={image.src}
-            alt={image.alt}
-            aspect="aspect-[2/1]"
-            sizes="(max-width: 768px) 100vw, 44vw"
-            position={image.position}
-            className="border-b border-ink-line"
-          />
-          {/* Trade name + pilot state sit over the lower edge of the photo,
-              where the .photo-caption gradient guarantees AA-contrast text. */}
-          <div className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-5 pt-12 md:p-6 md:pt-14">
-            <h3 className="font-extrabold uppercase tracking-tight text-white text-2xl md:text-3xl">
-              {label}
-            </h3>
-            <span className="shrink-0 pb-1 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-white/90">
-              {state}
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-baseline justify-between gap-3 p-6 pb-0 md:p-8 md:pb-0">
-          <h3 className="font-extrabold uppercase tracking-tight text-2xl md:text-3xl">
-            {label}
-          </h3>
-          <span className="shrink-0 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
-            {state}
-          </span>
-        </div>
-      )}
-
-      <div className="p-6 md:p-8">
-        <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-accent">
-          Auto-quoted
-        </span>
-        <ul className="mt-3 grid gap-2">
-          {auto.map((it) => (
-            <li
-              key={it}
-              className="flex items-baseline gap-3 text-sm text-text-sec md:text-base"
-            >
-              <span className="font-mono text-xs text-accent" aria-hidden="true">
-                →
-              </span>
-              {it}
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-7 border-t border-ink-line pt-7">
-          <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-            $99 site visit
-          </span>
-          <ul className="mt-3 grid gap-2">
-            {inspection.map((it) => (
-              <li
-                key={it}
-                className="flex items-baseline gap-3 text-sm text-text-sec md:text-base"
-              >
-                <span className="font-mono text-xs text-text-dim" aria-hidden="true">
-                  ○
-                </span>
-                {it}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// A compact live-trade card — a brand-tinted photo with the trade name,
-// clickable through to its trade page. Present-tense, no "coming soon".
-function TradeTile({
-  href,
-  src,
-  alt,
-  label,
-  position,
-}: {
-  href: string
-  src: string
-  alt: string
-  label: string
-  position?: string
-}) {
-  return (
-    <Link
-      href={href}
-      className="edge-lit group relative block overflow-hidden rounded-2xl border border-ink-line transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-    >
-      <DuotoneImage
-        src={src}
-        alt={alt}
-        aspect="aspect-[4/3]"
-        sizes="(max-width: 640px) 100vw, 28vw"
-        position={position}
-      />
-      {/* A div, not a figcaption — there is no <figure> here to caption. */}
-      <div className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4 pt-10">
-        <span className="font-extrabold uppercase tracking-tight text-white text-lg">
-          {label}
-        </span>
-        <span
-          className="shrink-0 pb-0.5 font-mono text-white transition-transform duration-300 group-hover:translate-x-0.5"
-          aria-hidden="true"
-        >
-          &rarr;
-        </span>
-      </div>
-    </Link>
   )
 }
 

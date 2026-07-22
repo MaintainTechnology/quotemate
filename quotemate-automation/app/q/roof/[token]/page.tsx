@@ -52,7 +52,7 @@ import {
   loadTenantIdentity,
   contactDisplayName,
   safeWebsiteUrl,
-  trustVideoUrls,
+  trustVideoTrack,
 } from '@/lib/quote/tenant-identity'
 import { asQuoteTierMode, resolveVisibleTiers } from '@/lib/quote/tier-visibility'
 import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
@@ -645,7 +645,9 @@ export default async function RoofingQuotePage({
       displayTiersWithSolar.find((t) => t.tier === roofKey && t.inc_gst > 0) ??
       displayTiersWithSolar.find((t) => t.inc_gst > 0) ??
       null
-    const videos = trustVideoUrls(identity)
+    // Video + the script it speaks, resolved together so the captions can
+    // never belong to a different film than the one playing.
+    const welcomeVideo = trustVideoTrack(identity, 'welcome')
     const websiteUrl = safeWebsiteUrl(identity?.website_url)
     const tradieName = identity?.business_name ?? 'Your roofer'
     // Section 03 identity — the same resolver the quote PDF uses, so the photo
@@ -747,7 +749,8 @@ export default async function RoofingQuotePage({
           <div style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
             <div className="qm-print-hide">
               <TrustVideo
-                src={videos.intro}
+                src={welcomeVideo.url}
+                script={welcomeVideo.script}
                 title={tradieName}
                 caption="A short introduction from your tradie"
               />

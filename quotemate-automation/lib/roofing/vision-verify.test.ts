@@ -16,7 +16,9 @@ describe('buildVisionPrompt', () => {
   it('lists every accepted material value', () => {
     const p = buildVisionPrompt({ address: '27 Smith St', hasReferenceImage: true })
     for (const m of [
+      'colorbond_corrugated',
       'colorbond_trimdek',
+      'colorbond_spandek',
       'colorbond_kliplok',
       'concrete_tile',
       'terracotta_tile',
@@ -26,6 +28,17 @@ describe('buildVisionPrompt', () => {
       expect(p).toContain(m)
     }
   })
+  // The reported bug: a tradie picks Colorbond Corrugated, the photo verdict
+  // reports Trimdek. The prompt told the model corrugated WAS trimdek.
+  it('never describes corrugated as Trimdek', () => {
+    const p = buildVisionPrompt({ address: '27 Smith St', hasReferenceImage: true })
+    expect(p).not.toMatch(/corrugated\/Trimdek/i)
+    expect(p).toMatch(/Custom Orb/i)
+  })
+  it('tells the model to answer low confidence when the profile is unclear', () => {
+    const p = buildVisionPrompt({ address: '27 Smith St', hasReferenceImage: false })
+    expect(p).toMatch(/material_confidence to "low"/)
+  })
   it('demands strict JSON only', () => {
     const p = buildVisionPrompt({ address: '27 Smith St', hasReferenceImage: false })
     expect(p).toMatch(/STRICT JSON only/)
@@ -33,6 +46,24 @@ describe('buildVisionPrompt', () => {
 })
 
 describe('parseVisionResponse', () => {
+  // Root cause: VALID_MATERIALS was a hand-written subset of RoofMaterial, so
+  // the two materials added later coerced to 'unknown' and could never be read
+  // back off a photo.
+  it('accepts every RoofMaterial the pricing engine accepts', () => {
+    for (const m of [
+      'colorbond_corrugated',
+      'colorbond_trimdek',
+      'colorbond_spandek',
+      'colorbond_kliplok',
+      'concrete_tile',
+      'terracotta_tile',
+      'cement_sheet',
+      'unknown',
+    ]) {
+      expect(parseVisionResponse(JSON.stringify({ match: true, material: m })).material).toBe(m)
+    }
+  })
+
   it('parses a typical strict-JSON response', () => {
     const v = parseVisionResponse(
       JSON.stringify({

@@ -63,3 +63,42 @@ describe('TrustVideo — plays on arrival, no tap required', () => {
     expect(html).toContain('Video coming soon')
   })
 })
+
+// The video autoplays MUTED (above), so for the first seconds of every quote
+// page the captions ARE the message. They must therefore be on by default, not
+// behind the controls menu — that is what `default` on the <track> buys.
+describe('TrustVideo — captions', () => {
+  const DEFAULT_WELCOME =
+    'https://proj.supabase.co/storage/v1/object/public/tenant-videos/defaults/welcome.mp4'
+  const trackTag = (html: string) => html.match(/<track[^>]*>/)?.[0] ?? ''
+
+  it('captions the QuoteMax default video from its shipped transcript', () => {
+    const tag = trackTag(render({ src: DEFAULT_WELCOME, title: 'Welcome' }))
+    expect(tag).toContain('src="/captions/welcome.vtt"')
+    expect(tag).toContain('kind="captions"')
+  })
+
+  it('is showing from the first frame, without the customer touching anything', () => {
+    const tag = trackTag(render({ src: DEFAULT_WELCOME, title: 'Welcome' }))
+    expect(/\bdefault\b/.test(tag.replace(/"[^"]*"/g, '""'))).toBe(true)
+  })
+
+  it('is labelled so the native CC control can name (and toggle) it', () => {
+    const tag = trackTag(render({ src: DEFAULT_WELCOME, title: 'Welcome' }))
+    // React spells it srcLang="en"; an HTML parser lower-cases it (same quirk
+    // as playsInline above), so assert case-insensitively.
+    expect(tag).toMatch(/srclang="en"/i)
+    expect(tag).toContain('label=')
+  })
+
+  it("captions a tenant's own video from the script it was generated from", () => {
+    const html = render({ src: SRC, title: 'Welcome', script: 'Hi, we are Ric Electrical.' })
+    expect(trackTag(html)).toContain(
+      `src="/api/captions?s=${encodeURIComponent('Hi, we are Ric Electrical.')}"`,
+    )
+  })
+
+  it('renders no track when the spoken words are unknown — never captions that lie', () => {
+    expect(render({ src: SRC, title: 'Welcome' })).not.toContain('<track')
+  })
+})

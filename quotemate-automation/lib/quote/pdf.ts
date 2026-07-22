@@ -103,7 +103,7 @@ const PAINT_PDF_REV = '-v7'
 //   not the tradie's detailed measurement report. Every cached -v5 PDF (the one
 //   already sent as MMS media / linked from the quote SMS) regenerates once on
 //   its next download.
-const ROOF_PDF_REV = '-v6'
+const ROOF_PDF_REV = '-v7'
 
 let _client: SupabaseClient | null = null
 function supabase(): SupabaseClient {

@@ -33,7 +33,7 @@ describe('advanceRoofing — gather then measure', () => {
       '670 London Rd, Chandler QLD 4155',
       'yes',
       'full re-roof',
-      'colorbond',
+      'colorbond trimdek',
       'standard',
     ])
     const steps = decisions.map((d) => (d.action === 'ask' ? d.step : d.action))
@@ -42,6 +42,25 @@ describe('advanceRoofing — gather then measure', () => {
     expect(steps).toContain('material')
     expect(steps).toContain('pitch')
     expect(steps[steps.length - 1]).toBe('measure')
+  })
+
+  it('asks which profile when the customer just says "colorbond", then measures', () => {
+    const { decisions } = runConversation([
+      'Hi, I need a re-roof quote',
+      '670 London Rd, Chandler QLD 4155',
+      'yes',
+      'full re-roof',
+      'colorbond', // names no profile → one targeted follow-up
+      'corrugated',
+      'standard',
+    ])
+    const steps = decisions.map((d) => (d.action === 'ask' ? d.step : d.action))
+    expect(steps).toContain('material_profile')
+    const askedProfile = decisions.find((d) => d.action === 'ask' && d.step === 'material_profile')
+    expect(askedProfile && askedProfile.action === 'ask' && askedProfile.reply).toMatch(/corrugated/i)
+    expect(steps[steps.length - 1]).toBe('measure')
+    const last = decisions[decisions.length - 1]
+    expect(last.slots.material).toBe('colorbond_corrugated')
   })
 
   it('opener gleans intent so it is not asked again', () => {

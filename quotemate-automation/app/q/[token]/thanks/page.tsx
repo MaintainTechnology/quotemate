@@ -26,7 +26,7 @@ import { thanksPageTarget, bookingRef } from '@/lib/quote/thanks'
 import { resolvePaidAmount, formatPaidAmount } from '@/lib/quote/paid-amount'
 import { tzForState } from '@/lib/quote/availability'
 import { confirmPaidFromSession } from '@/lib/quote/paid-confirm'
-import { loadTenantIdentity, trustVideoUrls } from '@/lib/quote/tenant-identity'
+import { loadTenantIdentity, trustVideoTrack } from '@/lib/quote/tenant-identity'
 import { TrustVideo, AddToCalendar } from '@/app/q/_chrome/parts'
 import { BookedSummary } from '@/app/q/_chrome/BookedSummary'
 import { getStripe } from '@/lib/stripe/client'
@@ -163,6 +163,9 @@ export default async function ThanksPage(props: {
   ])
 
   const tradieName = tenant?.business_name ?? null
+  // Video + the script it speaks, resolved together so the captions always
+  // belong to the film that is actually playing.
+  const thankyouVideo = trustVideoTrack(tenant, 'thankyou')
   const who = tradieName ?? 'Your tradie'
   const tz = tzForState(tenant?.state ?? null)
   const jobType = (intake?.job_type as string | null) ?? null
@@ -234,7 +237,8 @@ export default async function ThanksPage(props: {
         {/* a. the tradie's own thank-you film, else the QuoteMax default. */}
         <div className="mt-8 max-w-md">
           <TrustVideo
-            src={trustVideoUrls(tenant).thankyou}
+            src={thankyouVideo.url}
+            script={thankyouVideo.script}
             title={tradieName ?? 'Your tradie'}
             caption="A thank-you message from your tradie"
           />
