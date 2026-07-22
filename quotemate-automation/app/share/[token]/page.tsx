@@ -27,9 +27,18 @@ import { SharedHouse } from './SharedHouse'
 
 export const dynamic = 'force-dynamic'
 
+// metadataBase is required for the co-located opengraph-image.tsx to resolve
+// to an absolute URL — link previewers fetch it from outside our origin and a
+// relative path silently yields no preview.
 export const metadata: Metadata = {
+  metadataBase: process.env.APP_URL ? new URL(process.env.APP_URL) : undefined,
   title: 'A new roof',
   description: 'Have a look at this place with a new roof on it.',
+  openGraph: {
+    title: 'A new roof',
+    description: 'Have a look at this place with a new roof on it.',
+    type: 'website',
+  },
   robots: { index: false, follow: false },
 }
 
