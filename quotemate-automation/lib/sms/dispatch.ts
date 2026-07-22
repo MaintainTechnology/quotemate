@@ -65,6 +65,16 @@ function isRetryable(result: Extract<TwilioSendResult, { ok: false }>): boolean 
 
 const RETRY_DELAYS_MS = [500, 1500, 3500] // total max ~5.5s before falling back
 
+/** PURE-ish (reads env) — may a failed SMS fall back to WhatsApp?
+ *  Only when the reply wasn't meant to come from a tenant's own number:
+ *  no custom `from`, or `from` IS the platform's shared number. The WA
+ *  sender is always the global TWILIO_WHATSAPP_FROM, which on a
+ *  tenant-number thread is a stranger's number to the customer. */
+export function whatsappFallbackAllowed(from: string | undefined): boolean {
+  if (!from) return true
+  return from === process.env.TWILIO_SMS_NUMBER || from === process.env.TWILIO_PHONE_NUMBER
+}
+
 // Map a thrown error from sendSms (AbortError / TimeoutError / generic
 // network throw that escaped postTwilioMessage's own try) into a synthetic
 // failed TwilioSendResult so the retry/fallback loop below has ONE code path.
@@ -164,6 +174,14 @@ export async function dispatchQuoteMessage(opts: {
   }
 
   const smsAttempt = { code: smsResult.code, reason: smsResult.reason }
+
+  // US-008 (audit 2026-07-23): WhatsApp always sends from the global
+  // TWILIO_WHATSAPP_FROM — a WA sender can't be a tenant long code. On a
+  // tenant-number thread that re-sent a failed SMS from a STRANGER'S
+  // number, so the fallback is scoped to shared/platform-number flows.
+  if (!whatsappFallbackAllowed(opts.from)) {
+    return { ok: false, smsAttempt, smsAttempts }
+  }
 
   // WhatsApp fallback. Same teardown guard as the SMS path: a thrown
   // AbortError/timeout here must NOT escape dispatchQuoteMessage (callers
