@@ -1,44 +1,78 @@
 {
-  "project": "Roofing 3D model — enhanced-capture cache + manual capture mode",
-  "branch": "ralph/roofing-3d-capture-upgrades",
+  "project": "Roofing SMS receptionist — hardening (from 2026-07-23 multi-agent audit)",
+  "branch": "ralph/roofing-hardening",
   "completion_promise": "All tests pass",
-  "created": "2026-07-16",
-  "requirements": "(1) Address-keyed cache of Gemini-enhanced captures: when polished screenshots already exist for a property address, reuse them (cross-tenant by design) instead of re-enhancing — saves Gemini tokens. (2) Manual capture mode: tradie takes up to 5 screenshots (front, left, right, back, top) of the photorealistic 3D map; they are polished as usual and fed to model generation. Constraint: Tripo multiview accepts only front/left/back/right — 'top' is enhanced + cached but not sent to Tripo. Auto capture reads the cache; manual capture bypasses the read (deliberate framing wins) but writes its enhanced output to the cache.",
+  "created": "2026-07-23",
+  "goal": "Roofing AI receptionist works for every tenant (old/new/suspended), every caller (known, unknown, opted-out, shared numbers), and never loses a lead or leaks another tenant's data.",
   "stories": [
     {
-      "id": "S1",
-      "title": "Enhanced-capture cache lib (address-keyed)",
-      "detail": "lib/roofing/capture-cache.ts: pure normalizeAddressKey + cachePathFor (tested); getCachedEnhanced/putCachedEnhanced against roof-models bucket under enhanced/{key}/{view}.jpg. Best-effort: cache failures never fail generation.",
-      "status": "complete",
-      "priority": 1
+      "id": "US-001",
+      "title": "Non-active tenant numbers do not transact",
+      "detail": "tenants.status is selected and logged but never gated. A suspended/onboarding tenant's provisioned number must not run the AI pipeline, quote, or create customer rows. Silent ack (empty TwiML), logged.",
+      "priority": 1,
+      "status": "complete"
     },
     {
-      "id": "S2",
-      "title": "Labeled captures end-to-end (schema + Tripo body, 2-5 views incl. top)",
-      "detail": "POST body {captures:[{view,image}], mode:'auto'|'manual'} — front required, >=1 of left/back/right, top optional, views unique. buildMultiviewTaskBody emits only provided front/left/back/right slots (top excluded). Tests for partial views + top exclusion.",
-      "status": "complete",
-      "priority": 2
+      "id": "US-002",
+      "title": "Tradie is notified when a roofing quote is sent or an inspection is booked",
+      "detail": "Roofing path never notifies owner_mobile — leads land in the DB silently. Mirror notifyPaintingTradie: notify on send_saved (quote delivered) and on booking confirmed. Injected dispatch, never throws.",
+      "priority": 2,
+      "status": "complete"
     },
     {
-      "id": "S3",
-      "title": "Wire cache into startModel3d + labeled auto-capture client",
-      "detail": "startModel3d(measureToken, captures, {address, reuseCache}): auto reuses cached enhanced per view, else enhance+store; manual always enhances+stores. Route passes row address + mode. Client auto flow posts labeled views.",
-      "status": "complete",
-      "priority": 3
+      "id": "US-003",
+      "title": "Global STOP opt-out honoured on every conversation type",
+      "detail": "STOP/UNSUBSCRIBE currently only honoured inside roofing/painting receptionists, per-conversation. A standard Twilio opt-out keyword as the whole message must close the conversation and suppress the AI reply on any thread. (Carrier-side send suppression is Twilio 21610.)",
+      "priority": 3,
+      "status": "complete"
     },
     {
-      "id": "S4",
-      "title": "Manual capture mode UI (front/left/right/back/top)",
-      "detail": "Roof3DModelSection: 'Manual capture' opens free-orbit Cesium viewer with per-view capture buttons + chips + retake; 'Build 3D model' enabled once front + one side captured; submits mode:'manual'.",
-      "status": "complete",
-      "priority": 4
+      "id": "US-004",
+      "title": "Customer memory is tenant-scoped",
+      "detail": "customers rows are globally unique by phone; memory (name/suburb/address/email/total_quotes) currently leaks across tenants into prompts and seeded slots. Gate all memory use on customer.tenant_id matching the resolved tenant (legacy null tenant_id stays allowed).",
+      "priority": 4,
+      "status": "complete"
     },
     {
-      "id": "S5",
-      "title": "Quality gates green (completion promise: all tests pass)",
-      "detail": "npx tsc --noEmit clean; FULL npx vitest run green; /m/[token] renders both Generate and Manual capture entry points.",
-      "status": "complete",
-      "priority": 5
+      "id": "US-005",
+      "title": "tradeScopeDirective derives from the full trades[] list",
+      "detail": "Directive only knows electrical/plumbing: tenants with roofing enabled never advertise it ('we do electrical and plumbing' straight after a roofing quote), tenants without roofing get no decline rule. Advertise enabled extras; explicitly decline disabled ones (no quote, no $99 inspection).",
+      "priority": 5,
+      "status": "complete"
+    },
+    {
+      "id": "US-006",
+      "title": "Disabling roofing mid-thread closes stale roofing_state",
+      "detail": "Turning roofing off with a conversation parked at confirm_roof/await_booking orphans it — the general dialog inherits a warm roofing thread. When the gate is off and roofing_state is active, close it.",
+      "priority": 6,
+      "status": "complete"
+    },
+    {
+      "id": "US-007",
+      "title": "tenant/me selects customers.phone_number, not nonexistent phone",
+      "detail": "app/api/tenant/me/route.ts:436 selects 'id, phone, email' — customers has phone_number. PostgREST errors and the dashboard loses customer contact info.",
+      "priority": 7,
+      "status": "complete"
+    },
+    {
+      "id": "US-008",
+      "title": "WhatsApp fallback never replies from a stranger's number on tenant flows",
+      "detail": "dispatchQuoteMessage falls back to WhatsApp from the global TWILIO_WHATSAPP_FROM even when the SMS was meant to come from the tenant's own number. Skip the WhatsApp fallback when a custom tenant from was requested; keep it for shared/dev-number flows.",
+      "priority": 8,
+      "status": "complete"
+    },
+    {
+      "id": "US-009",
+      "title": "No-tenant roofing SMS tier presentation matches the quote page",
+      "detail": "Audit: null-tenant roofing SMS sends Good/Better/Best while the linked page/PDF render single-tier. Align the SMS default with the page's default.",
+      "priority": 9,
+      "status": "complete"
     }
+  ],
+  "out_of_scope": [
+    "Per-speaker identity on shared numbers (needs product design — receptionist would have to ask names)",
+    "customers (phone, tenant) composite-key migration — Phase 2 schema work; US-004 is the app-layer mitigation",
+    "Keyword-free engagement for roofing-only tenants (by design: any inbound to a roofing-only tradie is presumed a lead)",
+    "pricing_book seeding when a trade is enabled (product decision on defaults vs forced setup)"
   ]
 }

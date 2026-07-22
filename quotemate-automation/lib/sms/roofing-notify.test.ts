@@ -3,8 +3,15 @@
 // audit). Mirrors notifyPaintingTradie: injected dispatch, never throws,
 // missing notify number just means no notification.
 
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { buildRoofingTradieNotification, notifyRoofingTradie } from './roofing-notify'
+
+// One test deletes TRADIE_NOTIFY_NUMBER; restore so nothing leaks into
+// other files sharing this worker's process.env.
+const ENV = { ...process.env }
+afterEach(() => {
+  process.env = { ...ENV }
+})
 
 const TENANT = {
   owner_mobile: '+61400111222',

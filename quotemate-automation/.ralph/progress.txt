@@ -1,26 +1,58 @@
-# Ralph progress — Google Solar API full exploitation (2026-06-13)
+# Ralph progress — Roofing SMS receptionist hardening (2026-07-23)
 
 Completion promise: "All tests pass"
+Branch: ralph/roofing-hardening (from main @ b6f94b80)
 
 ## Learnings
-- pngjs already a direct dep (used in lib/estimation/refine.ts); geotiff must be added.
-- buildMonthlyProductionChart already accepts monthly_kwh?: number[] — sink for monthly flux.
-- data_layers summary persists inside solar_estimates.estimate jsonb (no dedicated column); GeoTIFF URLs are short-lived and must never be persisted (data-layers.test.ts asserts no 'geoTiff' in JSON).
-- after() pattern for enrichment: see pylon-aftercheck/opensolar-supplement invocations in /api/solar/[tenantSlug]/estimate route.
-- Asset caching pattern: intake-photos bucket, path solar/{row.id}/..., served via /api/solar/q/[token]/* routes (see panels-after).
-- Pre-existing uncommitted worktree changes (deleted pylon/opensolar tab files) must NOT be staged in story commits — stage explicitly.
+- tenants.status was in SELECT_COLS + logged since v6 but never gated anywhere;
+  the gate belongs BEFORE customer creation (step 2a) so suspended tenants
+  create no rows at all.
+- lib/customers/lookup.ts creates a supabase client at MODULE level — pure
+  helpers must live in sibling pure modules (memory-scope.ts) or their tests
+  need env. Same trap as twilio.ts (env read inside fns, so that one's safe).
+- customers.phone_number is GLOBALLY unique (mig 008); tenant_id is a
+  first-writer-wins stamp, not a partition key. App-layer memory scoping at
+  the single resolution point in the route covers every downstream read;
+  the composite-key migration remains Phase-2.
+- trade-scope.test.ts pins tradeScopeDirective byte-for-byte with inline
+  snapshots ("Phase 0 exit gate"). Deliberate directive changes must update
+  the pins AND the header comment, or the intent is lost.
+- The advertise half of US-005 (extraTradeLines, roofing-only branch) had
+  already landed in 48a1e9d6 the same day — always re-read dialog.ts before
+  extending it; this session had three concurrent editors.
+- WhatsApp senders are never tenant long codes: sendWhatsApp always uses
+  TWILIO_WHATSAPP_FROM, so the only safe fallback scope is platform-number
+  flows (whatsappFallbackAllowed).
+- Twilio treats ONLY whole-message keywords as opt-outs and then blocks
+  sends (21610) — so global STOP handling is silence+close, and phrase-level
+  "cancel the booking" must still reach the dialog.
+- asQuoteTierMode(null) → 'single' is THE platform default; any surface
+  hardcoding 'good_better_best' as a fallback is a mismatch bug.
+- Roofing measure-path park at await_booking now KEEPS pending_quote_token
+  (needed by the booking-confirm tradie notify link). nextRoofingConversation-
+  State's 'inspection' arm still nulls it — route persists explicitly, so
+  only the route's own persists matter there.
 
 ## History
-- S1 (d9e2cf7): sunshineQuantiles/maxSunshineHours/maxArrayArea/panelLifetime into SolarRoofFacts + sun-score module. 94 tests green.
-- S2 (f03e3ff): geotiff dep; decodeSolarGeoTiff + raster-analysis (masked means, monthly weights, hourly-shade bitmask analysis, DSM height) + flux-render PNG. 29 tests green.
-- S3 (e1b3e1d): fetchSolarDataLayersWithUrls (URLs in-memory only) + applySolarSunAssets after()-job wired into estimate + redraft routes; context.sun merged into estimate jsonb.
-- S4 (641436f): sun-view model, Sun & shade section on /q/solar/[token] + PDF, /api/solar/q/[token]/flux-heatmap route, RGB composite heatmap, measured monthly production chart.
-- S5 (6637449): SOLAR_EXPANDED_COVERAGE flag — experiments=EXPANDED_COVERAGE param + BASE imagery admitted (wide band) behind the flag only. Roofing boundary coerces BASE→LOW.
-- S6: full gates — vitest 3070 passed/1 skipped (live test), eslint 0 errors in touched files (repo has 874 pre-existing errors elsewhere), next build green after BASE→LOW coercion fix.
+- US-001 (per commit log): isTransactableTenantStatus + route gate. 3 tests.
+- US-002: lib/sms/roofing-notify.ts (builder + notifyRoofingTradie, injected
+  dispatch, self-test guard) + route wiring at send_saved/booking-confirmed;
+  inspection park keeps token. 6 tests.
+- US-003: isGlobalOptOut in inbound-helpers + route close-and-silence before
+  the receptionists. 3 tests.
+- US-004: lib/customers/memory-scope.ts (customerMemoryAllowed +
+  stripCustomerMemory) wired at the single customer-resolution point. 6 tests.
+- US-005: missingTradeLines decline block (NOT OFFERED: roofing/painting/
+  solar/aircon) for explicit trades[]; commercial_painting counts as painting;
+  legacy undefined invents nothing. Snapshots updated deliberately. 19 tests.
+- US-006: closeStaleRoofingState + route else-branch when roofing disabled
+  mid-thread. 2 tests.
+- US-007: tenant/me customers select phone→phone_number (PostgREST 400).
+- US-008: whatsappFallbackAllowed + gate in dispatchQuoteMessage. 5 tests.
+- US-009: SMS no-tenant roofing tier default = asQuoteTierMode(null), matching
+  the quote page.
 
-## Completion promise check
-"All tests pass" — npm test: 3070 passed, 0 failed (1 skipped = .live test requiring real API keys, skipped by design).
-=== ralph/roofing-3d-capture-upgrades — progress ===
-
-[2026-07-16T15:18] PLAN: 5 stories. Base 3D feature committed. Key constraints: Tripo has no 'top' slot; cache is global by normalized address; auto reads cache, manual bypasses read but writes.
-[2026-07-16T15:32] S1 cache lib (6 tests). S2+S3 labelled captures + cache-aware enhance (14 tests). S4 manual capture UI. S5 gates: tsc clean, FULL vitest 5904 passed / 0 failed, both entry points render on /m/[token]. LEARNINGS: git pathspecs with [token] need ':(literal)'; only cache genuinely-enhanced images (raw fallback would poison the address cache); Tripo multiview has no 'top' slot — cache-only view.
+## Out of scope (documented in prd.json)
+- Per-speaker identity on shared numbers; customers composite-key migration;
+  keyword-free engagement for roofing-only tenants; pricing_book seeding on
+  trade activation.

@@ -171,7 +171,10 @@ describe('GET /api/tenant/me — quote customer contact', () => {
     ]
     h.resultsByTable.customers = [
       {
-        data: [{ id: 'cust1', phone: '+61466666666', email: 'row@example.com' }],
+        // Real schema (migration 008): the column is phone_number, not
+        // phone. The old mock mirrored the buggy select that PostgREST
+        // 400'd on in prod (US-007, 2026-07-23 audit).
+        data: [{ id: 'cust1', phone_number: '+61466666666', email: 'row@example.com' }],
         error: null,
       },
     ]
