@@ -43,6 +43,7 @@ import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import { newMeasurementTokens } from '@/lib/roofing/tokens'
 import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
 import { tenantHasRoofingTrade, tenantIsRoofingOnly } from '@/lib/roofing/tenant'
 import { tenantHasFeature } from '@/lib/features/catalog'
@@ -722,7 +723,13 @@ async function handleRoofingTurn(args: {
       const rateCard = await loadRoofingRateCard(supabase, tenantId, tenantTrade)
       const result = await measureAndPriceRoofs(reqInput.address, reqInput.inputs, { rateCard })
       if (result.ok) {
-        const token = randomBytes(16).toString('hex')
+        // BOTH capability tokens, minted as a pair. Until 2026-07-23 this
+        // minted public_token only, so every SMS-origin job had
+        // measure_token NULL and /api/tenant/trade-jobs rendered
+        // tradieHref null — no Measurement Results page for SMS jobs,
+        // while every web save had one.
+        const tokens = newMeasurementTokens()
+        const token = tokens.public_token
         const isInspection = decision.action === 'inspection'
         // For an inspection routed by the gathered inputs (e.g. unknown
         // material), force the routing onto the saved quote so the page +
@@ -745,7 +752,7 @@ async function handleRoofingTurn(args: {
           routing: quote.routing.decision,
           structures: quote.structures,
           quote,
-          public_token: token,
+          ...tokens,
         })
         const quoteUrl = `${baseUrl}/q/roof/${token}`
         // Best-effort roof-photo MMS FIRST (one per building, capped), then
@@ -1033,7 +1040,7 @@ export async function POST(req: Request) {
   // downstream (estimator, etc.) can scope by tenant.
   // Fail-soft: no tenant match → null → existing pipeline uses the
   // legacy single pricing_book (back-compat for pre-v6 conversations).
-  const { tenantByDestinationSms } = await import('@/lib/tenant/lookup')
+  const { tenantByDestinationSms, isTransactableTenantStatus } = await import('@/lib/tenant/lookup')
   const tenant = await tenantByDestinationSms(supabase, toNumber)
   if (tenant) {
     console.log('[sms/inbound] step 2a — tenant resolved by destination number', {
@@ -1042,6 +1049,17 @@ export async function POST(req: Request) {
       trade: tenant.trade,
       status: tenant.status,
     })
+    // US-001 (audit 2026-07-23): status was logged but never GATED — a
+    // suspended/onboarding tenant's number kept quoting. A non-active
+    // tenant's line behaves like a disconnected number: ack Twilio (so it
+    // doesn't retry) and do nothing else — no customer row, no AI reply.
+    if (!isTransactableTenantStatus(tenant.status)) {
+      console.warn('[sms/inbound] step 2a — tenant not active; dropping inbound', {
+        tenantId: tenant.id,
+        status: tenant.status,
+      })
+      return ackTwiml()
+    }
   } else {
     // Spec quote-pdf-logo-fix R5 — the destination number maps to no tenant
     // (e.g. the shared dev number). Expected, but warn-level so the resulting

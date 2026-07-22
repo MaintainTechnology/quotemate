@@ -38,6 +38,15 @@ const SELECT_COLS =
   'trade, trades, state, status, twilio_sms_number, twilio_voice_number, ' +
   'vapi_assistant_id, stripe_connect_account_id, sms_estimator_enabled'
 
+/** PURE — may this tenant's provisioned number transact (run the AI
+ *  pipeline, quote, create customer rows)? Only an ACTIVE tenant may.
+ *  Fail closed: null/unknown statuses do not transact — a suspended or
+ *  still-onboarding tenant's number must behave like a disconnected line,
+ *  not keep issuing priced quotes (audit 2026-07-23). */
+export function isTransactableTenantStatus(status: string | null | undefined): boolean {
+  return (status ?? '').trim().toLowerCase() === 'active'
+}
+
 /** SMS webhooks: find the tenant whose number the customer texted.
  *
  *  Canonicalises both sides to E.164 (+614xxxxxxxx) before comparing.
