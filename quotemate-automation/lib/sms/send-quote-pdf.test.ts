@@ -53,19 +53,43 @@ describe('dispatchQuoteWithPdf', () => {
     )
   })
 
-  it('attaches the signed media URL when the PDF exists and signing succeeds', async () => {
+  // MMS attachment is opt-in since 2026-07-22. On an AU long code without
+  // MMS support Twilio accepts the send, the status sticks at 'sent', and
+  // the customer loses the whole quote — body included. Two live roofing
+  // estimates were lost exactly this way.
+  it('does NOT attach media by default — the body link carries the PDF', async () => {
+    delete process.env.SMS_QUOTE_PDF_MMS
     const sign = vi.fn(async () => 'https://signed/abc.pdf')
     await dispatchQuoteWithPdf({
       to: '+61400000000',
       text: 'quote ready',
-      from: '+61481613464',
       pdfPath: 'quotes/x.pdf',
       signMediaUrl: sign,
     })
-    expect(sign).toHaveBeenCalledWith('quotes/x.pdf')
+    expect(sign).not.toHaveBeenCalled()
     expect(dispatchQuoteMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ to: '+61400000000', from: '+61481613464', mediaUrl: 'https://signed/abc.pdf' }),
+      expect.not.objectContaining({ mediaUrl: expect.anything() }),
     )
+  })
+
+  it('attaches the signed media URL when MMS is explicitly enabled', async () => {
+    process.env.SMS_QUOTE_PDF_MMS = '1'
+    try {
+      const sign = vi.fn(async () => 'https://signed/abc.pdf')
+      await dispatchQuoteWithPdf({
+        to: '+61400000000',
+        text: 'quote ready',
+        from: '+61481613464',
+        pdfPath: 'quotes/x.pdf',
+        signMediaUrl: sign,
+      })
+      expect(sign).toHaveBeenCalledWith('quotes/x.pdf')
+      expect(dispatchQuoteMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ to: '+61400000000', from: '+61481613464', mediaUrl: 'https://signed/abc.pdf' }),
+      )
+    } finally {
+      delete process.env.SMS_QUOTE_PDF_MMS
+    }
   })
 
   it('degrades to a plain SMS when signing throws (best-effort)', async () => {

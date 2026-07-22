@@ -17,7 +17,12 @@
 
 import { describe, it, expect } from 'vitest'
 import { mapMaterial, mapPitch, mapIntent, nextRoofingStep, type RoofingSlots } from './roofing-intake'
-import { advanceRoofing, type RoofingConversationState, type RoofingTurnDecision } from './roofing-receptionist'
+import {
+  advanceRoofing,
+  parseStructureChoice,
+  type RoofingConversationState,
+  type RoofingTurnDecision,
+} from './roofing-receptionist'
 
 // Drive the receptionist for N turns, feeding the same reply each time,
 // exactly as the route does: persist the returned slots + asked step.
@@ -229,6 +234,33 @@ describe('live transcript replay — 2026-07-22 stuck roofing thread', () => {
     )
     expect(d.action).toBe('measure')
     expect(d.action === 'measure' && d.slots.pitch).toBe('steep')
+  })
+})
+
+// The building list names each structure ("1) Main dwelling", "2) Secondary
+// structure 1"), so customers answer with the NAME as readily as the number.
+// Live thread 2026-07-22: "Main dwelling" was not understood and the whole
+// 3-building list was re-sent verbatim.
+describe('structure picks by name, not just number', () => {
+  it('parses the labels we ourselves printed in the list', () => {
+    expect(parseStructureChoice('Main dwelling', 3)).toBe(1)
+    expect(parseStructureChoice('main house', 3)).toBe(1)
+    expect(parseStructureChoice('the main one', 3)).toBe(1)
+    expect(parseStructureChoice('Secondary structure 1', 3)).toBe(2)
+    expect(parseStructureChoice('secondary structure 2', 3)).toBe(3)
+    // Numbers and ordinals must keep working exactly as before.
+    expect(parseStructureChoice('1', 3)).toBe(1)
+    expect(parseStructureChoice('the second', 3)).toBe(2)
+    expect(parseStructureChoice('nothing relevant', 3)).toBeNull()
+  })
+
+  it('does not re-send the building list when the customer names a building', () => {
+    const d = advanceRoofing(
+      { slots: GATHERED, last_step: 'confirm_roof', pending_quote_token: 'tok', pending_structure_count: 3 },
+      'Main dwelling',
+    )
+    expect(d.action).toBe('send_saved')
+    expect(d.action === 'send_saved' && d.structureChoices).toEqual([1])
   })
 })
 

@@ -36,6 +36,7 @@ import {
 } from '@/lib/sms/roofing-compose'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { ensureRoofQuotePdf, roofQuotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
+import { quotePdfMmsEnabled } from '@/lib/sms/send-quote-pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
@@ -560,10 +561,17 @@ async function handleRoofingTurn(args: {
         })
         if (roofPdfPath) {
           roofPdfUrl = roofQuotePdfUrl(pending.token)
-          try {
-            roofPdfMedia = await signQuotePdfUrl(roofPdfPath, 60 * 60)
-          } catch {
-            roofPdfMedia = undefined
+          // Attach the PDF as MMS media ONLY where MMS is known to work.
+          // On an AU long code without MMS, Twilio accepts the send, the
+          // status sticks at 'sent' and the whole estimate — body included
+          // — never reaches the handset. The body's "PDF copy:" link makes
+          // the attachment redundant anyway. See quotePdfMmsEnabled().
+          if (quotePdfMmsEnabled()) {
+            try {
+              roofPdfMedia = await signQuotePdfUrl(roofPdfPath, 60 * 60)
+            } catch {
+              roofPdfMedia = undefined
+            }
           }
         }
       }

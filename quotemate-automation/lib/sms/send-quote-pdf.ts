@@ -35,6 +35,20 @@ export function exceedsMmsMediaCap(bytes: number | null | undefined): boolean {
   return typeof bytes === 'number' && bytes > MMS_MEDIA_CAP_BYTES
 }
 
+// The size cap above only catches ONE way an MMS dies asynchronously. The
+// other, observed in production 2026-07-22: an AU long code that does not
+// support MMS at all. Twilio accepts the send, the status sticks at 'sent'
+// and never reaches 'delivered' — so the customer loses the ENTIRE message,
+// body and all, not just the attachment. Two roofing quotes were lost this
+// way while every media-free SMS on the same thread delivered fine.
+//
+// The body always carries a durable "PDF copy: …" link, so the attachment
+// buys us nothing the customer can't already reach. Default OFF; a
+// deployment that knows its numbers do MMS can opt back in.
+export function quotePdfMmsEnabled(): boolean {
+  return process.env.SMS_QUOTE_PDF_MMS === '1'
+}
+
 export async function dispatchQuoteWithPdf(opts: {
   to: string
   text: string
@@ -48,7 +62,7 @@ export async function dispatchQuoteWithPdf(opts: {
   signMediaUrl: (path: string) => Promise<string>
 }): Promise<DispatchResult> {
   let mediaUrl: string | undefined
-  if (opts.pdfPath) {
+  if (opts.pdfPath && quotePdfMmsEnabled()) {
     try {
       mediaUrl = await opts.signMediaUrl(opts.pdfPath)
     } catch (e) {

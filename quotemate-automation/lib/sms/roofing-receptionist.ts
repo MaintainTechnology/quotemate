@@ -87,6 +87,19 @@ const ORDINALS: Record<string, number> = { first: 1, second: 2, third: 3, fourth
  */
 export function parseStructureChoice(inbound: string, count: number): number | null {
   const t = (inbound ?? '').toLowerCase()
+  // The list we sent NAMES each building ("1) Main dwelling", "2) Secondary
+  // structure 1"), so read those names back before falling to digits —
+  // otherwise "Main dwelling" is unrecognised and we re-send the same list.
+  // Checked first: "secondary structure 1" contains a digit that means
+  // something different from a bare "1".
+  const secondary = t.match(/secondary\s*(?:structure|building)?\s*#?(\d{1,2})/)
+  if (secondary) {
+    const n = Number(secondary[1]) + 1 // "secondary structure 1" is entry 2
+    if (n >= 1 && n <= count) return n
+  }
+  if (/\b(main dwelling|main house|main building|main structure|main roof|the main one|main one)\b/.test(t)) {
+    return 1
+  }
   for (const [word, n] of Object.entries(ORDINALS)) {
     if (new RegExp(`\\b${word}\\b`).test(t) && n <= count) return n
   }
