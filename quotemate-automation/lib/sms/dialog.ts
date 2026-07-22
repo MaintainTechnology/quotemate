@@ -1223,9 +1223,66 @@ function customerHistoryDirective(hint: CustomerHistoryHint): string {
  * Empty/undefined trades → fall back to permissive "both" (legacy pre-v6
  * single-pilot behaviour) so older traffic isn't accidentally blocked.
  */
+/** Trades this tenant holds that are NEITHER of the two pilots. These used
+ *  to be invisible to the dialog: the electrical / plumbing / both branches
+ *  below are chosen purely on the pilot membership test, so a tenant with
+ *  trades ['electrical','plumbing','roofing'] was told it "covers BOTH
+ *  electrical AND plumbing" and nothing else — and then instructed to
+ *  decline anything outside the easy-5 lists. That is why a roofing-enabled
+ *  account replied that it does not do roofing (reported 2026-07-23; 6 of 8
+ *  live tenants held roofing while every one of them hit a pilot branch). */
+function extraTradeLines(set: ReadonlySet<string>): string[] {
+  const extras = [...set].filter((t) => t !== 'electrical' && t !== 'plumbing')
+  if (extras.length === 0) return []
+  const lines = [
+    `  - THIS TRADIE ALSO COVERS: ${extras.join(', ')}.`,
+    '    These are IN SCOPE. NEVER tell the customer we do not do them, and never',
+    '    end_conversation because a job is one of these — that is the wrong-trade',
+    '    redirect, and this is not the wrong trade.',
+  ]
+  if (set.has('roofing')) {
+    lines.push(
+      '  - ROOFING is quoted by a dedicated roofing flow, not by the easy-5 job',
+      '    types. If the customer wants a roof quoted (re-roof, roof repair, leak,',
+      '    gutters, ridge caps), acknowledge it and ask for the property address',
+      '    including suburb and postcode. Do NOT offer electrical or plumbing job',
+      '    types for it, and do NOT escalate it to the $99 inspection.',
+    )
+  }
+  return lines
+}
+
+/** US-005 decline half (audit 2026-07-23 Q6) — trades with a dedicated flow
+ *  that a tenant can hold or not. When an EXPLICIT trades[] lacks one, the
+ *  dialog is told to decline it outright; before this, an electrical-only
+ *  tenant had a decline rule for plumbing and NOTHING for roofing, so the
+ *  model improvised on "do you do roofing?". Legacy tenants (trades
+ *  undefined) get no invented declines. */
+const DECLINABLE_TRADES = ['roofing', 'painting', 'solar', 'aircon'] as const
+
+function missingTradeLines(set: ReadonlySet<string>, explicit: boolean): string[] {
+  if (!explicit || set.size === 0) return []
+  const missing = DECLINABLE_TRADES.filter((t) => {
+    if (set.has(t)) return false
+    // commercial_painting counts as painting capability.
+    if (t === 'painting' && set.has('commercial_painting')) return false
+    return true
+  })
+  if (missing.length === 0) return []
+  return [
+    `  - NOT OFFERED: ${missing.join(', ')}. If the customer asks for one of these,`,
+    "    say we don't offer that service and suggest a specialist — do NOT quote",
+    '    it, do NOT gather job details for it, and do NOT offer the $99 inspection.',
+  ]
+}
+
 export function tradeScopeDirective(trades: ReadonlyArray<string> | undefined): string {
   const set = new Set(trades ?? ['electrical', 'plumbing'])
   const both = set.has('electrical') && set.has('plumbing')
+  // Appended to whichever pilot branch is chosen below. extra is empty for
+  // a pilot-only tenant; missing is empty for legacy tenants (no explicit
+  // trades[]), so those keep no invented declines.
+  const extra = [...extraTradeLines(set), ...missingTradeLines(set, Array.isArray(trades))]
   if (both) {
     return [
       'TENANT TRADE SCOPE: this tradie covers BOTH electrical AND plumbing jobs.',
@@ -1237,6 +1294,7 @@ export function tradeScopeDirective(trades: ReadonlyArray<string> | undefined): 
       '  - In the opener invite, mention BOTH trades:',
       '      "We do electrical (downlights, GPOs, fans, smoke alarms, outdoor lights)',
       '       AND plumbing (blocked drains, hot water, taps, toilets)."',
+      ...extra,
     ].join('\n')
   }
   if (set.has('electrical')) {
@@ -1253,6 +1311,7 @@ export function tradeScopeDirective(trades: ReadonlyArray<string> | undefined): 
       '       You\'ll need a plumber for that one. All the best!"',
       '  - DO NOT escalate plumbing jobs to a $99 inspection. That\'s for out-of-scope ELECTRICAL',
       '    work (switchboards, EV chargers, etc.), not for the wrong trade entirely.',
+      ...extra,
     ].join('\n')
   }
   if (set.has('plumbing')) {
@@ -1269,6 +1328,31 @@ export function tradeScopeDirective(trades: ReadonlyArray<string> | undefined): 
       '       You\'ll need a sparky for that one. All the best!"',
       '  - DO NOT escalate electrical jobs to a $99 inspection. That\'s for out-of-scope PLUMBING',
       '    work (gas fitting, bathroom reno, etc.), not for the wrong trade entirely.',
+      ...extra,
+    ].join('\n')
+  }
+  // Roofing-capable, no pilot trade — e.g. the roofing-only tenants
+  // (trades = ['roofing']). Handled BEFORE the generic non-pilot branch
+  // below, which defers the in-scope list to TENANT CUSTOM SERVICES and
+  // says to decline anything absent from it. Live 2026-07-23 all three
+  // roofing-only tenants had ZERO custom assemblies, so that branch told
+  // the model its in-scope list was empty and to decline everything —
+  // including the roofing the tenant exists to sell.
+  if (set.has('roofing')) {
+    return [
+      `TENANT TRADE SCOPE: this tradie covers ${[...set].join(' and ')} work. ROOFING IS THEIR TRADE.`,
+      '  - NEVER say we do not do roofing, and never end_conversation on a roofing',
+      '    request. Roofing is the core service here.',
+      '  - Roofing quotes are produced by a dedicated roofing flow, not the easy-5',
+      '    job types. Do NOT offer downlights, GPOs, fans, smoke alarms, drains, hot',
+      '    water, taps or toilets — this tradie does not do them.',
+      '  - For any roof job (re-roof, repair, leak, gutters, downpipes, ridge caps),',
+      '    acknowledge it and ask for the property address including suburb and',
+      '    postcode. Do NOT escalate it to the $99 inspection.',
+      '  - Use "roofer" as the tradie noun.',
+      // ALSO COVERS would be redundant here (roofing IS the headline);
+      // the absent-trade declines still apply.
+      ...missingTradeLines(set, Array.isArray(trades)),
     ].join('\n')
   }
   // Non-pilot trade(s) only — e.g. a trade added by the admin bulk loader.

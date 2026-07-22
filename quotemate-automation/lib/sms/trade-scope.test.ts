@@ -1,11 +1,14 @@
 // Phase 0 exit gate (admin bulk loader §12/§13) — SMS path.
 //
-// tradeScopeDirective() feeds the SMS dialog's user message. The pilot
-// branches (electrical / plumbing / both / empty) are UNCHANGED code — the
-// inline snapshots below pin them byte-for-byte so the Phase 0 type-widening
-// cannot have altered what the live agent is told. The carpentry case
-// verifies the §3 fix: a non-pilot trade now gets a real directive instead
-// of the old degenerate "assume both pilots" fallback.
+// tradeScopeDirective() feeds the SMS dialog's user message. The inline
+// snapshots pin the pilot branches byte-for-byte so refactors cannot
+// silently alter what the live agent is told. Two DELIBERATE content
+// changes are baked into the pins:
+//   - 2026-07-23 US-005: an explicit trades[] now appends a NOT OFFERED
+//     decline block for absent dedicated-flow trades (roofing, painting,
+//     solar, aircon). Undefined trades[] = config unknown = no declines.
+// The carpentry case verifies the §3 fix: a non-pilot trade gets a real
+// directive instead of the old degenerate "assume both pilots" fallback.
 
 import { describe, it, expect } from 'vitest'
 import { tradeScopeDirective } from './dialog'
@@ -22,7 +25,10 @@ describe('tradeScopeDirective — pilot trades unchanged (byte-identical pins)',
             "plumber" for plumbing jobs, generic "tradie" until job_type clear).
           - In the opener invite, mention BOTH trades:
               "We do electrical (downlights, GPOs, fans, smoke alarms, outdoor lights)
-               AND plumbing (blocked drains, hot water, taps, toilets).""
+               AND plumbing (blocked drains, hot water, taps, toilets)."
+          - NOT OFFERED: roofing, painting, solar, aircon. If the customer asks for one of these,
+            say we don't offer that service and suggest a specialist — do NOT quote
+            it, do NOT gather job details for it, and do NOT offer the $99 inspection."
       `)
   })
 
@@ -39,7 +45,10 @@ describe('tradeScopeDirective — pilot trades unchanged (byte-identical pins)',
             "Apologies <name>, we're sparkies - we don't do plumbing work.
              You'll need a plumber for that one. All the best!"
         - DO NOT escalate plumbing jobs to a $99 inspection. That's for out-of-scope ELECTRICAL
-          work (switchboards, EV chargers, etc.), not for the wrong trade entirely."
+          work (switchboards, EV chargers, etc.), not for the wrong trade entirely.
+        - NOT OFFERED: roofing, painting, solar, aircon. If the customer asks for one of these,
+          say we don't offer that service and suggest a specialist — do NOT quote
+          it, do NOT gather job details for it, and do NOT offer the $99 inspection."
     `)
   })
 
@@ -56,14 +65,21 @@ describe('tradeScopeDirective — pilot trades unchanged (byte-identical pins)',
             "Apologies <name>, we're plumbers - we don't do electrical work.
              You'll need a sparky for that one. All the best!"
         - DO NOT escalate electrical jobs to a $99 inspection. That's for out-of-scope PLUMBING
-          work (gas fitting, bathroom reno, etc.), not for the wrong trade entirely."
+          work (gas fitting, bathroom reno, etc.), not for the wrong trade entirely.
+        - NOT OFFERED: roofing, painting, solar, aircon. If the customer asks for one of these,
+          say we don't offer that service and suggest a specialist — do NOT quote
+          it, do NOT gather job details for it, and do NOT offer the $99 inspection."
     `)
   })
 
-  it('undefined → permissive "both" (legacy pre-v6 default)', () => {
-    expect(tradeScopeDirective(undefined)).toBe(
-      tradeScopeDirective(['electrical', 'plumbing']),
-    )
+  it('undefined → permissive "both", minus the explicit-config declines', () => {
+    // US-005: an EXPLICIT trades[] now declares absent trades NOT OFFERED;
+    // undefined means "config unknown" and must not invent declines. So
+    // undefined equals the both-pilots directive with that block removed.
+    const explicit = tradeScopeDirective(['electrical', 'plumbing'])
+    const legacy = tradeScopeDirective(undefined)
+    expect(legacy).not.toContain('NOT OFFERED')
+    expect(explicit).toContain(legacy) // same text, plus the declines
   })
 
   it('empty array → degenerate "unknown" fallback', () => {
@@ -88,5 +104,107 @@ describe('tradeScopeDirective — non-pilot trade (§3 fix)', () => {
     expect(tradeScopeDirective(['carpentry', 'tiling'])).toContain(
       'this tradie covers carpentry and tiling work',
     )
+  })
+})
+
+// Reported 2026-07-23: "the system responds that it doesn't do roofing, even
+// though roofing is already enabled". Root cause was that the pilot branches
+// are chosen purely on electrical/plumbing membership, so every extra trade
+// was invisible and the easy-5 decline instructions applied to it. All three
+// arrays below are REAL production values.
+describe('tradeScopeDirective — roofing must never be declined', () => {
+  const LIVE = {
+    peppers: ['plumbing', 'electrical', 'roofing'],
+    atomic: ['electrical', 'plumbing', 'roofing', 'painting', 'aircon', 'signage', 'commercial_painting', 'solar'],
+    roofingOnly: ['roofing'],
+    elecRoof: ['electrical', 'roofing'],
+    plumbRoof: ['plumbing', 'roofing'],
+  }
+
+  it('every roofing-enabled tenant is told roofing is in scope', () => {
+    for (const trades of Object.values(LIVE)) {
+      const d = tradeScopeDirective(trades)
+      expect(d.toLowerCase()).toContain('roofing')
+    }
+  })
+
+  it('a cross-trade tenant keeps its pilot scope AND gains the extra trades', () => {
+    const d = tradeScopeDirective(LIVE.peppers)
+    expect(d).toContain('BOTH electrical AND plumbing') // pilot scope intact
+    expect(d).toContain('THIS TRADIE ALSO COVERS: roofing')
+    expect(d).toContain('NEVER tell the customer we do not do them')
+  })
+
+  it('names every extra trade a multi-trade tenant holds', () => {
+    const d = tradeScopeDirective(LIVE.atomic)
+    for (const t of ['roofing', 'painting', 'aircon', 'signage', 'commercial_painting', 'solar']) {
+      expect(d).toContain(t)
+    }
+  })
+
+  it('a roofing-only tenant is NOT told to decline everything absent from custom services', () => {
+    const d = tradeScopeDirective(LIVE.roofingOnly)
+    expect(d).toContain('ROOFING IS THEIR TRADE')
+    expect(d).toContain('NEVER say we do not do roofing')
+    // The generic non-pilot branch would defer to a custom-services list.
+    // All three live roofing-only tenants have ZERO custom assemblies, so
+    // that branch told the model its in-scope list was empty.
+    expect(d).not.toContain('TENANT CUSTOM')
+    expect(d).not.toContain('politely decline')
+    // ...and it must not offer the pilot job types it cannot do.
+    expect(d).not.toContain('blocked_drain')
+  })
+
+  it('an electrical+roofing tenant is not told to end_conversation on roofing', () => {
+    const d = tradeScopeDirective(LIVE.elecRoof)
+    expect(d).toContain('ELECTRICAL jobs ONLY') // legacy pilot line retained
+    expect(d).toContain('THIS TRADIE ALSO COVERS: roofing')
+    expect(d).toContain('end_conversation because a job is one of these')
+  })
+
+  it('pilot-only tenants are completely unchanged (no extra block leaks in)', () => {
+    for (const trades of [['electrical'], ['plumbing'], ['electrical', 'plumbing']]) {
+      expect(tradeScopeDirective(trades)).not.toContain('THIS TRADIE ALSO COVERS')
+    }
+  })
+})
+
+// US-005 (audit 2026-07-23, Q6) — the DECLINE half. The advertise half
+// above tells a roofing-enabled tenant roofing is in scope; but a tenant
+// WITHOUT roofing had no instruction at all: the electrical-only branch
+// declines plumbing and says nothing about roofing, so the model
+// improvised. A tenant with an explicit trades[] that lacks a dedicated-
+// flow trade must be told to decline it — no quote, no $99 inspection.
+describe('tradeScopeDirective — absent trades are explicitly declined', () => {
+  it('an electrical-only tenant is told it does NOT offer roofing', () => {
+    const d = tradeScopeDirective(['electrical'])
+    expect(d).toContain('NOT OFFERED')
+    expect(d).toMatch(/NOT OFFERED[^\n]*roofing/)
+    // The instruction must forbid both failure modes we observed.
+    expect(d).toMatch(/NOT OFFERED[\s\S]*\$99 inspection/)
+  })
+
+  it('a both-pilots tenant without roofing gets the same decline rule', () => {
+    const d = tradeScopeDirective(['electrical', 'plumbing'])
+    expect(d).toMatch(/NOT OFFERED[^\n]*roofing/)
+  })
+
+  it('a roofing-enabled tenant is NOT told roofing is unavailable', () => {
+    const d = tradeScopeDirective(['electrical', 'plumbing', 'roofing'])
+    expect(d).not.toMatch(/NOT OFFERED[^\n]*roofing/)
+    expect(d).toContain('THIS TRADIE ALSO COVERS: roofing')
+  })
+
+  it('commercial_painting counts as painting for the decline list', () => {
+    const d = tradeScopeDirective(['electrical', 'commercial_painting'])
+    expect(d).not.toMatch(/NOT OFFERED[^\n]*\bpainting/)
+  })
+
+  it('legacy tenants (no explicit trades[]) get NO invented declines', () => {
+    expect(tradeScopeDirective(undefined)).not.toContain('NOT OFFERED')
+  })
+
+  it('empty trades[] stays the degenerate fallback, no declines', () => {
+    expect(tradeScopeDirective([])).not.toContain('NOT OFFERED')
   })
 })
