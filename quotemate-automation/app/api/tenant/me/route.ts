@@ -17,6 +17,7 @@ import { z } from 'zod'
 import { UpdateSchema } from '@/lib/tenant/update-schema'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { parseVapiTranscript } from '@/lib/voice/parse-transcript'
+import { measurementHrefByShareToken } from '@/lib/dashboard/measurement-links'
 import {
   normalizeServiceDelta,
   buildServiceWritePlan,
@@ -431,13 +432,16 @@ export async function GET(req: Request) {
     ),
   )
   if (linkedCustomerIds.length > 0) {
+    // customers has phone_number (migration 008), not `phone` — the old
+    // select 400'd in PostgREST and this whole fallback silently returned
+    // nothing (2026-07-23 audit).
     const { data: custRows } = await supabase
       .from('customers')
-      .select('id, phone, email')
+      .select('id, phone_number, email')
       .in('id', linkedCustomerIds)
     for (const c of custRows ?? []) {
       customerContactById[c.id as string] = {
-        phone: ((c.phone as string | null) ?? '').trim() || null,
+        phone: ((c.phone_number as string | null) ?? '').trim() || null,
         email: ((c.email as string | null) ?? '').trim() || null,
       }
     }
@@ -451,6 +455,43 @@ export async function GET(req: Request) {
   // false for every quote, which made the dashboard's "Deposit paid" badge
   // (and the delete-button gate) dead code.
   const paidQuoteIds = new Set<string>()
+
+  // Promoted roofing measurements (migration 168). /api/tenant/trade-jobs
+  // drops a measurement once it becomes a quote (`.is('quote_share_token',
+  // null)`) so the job doesn't render twice — but that also stripped its
+  // /m/[measure_token] link, leaving a sold job with no way back to its
+  // Measurement Results page. Re-attach it here through the reverse key
+  // roofing_measurements.quote_share_token = quotes.share_token.
+  // Best-effort: a failure means no link, never a failed response.
+  // Bounded by the share tokens actually on this page (quotes are capped at
+  // 100 above), so this never scans a tenant's whole measurement history and
+  // can't be truncated by PostgREST's row cap.
+  let measureHrefByShare: Record<string, string> = {}
+  const pageShareTokens = (quotesRes.data ?? [])
+    .map((q) => q.share_token as string | null)
+    .filter((t): t is string => !!t)
+  if (pageShareTokens.length > 0) {
+    // supabase-js resolves errors into `error` rather than throwing, so this
+    // is checked, not try/caught. A failure degrades to "no link" — never a
+    // failed /api/tenant/me — but it gets logged rather than vanishing.
+    const { data: promoted, error: promotedErr } = await supabase
+      .from('roofing_measurements')
+      .select('quote_share_token, measure_token')
+      .eq('tenant_id', tenant.id)
+      .in('quote_share_token', pageShareTokens)
+    if (promotedErr) {
+      console.warn(
+        '[tenant/me] promoted-measurement lookup failed — quotes render without the Measurement Results link',
+        promotedErr.message,
+      )
+    }
+    measureHrefByShare = measurementHrefByShareToken(
+      (promoted ?? []) as Array<{
+        quote_share_token: string | null
+        measure_token: string | null
+      }>,
+    )
+  }
 
   const quotes = (quotesRes.data ?? []).map((q) => {
     const intake = q.intake_id ? intakeMap[q.intake_id] : null
@@ -485,6 +526,11 @@ export async function GET(req: Request) {
       trade: intake?.trade ?? null,
       inspection_required: intake?.inspection_required ?? null,
       deposit_paid: !!q.paid_at || paidQuoteIds.has(q.id as string),
+      // Tradie-facing Measurement Results page, for roofing quotes that were
+      // promoted from a saved measurement. Null for every other quote.
+      measure_href: q.share_token
+        ? measureHrefByShare[q.share_token as string] ?? null
+        : null,
       // Channel + transcript: SMS thread for sms-sourced quotes, parsed
       // Vapi transcript for voice-sourced. Both shapes match
       // ConvoMessage[] so the dashboard renders them identically.
