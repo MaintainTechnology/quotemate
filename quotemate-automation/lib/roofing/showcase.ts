@@ -89,6 +89,25 @@ export const SHOWCASE_MATERIALS: readonly RoofMaterial[] = [
 ] as const
 
 /**
+ * Customer-facing labels for the selectable materials.
+ *
+ * Deliberately owned here rather than imported from quote-bullets.ts: these
+ * are showcase copy for a picker, they must cover exactly SHOWCASE_MATERIALS,
+ * and the repo already carries seven divergent label maps for these keys.
+ * Short forms — they sit on 40px-tall buttons on a phone.
+ */
+export const SHOWCASE_MATERIAL_LABELS: Record<RoofMaterial, string> = {
+  colorbond_corrugated: 'Corrugated',
+  colorbond_trimdek: 'Trimdek',
+  colorbond_spandek: 'Spandek',
+  colorbond_kliplok: 'Klip-Lok',
+  concrete_tile: 'Concrete tile',
+  terracotta_tile: 'Terracotta tile',
+  cement_sheet: 'Flat sheet',
+  unknown: 'Existing roof',
+}
+
+/**
  * Resolve a requested material, falling back to the one actually quoted.
  *
  * Never returns 'unknown': a quote whose material was not confirmed still

@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadCesium } from '@/app/dashboard/_components/loadCesium'
+import { HouseViewer } from '@/app/q/_chrome/HouseViewer'
 
 type Props = {
   measureToken: string
@@ -181,10 +182,6 @@ async function createCaptureViewer(
 
 export function Roof3DModelSection({ measureToken, center, captureRangeM, initialStatus }: Props) {
   const captureRef = useRef<HTMLDivElement | null>(null)
-  const viewerBoxRef = useRef<HTMLDivElement | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const materialsRef = useRef<any[]>([])
-  const cleanupRef = useRef<(() => void) | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [phase, setPhase] = useState<Phase>(
@@ -193,8 +190,8 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const [stage, setStage] = useState('')
   const [progress, setProgress] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [modelLoaded, setModelLoaded] = useState(false)
-  const [viewerLoading, setViewerLoading] = useState(false)
+  /** Signed GLB URL from the state endpoint — handed to the shared viewer. */
+  const [modelUrl, setModelUrl] = useState<string | null>(null)
   // Manual capture mode — the tradie frames each view by hand.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const manualViewerRef = useRef<any>(null)
@@ -218,140 +215,10 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     }
   }, [])
 
-  // ── viewer (three.js) ─────────────────────────────────────────────
-  const loadModel = useCallback(async (url: string) => {
-    const box = viewerBoxRef.current
-    if (!box) return
-    setViewerLoading(true)
-    const THREE = await import('three')
-    const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
-    const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js')
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(box.clientWidth, box.clientHeight)
-    // The host div is a React-empty node — appendChild only, NEVER
-    // replaceChildren (mutating React-managed children crashes reconciliation
-    // with "removeChild … not a child of this node").
-    cleanupRef.current?.()
-    box.appendChild(renderer.domElement)
-
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#14100d')
-    const camera = new THREE.PerspectiveCamera(45, box.clientWidth / box.clientHeight, 0.1, 1000)
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x444433, 2.4))
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2)
-    sun.position.set(1, 2, 1.2)
-    scene.add(sun)
-
-    const gltf = await new GLTFLoader().loadAsync(url)
-    const model = gltf.scene
-
-    // Frame the model: centre at origin, camera pulled back by its size.
-    const bounds = new THREE.Box3().setFromObject(model)
-    const size = bounds.getSize(new THREE.Vector3())
-    const centre = bounds.getCenter(new THREE.Vector3())
-    model.position.sub(centre)
-    scene.add(model)
-    const dim = Math.max(size.x, size.y, size.z) || 1
-    camera.position.set(dim * 1.2, dim * 0.8, dim * 1.2)
-
-    // Recolour hook: tint fragments by WORLD normal — sloped-up normals are
-    // roof, near-horizontal are walls. Injected into every material so the
-    // pickers work on Tripo's single baked-texture output.
-    // ponytail: normal-heuristic zones; true per-surface repaint would need
-    // Tripo's /models/texture re-texture task (paid, slow) or segmentation.
-    const uniforms = {
-      uRoofColor: { value: new THREE.Color(roofColor) },
-      uRoofMix: { value: 0 },
-      uWallColor: { value: new THREE.Color(wallColor) },
-      uWallMix: { value: 0 },
-    }
-    materialsRef.current = []
-    model.traverse((obj) => {
-      const mesh = obj as InstanceType<typeof THREE.Mesh>
-      if (!mesh.isMesh || !mesh.material) return
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      for (const mat of mats) {
-        mat.onBeforeCompile = (shader) => {
-          Object.assign(shader.uniforms, uniforms)
-          shader.fragmentShader = shader.fragmentShader
-            .replace(
-              '#include <common>',
-              `#include <common>
-               uniform vec3 uRoofColor; uniform float uRoofMix;
-               uniform vec3 uWallColor; uniform float uWallMix;`,
-            )
-            .replace(
-              '#include <map_fragment>',
-              `#include <map_fragment>
-               {
-                 vec3 worldN = inverseTransformDirection(normalize(vNormal), viewMatrix);
-                 float up = worldN.y;
-                 float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-                 // Sloped upward faces = roof (excludes flat ground at up≈1).
-                 float roofMask = step(0.35, up) * (1.0 - step(0.985, up));
-                 float wallMask = 1.0 - step(0.35, abs(up));
-                 vec3 roofTint = uRoofColor * (0.25 + lum * 1.5);
-                 vec3 wallTint = uWallColor * (0.25 + lum * 1.5);
-                 diffuseColor.rgb = mix(diffuseColor.rgb, roofTint, roofMask * uRoofMix);
-                 diffuseColor.rgb = mix(diffuseColor.rgb, wallTint, wallMask * uWallMix);
-               }`,
-            )
-        }
-        mat.needsUpdate = true
-      }
-    })
-    materialsRef.current = [uniforms]
-
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true
-    controls.target.set(0, 0, 0)
-
-    let raf = 0
-    const animate = () => {
-      raf = requestAnimationFrame(animate)
-      controls.update()
-      renderer.render(scene, camera)
-    }
-    animate()
-
-    const onResize = () => {
-      if (!viewerBoxRef.current) return
-      const w = viewerBoxRef.current.clientWidth
-      const h = viewerBoxRef.current.clientHeight
-      camera.aspect = w / h
-      camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
-    }
-    window.addEventListener('resize', onResize)
-
-    cleanupRef.current = () => {
-      cancelAnimationFrame(raf)
-      window.removeEventListener('resize', onResize)
-      controls.dispose()
-      renderer.dispose()
-      renderer.domElement.remove()
-      cleanupRef.current = null
-    }
-    setModelLoaded(true)
-    setViewerLoading(false)
-    // roofColor/wallColor deliberately not deps — uniforms update via the picker effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Push picker changes into the shader uniforms.
-  useEffect(() => {
-    void (async () => {
-      const u = materialsRef.current[0]
-      if (!u) return
-      const THREE = await import('three')
-      u.uRoofColor.value = new THREE.Color(roofColor)
-      u.uWallColor.value = new THREE.Color(wallColor)
-      u.uRoofMix.value = tinting.roof ? 0.85 : 0
-      u.uWallMix.value = tinting.walls ? 0.85 : 0
-    })()
-  }, [roofColor, wallColor, tinting])
+  // The three.js viewer itself lives in app/q/_chrome/HouseViewer.tsx — the
+  // customer thank-you page renders the same component, so the GLB load, the
+  // orbit controls and the roof/wall tint shader cannot drift between the two
+  // surfaces. Only the colour pickers below stay tradie-side.
 
   // ── polling ───────────────────────────────────────────────────────
   const fetchStateOnce = useCallback(async (opts: { metaOnly?: boolean } = {}): Promise<void> => {
@@ -365,20 +232,16 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     setAnatomy(json.anatomy ?? null)
     setPolished(json.polished ?? null)
     setSynth(json.synth ?? null)
+    // The signed GLB URL rides on every response, including the mount fetch —
+    // keeping it means an already-ready model is viewable without a second
+    // round trip. Nothing downloads until the viewer's own button is tapped.
+    setModelUrl(json.modelUrl ?? null)
     // Metadata-only (page mount): populate the image panels but never touch
     // the phase — an async response must not undo a click (e.g. Regenerate).
     if (opts.metaOnly) return
     if (json.status === 'ready') {
       stopPolling()
       setPhase('ready')
-      if (json.modelUrl) {
-        try {
-          await loadModel(json.modelUrl)
-        } catch (e) {
-          setViewerLoading(false)
-          setError(e instanceof Error ? e.message : String(e))
-        }
-      }
     } else if (json.status === 'failed') {
       stopPolling()
       setPhase('failed')
@@ -386,7 +249,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     } else if (json.status === 'generating') {
       setProgress(json.progress ?? null)
     }
-  }, [measureToken, loadModel, stopPolling])
+  }, [measureToken, stopPolling])
 
   const startPolling = useCallback(() => {
     stopPolling()
@@ -400,7 +263,6 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     void fetchStateOnce({ metaOnly: true })
     return () => {
       stopPolling()
-      cleanupRef.current?.()
       try {
         manualViewerRef.current?.destroy()
       } catch {
@@ -824,26 +686,24 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         {phase === 'ready' && (
           <div>
             <div className="relative h-[28rem] w-full bg-ink-deep">
-              {/* Canvas host — React renders NOTHING inside; three.js appends
-                  its canvas imperatively. Keeping it childless in JSX is what
-                  makes the imperative appendChild safe. */}
-              <div ref={viewerBoxRef} className="absolute inset-0" />
-              {!modelLoaded && (
+              {modelUrl ? (
+                <HouseViewer
+                  modelUrl={modelUrl}
+                  // Empty hex = leave that surface alone, so "Reset colours"
+                  // and the untouched initial state stay untinted as before.
+                  roofHex={tinting.roof ? roofColor : ''}
+                  wallHex={tinting.walls ? wallColor : ''}
+                  posterUrl={synth?.front ?? null}
+                  label="Interactive 3D model of the property"
+                />
+              ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <button
                     type="button"
                     onClick={() => void fetchStateOnce()}
-                    disabled={viewerLoading}
-                    className="inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press disabled:opacity-60"
+                    className="inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-accent-ink hover:bg-accent-press"
                   >
-                    {viewerLoading ? (
-                      <>
-                        <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" />
-                        Loading model…
-                      </>
-                    ) : (
-                      'View 3D model'
-                    )}
+                    View 3D model
                   </button>
                 </div>
               )}
@@ -882,11 +742,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  cleanupRef.current?.()
-                  setModelLoaded(false)
-                  setPhase('idle')
-                }}
+                onClick={() => setPhase('idle')}
                 className="ml-auto inline-flex items-center gap-2 border border-ink-line px-3 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim hover:border-accent hover:text-accent"
               >
                 Regenerate
