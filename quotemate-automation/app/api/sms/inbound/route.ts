@@ -93,6 +93,7 @@ import {
   writeCustomerCorrections,
   type CustomerProfile,
 } from '@/lib/customers/lookup'
+import { customerMemoryAllowed, stripCustomerMemory } from '@/lib/customers/memory-scope'
 import {
   extractSlots,
   mergeSlotUpdates,
@@ -1138,13 +1139,22 @@ export async function POST(req: Request) {
   // returning customers don't get re-asked their name/suburb, and to
   // link the conversation back to a customer for cross-channel history.
   // Fail-soft: returns null on DB error, all downstream code handles null.
-  const customer: CustomerProfile | null = await findOrCreateCustomer(fromNumber, 'sms', tenant?.id ?? null)
+  const customerRaw: CustomerProfile | null = await findOrCreateCustomer(fromNumber, 'sms', tenant?.id ?? null)
+  // US-004 (audit 2026-07-23): the customers row is globally unique by phone
+  // and shared by every tenant this number ever texts. When it belongs to a
+  // DIFFERENT tenant, withhold the remembered profile at the single point
+  // every downstream read flows from — tenant B must not greet tenant A's
+  // customer by name with A's history in the prompt. Identity (id/phone)
+  // is kept so intake/quote linking still works.
+  const memoryOk = customerMemoryAllowed(customerRaw?.tenant_id ?? null, tenant?.id ?? null)
+  const customer: CustomerProfile | null = memoryOk ? customerRaw : stripCustomerMemory(customerRaw)
   if (customer) {
     console.log('[sms/inbound] step 2 — customer resolved', {
       customerId: customer.id,
       hasName: !!customer.first_name,
       hasSuburb: !!customer.suburb,
       totalQuotes: customer.total_quotes,
+      memoryScoped: !memoryOk,
     })
   }
 

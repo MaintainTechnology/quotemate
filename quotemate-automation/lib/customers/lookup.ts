@@ -40,7 +40,14 @@ export type CustomerProfile = {
   total_bookings: number
   first_contacted_at: string
   last_contacted_at: string
+  /** Owning tenant (first-writer-wins stamp; null on legacy rows). Present
+   *  at runtime via select('*'); typed here so memory scoping can read it. */
+  tenant_id?: string | null
 }
+
+// US-004 memory-scoping helpers live in ./memory-scope.ts (pure module —
+// this file creates a supabase client at import time, which pure tests
+// must not pay for).
 
 /**
  * Look up the customer for this phone number. Create a stub if missing.
