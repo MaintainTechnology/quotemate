@@ -11,6 +11,9 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { cachePathFor } from './capture-cache'
+import { SHOWCASE_MATERIALS } from './showcase'
+import { showcaseRenderPath } from './showcase-render'
+import type { RoofMaterial } from './types'
 
 const BUCKET = 'roof-models'
 /** One hour, matching the tradie route's expiry. Long enough to load a 20 MB
@@ -36,10 +39,15 @@ async function sign(path: string): Promise<string | null> {
   }
 }
 
+export type ShowcaseViews = { front: string | null; back: string | null }
+
 export type ShowcaseAssets = {
   modelUrl: string | null
   /** The two synthesised studio renders Tripo reconstructed from. */
-  images: { front: string | null; back: string | null }
+  images: ShowcaseViews
+  /** Pre-generated per-material renders, where they exist. A material with no
+   *  entry falls back to `images` in the UI — the selector never blanks out. */
+  materialImages: Partial<Record<RoofMaterial, ShowcaseViews>>
 }
 
 /**
@@ -53,10 +61,29 @@ export async function signedShowcaseAssets(input: {
   glbPath: string | null
   address: string | null
 }): Promise<ShowcaseAssets> {
-  const [modelUrl, front, back] = await Promise.all([
+  const { address } = input
+
+  // One flat batch — signing is a cheap independent call per object, so the
+  // whole matrix goes out at once rather than serially per material.
+  const [modelUrl, front, back, ...materialUrls] = await Promise.all([
     input.glbPath ? sign(input.glbPath) : Promise.resolve(null),
-    input.address ? sign(cachePathFor(input.address, 'front', 'synth')) : Promise.resolve(null),
-    input.address ? sign(cachePathFor(input.address, 'back', 'synth')) : Promise.resolve(null),
+    address ? sign(cachePathFor(address, 'front', 'synth')) : Promise.resolve(null),
+    address ? sign(cachePathFor(address, 'back', 'synth')) : Promise.resolve(null),
+    ...SHOWCASE_MATERIALS.flatMap((m) =>
+      (['front', 'back'] as const).map((v) =>
+        address ? sign(showcaseRenderPath(address, m, v)) : Promise.resolve(null),
+      ),
+    ),
   ])
-  return { modelUrl, images: { front, back } }
+
+  // Only materials with at least one view are published — an entry of two
+  // nulls would make the UI swap to nothing.
+  const materialImages: Partial<Record<RoofMaterial, ShowcaseViews>> = {}
+  SHOWCASE_MATERIALS.forEach((m, i) => {
+    const f = materialUrls[i * 2] ?? null
+    const b = materialUrls[i * 2 + 1] ?? null
+    if (f || b) materialImages[m] = { front: f, back: b }
+  })
+
+  return { modelUrl, images: { front, back }, materialImages }
 }

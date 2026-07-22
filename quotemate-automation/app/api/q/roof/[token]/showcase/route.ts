@@ -63,6 +63,7 @@ export async function GET(
       status: 'unavailable',
       modelUrl: null,
       images: { front: null, back: null },
+      materialImages: {},
       material: payload.material,
     })
   }
@@ -77,6 +78,7 @@ export async function GET(
     status: 'ready',
     modelUrl: assets.modelUrl,
     images: assets.images,
+    materialImages: assets.materialImages,
     material: payload.material,
   })
 }

@@ -113,10 +113,12 @@ export default async function SharePage(props: {
           </p>
         </header>
 
+        {/* Show the material that was shared, where its render exists;
+            otherwise the original pair, so the page is never blank. */}
         <SharedHouse
           modelUrl={assets.modelUrl}
-          posterUrl={assets.images.front}
-          images={assets.images}
+          posterUrl={(assets.materialImages[material] ?? assets.images).front}
+          images={assets.materialImages[material] ?? assets.images}
           roofHex={roof.hex}
           wallHex={wall.hex}
         />
