@@ -204,12 +204,20 @@ function missBudget(step: RoofingStep): number {
 /** PURE — did the customer's answer actually land in the slot we asked
  *  about? A 'no' at confirm_address counts as landed: it's understood, and
  *  it clears the address so we re-ask for a new one. */
-function answerLanded(after: RoofingSlots, step: RoofingStep): boolean {
+function answerLanded(before: RoofingSlots, after: RoofingSlots, step: RoofingStep): boolean {
   switch (step) {
     case 'address':
       return !!after.address
     case 'confirm_address':
-      return after.address_confirmed === true || !after.address
+      // A correction (new address) or a bare postcode is understood too —
+      // it just isn't a "yes". Counting those as misses would spend the
+      // budget while the customer is actively fixing the address.
+      return (
+        after.address_confirmed === true ||
+        !after.address ||
+        after.address !== before.address ||
+        after.postcode !== before.postcode
+      )
     case 'intent':
       return !!after.intent
     case 'material':
@@ -225,6 +233,25 @@ function answerLanded(after: RoofingSlots, step: RoofingStep): boolean {
     default:
       return true
   }
+}
+
+/**
+ * PURE — the structures to PERSIST as the confirmed selection when a quote
+ * is sent. `null` choices mean the customer took all of them.
+ *
+ * This must be written to roofing_measurements.included_indices, not left
+ * to the `?s=` link: resolveEffectiveIndices only ever NARROWS, falling
+ * back to the main-dwelling-only default when included_indices is NULL, so
+ * a bare link cannot express "all". Live 2026-07-22: a customer replied
+ * YES to 3 buildings, the SMS quoted 2 of them at $115,117, and the linked
+ * page showed the main dwelling alone at $69,652.
+ */
+export function confirmedIncludedIndices(
+  structureChoices: number[] | null,
+  totalStructures: number,
+): number[] {
+  if (structureChoices && structureChoices.length > 0) return [...structureChoices]
+  return Array.from({ length: Math.max(0, totalStructures) }, (_, i) => i + 1)
 }
 
 /**
@@ -301,7 +328,7 @@ export function advanceRoofing(
   if (lastStep && ANSWERABLE_STEPS.has(lastStep)) {
     nextSlots = applyRoofingAnswer(slots, lastStep, inbound)
 
-    if (answerLanded(nextSlots, lastStep)) {
+    if (answerLanded(slots, nextSlots, lastStep)) {
       // Understood — clear the counter so misses never accumulate across
       // steps (one bad material answer must not shorten the pitch budget).
       delete nextSlots.misses
@@ -417,8 +444,29 @@ export function shouldEngageRoofing(
   prev: RoofingConversationState | null | undefined,
   inbound: string,
   followupPinActive: boolean,
+  /** This tenant does roofing and NOTHING else (trades === ['roofing']).
+   *  See the note below — for these tenants the keyword test is skipped. */
+  roofingOnly = false,
 ): boolean {
   const canResume = isActiveRoofingFlow(prev) && !followupPinActive
-  const isNewEnquiry = looksLikeRoofingEnquiry(inbound)
-  return canResume || isNewEnquiry
+  if (canResume) return true
+  if (looksLikeRoofingEnquiry(inbound)) return true
+  // SINGLE-TRADE ROOFING TENANT — no keyword required.
+  //
+  // The keyword test exists to ROUTE BETWEEN trades on a cross-trade
+  // tenant (Atomic Electrical does electrical + roofing, so "the downlight
+  // flickers" must reach the electrical dialog). A roofing-only tenant has
+  // nothing to route to: every customer who texts them wants a roof
+  // quoted, and the only other handler is the electrical/plumbing dialog,
+  // which will happily start an electrical intake for a roofing company.
+  //
+  // Observed live: "Bills roofing" (trades = ['roofing']) received "test
+  // from owner" and the general dialog answered it. No keyword, so no
+  // roofing receptionist, so no measurement — for a business that does
+  // nothing but roofs. Openers like "hi", "how much for my place?" or "can
+  // you help?" fail the same way.
+  //
+  // The pin still wins: if the tradie just chased a different quote on this
+  // thread, let the general dialog honour it.
+  return roofingOnly && !followupPinActive
 }

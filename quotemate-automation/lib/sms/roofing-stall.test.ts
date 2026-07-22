@@ -16,13 +16,23 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { describe, it, expect } from 'vitest'
-import { mapMaterial, mapPitch, mapIntent, nextRoofingStep, type RoofingSlots } from './roofing-intake'
+import {
+  applyRoofingAnswer,
+  isAmbiguousMetal,
+  mapMaterial,
+  mapPitch,
+  mapIntent,
+  nextRoofingStep,
+  type RoofingSlots,
+} from './roofing-intake'
 import {
   advanceRoofing,
+  confirmedIncludedIndices,
   parseStructureChoice,
   type RoofingConversationState,
   type RoofingTurnDecision,
 } from './roofing-receptionist'
+import { resolveEffectiveIndices } from '@/lib/roofing/selection'
 
 // Drive the receptionist for N turns, feeding the same reply each time,
 // exactly as the route does: persist the returned slots + asked step.
@@ -261,6 +271,179 @@ describe('structure picks by name, not just number', () => {
     )
     expect(d.action).toBe('send_saved')
     expect(d.action === 'send_saved' && d.structureChoices).toEqual([1])
+  })
+})
+
+// Live 2026-07-22, two tenants, same address, same code. Atomic Electrical's
+// customer replied YES to 3 buildings: the SMS quoted 2 of them at $115,117
+// while the linked page showed the main dwelling alone at $69,652. Sparky's
+// customer picked building 1, so their page matched — by coincidence, because
+// one-building IS the page's fallback. The SMS never persisted the confirmed
+// set, and a ?s= link cannot supply it: the page only ever narrows.
+describe('confirmed structure selection is persisted, not left to the link', () => {
+  it('expands "all" to every structure index', () => {
+    expect(confirmedIncludedIndices(null, 3)).toEqual([1, 2, 3])
+    expect(confirmedIncludedIndices(null, 1)).toEqual([1])
+    expect(confirmedIncludedIndices([], 3)).toEqual([1, 2, 3])
+  })
+
+  it('keeps an explicit pick verbatim', () => {
+    expect(confirmedIncludedIndices([1], 3)).toEqual([1])
+    expect(confirmedIncludedIndices([2, 3], 3)).toEqual([2, 3])
+  })
+
+  const quote = {
+    structures: [
+      { name: 'Main dwelling' },
+      { name: 'Secondary structure 1' },
+      { name: 'Secondary structure 2' },
+    ],
+  } as unknown as Parameters<typeof resolveEffectiveIndices>[1]
+
+  it('a ?s= link alone CANNOT widen the page — this is why persisting is required', () => {
+    // What Atomic actually got: nothing persisted, link carrying 1,2.
+    expect(
+      resolveEffectiveIndices({ included: null, confirmedStructure: null, paramIndices: [1, 2] }, quote),
+    ).toEqual([1]) // ← the bug: narrowed to the main-dwelling default
+  })
+
+  it('persisting the confirmed set makes the page match the SMS', () => {
+    expect(
+      resolveEffectiveIndices(
+        { included: confirmedIncludedIndices(null, 3), confirmedStructure: null, paramIndices: null },
+        quote,
+      ),
+    ).toEqual([1, 2, 3])
+    // A single pick still narrows exactly as before.
+    expect(
+      resolveEffectiveIndices(
+        { included: confirmedIncludedIndices([1], 3), confirmedStructure: 1, paramIndices: [1] },
+        quote,
+      ),
+    ).toEqual([1])
+  })
+})
+
+// Live 2026-07-22, +61401460956. Four defects compounded into a dead lead:
+// the read-back was junk ("Address above postcode 4151"), two replies that
+// GAVE the real address at the confirm step read as neither yes nor no, a
+// bare "4151" was discarded, and "Colorblind" (phone autocorrect) plus
+// "Color bond" (spaced) both failed to map. Final state: address
+// "Address is 31 greens rd coorparoo", postcode null, material unknown.
+describe('address correction at the confirm step', () => {
+  it('strips a label prefix and keeps only the street address', () => {
+    expect(applyRoofingAnswer({}, 'address', 'Address is 31 greens rd coorparoo').address)
+      .toBe('31 greens rd coorparoo')
+    expect(applyRoofingAnswer({}, 'address', "it's 670 London Road, Chandler, QLD, 4155").address)
+      .toBe('670 London Road, Chandler, QLD, 4155')
+    // Plain addresses are untouched.
+    expect(applyRoofingAnswer({}, 'address', '670 London Road, Chandler, QLD, 4155').address)
+      .toBe('670 London Road, Chandler, QLD, 4155')
+  })
+
+  it('rejects a reply with a postcode but no street number', () => {
+    // This is the one that poisoned the whole conversation.
+    expect(applyRoofingAnswer({}, 'address', 'Address above postcode 4151').address).toBeUndefined()
+    expect(applyRoofingAnswer({}, 'address', 'not sure sorry').address).toBeUndefined()
+  })
+
+  it('treats a new address at the confirm step as a correction, not a yes/no', () => {
+    const before: RoofingSlots = { address: 'Address above postcode 4151', address_confirmed: false }
+    const after = applyRoofingAnswer(before, 'confirm_address', 'Address is 31 greens rd coorparoo')
+    expect(after.address).toBe('31 greens rd coorparoo')
+    expect(after.address_confirmed).toBe(false)
+  })
+
+  it('attaches a bare postcode to the address we read back', () => {
+    const before: RoofingSlots = { address: '31 greens rd coorparoo', address_confirmed: false }
+    const after = applyRoofingAnswer(before, 'confirm_address', '4151')
+    expect(after.postcode).toBe('4151')
+    expect(after.address).toContain('4151')
+  })
+
+  it('still honours a plain yes / no', () => {
+    const slots: RoofingSlots = { address: '31 greens rd coorparoo', address_confirmed: false }
+    expect(applyRoofingAnswer(slots, 'confirm_address', 'Yes').address_confirmed).toBe(true)
+    expect(applyRoofingAnswer(slots, 'confirm_address', 'No').address).toBeNull()
+  })
+
+  it('a correction counts as progress — it must not burn the miss budget', () => {
+    const d = advanceRoofing(
+      { slots: { address: 'Address above postcode 4151', address_confirmed: false }, last_step: 'confirm_address' },
+      'Address is 31 greens rd coorparoo',
+    )
+    expect(d.action).toBe('ask')
+    expect(d.action === 'ask' && d.step).toBe('confirm_address')
+    // The read-back must quote the CORRECTED address, not the old junk.
+    expect(d.action === 'ask' && d.reply).toContain('31 greens rd coorparoo')
+    expect(d.slots.misses ?? 0).toBe(0)
+  })
+})
+
+describe('Colorbond spelling variants', () => {
+  it('recognises the autocorrect and spaced spellings as metal', () => {
+    // Not a material on their own — they name no profile — so the receptionist
+    // must ask "corrugated or Trimdek?" rather than treat them as unmapped.
+    expect(isAmbiguousMetal('Colorblind')).toBe(true)
+    expect(isAmbiguousMetal('Color bond')).toBe(true)
+    expect(isAmbiguousMetal('colour bond')).toBe(true)
+    expect(mapMaterial('Colorblind')).toBeNull()
+    expect(mapMaterial('Color bond')).toBeNull()
+  })
+
+  it('asks the profile question instead of falling to inspection', () => {
+    const d = advanceRoofing(
+      { slots: { address: '31 greens rd coorparoo', address_confirmed: true, intent: 'full_reroof' }, last_step: 'material' },
+      'Colorblind',
+    )
+    expect(d.action).toBe('ask')
+    expect(d.action === 'ask' && d.step).toBe('material_profile')
+  })
+
+  it('a named profile still maps directly', () => {
+    expect(mapMaterial('Colorbond corrugated')).toBe('colorbond_corrugated')
+    expect(mapMaterial('trimdek')).toBe('colorbond_trimdek')
+  })
+})
+
+// Verbatim replay of the +61401460956 thread. Previously this produced a
+// junk address, a discarded postcode, an unmapped material, and a dead-end
+// "we couldn't measure it" inspection. It must now reach a real measurement
+// with a clean, geocodable address.
+describe('live transcript replay — 2026-07-22 31 greens rd', () => {
+  it('recovers from the mistyped address and the autocorrected material', () => {
+    let state: RoofingConversationState = { slots: {}, last_step: 'address' }
+    const say = (msg: string): RoofingTurnDecision => {
+      const d = advanceRoofing(state, msg)
+      if (d.action === 'ask') state = { slots: d.slots, last_step: d.step }
+      return d
+    }
+
+    say('Address above postcode 4151')            // junk — must be rejected
+    expect(state.last_step).toBe('address')
+
+    say('Address is 31 greens rd coorparoo')      // now a real address
+    expect(state.slots.address).toBe('31 greens rd coorparoo')
+    expect(state.last_step).toBe('confirm_address')
+
+    say('4151')                                    // bare postcode completes it
+    expect(state.slots.postcode).toBe('4151')
+
+    say('Yes')
+    expect(state.slots.address_confirmed).toBe(true)
+
+    say('full re-roof')
+    const material = say('Colorblind')             // autocorrect of Colorbond
+    expect(material.action).toBe('ask')
+    expect(material.action === 'ask' && material.step).toBe('material_profile')
+
+    say('Corrugated')
+    expect(state.slots.material).toBe('colorbond_corrugated')
+
+    const done = say('standard')
+    expect(done.action).toBe('measure')
+    // The address handed to the geocoder must be clean and complete.
+    expect(done.action === 'measure' && done.slots.address).toBe('31 greens rd coorparoo 4151')
   })
 })
 

@@ -16,6 +16,7 @@ import {
   composeEstimateMessage,
   composeInspectionMessage,
   composeMeasureUnavailableMessage,
+  composeInspectionReasonMessage,
   fmtAud,
   narrowQuoteToStructure,
   narrowQuoteToStructures,
@@ -289,6 +290,34 @@ describe('composeMeasureUnavailableMessage (measurement-failed fallback)', () =>
   })
 })
 
+// Live 2026-07-22: a customer whose profile answer we failed to map was
+// told "I couldn't pull an automatic measurement for <address>" — but no
+// measurement had been attempted at all. nextRoofingStep had already
+// routed to inspection on the brief, leaving the slots incomplete, so
+// toRoofingRequest() returned null and the measure call never ran. The
+// message was untrue and threw away the real reason.
+describe('composeInspectionReasonMessage', () => {
+  it('states the real reason and never claims a measurement was attempted', () => {
+    const m = composeInspectionReasonMessage('Mark', '1434 Numinbah Road', 'we couldn\'t confirm the roof material')
+    expect(m).toContain('we couldn\'t confirm the roof material')
+    expect(m).toContain('1434 Numinbah Road')
+    expect(m).not.toMatch(/couldn't pull an automatic measurement/i)
+    expect(m).toMatch(/Reply YES/)
+  })
+
+  it('carries the asbestos reason through verbatim', () => {
+    const m = composeInspectionReasonMessage('Mark', '12 Smith St', 'cement sheet or fibro roofs may contain asbestos')
+    expect(m).toContain('cement sheet or fibro roofs may contain asbestos')
+  })
+
+  it('reads correctly with no name and no reason', () => {
+    const m = composeInspectionReasonMessage(null, 'your property', '')
+    expect(m).toContain('your property')
+    expect(m).not.toContain('Because ,')
+    expect(m).not.toContain('undefined')
+  })
+})
+
 describe('no em dashes in any customer-facing message', () => {
   const quote = priceMultiRoof({ structures: [house, shed] })
   const inspectionQuote = priceMultiRoof({ structures: [{ ...house, inputs: inputs({ material: 'cement_sheet' }) }, shed] })
@@ -303,6 +332,8 @@ describe('no em dashes in any customer-facing message', () => {
     composeBookingMessage(null, false),
     composeMeasureUnavailableMessage('James', CTX.address),
     composeMeasureUnavailableMessage(null, CTX.address),
+    composeInspectionReasonMessage('James', CTX.address, 'we couldn\'t confirm the roof material'),
+    composeInspectionReasonMessage(null, CTX.address, ''),
     buildRoofingReplyMessage({ ...CTX, quote }),
   ]
   it('contains no em dash (—) or en dash (–)', () => {

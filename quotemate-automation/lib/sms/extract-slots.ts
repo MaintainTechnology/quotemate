@@ -17,6 +17,7 @@
 
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
+import { SMS_RECEPTIONIST_MODEL, SMS_RECEPTIONIST_MAX_TOKENS } from './model'
 import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
 
@@ -678,7 +679,9 @@ export async function extractSlots(args: {
         // replace_or_new="replace"). The dialog Rule 0 + the new rule 0b
         // worked examples in this prompt only help if the extractor sees
         // every fact in the first place.
-        model: anthropic('claude-sonnet-4-6'),
+        // Upgraded again 2026-07-22 to Sonnet 5, with the rest.
+        model: anthropic(SMS_RECEPTIONIST_MODEL),
+        maxOutputTokens: SMS_RECEPTIONIST_MAX_TOKENS,
         system: SYSTEM_PROMPT,
         prompt: userPrompt,
       }),

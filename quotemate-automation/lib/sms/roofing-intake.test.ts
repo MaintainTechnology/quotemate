@@ -16,6 +16,7 @@ import {
   parsePostcode,
   parseYearBuilt,
   roofingReadiness,
+  seedRoofingSlots,
   toRoofingRequest,
   type RoofingSlots,
 } from './roofing-intake'
@@ -51,12 +52,77 @@ describe('looksLikeRoofingEnquiry', () => {
     expect(looksLikeRoofingEnquiry('need the ridge caps repointed')).toBe(true)
     expect(looksLikeRoofingEnquiry('quote to replace my roof')).toBe(true)
   })
+  // Live 2026-07-22: this exact message went to the ELECTRICAL dialog,
+  // which then asked for the address, hallucinated a suburb correction,
+  // and only handed over to roofing three turns later — where the whole
+  // intake restarted. Root cause was `\bquote\b` failing to match
+  // "quoted": the verb list held exact words, not stems.
+  it('matches inflected work verbs (the 2026-07-22 production miss)', () => {
+    expect(looksLikeRoofingEnquiry('Can you quoted my roof.')).toBe(true)
+    expect(looksLikeRoofingEnquiry('quoting my roof')).toBe(true)
+    expect(looksLikeRoofingEnquiry('replacing the roof')).toBe(true)
+    expect(looksLikeRoofingEnquiry('estimating a roof job')).toBe(true)
+    expect(looksLikeRoofingEnquiry('how much to do my roof')).toBe(true)
+    expect(looksLikeRoofingEnquiry('what would my roof cost')).toBe(true)
+    expect(looksLikeRoofingEnquiry('i need my roof done')).toBe(true)
+  })
+  // "roofer" is a tradesperson noun — never incidental, so no work verb
+  // is required alongside it.
+  it('matches the bare tradesperson noun', () => {
+    expect(looksLikeRoofingEnquiry('need a roofer')).toBe(true)
+    expect(looksLikeRoofingEnquiry('roofer?')).toBe(true)
+    expect(looksLikeRoofingEnquiry('do you have roofers')).toBe(true)
+  })
   it('does not trip on incidental "roof" in an electrical context', () => {
     expect(looksLikeRoofingEnquiry('the downlight near the roof cavity flickers')).toBe(false)
     expect(looksLikeRoofingEnquiry('I need 6 downlights')).toBe(false)
   })
+  // The broadened verb list must not leak into other trades: these all
+  // carry a work word AND the token "roof", but the roof is a LOCATION.
+  it('does not trip when the roof is a location, not the job', () => {
+    expect(looksLikeRoofingEnquiry('need a new light in the roof')).toBe(false)
+    expect(looksLikeRoofingEnquiry('replace the old wiring in the roof space')).toBe(false)
+    expect(looksLikeRoofingEnquiry('fix the pipe under the roof')).toBe(false)
+    expect(looksLikeRoofingEnquiry('the fan in the roof cavity needs replacing')).toBe(false)
+  })
   it('is empty-safe', () => {
     expect(looksLikeRoofingEnquiry('')).toBe(false)
+  })
+})
+
+// Live 2026-07-22: the customer gave "1434 NUMINBAH Road Chillingham NSW
+// 2484" to the general dialog and confirmed it, then roofing engaged a
+// couple of turns later, started from empty slots, and asked for the same
+// address again — and made them confirm it a second time.
+describe('seedRoofingSlots', () => {
+  const general = { address: '1434 Numinbah Road', suburb: 'Chillingham NSW 2484' }
+
+  it('carries a dialog-collected address into a cold roofing flow', () => {
+    const s = seedRoofingSlots({}, general)
+    expect(s.address).toContain('1434 Numinbah Road')
+    expect(s.postcode).toBe('2484')
+    expect(s.state).toBe('NSW')
+  })
+
+  // Confirmed to the DIALOG, not to us. Read it back exactly once.
+  it('leaves the address unconfirmed so exactly one read-back happens', () => {
+    const s = seedRoofingSlots({}, general)
+    expect(s.address_confirmed).toBe(false)
+    const step = nextRoofingStep(s)
+    expect(step.step).toBe('confirm_address')
+    expect(step.question).toContain('1434 Numinbah Road')
+  })
+
+  it('never overwrites an address the roofing flow already owns', () => {
+    const existing: RoofingSlots = { address: '670 London Rd, Chandler QLD 4155', address_confirmed: true }
+    expect(seedRoofingSlots(existing, general)).toEqual(existing)
+  })
+
+  it('is a no-op when there is nothing addressable', () => {
+    expect(seedRoofingSlots({}, null)).toEqual({})
+    expect(seedRoofingSlots({}, {})).toEqual({})
+    // A suburb with no street number cannot be measured — ask properly.
+    expect(seedRoofingSlots({}, { suburb: 'Chillingham NSW 2484' }).address).toBeUndefined()
   })
 })
 
@@ -73,6 +139,27 @@ describe('mapMaterial', () => {
   it('still maps an explicitly named profile', () => {
     expect(mapMaterial('trimdek')).toBe('colorbond_trimdek')
     expect(mapMaterial('colorbond trimdek')).toBe('colorbond_trimdek')
+  })
+  // Live 2026-07-22: the customer answered the profile question with
+  // "Classic" — the very word that question uses for Corrugated ("the
+  // classic wavy sheets") — and got material='unknown', which forced an
+  // on-site inspection for an ordinary Colorbond roof. Any word the
+  // QUESTION teaches must map, or we punish the customer for using it.
+  it('maps the vocabulary our own profile question teaches', () => {
+    for (const s of ['classic', 'Classic', 'the classic wavy sheets', 'wavy', 'wavy ones', 'ripple']) {
+      expect(mapMaterial(s)).toBe('colorbond_corrugated')
+    }
+    for (const s of ['flat panels', 'square ribs', 'flat panel with square rib']) {
+      expect(mapMaterial(s)).toBe('colorbond_trimdek')
+    }
+  })
+  it('treats the question\'s own profile words as unambiguous', () => {
+    for (const s of ['classic', 'wavy', 'flat panels', 'square ribs']) {
+      expect(isAmbiguousMetal(s)).toBe(false)
+    }
+    // ...and still resolves when prefixed with the generic brand name.
+    expect(mapMaterial('colorbond classic')).toBe('colorbond_corrugated')
+    expect(isAmbiguousMetal('colorbond classic')).toBe(false)
   })
   it('does not treat a named profile or a tile answer as ambiguous', () => {
     for (const s of ['corrugated', 'trimdek', 'spandek', 'klip-lok', 'terracotta tiles', 'fibro']) {

@@ -9,6 +9,7 @@
 
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
+import { SMS_RECEPTIONIST_MODEL, SMS_RECEPTIONIST_MAX_TOKENS } from './model'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
@@ -910,7 +911,9 @@ function formatHistory(history: ConversationTurn[]): string {
 //   - from_memory:        skip re-asking, use silently
 //   - from_transcript:    customer stated this turn, can echo naturally
 //   - customer_corrected: ACKNOWLEDGE the change in the next reply
-function formatStateBlock(state: ConversationState | undefined): string | null {
+/** Exported for test only — this block is injected straight into the live
+ *  prompt, so its wording is customer-facing in effect and needs pinning. */
+export function formatStateBlock(state: ConversationState | undefined): string | null {
   if (!state) return null
   const slotEntries = Object.entries(state.slots).filter(
     ([, v]) => v !== null && v !== undefined,
@@ -938,9 +941,29 @@ function formatStateBlock(state: ConversationState | undefined): string | null {
     lines.push('The customer has corrected the following stored values during this conversation.')
     lines.push('Your reply MUST acknowledge each correction explicitly so the customer feels heard:')
     for (const [k, v] of corrections) {
-      lines.push(`  - ${k} is now ${JSON.stringify(v)}. Reference the change naturally`)
-      lines.push(`    (e.g. "Got it, ${v} not <previous value from history> - ...").`)
+      lines.push(`  - ${k} is now ${JSON.stringify(v)}. Acknowledge the NEW value only.`)
     }
+    // NEVER ask the model to contrast against the previous value.
+    //
+    // This block used to carry the example: Got it, ${v} not <previous
+    // value from history> - ... — with "<previous value from history>"
+    // emitted as literal text, because nothing ever substituted it. The
+    // old value is genuinely absent from the prompt by then:
+    // mergeSlotUpdates overwrites the slot in place and keeps no history
+    // (extract-slots.ts), KNOWN VALUES above renders post-merge values
+    // only, and `stateBlock ?? args.customerContext` drops the customer
+    // block that still held it whenever a state block exists. A
+    // from_memory-seeded value was never spoken aloud either, so it is
+    // not in the transcript.
+    //
+    // So this was a MUST-comply instruction to name a value the model
+    // could not see — and it complied by inventing one. Live 2026-07-22
+    // a customer who said "1434 Numinbah Road Chillingham NSW 2484" was
+    // told "Got it, Chillingham not Chandler", naming a suburb they had
+    // never mentioned. If contrasting is ever wanted, pass the old value
+    // into the prompt first; do not ask for it implicitly.
+    lines.push('Do NOT name, guess, or contrast against the previous value — you have not')
+    lines.push('been given it. State only what the value is NOW.')
     lines.push('Echo the CORRECTED value in your verification handshake, never the old one.')
   }
 
@@ -1686,8 +1709,12 @@ export async function decideNextTurn(args: {
       // follows the new Rule 0 ("read the customer's message before
       // asking anything") far more reliably. Cost is ~5× per call, but
       // the SMS reply is the customer's primary touchpoint — accuracy
-      // beats price here.
-      model: anthropic('claude-sonnet-4-6'),
+      // beats price here. Upgraded again 2026-07-22 to Sonnet 5.
+      model: anthropic(SMS_RECEPTIONIST_MODEL),
+      // Explicit — see SMS_RECEPTIONIST_MAX_TOKENS. Omitting it lets the
+      // pinned provider fall back to its unknown-model default of 4096,
+      // which Sonnet 5 shares with its adaptive-thinking tokens.
+      maxOutputTokens: SMS_RECEPTIONIST_MAX_TOKENS,
       schema: TurnDecisionSchema,
       // R30 — cache ONLY the large STATIC instruction block. Anthropic
       // caches the prefix up to (and including) the last cache_control

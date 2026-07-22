@@ -238,6 +238,35 @@ export function composeMeasureUnavailableMessage(
   ].join('\n')
 }
 
+/**
+ * PURE — the honest inspection message for a brief we deliberately chose
+ * NOT to measure: asbestos-suspect material, an unknown material or
+ * pitch, an unclear job. These are routed to an on-site visit by
+ * nextRoofingStep BEFORE the pitch question is even asked, which leaves
+ * the slot set incomplete — so toRoofingRequest() returns null and no
+ * measurement is ever attempted.
+ *
+ * Until 2026-07-22 that case fell through to
+ * composeMeasureUnavailableMessage, telling the customer "I couldn't pull
+ * an automatic measurement for <address>". That was simply untrue: we
+ * never tried. It also threw away the real reason, so a customer whose
+ * roof might contain asbestos got the same words as one hitting a
+ * provider outage, and the tradie lost the one detail that mattered.
+ *
+ * `reason` comes from nextRoofingStep and is phrased to follow "Because".
+ */
+export function composeInspectionReasonMessage(
+  firstName: string | null | undefined,
+  address: string,
+  reason: string,
+): string {
+  const because = (reason ?? '').trim()
+  const lead = because
+    ? `Because ${because}, we'll arrange a quick on-site inspection of ${address} to quote it accurately.`
+    : `We'll arrange a quick on-site inspection of ${address} to quote it accurately.`
+  return [`Thanks${nameSuffix(firstName)}. ${lead}`, `Reply YES and we'll book a time that suits you.`].join('\n')
+}
+
 /** PURE — reply after the inspection "shall we book?" prompt. */
 export function composeBookingMessage(firstName: string | null | undefined, confirmed: boolean): string {
   return confirmed

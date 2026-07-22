@@ -1,3 +1,7 @@
+// Constants only — no dependencies of its own, so this does NOT pull the
+// AI SDK into the regex-only path (see the dynamic imports below).
+import { SMS_RECEPTIONIST_MODEL, SMS_RECEPTIONIST_MAX_TOKENS } from './model'
+
 // SMS first-turn intent classifier.
 //
 // Decides whether an inbound SMS on the shared QuoteMax number is:
@@ -206,7 +210,9 @@ async function classifyIntentWithSonnet(
       // dialog and slot extractor. Intent classification (customer-vs-tradie,
       // payment ack vs follow-up question) gets sharper with Sonnet on the
       // short ambiguous messages where Sonnet occasionally misroutes.
-      model: anthropic('claude-sonnet-4-6'),
+      // Upgraded again 2026-07-22 to Sonnet 5, with the rest.
+      model: anthropic(SMS_RECEPTIONIST_MODEL),
+      maxOutputTokens: SMS_RECEPTIONIST_MAX_TOKENS,
       schema: Schema,
       system: SONNET_SYSTEM_PROMPT,
       prompt: `Customer message: "${message.slice(0, 500)}"`,

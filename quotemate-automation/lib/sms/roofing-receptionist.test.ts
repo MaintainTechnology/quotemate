@@ -324,3 +324,43 @@ describe('shouldEngageRoofing — follow-up pin guard (spec 2026-07-05 Part A2)'
     expect(shouldEngageRoofing(closedRoofing, 'Yes', false)).toBe(false) // closed flow
   })
 })
+
+// A tenant whose only trade is roofing has nothing to route to. Requiring a
+// roofing keyword there hands their customers to the electrical/plumbing
+// dialog. Observed live on "Bills roofing" (trades = ['roofing']): the
+// opener "test from owner" never reached the roofing receptionist.
+describe('shouldEngageRoofing — roofing-only tenant needs no keyword', () => {
+  const openers = [
+    'test from owner',
+    'hi',
+    'Hi there, are you available?',
+    'how much for my place?',
+    'can you help me out',
+    'I need a quote',
+    '670 London Road, Chandler QLD 4155',
+  ]
+
+  it('engages on any opener when the tenant does roofing and nothing else', () => {
+    for (const m of openers) {
+      expect(shouldEngageRoofing(null, m, false, true)).toBe(true)
+    }
+  })
+
+  it('still requires a keyword for a cross-trade tenant', () => {
+    for (const m of openers) {
+      expect(shouldEngageRoofing(null, m, false, false)).toBe(false)
+    }
+    // ...and the electrical job on a cross-trade tenant still routes away.
+    expect(shouldEngageRoofing(null, 'the downlight near the roof cavity flickers', false, false)).toBe(false)
+  })
+
+  it('the follow-up pin still wins over the roofing-only shortcut', () => {
+    const midGather: RoofingConversationState = { slots: {}, last_step: 'pitch' }
+    expect(shouldEngageRoofing(null, 'Yes', true, true)).toBe(false)
+    expect(shouldEngageRoofing(midGather, 'Yes', true, true)).toBe(false)
+  })
+
+  it('defaults to the old keyword behaviour when the flag is omitted', () => {
+    expect(shouldEngageRoofing(null, 'test from owner', false)).toBe(false)
+  })
+})

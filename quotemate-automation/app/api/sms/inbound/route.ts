@@ -18,9 +18,10 @@ import {
 } from '@/lib/sms/twilio-validator'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
-import { toRoofingRequest } from '@/lib/sms/roofing-intake'
+import { toRoofingRequest, seedRoofingSlots } from '@/lib/sms/roofing-intake'
 import {
   advanceRoofing,
+  confirmedIncludedIndices,
   shouldEngageRoofing,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
@@ -31,6 +32,7 @@ import {
   composeBookingMessage,
   composeCancelMessage,
   composeConfirmMessage,
+  composeInspectionReasonMessage,
   composeMeasureUnavailableMessage,
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
@@ -40,7 +42,10 @@ import { quotePdfMmsEnabled } from '@/lib/sms/send-quote-pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
+import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
+import { tenantHasRoofingTrade, tenantIsRoofingOnly } from '@/lib/roofing/tenant'
+import { tenantHasFeature } from '@/lib/features/catalog'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import { toPaintingRequest } from '@/lib/sms/painting-intake'
 import {
@@ -154,8 +159,16 @@ const WP9_ENABLED = process.env.WP9_PRODUCT_OPTIONS === '1'
 
 // SMS roofing receptionist — gathers roofing inputs over SMS, runs the
 // roofing measure/price pipeline, and replies with an MMS (roof image +
-// quote-page link). Flag-gated; OFF (default) ⇒ byte-identical behaviour.
-// Requires migration 085 (sms_conversations.roofing_state +
+// quote-page link).
+//
+// This env flag is now only the NO-TENANT fallback (dev shared number, or
+// an inbound whose destination maps to no tenant). When the destination
+// DOES resolve to a tenant, the gate is that tenant's own `trades[]` —
+// i.e. the roofing toggle the tradie/admin flips in account settings is
+// what turns the SMS roofing receptionist on for their number. Before
+// 2026-07-22 this was a deployment-global flag that never read
+// tenants.trades at all, so enabling roofing on an account did nothing
+// for SMS. Requires migration 085 (sms_conversations.roofing_state +
 // roofing_measurements.public_token).
 const SMS_ROOFING_ENABLED = process.env.SMS_ROOFING_ENABLED === '1'
 
@@ -238,6 +251,13 @@ const NON_NAME_WORDS = new Set([
   // ceiling / wall / access answers
   'flat', 'raked', 'high', 'plaster', 'brick', 'concrete', 'tile',
   'access', 'available', 'roof', 'ceiling',
+  // roofing answers — "Thanks Colorblind." went out to a live customer on
+  // 2026-07-22 because an autocorrected material answer shape-matched a name.
+  'colorbond', 'colourbond', 'colorblind', 'colourblind', 'bond',
+  'trimdek', 'corrugated', 'corro', 'spandek', 'kliplok', 'zincalume',
+  'terracotta', 'tiles', 'iron', 'galv', 'galvanised', 'fibro', 'asbestos',
+  'slate', 'shingles', 'steep', 'steeper', 'shallow', 'skillion', 'pitch',
+  'reroof', 'gutters', 'downpipes', 'dwelling', 'shed', 'garage', 'address',
   // scope / yes-no answers
   'replacing', 'replace', 'existing', 'new', 'install', 'indoor',
   'outdoor', 'fitted', 'wired', 'wiring', 'flat',
@@ -391,11 +411,31 @@ async function handleRoofingTurn(args: {
   toNumber: string
   fromNumber: string
   tenantId: string | null
+  /** tenants.trade — picks the pricing_book row the roofing rate card sits
+   *  on. Same argument /api/roofing/save passes, so SMS and the dashboard
+   *  resolve the SAME card. A cross-trade tenant keeps its roofing card on
+   *  its primary-trade row (e.g. Atomic Electrical's sits on 'electrical'),
+   *  so passing a literal 'roofing' here would miss it. */
+  tenantTrade: string | null
   firstName: string | null
   followupPinActive: boolean
+  /** Tenant does roofing and nothing else — engage without needing a
+   *  roofing keyword, since there is no other trade to route to. */
+  roofingOnly: boolean
+  /** Address the GENERAL dialog already collected in THIS conversation, so
+   *  a mid-thread roofing engage doesn't re-ask it. The caller must strip
+   *  from_memory slots first — see seedRoofingSlots. */
+  generalAddress?: { address?: string | null; suburb?: string | null } | null
 }): Promise<boolean> {
-  const { conversationId, turns, toNumber, fromNumber, tenantId, firstName, followupPinActive } = args
-  const prevState = (args.roofingStateRaw ?? null) as RoofingConversationState | null
+  const { conversationId, turns, toNumber, fromNumber, tenantId, tenantTrade, firstName, followupPinActive } = args
+  const prevStateRaw = (args.roofingStateRaw ?? null) as RoofingConversationState | null
+  // Seed only a COLD flow (no roofing slots yet). An in-progress roofing
+  // conversation owns its own address and must never be overwritten.
+  const prevState: RoofingConversationState | null = prevStateRaw
+    ? { ...prevStateRaw, slots: seedRoofingSlots(prevStateRaw.slots ?? {}, args.generalAddress) }
+    : (args.generalAddress
+        ? { slots: seedRoofingSlots({}, args.generalAddress), last_step: null }
+        : null)
 
   const latestInbound =
     [...turns].reverse().find((t) => t.direction === 'inbound')?.body ?? ''
@@ -407,7 +447,7 @@ async function handleRoofingTurn(args: {
   // When a follow-up pin is active the thread was just chased about a
   // DIFFERENT quote, so a stale roofing_state must not resume — only a
   // genuinely new roofing enquiry may engage (spec 2026-07-05 Part A2).
-  if (!shouldEngageRoofing(prevState, latestInbound, followupPinActive)) return false
+  if (!shouldEngageRoofing(prevState, latestInbound, followupPinActive, args.roofingOnly)) return false
 
   const decision = advanceRoofing(prevState, latestInbound)
 
@@ -534,13 +574,20 @@ async function handleRoofingTurn(args: {
         : quoteUrl
       // Stamp the customer's confirmation so the page flips from the
       // price-free picker to the priced view. A single pick narrows the
-      // page; a multi-pick / "all" leaves confirmed_structure null (the
-      // ?s= link drives the narrowing for those).
+      // page; a multi-pick / "all" leaves confirmed_structure null.
+      //
+      // included_indices carries the ACTUAL confirmed set. The ?s= link
+      // alone cannot: resolveEffectiveIndices only ever narrows, and with
+      // included_indices NULL it falls back to main-dwelling-only — so a
+      // customer who replied YES to 3 buildings got an SMS quoting 2 of
+      // them and a page showing 1 (live 2026-07-22, $115,117 vs $69,652).
+      const confirmedIndices = confirmedIncludedIndices(indices, totalStructures)
       await supabase
         .from('roofing_measurements')
         .update({
           confirmed_at: new Date().toISOString(),
           confirmed_structure: indices && indices.length === 1 ? indices[0] : null,
+          included_indices: confirmedIndices,
         })
         .eq('public_token', pending.token)
       // Migration 105 — Gotenberg quote PDF for the priced roofing
@@ -602,7 +649,7 @@ async function handleRoofingTurn(args: {
         last_step: 'quoted',
         pending_quote_token: pending.token,
         pending_structure_count: totalStructures,
-        last_served_structures: indices ?? Array.from({ length: totalStructures }, (_, i) => i + 1),
+        last_served_structures: confirmedIndices,
       }, 'open')
       // Per-tenant file-store ingest (best-effort, never blocks the send).
       // Archive the priced roofing quote PDF + minimized KB markdown.
@@ -643,11 +690,37 @@ async function handleRoofingTurn(args: {
     return true
   }
 
+  // ── inspection routed by the BRIEF, not by a failed measurement. ──
+  // nextRoofingStep short-circuits to inspection the moment it learns the
+  // material is asbestos-suspect/unknown or the job is unclear — before
+  // it ever asks pitch. That leaves the slots incomplete, so
+  // toRoofingRequest() below returns null and we never attempt a measure.
+  // Handled here so we say what actually happened: until 2026-07-22 this
+  // fell through to composeMeasureUnavailableMessage and told the
+  // customer "I couldn't pull an automatic measurement for <address>",
+  // which was untrue and discarded the real reason.
+  if (decision.action === 'inspection' && !toRoofingRequest(decision.slots)) {
+    const addr = decision.slots.address ?? 'your property'
+    await sendReply(composeInspectionReasonMessage(firstName, addr, decision.reason))
+    await persist(
+      { slots: decision.slots, last_step: 'await_booking', pending_quote_token: null, pending_structure_count: null },
+      'open',
+    )
+    return true
+  }
+
   // ── measure / inspection — run the roofing pipeline, save the job. ──
   const reqInput = toRoofingRequest(decision.slots)
   if (reqInput) {
     try {
-      const result = await measureAndPriceRoofs(reqInput.address, reqInput.inputs, {})
+      // Per-tenant rate card — WITHOUT this the SMS channel prices every
+      // tenant off DEFAULT_ROOFING_RATE_CARD, so the same address quotes
+      // differently on SMS than in the dashboard (which loads the card in
+      // /api/roofing/{measure,measure-all,save}). Best-effort: any miss
+      // returns the defaults, which is what omitting it already did
+      // (pricing.ts does `args.rateCard ?? DEFAULT_ROOFING_RATE_CARD`).
+      const rateCard = await loadRoofingRateCard(supabase, tenantId, tenantTrade)
+      const result = await measureAndPriceRoofs(reqInput.address, reqInput.inputs, { rateCard })
       if (result.ok) {
         const token = randomBytes(16).toString('hex')
         const isInspection = decision.action === 'inspection'
@@ -693,6 +766,19 @@ async function handleRoofingTurn(args: {
         await persist({ slots: decision.slots, last_step: 'confirm_roof', pending_quote_token: token, pending_structure_count: quote.structures.length }, 'open')
         return true
       }
+      // A failed measure used to be entirely silent — no else, so
+      // result.code/detail were dropped and the customer got the generic
+      // "couldn't pull an automatic measurement" with nothing recorded
+      // anywhere. Rural/edge addresses were therefore un-diagnosable
+      // after the fact. Log before falling through.
+      console.error('[sms/inbound:roofing] measure failed', {
+        code: result.code,
+        detail: result.detail,
+        address: reqInput.address.address,
+        postcode: reqInput.address.postcode,
+        state: reqInput.address.state,
+        tenantId,
+      })
     } catch (e) {
       console.error('[sms/inbound:roofing] measure/save failed', e)
     }
@@ -1638,13 +1724,22 @@ export async function POST(req: Request) {
         Date.now(),
       )
 
-      // ─────── SMS roofing receptionist (flag-gated) ───────
-      // When enabled, a roofing enquiry (or an in-progress roofing thread)
-      // is handled by the deterministic roofing receptionist instead of
-      // the electrical/plumbing Sonnet dialog: gather inputs → run the
-      // roofing measure/price pipeline → reply with the MMS + quote link.
-      // OFF (default) ⇒ this block is skipped entirely (byte-identical).
-      if (SMS_ROOFING_ENABLED && !inflightContinuation) {
+      // ─────── SMS roofing receptionist (per-tenant) ───────
+      // A roofing enquiry (or an in-progress roofing thread) is handled by
+      // the deterministic roofing receptionist instead of the
+      // electrical/plumbing Sonnet dialog: gather inputs → run the roofing
+      // measure/price pipeline → reply with the MMS + quote link.
+      //
+      // Gate = the tenant's OWN roofing toggle (tenants.trades[]), which is
+      // what /api/tenant/trades/{activate,reconcile}, the admin customers
+      // page and plan grants all write. Every provisioned number therefore
+      // runs the same roofing receptionist the moment roofing is enabled on
+      // its account — no deploy, no env change. The env flag survives only
+      // for inbounds that map to NO tenant (dev shared number).
+      const roofingEnabled = tenant
+        ? tenantHasRoofingTrade(tenant.trades)
+        : SMS_ROOFING_ENABLED
+      if (roofingEnabled && !inflightContinuation) {
         try {
           const handledRoofing = await handleRoofingTurn({
             conversationId,
@@ -1653,8 +1748,26 @@ export async function POST(req: Request) {
             toNumber,
             fromNumber,
             tenantId: tenant?.id ?? null,
+            tenantTrade: tenant?.trade ?? null,
             firstName: customer?.first_name ?? guessFirstName(turns) ?? null,
             followupPinActive,
+            roofingOnly: tenantIsRoofingOnly(tenant?.trades),
+            // Hand over ONLY what the customer said in this conversation.
+            // A from_memory slot is pre-seeded from the customers row,
+            // which is keyed on phone number alone and can hold a suburb
+            // from an unrelated earlier job — that is the same stale data
+            // behind the "Got it, Chillingham not Chandler" reply, and
+            // seeding it here would quote the wrong building outright.
+            generalAddress: {
+              address:
+                initialConversationState.sources.address === 'from_memory'
+                  ? null
+                  : initialConversationState.slots.address,
+              suburb:
+                initialConversationState.sources.suburb === 'from_memory'
+                  ? null
+                  : initialConversationState.slots.suburb,
+            },
           })
           if (handledRoofing) {
             console.log('[sms/inbound:after] handled by roofing receptionist', { conversationId })
@@ -1671,8 +1784,13 @@ export async function POST(req: Request) {
       // electrical/plumbing Sonnet dialog: offer the self-serve form link
       // first → otherwise gather inputs question-by-question → run the
       // painting estimate → reply with the G/B/B quote link.
-      // OFF (default) ⇒ this block is skipped entirely (byte-identical).
-      if (SMS_PAINTING_ENABLED && !inflightContinuation) {
+      // Same per-tenant gate as roofing above: the tenant's own painting
+      // toggle in trades[] decides, and the env flag is only the
+      // no-tenant fallback.
+      const paintingEnabled = tenant
+        ? tenantHasFeature(tenant.trades, 'painting')
+        : SMS_PAINTING_ENABLED
+      if (paintingEnabled && !inflightContinuation) {
         try {
           const handledPainting = await handlePaintingTurn({
             conversationId,

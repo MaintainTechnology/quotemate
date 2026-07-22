@@ -90,22 +90,40 @@ const ROOFING_KEYWORDS = [
   'gutter', 'downpipe', 'down pipe', 'ridge cap', 'ridge caps', 'valley iron',
   'roof flashing', 'whirlybird', 'whirly bird', 'colorbond roof', 'tile roof',
   'tiled roof', 'metal roof', 'eaves', 'fascia', 'sarking',
+  // "roofer" is a tradesperson noun — unlike bare "roof" it is never
+  // incidental, so it needs no accompanying work verb. "Need a roofer" and
+  // "roofer?" both reached the electrical dialog before 2026-07-22.
+  'roofer',
 ]
+
+/** A "roof" that is a LOCATION, not the job. These are electrical/plumbing
+ *  sentences ("the downlight near the roof cavity flickers") and must never
+ *  open a roofing quote no matter what other words they carry. Checked
+ *  first, so widening the verb list below can't leak into other trades. */
+const NOT_ROOFING = /\broof\s?(cavity|space|void)\b|\bin the roof\b|\bunder the roof\b/
+
+/** Work the customer might want done, as STEMS.
+ *
+ *  These were exact words until 2026-07-22, which is why "Can you quoted my
+ *  roof." fell through to the electrical dialog — `\bquote\b` cannot match
+ *  "quoted". Same class of bug as the one already fixed in mapIntent below
+ *  (see its NOTE about `replac\w*`); it was never back-ported here. */
+const ROOFING_WORK =
+  /\b(quot\w*|estimat\w*|price[sd]?|pricing|cost\w*|how much|replac\w*|repair\w*|fix\w*|leak\w*|redo|redone|restor\w*|paint\w*|inspect\w*|broken|cracked|damaged|old|new|done|doing|need\w*|want\w*|look\w* at|sort\w* out|do you do)\b/
 
 /**
  * PURE — does this message read like a roofing enquiry? Used to branch
  * the SMS receptionist into the roofing flow. Conservative: matches clear
- * roofing terms; bare "roof" only counts with a work verb nearby so
+ * roofing terms; bare "roof"/"roofs" only counts with a work word nearby so
  * "the switch is near the roof" (electrical) doesn't trip it.
  */
 export function looksLikeRoofingEnquiry(text: string): boolean {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return false
+  if (NOT_ROOFING.test(t)) return false
   if (ROOFING_KEYWORDS.some((k) => t.includes(k))) return true
   // bare "roof" only when paired with an action/condition word
-  if (/\broofs?\b/.test(t) && /\b(quote|estimate|replace|repair|fix|leak|redo|restore|paint|broken|cracked|old)\b/.test(t)) {
-    return true
-  }
+  if (/\broofs?\b/.test(t) && ROOFING_WORK.test(t)) return true
   return false
 }
 
@@ -117,10 +135,36 @@ export function looksLikeRoofingEnquiry(text: string): boolean {
 const UNSURE = /\b(not sure|unsure|no idea|dunno|don'?t know|do not know|no clue|couldn'?t say|hard to say)\b/
 
 /** Metal named generically, with no profile. */
-const GENERIC_METAL = /\b(colorbond|colourbond|metal|tin|steel|zincalume)\b/
+// "Colorblind" is what phone autocorrect makes of "Colorbond", and "color
+// bond" is the spaced spelling. Neither matched on 2026-07-22, so two
+// consecutive misses forced a perfectly ordinary metal roof to inspection.
+const GENERIC_METAL =
+  /\bcolou?r[\s-]?bond\b|\bcolou?r[\s-]?blind\b|\b(metal|tin|steel|zincalume)\b/
+// ── Profile vocabularies ─────────────────────────────────────────────
+// ONE source of truth per profile, shared by mapMaterial() and
+// NAMED_PROFILE. They used to be written out twice, which is exactly how
+// they drifted from the question we ask: QUESTIONS.material_profile calls
+// Corrugated "the classic wavy sheets" and Trimdek "flat panels with
+// square ribs", but neither "classic", "wavy", "flat panel" nor "square
+// rib" mapped to anything. A customer who answered with the word the bot
+// itself taught them got material='unknown' and was pushed to an on-site
+// inspection (observed live 2026-07-22). Any word used in a QUESTION must
+// appear in the matching vocabulary below.
+const CORRUGATED_WORDS =
+  'corro|corrugated|custom ?orb|iron|galv|galvanised|galvanized|classic|wavy|wave|ripple[ds]?'
+const TRIMDEK_WORDS = 'trimdek|trim ?dek|flat panel[s]?|square rib[s]?'
+const KLIPLOK_WORDS = 'klip-?lok|kliplok|standing seam|concealed fix'
+const SPANDEK_WORDS = 'spandek|span ?deck'
+
+const CORRUGATED = new RegExp(`\\b(${CORRUGATED_WORDS})\\b`)
+const TRIMDEK = new RegExp(`\\b(${TRIMDEK_WORDS})\\b`)
+const KLIPLOK = new RegExp(`\\b(${KLIPLOK_WORDS})\\b`)
+const SPANDEK = new RegExp(`\\b(${SPANDEK_WORDS})\\b`)
+
 /** Any answer that DOES pin the profile down. */
-const NAMED_PROFILE =
-  /\b(corro|corrugated|custom ?orb|iron|galv|galvanised|galvanized|trimdek|trim ?dek|spandek|span ?deck|klip-?lok|kliplok|standing seam|concealed fix)\b/
+const NAMED_PROFILE = new RegExp(
+  `\\b(${[CORRUGATED_WORDS, TRIMDEK_WORDS, KLIPLOK_WORDS, SPANDEK_WORDS].join('|')})\\b`,
+)
 
 /**
  * PURE — did the customer say "it's metal" without saying WHICH metal?
@@ -146,12 +190,13 @@ export function mapMaterial(text: string): RoofMaterial | null {
   // 'unknown' routes the job to an on-site inspection — the honest answer.
   // Guessing the nearest priced material would quote the wrong roof.
   if (/\b(slate|shingles?|asphalt|shake|thatch|polycarbonate|fibreglass)\b/.test(t)) return 'unknown'
-  if (/\b(klip-?lok|kliplok|standing seam|concealed fix)\b/.test(t)) return 'colorbond_kliplok'
-  if (/\b(spandek|span ?deck)\b/.test(t)) return 'colorbond_spandek'
+  if (KLIPLOK.test(t)) return 'colorbond_kliplok'
+  if (SPANDEK.test(t)) return 'colorbond_spandek'
   // "Iron" / "galv" is AU vernacular for corrugated metal sheet — by far
-  // the most common way a homeowner names this roof.
-  if (/\b(corro|corrugated|custom ?orb|iron|galv|galvanised|galvanized)\b/.test(t)) return 'colorbond_corrugated'
-  if (/\b(trimdek|trim ?dek)\b/.test(t)) return 'colorbond_trimdek'
+  // the most common way a homeowner names this roof. "Classic" / "wavy"
+  // are the words OUR OWN profile question uses to describe it.
+  if (CORRUGATED.test(t)) return 'colorbond_corrugated'
+  if (TRIMDEK.test(t)) return 'colorbond_trimdek'
   // A bare "Colorbond" / "metal" / "tin" names NO profile. This used to
   // return Trimdek, quoting a roof the customer never described (and the
   // SMS twin of the dashboard bug where a tradie's Corrugated came back as
@@ -270,6 +315,70 @@ export function isStopRequest(text: string): boolean {
   return STOP_RE.test(t) || FRUSTRATION_RE.test(t)
 }
 
+/**
+ * PURE — pull the usable street address out of a reply.
+ *
+ * Customers label their answer ("Address is 31 greens rd coorparoo", "it's
+ * at 670 London Rd"), and that prefix used to be stored verbatim and handed
+ * to the geocoder, which then found nothing. Take everything from the first
+ * street number onward.
+ *
+ * The street number is also the validity test. "Address above postcode
+ * 4151" carries a postcode but no street number, so it is NOT an address —
+ * it was accepted as one on 2026-07-22 and poisoned the whole conversation.
+ * Returns null when there's nothing addressable, so the caller re-asks.
+ */
+export function extractStreetAddress(text: string): string | null {
+  const t = (text ?? '').trim()
+  if (!t || isStopRequest(t)) return null
+  // A street number is digits (optionally 12a, 5/12, 1-3) followed by the
+  // street name. A trailing postcode alone can never match.
+  const m = t.match(/\d[\d/\-a-zA-Z]*\s+[A-Za-z].*/)
+  if (!m) return null
+  const addr = m[0].trim().replace(/\s+/g, ' ')
+  return addr.length >= 6 ? addr : null
+}
+
+/**
+ * PURE — carry an address the GENERAL dialog already collected into a
+ * roofing flow that is starting cold.
+ *
+ * The roofing receptionist keeps its own slots (roofing_state), separate
+ * from the dialog's (conversation_state). When roofing engages mid-thread
+ * — because the opening message missed the detector and only a later one
+ * matched — it starts from empty and asks for the address again. Live
+ * 2026-07-22 a customer gave "1434 NUMINBAH Road Chillingham NSW 2484",
+ * confirmed it, answered the job question, and was then asked for the
+ * very same address a second time and made to confirm it twice.
+ *
+ * CALLER MUST NOT PASS from_memory VALUES. Only values the customer
+ * stated in THIS conversation are safe to seed. A from_memory slot comes
+ * from the customers row, is keyed on phone number alone, and can hold a
+ * suburb from an unrelated earlier job — seeding one here would silently
+ * quote the wrong building.
+ *
+ * `address_confirmed` is deliberately left false: the customer confirmed
+ * this address to the dialog, not to us, so we still read it back exactly
+ * once before measuring.
+ */
+export function seedRoofingSlots(
+  prev: RoofingSlots,
+  general: { address?: string | null; suburb?: string | null } | null | undefined,
+): RoofingSlots {
+  if (prev.address) return prev
+  if (!general) return prev
+  const combined = [general.address, general.suburb].filter(Boolean).join(', ')
+  const addr = extractStreetAddress(combined)
+  if (!addr) return prev
+  return {
+    ...prev,
+    address: addr,
+    postcode: parsePostcode(combined),
+    state: parseAuState(combined),
+    address_confirmed: false,
+  }
+}
+
 // ── Apply a customer answer for a given step ──────────────────────────
 
 /**
@@ -287,21 +396,40 @@ export function applyRoofingAnswer(
 
   switch (step) {
     case 'address': {
-      const trimmed = msg.trim()
-      // Accept only something that actually looks like an address: a
-      // street number plus text, and not a stop/cancel sentence. Stops a
-      // reply like "Let's cancel now" being stored as the address.
-      if (trimmed.length >= 6 && /\d/.test(trimmed) && !isStopRequest(trimmed)) {
-        next.address = trimmed
-        const pc = parsePostcode(trimmed)
+      const addr = extractStreetAddress(msg)
+      if (addr) {
+        next.address = addr
+        const pc = parsePostcode(msg)
         if (pc) next.postcode = pc
-        const st = parseAuState(trimmed)
+        const st = parseAuState(msg)
         if (st) next.state = st
         next.address_confirmed = false
       }
       break
     }
     case 'confirm_address': {
+      // A bare postcode COMPLETES the address we read back rather than
+      // answering the question — "4151" used to be discarded entirely.
+      const barePostcode = msg.trim().match(/^(\d{4})$/)
+      if (barePostcode && next.address) {
+        next.postcode = barePostcode[1]
+        if (!next.address.includes(barePostcode[1])) {
+          next.address = `${next.address} ${barePostcode[1]}`
+        }
+        break
+      }
+      // A reply carrying a NEW street address is a CORRECTION, not a
+      // yes/no. Checked before the affirm/deny test so "Address is 31
+      // greens rd coorparoo" replaces the wrong read-back instead of
+      // reading as neither and re-asking the identical question.
+      const corrected = extractStreetAddress(msg)
+      if (corrected && corrected !== next.address) {
+        next.address = corrected
+        next.postcode = parsePostcode(msg)
+        next.state = parseAuState(msg)
+        next.address_confirmed = false
+        break
+      }
       if (isAffirmative(msg) && !isNegative(msg)) {
         next.address_confirmed = true
       } else if (isNegative(msg)) {
