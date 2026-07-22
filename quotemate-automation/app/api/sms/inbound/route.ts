@@ -137,6 +137,7 @@ import {
   throwIfDispatchFailed,
   sideEffectsAllowed,
   isNearMaxDuration,
+  isGlobalOptOut,
 } from '@/lib/sms/inbound-helpers'
 
 // R42/R44/R46/R49 — SMS delivery knobs resolved once at module load. These
@@ -1788,6 +1789,30 @@ export async function POST(req: Request) {
         body: m.body,
       }))
       const inboundCount = turns.filter(t => t.direction === 'inbound').length
+
+      // US-003 (audit 2026-07-23) — a standard Twilio opt-out keyword as the
+      // whole message ends the thread on EVERY conversation type, not just
+      // inside the roofing/painting receptionists. Twilio has already
+      // carrier-blocked this number by now (any send would 21610), so the
+      // right move is: close the conversation, send nothing.
+      const lastInboundBody =
+        [...turns].reverse().find(t => t.direction === 'inbound')?.body ?? ''
+      if (isGlobalOptOut(lastInboundBody)) {
+        console.log('[sms/inbound:after] opt-out keyword — closing conversation, no reply', { conversationId })
+        try {
+          await supabase
+            .from('sms_conversations')
+            .update({
+              status: 'done',
+              roofing_state: { slots: {}, last_step: 'closed' },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', conversationId)
+        } catch (e) {
+          console.warn('[sms/inbound:after] opt-out close failed (non-fatal)', e)
+        }
+        return
+      }
 
       // Is a follow-up pin active on this thread? The tradie may have just
       // chased a DIFFERENT quote (e.g. Ceiling Fans) on the customer's

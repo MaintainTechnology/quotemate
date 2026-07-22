@@ -27,6 +27,22 @@
 //     idempotency contract is tested and can't silently regress.
 
 // ---------------------------------------------------------------------------
+// US-003 — global opt-out (2026-07-23 audit).
+// ---------------------------------------------------------------------------
+
+// Twilio's standard opt-out keywords. Twilio itself only treats a message
+// as an opt-out when the keyword IS the whole message (give or take
+// punctuation) — and after one, it carrier-blocks the number (21610 on any
+// send). So phrases like "let's cancel the booking" stay conversation, and
+// an exact keyword means: close the thread, send nothing.
+const OPT_OUT_RE = /^\s*(stop|stopall|unsubscribe|cancel|end|quit)\s*[.!]*\s*$/i
+
+/** PURE — is this inbound a carrier-level opt-out (whole-message keyword)? */
+export function isGlobalOptOut(body: string | null | undefined): boolean {
+  return OPT_OUT_RE.test(body ?? '')
+}
+
+// ---------------------------------------------------------------------------
 // R47 — MessageSid idempotency decision.
 // ---------------------------------------------------------------------------
 
