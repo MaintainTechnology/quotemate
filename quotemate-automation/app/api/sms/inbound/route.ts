@@ -23,6 +23,7 @@ import {
   advanceRoofing,
   confirmedIncludedIndices,
   shouldEngageRoofing,
+  closeStaleRoofingState,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
 import {
@@ -1889,6 +1890,26 @@ export async function POST(req: Request) {
           }
         } catch (e) {
           console.error('[sms/inbound:after] roofing receptionist threw — falling through to standard dialog', e)
+        }
+      } else if (!roofingEnabled) {
+        // US-006 (audit 2026-07-23) — roofing was just turned OFF for this
+        // tenant while the thread was mid-flow. Close the stale
+        // roofing_state so the general dialog doesn't inherit a warm
+        // roofing thread it can't speak to, and a later re-enable doesn't
+        // resume a zombie flow. Best-effort.
+        const staleClosed = closeStaleRoofingState(
+          ((conversation as Record<string, unknown>).roofing_state ?? null) as RoofingConversationState | null,
+        )
+        if (staleClosed) {
+          console.log('[sms/inbound:after] roofing disabled mid-thread — closing stale roofing_state', { conversationId })
+          try {
+            await supabase
+              .from('sms_conversations')
+              .update({ roofing_state: staleClosed, updated_at: new Date().toISOString() })
+              .eq('id', conversationId)
+          } catch (e) {
+            console.warn('[sms/inbound:after] stale roofing_state close failed (non-fatal)', e)
+          }
         }
       }
 

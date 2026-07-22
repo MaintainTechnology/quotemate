@@ -23,12 +23,17 @@
 
 import {
   applyRoofingAnswer,
+  extractStreetAddress,
   isAffirmative,
+  isAmbiguousMetal,
   isNegative,
   isStopRequest,
   looksLikeRoofingEnquiry,
   mapIntent,
+  mapMaterial,
   nextRoofingStep,
+  parseAuState,
+  parsePostcode,
   parseYearBuilt,
   type RoofingSlots,
   type RoofingStep,
@@ -366,9 +371,40 @@ export function advanceRoofing(
       }
     }
   } else {
+    // ── Harvest the OPENING message ──────────────────────────────────
+    // We are not answering a question we asked, so read whatever the
+    // customer volunteered. This branch used to take only the intent and
+    // the build year, which is why an address given up front was asked
+    // for a second time. Observed live (tenant "Ricardos Roofing"):
+    //   CUSTOMER: "I am looking to get a new roof at 670 London road Chandler"
+    //   BOT:      "Happy to sort a roofing quote for you. What's the
+    //              property address, including suburb and postcode?"
+    // Everything harvested here is still READ BACK once for confirmation
+    // (address_confirmed stays false), so a mis-parse costs one "no",
+    // never a wrong quote.
     if (!nextSlots.intent) {
       const intent = mapIntent(inbound)
       if (intent) nextSlots.intent = intent
+    }
+    if (!nextSlots.address) {
+      const addr = extractStreetAddress(inbound)
+      if (addr) {
+        nextSlots.address = addr
+        const pc = parsePostcode(inbound)
+        if (pc) nextSlots.postcode = pc
+        const st = parseAuState(inbound)
+        if (st) nextSlots.state = st
+        nextSlots.address_confirmed = false
+      }
+    }
+    if (!nextSlots.material) {
+      // Only a POSITIVE match counts. mapMaterial returns null for a bare
+      // "Colorbond"/"metal" (profile unknown) and we mirror the material
+      // step by recording the hint instead, so the profile question is
+      // asked rather than a profile being guessed.
+      const m = mapMaterial(inbound)
+      if (m) nextSlots.material = m
+      else if (isAmbiguousMetal(inbound)) nextSlots.metal_hint = true
     }
     if (nextSlots.year_built == null) {
       const y = parseYearBuilt(inbound)
@@ -417,6 +453,24 @@ export function nextRoofingConversationState(
     case 'cancel':
     case 'booking':
       return { slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }
+  }
+}
+
+/** PURE — US-006: the tenant just turned roofing OFF while this thread was
+ *  mid-flow. Return the closed state to persist, or null when there's
+ *  nothing to close. Without this, a conversation parked at confirm_roof /
+ *  await_booking was orphaned: the general dialog inherited a warm
+ *  roofing_state it cannot speak to, and re-enabling roofing later resumed
+ *  a zombie flow (audit 2026-07-23). */
+export function closeStaleRoofingState(
+  prev: RoofingConversationState | null | undefined,
+): RoofingConversationState | null {
+  if (!isActiveRoofingFlow(prev)) return null
+  return {
+    slots: {},
+    last_step: 'closed',
+    pending_quote_token: null,
+    pending_structure_count: null,
   }
 }
 

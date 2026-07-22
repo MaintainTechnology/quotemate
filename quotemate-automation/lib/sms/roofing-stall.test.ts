@@ -27,6 +27,7 @@ import {
 } from './roofing-intake'
 import {
   advanceRoofing,
+  closeStaleRoofingState,
   confirmedIncludedIndices,
   parseStructureChoice,
   type RoofingConversationState,
@@ -444,6 +445,27 @@ describe('live transcript replay — 2026-07-22 31 greens rd', () => {
     expect(done.action).toBe('measure')
     // The address handed to the geocoder must be clean and complete.
     expect(done.action === 'measure' && done.slots.address).toBe('31 greens rd coorparoo 4151')
+  })
+})
+
+// US-006 (audit 2026-07-23) — turning roofing OFF for a tenant while a
+// conversation is parked mid-flow (confirm_roof, await_booking, gathering)
+// orphaned the thread: the general dialog inherited a warm roofing_state it
+// cannot speak to, and re-enabling roofing later resumed a zombie flow.
+describe('closeStaleRoofingState — roofing disabled mid-thread', () => {
+  it('closes an active flow (mid-gather, confirm, booking, warm-quoted)', () => {
+    for (const step of ['address', 'material', 'confirm_roof', 'await_booking', 'quoted'] as const) {
+      const closed = closeStaleRoofingState({ slots: { address: 'x' }, last_step: step })
+      expect(closed, step).not.toBeNull()
+      expect(closed!.last_step).toBe('closed')
+      expect(closed!.pending_quote_token ?? null).toBeNull()
+    }
+  })
+
+  it('nothing to do on closed/absent state', () => {
+    expect(closeStaleRoofingState(null)).toBeNull()
+    expect(closeStaleRoofingState(undefined)).toBeNull()
+    expect(closeStaleRoofingState({ slots: {}, last_step: 'closed' })).toBeNull()
   })
 })
 
