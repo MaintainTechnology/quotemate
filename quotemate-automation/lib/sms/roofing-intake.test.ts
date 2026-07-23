@@ -259,6 +259,15 @@ describe('mapIntent', () => {
     expect(mapIntent('flashing repair')).toBe('flashing_repair')
     expect(mapIntent('a few broken tiles to fix')).toBe('patch_repair')
   })
+  it('maps "re roof" / "re-roof" / "reroof" incl. space-separated (voice STT)', () => {
+    // Speech-to-text transcribes "re-roof" as "re roof" with a space; the
+    // regex used to require the hyphen/joined form, so a full-re-roof call
+    // dropped its intent and got re-asked by text.
+    expect(mapIntent('full re roof')).toBe('full_reroof')
+    expect(mapIntent('re roof')).toBe('full_reroof')
+    expect(mapIntent('re-roof')).toBe('full_reroof')
+    expect(mapIntent('reroof')).toBe('full_reroof')
+  })
   it('returns null when nothing matches', () => {
     expect(mapIntent('hello there')).toBeNull()
   })

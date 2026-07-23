@@ -245,7 +245,10 @@ export function mapIntent(text: string): RoofJobIntent | null {
   // NOTE: match verb STEMS (replac\w*), never `…replace\b`. A trailing \b
   // cannot match "replacement" / "replacing", which is exactly how "Roof
   // replacement" read as unrecognised and re-asked the same question.
-  if (/\bre-?roof/.test(t)) return 'full_reroof'
+  // re-roof / reroof / "re roof" — voice STT commonly splits it with a space,
+  // which the hyphen-only form used to miss (a full-re-roof call then dropped
+  // its intent and got re-asked by text).
+  if (/\bre[-\s]?roof/.test(t)) return 'full_reroof'
   if (/\b(whole|entire|full|new)\s+roof/.test(t)) return 'full_reroof'
   if (/\broofs?\s+replac\w*/.test(t)) return 'full_reroof' // "roof replacement"
   if (/\breplac\w*\s+(the\s+|my\s+|our\s+|that\s+|existing\s+)*roof/.test(t)) return 'full_reroof'

@@ -57,15 +57,20 @@ describe('mapVoiceAnswersToRoofingSlots — SMS-parser parity', () => {
     expect(slots.address_confirmed).toBe(false)
   })
 
-  it('bare "Colorbond" keeps the machine\'s which-profile follow-up', () => {
+  it('bare "Colorbond" defaults to corrugated (voice never collects the profile)', () => {
+    // The voice receptionist's script presents "Colorbond" as a COMPLETE
+    // answer and never asks the corrugated/trimdek/kliplok profile. So a call
+    // that said "Colorbond" must not be re-asked the profile by text — default
+    // to the most common profile (corrugated); the tradie reviews every quote.
     const slots = mapVoiceAnswersToRoofingSlots({
       address: '31 Greens Road, Coorparoo QLD 4151',
       material: 'Colorbond',
       pitch: 'standard',
       intent: 're-roof',
     })
-    expect(slots.material ?? null).toBeNull()
-    expect(slots.metal_hint).toBe(true)
+    expect(slots.material).toBe('colorbond_corrugated')
+    expect(slots.metal_hint).toBeFalsy()
+    expect(slots.intent).toBe('full_reroof')
   })
 
   it('unparseable answers leave the slot empty for the SMS machine to ask', () => {

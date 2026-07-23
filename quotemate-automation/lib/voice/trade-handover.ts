@@ -99,7 +99,11 @@ Return ONLY a JSON object, no prose, with these fields (null when not stated):
 
 Rules:
 - trade is "roofing" ONLY when the caller wants roof work (re-roof, roof repair, leak, gutters). "painting" ONLY for residential painting jobs. EVERYTHING else — electrical, plumbing, solar, aircon, signage, commercial painting, unclear — is "other".
-- Copy the CALLER'S OWN WORDS verbatim into each answer field (e.g. material: "colorbond", pitch: "pretty steep", intent: "full re-roof"). Do not normalise or interpret.
+- NORMALISE each answer to the STANDARD Australian roofing/painting term, correcting obvious speech-to-text mishears. This is a phone transcript, so the words are often garbled — use the surrounding context (the receptionist's question) to recover what the caller meant. Examples: "Calabond"/"Color bond"/"Cala bond" → "Colorbond"; "Dericota"/"Terry cotta" → "terracotta"; "Steve"/"steap" → "steep"; "fibro"/"cement sheet" stays as-is; "full re roof"/"pull of roof" (in a re-roof context) → "full re-roof". If the caller genuinely didn't answer or it's unrecoverable, use null (do NOT guess a material/pitch that was never discussed).
+- material = the roof material: one of Colorbond, metal, tin, concrete tiles, terracotta tiles, or fibro/cement sheet (corrected to standard spelling).
+- pitch = flat/shallow, standard, steep, or very steep.
+- intent = full re-roof, repair/patch, leak trace, or gutters/downpipes.
+- If the caller CORRECTED an answer during the call (e.g. "actually it's standard, not steep"), use the FINAL corrected value.
 - address = the full property address as the caller stated it (street, suburb, state, postcode when given).
 - address_confirmed = true ONLY when the receptionist read the address back and the caller agreed it was right ("yep", "that's it", "correct"). false if it was never read back, or the caller corrected it and the correction was not re-confirmed.
 - first_name = the caller's first name if they gave one.`
@@ -147,6 +151,16 @@ export function mapVoiceAnswersToRoofingSlots(
   if (a.intent) slots = applyRoofingAnswer(slots, 'intent', a.intent)
   if (a.material) slots = applyRoofingAnswer(slots, 'material', a.material)
   if (a.pitch) slots = applyRoofingAnswer(slots, 'pitch', a.pitch)
+  // Bare "Colorbond"/"metal"/"tin" sets metal_hint (SMS then asks WHICH
+  // profile). The VOICE script never asks the profile — it treats "Colorbond"
+  // as a complete answer — so default the profile to corrugated (the most
+  // common AU residential sheet) rather than re-asking by text. Every roofing
+  // quote is tradie-reviewed, so a wrong profile is corrected there.
+  // ponytail: fixed default, not a lookup — corrugated is the safe common case.
+  if (slots.metal_hint && !slots.material) {
+    slots.material = 'colorbond_corrugated'
+    slots.metal_hint = false
+  }
   // The SMS flow must ALWAYS re-confirm the address by text — the map
   // check (screenConfirmAddress) runs there, and a misheard voice address
   // must never be measured unverified.
