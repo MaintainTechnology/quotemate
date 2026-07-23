@@ -11,6 +11,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   type AddressSlotsLike,
+  firstStreetNumber,
+  titleCaseAu,
   MAX_ADDRESS_VERIFY_REJECTS,
   planConfirmAddress,
   screenConfirmAddress,
@@ -27,6 +29,7 @@ function googleBody(over: {
   formatted?: string | null
   nextAction?: string | null
   unresolvedTokens?: string[]
+  unconfirmed?: string[]
 }) {
   return {
     responseId: 'resp-1',
@@ -40,7 +43,7 @@ function googleBody(over: {
       address: {
         formattedAddress: over.formatted ?? undefined,
         missingComponentTypes: [],
-        unconfirmedComponentTypes: [],
+        unconfirmedComponentTypes: over.unconfirmed ?? [],
         unresolvedTokens: over.unresolvedTokens ?? [],
       },
       geocode: { location: { latitude: -30.353, longitude: 153.19 } },
@@ -128,6 +131,85 @@ describe('verifyAuAddress', () => {
         })
       ).outcome,
     ).toBe('not_found')
+  })
+})
+
+// ── Geoscape cross-check ────────────────────────────────────────────
+// Live 2026-07-23: "223 Archer St, Chandler" was confirmed verbatim and
+// the job was measured against a Gumdale parcel. Google returned ACCEPT
+// while flagging locality unconfirmed; Geoscape (G-NAF, the same source
+// the measurement resolves against) knows the real suburb.
+describe('Geoscape cross-check', () => {
+  const GOOGLE_ACCEPT_UNCONFIRMED_SUBURB = googleBody({
+    formatted: '223 Archer Street, Chandler QLD 4154, Australia',
+    unconfirmed: ['locality'],
+  })
+  const geoBody = (address: string) => ({ data: [{ address, addressId: 'GAQLD157977809' }] })
+
+  /** Route by URL: the Google validate POST vs the Geoscape /addresses GET. */
+  const routed = (google: unknown, geoscape: unknown) =>
+    vi.fn(async (url: RequestInfo | URL) =>
+      String(url).includes('/addresses') ? asRes(200, geoscape) : asRes(200, google),
+    )
+
+  it('reads back GEOSCAPE’s suburb, as a correction, when Google echoed an unconfirmed one', async () => {
+    const v = await verifyAuAddress('223 Archer St, Chandler', {
+      apiKey: 'K',
+      geoscapeApiKey: 'G',
+      fetchImpl: routed(GOOGLE_ACCEPT_UNCONFIRMED_SUBURB, geoBody('223 ARCHER ST, GUMDALE QLD 4154')),
+    })
+    expect(v.outcome).toBe('match')
+    if (v.outcome === 'match') {
+      expect(v.formatted).toBe('223 Archer St, Gumdale QLD 4154')
+      expect(v.corrected).toBe(true) // -> "The closest address I can find is..."
+      expect(v.postcode).toBe('4154')
+      expect(v.state).toBe('QLD')
+    }
+  })
+
+  it('REFUSES a match whose street number differs — never price the wrong house', async () => {
+    const v = await verifyAuAddress('223 Archer Street, Chandler QLD 4155', {
+      apiKey: 'K',
+      geoscapeApiKey: 'G',
+      fetchImpl: routed(GOOGLE_ACCEPT_UNCONFIRMED_SUBURB, geoBody('33 ARCHER ST, GUMDALE QLD 4154')),
+    })
+    expect(v.outcome).toBe('not_found')
+  })
+
+  it('falls back to Google when Geoscape has no key, no match, or errors', async () => {
+    const clean = googleBody({ formatted: '670 London Road, Chandler QLD 4155, Australia' })
+    const noKey = await verifyAuAddress('670 London Road Chandler QLD 4155', {
+      apiKey: 'K',
+      geoscapeApiKey: '',
+      fetchImpl: routed(clean, geoBody('SHOULD NOT BE USED')),
+    })
+    expect(noKey.outcome === 'match' && noKey.formatted).toBe('670 London Road, Chandler QLD 4155')
+
+    const noMatch = await verifyAuAddress('670 London Road Chandler QLD 4155', {
+      apiKey: 'K',
+      geoscapeApiKey: 'G',
+      fetchImpl: routed(clean, { data: [] }),
+    })
+    expect(noMatch.outcome === 'match' && noMatch.formatted).toBe('670 London Road, Chandler QLD 4155')
+  })
+
+  it('still rejects outright when Google says the address does not exist', async () => {
+    const v = await verifyAuAddress('123 zzzqqq street nowhereville', {
+      apiKey: 'K',
+      geoscapeApiKey: 'G',
+      fetchImpl: routed(googleBody({ formatted: 'Australia', nextAction: 'FIX' }), geoBody('1 REAL ST, SOMEWHERE QLD 4000')),
+    })
+    expect(v.outcome).toBe('not_found')
+  })
+})
+
+describe('firstStreetNumber / titleCaseAu', () => {
+  it('takes the first number and title-cases G-NAF caps, keeping state codes', () => {
+    expect(firstStreetNumber('223 ARCHER ST, GUMDALE QLD 4154')).toBe('223')
+    expect(firstStreetNumber('5/12 Smith St')).toBe('5')
+    expect(firstStreetNumber('no digits here')).toBeNull()
+    expect(titleCaseAu('223 ARCHER ST, GUMDALE QLD 4154')).toBe('223 Archer St, Gumdale QLD 4154')
+    expect(titleCaseAu('15 SCHOFIELD DR, SAFETY BEACH NSW 2456')).toBe('15 Schofield Dr, Safety Beach NSW 2456')
   })
 })
 

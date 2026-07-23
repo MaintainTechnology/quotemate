@@ -30,7 +30,6 @@ import {
 import {
   applySolarToTiers,
   buildRoofingReplyMessage,
-  buildRoofPhotoMedia,
   composeBookingMessage,
   composeCancelMessage,
   composeConfirmMessage,
@@ -45,8 +44,10 @@ import { quotePdfMmsEnabled } from '@/lib/sms/send-quote-pdf'
 import { notifyRoofingTradie, type RoofingNotifyKind } from '@/lib/sms/roofing-notify'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
-import { measureAndPriceRoofs } from '@/lib/roofing/measure'
-import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import {
+  measureAndDispatchRoofing,
+  sendRoofPhotoMms,
+} from '@/lib/sms/roofing-measure-dispatch'
 import { newMeasurementTokens } from '@/lib/roofing/tokens'
 import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
 import { tenantHasRoofingTrade, tenantIsRoofingOnly } from '@/lib/roofing/tenant'
@@ -529,30 +530,8 @@ async function handleRoofingTurn(args: {
   // just means no photo — we never fall back to a plain SMS here, which
   // would spam non-MMS numbers with extra texts. The confirm SMS that
   // follows carries the page link, so this is purely a bonus. Never throws.
-  const sendRoofPhotos = async (token: string, quote: MultiRoofQuote) => {
-    // Fully guarded: nothing here may throw or it could skip the confirm SMS
-    // that follows. buildRoofPhotoMedia is inside the try for that reason.
-    try {
-      const media = buildRoofPhotoMedia({ baseUrl, token, quote, max: 3 })
-      for (const { mediaUrl, caption } of media) {
-        try {
-          const res = await sendSms({ to: fromNumber, from: replyFrom, text: caption, mediaUrl })
-          if (!res.ok) {
-            console.warn('[sms/inbound:roofing] roof photo MMS not sent (non-fatal)', { code: res.code })
-          }
-          await supabase.from('sms_messages').insert({
-            conversation_id: conversationId,
-            direction: 'outbound',
-            body: `[roof photo] ${caption}`,
-          })
-        } catch (e) {
-          console.warn('[sms/inbound:roofing] roof photo MMS threw (non-fatal)', e)
-        }
-      }
-    } catch (e) {
-      console.warn('[sms/inbound:roofing] sendRoofPhotos failed (non-fatal)', e)
-    }
-  }
+  const sendRoofPhotos = (token: string, quote: MultiRoofQuote) =>
+    sendRoofPhotoMms({ supabase, conversationId, to: fromNumber, from: replyFrom, baseUrl, token, quote })
   const loadPending = async (token: string | null) => {
     if (!token) return null
     const { data } = await supabase
@@ -807,85 +786,29 @@ async function handleRoofingTurn(args: {
   }
 
   // ── measure / inspection — run the roofing pipeline, save the job. ──
+  // The sequence itself (rate card → measure → save → photo MMS → confirm
+  // SMS) lives in lib/sms/roofing-measure-dispatch.ts so the VOICE path
+  // runs the identical one after a call. A failure falls through to the
+  // unavailable path below, exactly as it did inline.
   const reqInput = toRoofingRequest(decision.slots)
   if (reqInput) {
-    try {
-      // Per-tenant rate card — WITHOUT this the SMS channel prices every
-      // tenant off DEFAULT_ROOFING_RATE_CARD, so the same address quotes
-      // differently on SMS than in the dashboard (which loads the card in
-      // /api/roofing/{measure,measure-all,save}). Best-effort: any miss
-      // returns the defaults, which is what omitting it already did
-      // (pricing.ts does `args.rateCard ?? DEFAULT_ROOFING_RATE_CARD`).
-      const rateCard = await loadRoofingRateCard(supabase, tenantId, tenantTrade)
-      const result = await measureAndPriceRoofs(reqInput.address, reqInput.inputs, { rateCard })
-      if (result.ok) {
-        // BOTH capability tokens, minted as a pair. Until 2026-07-23 this
-        // minted public_token only, so every SMS-origin job had
-        // measure_token NULL and /api/tenant/trade-jobs rendered
-        // tradieHref null — no Measurement Results page for SMS jobs,
-        // while every web save had one.
-        const tokens = newMeasurementTokens()
-        const token = tokens.public_token
-        const isInspection = decision.action === 'inspection'
-        // For an inspection routed by the gathered inputs (e.g. unknown
-        // material), force the routing onto the saved quote so the page +
-        // message show the inspection path, not a $0 estimate.
-        const quote: MultiRoofQuote = isInspection
-          ? { ...result.quote, routing: { decision: 'inspection_required', reason: decision.reason } }
-          : result.quote
-        await supabase.from('roofing_measurements').insert({
-          tenant_id: tenantId,
-          address: reqInput.address.address,
-          postcode: reqInput.address.postcode || null,
-          state: reqInput.address.state,
-          provider: result.provider,
-          customer_phone: fromNumber,
-          structure_count: quote.structures.length,
-          combined_area_m2: quote.combined.area_m2,
-          // Solar-inclusive better total (applySolarToTiers) — same rule as
-          // denormFromSelection, so the dashboard list matches the customer page.
-          combined_better_inc_gst: applySolarToTiers(quote.combined.tiers, quote.solar ?? null)[1]?.inc_gst ?? null,
-          routing: quote.routing.decision,
-          structures: quote.structures,
-          quote,
-          ...tokens,
-        })
-        const quoteUrl = `${baseUrl}/q/roof/${token}`
-        // Best-effort roof-photo MMS FIRST (one per building, capped), then
-        // the SMS. MMS is a bonus for numbers that support it; the SMS body
-        // carries the page link regardless, so a non-MMS number loses
-        // nothing. Never blocks the SMS that follows.
-        await sendRoofPhotos(token, quote)
-        if (isInspection) {
-          // Inspection: send the next-step + link, then PARK at
-          // await_booking so a "yes" books it (instead of re-quoting).
-          // The token is KEPT so the booking-confirm notify (US-002) can
-          // link the tradie straight to the saved measurement.
-          await sendReply(buildRoofingReplyMessage({ quote, address: reqInput.address.address, quoteUrl, firstName }))
-          await persist({ slots: decision.slots, last_step: 'await_booking', pending_quote_token: token, pending_structure_count: null }, 'open')
-          return true
-        }
-        // Quotable — send "is this your roof?" + link and PARK at
-        // confirm_roof; the price goes out only after they confirm.
-        await sendReply(composeConfirmMessage({ quote, address: reqInput.address.address, quoteUrl, firstName }))
-        await persist({ slots: decision.slots, last_step: 'confirm_roof', pending_quote_token: token, pending_structure_count: quote.structures.length }, 'open')
-        return true
-      }
-      // A failed measure used to be entirely silent — no else, so
-      // result.code/detail were dropped and the customer got the generic
-      // "couldn't pull an automatic measurement" with nothing recorded
-      // anywhere. Rural/edge addresses were therefore un-diagnosable
-      // after the fact. Log before falling through.
-      console.error('[sms/inbound:roofing] measure failed', {
-        code: result.code,
-        detail: result.detail,
-        address: reqInput.address.address,
-        postcode: reqInput.address.postcode,
-        state: reqInput.address.state,
-        tenantId,
-      })
-    } catch (e) {
-      console.error('[sms/inbound:roofing] measure/save failed', e)
+    const dispatched = await measureAndDispatchRoofing({
+      supabase,
+      tenantId,
+      tenantTrade,
+      conversationId,
+      customerPhone: fromNumber,
+      replyFrom,
+      firstName,
+      baseUrl,
+      slots: decision.slots,
+      isInspection: decision.action === 'inspection',
+      inspectionReason: decision.action === 'inspection' ? decision.reason : undefined,
+      sendReply,
+    })
+    if (dispatched.ok) {
+      await persist(dispatched.state, 'open')
+      return true
     }
   }
 
@@ -897,8 +820,46 @@ async function handleRoofingTurn(args: {
   // takes. Previously this closed the thread with a "we'll confirm your
   // quote shortly" message that created no measurement, no booking, and no
   // tradie alert — a black hole the customer never heard back from.
-  const fallbackAddress =
-    reqInput?.address.address ?? decision.slots.address ?? 'your property'
+  const leadAddress = reqInput?.address.address ?? decision.slots.address ?? null
+  const fallbackAddress = leadAddress ?? 'your property'
+
+  // A complete brief we COULDN'T measure is still a real lead, and until
+  // 2026-07-23 nothing was written here at all — so the job never reached
+  // the tradie's roofing queue (which lists roofing_measurements rows). The
+  // customer was promised an on-site inspection while the tradie was given
+  // no job to arrange it on. Live case: 223 Archer St, Gumdale, where
+  // Geoscape resolves the address but holds ZERO building footprints for
+  // it, so no measurement is possible at any time — not a transient outage.
+  //
+  // Best-effort and fully guarded: this fallback's contract is "always
+  // reply, always park", and a throw here runs inside after(), which would
+  // swallow the customer's reply — the exact black hole it exists to
+  // prevent. pending_quote_token stays null deliberately: /q/roof/[token]
+  // is headlined "Your roof, measured", which this lead is not.
+  if (leadAddress) {
+    try {
+      const { error: leadErr } = await supabase.from('roofing_measurements').insert({
+        tenant_id: tenantId,
+        address: leadAddress,
+        postcode: reqInput?.address.postcode || decision.slots.postcode || null,
+        state: reqInput?.address.state ?? decision.slots.state ?? null,
+        customer_name: firstName,
+        customer_phone: fromNumber,
+        structure_count: 0,
+        structures: [],
+        combined_area_m2: null,
+        routing: 'inspection_required',
+        quote: null,
+        ...newMeasurementTokens(),
+      })
+      if (leadErr) {
+        console.warn('[sms/inbound:roofing] unmeasured lead insert failed (non-fatal)', leadErr)
+      }
+    } catch (e) {
+      console.warn('[sms/inbound:roofing] unmeasured lead insert threw (non-fatal)', e)
+    }
+  }
+
   await sendReply(composeMeasureUnavailableMessage(firstName, fallbackAddress))
   await persist({ slots: decision.slots, last_step: 'await_booking', pending_quote_token: null, pending_structure_count: null }, 'open')
   return true

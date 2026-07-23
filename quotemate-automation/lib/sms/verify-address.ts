@@ -50,11 +50,32 @@ export type VerifyAddressOpts = {
   apiKey?: string
   fetchImpl?: FetchLike
   baseUrl?: string
+  geoscapeApiKey?: string
+  geoscapeBaseUrl?: string
 }
 
 const DEFAULT_BASE_URL =
   process.env.GOOGLE_ADDRESS_VALIDATION_API_URL ??
   'https://addressvalidation.googleapis.com/v1:validateAddress'
+
+const GEOSCAPE_BASE_URL =
+  process.env.GEOSCAPE_API_BASE_URL ?? 'https://api.psma.com.au/v1'
+
+/**
+ * Google components whose value we must NOT parrot back when Google itself
+ * couldn't confirm them. Google ECHOES an unconfirmed component verbatim —
+ * live 2026-07-23 "223 Archer St, Chandler" came back ACCEPT, formatted
+ * "223 Archer Street, Chandler QLD 4154", with unconfirmedComponentTypes
+ * ["locality"]: the suburb was never verified (the real one is Gumdale) but
+ * every word the customer typed survived, so the read-back looked clean.
+ */
+const SIGNIFICANT_COMPONENTS = new Set([
+  'locality',
+  'route',
+  'street_number',
+  'postal_code',
+  'administrative_area_level_1',
+])
 
 /** How many "can't find it" re-asks an address gets before we fall back
  *  to the plain read-back. New estates and very fresh subdivisions are
@@ -63,9 +84,59 @@ const DEFAULT_BASE_URL =
  *  at the measure step's inspection fallback. */
 export const MAX_ADDRESS_VERIFY_REJECTS = 2
 
-/** Verify a raw customer-typed AU address against Google Address
- *  Validation. Never throws; any failure is 'unavailable'. */
+/**
+ * Verify a raw customer-typed AU address.
+ *
+ * TWO sources, because neither alone is sufficient:
+ *   • Google Address Validation catches typos and non-existent addresses,
+ *     but it ECHOES a suburb it could not confirm, so a wrong-suburb
+ *     address reads back as clean.
+ *   • Geoscape (G-NAF) is the authoritative AU address register AND the
+ *     exact source `measureAndPriceRoofs` resolves the parcel against, so
+ *     its answer is the one worth confirming: agreeing here means the
+ *     address the customer says yes to is the address we will measure.
+ *
+ * Geoscape is best-effort — no key, no match or any error falls back to
+ * Google's verdict rather than blocking a lead. Never throws.
+ */
 export async function verifyAuAddress(
+  raw: string,
+  opts: VerifyAddressOpts = {},
+): Promise<AddressVerification> {
+  const google = await verifyWithGoogle(raw, opts)
+  // Google is certain it does not exist — no point asking Geoscape.
+  if (google.outcome === 'not_found') return google
+
+  const candidate = google.outcome === 'match' ? google.formatted : raw
+  const state = (google.outcome === 'match' ? google.state : null) ?? parseFormattedState(raw)
+  const geo = await lookupGeoscapeAddress(candidate, state, opts)
+  if (!geo) return google
+
+  // MONEY-PATH GUARD. Geoscape's /addresses is a fuzzy top-1 match with no
+  // score: "223 Archer Street, Chandler QLD 4155" (one digit out in the
+  // postcode) silently returns "33 ARCHER ST, GUMDALE" — a different house.
+  // Measuring and pricing THAT roof would be worse than not quoting, so a
+  // street-number disagreement is a refusal, not a suggestion.
+  const typedNumber = firstStreetNumber(raw)
+  const foundNumber = firstStreetNumber(geo.address)
+  if (typedNumber && foundNumber && typedNumber !== foundNumber) {
+    return { outcome: 'not_found' }
+  }
+
+  // Geoscape wins: read ITS address back (title-cased — G-NAF is ALL CAPS
+  // and an all-caps SMS reads like shouting).
+  const formatted = titleCaseAu(geo.address)
+  return {
+    outcome: 'match',
+    formatted,
+    postcode: parseFormattedPostcode(formatted),
+    state: parseFormattedState(formatted),
+    corrected: wasCorrected(raw, formatted),
+  }
+}
+
+/** Google Address Validation only. Never throws; failure is 'unavailable'. */
+async function verifyWithGoogle(
   raw: string,
   opts: VerifyAddressOpts = {},
 ): Promise<AddressVerification> {
@@ -104,13 +175,78 @@ export async function verifyAuAddress(
   if (!insight.formatted_address) return { outcome: 'unavailable' }
 
   const formatted = stripCountry(insight.formatted_address)
+  // An unconfirmed significant component means Google kept the customer's
+  // word without verifying it, so the read-back must be phrased as a
+  // suggestion even though every typed token "survived" (see
+  // SIGNIFICANT_COMPONENTS).
+  const unconfirmed = insight.unconfirmed_components.some((c) => SIGNIFICANT_COMPONENTS.has(c))
   return {
     outcome: 'match',
     formatted,
     postcode: parseFormattedPostcode(formatted),
     state: parseFormattedState(formatted),
-    corrected: wasCorrected(raw, formatted),
+    corrected: wasCorrected(raw, formatted) || unconfirmed,
   }
+}
+
+/**
+ * Geoscape's authoritative G-NAF match for an AU address string, or null
+ * when unavailable/unmatched. Never throws — the caller falls back to
+ * Google so a Geoscape outage can never block a lead.
+ */
+async function lookupGeoscapeAddress(
+  addressString: string,
+  state: AuStateAbbr | null,
+  opts: VerifyAddressOpts,
+): Promise<{ address: string; addressId: string } | null> {
+  const key = opts.geoscapeApiKey ?? process.env.GEOSCAPE_API_KEY
+  if (!key || !addressString.trim()) return null
+  const fetchImpl = opts.fetchImpl ?? ((u: RequestInfo | URL, init?: RequestInit) => fetch(u, init))
+  const url =
+    `${opts.geoscapeBaseUrl ?? GEOSCAPE_BASE_URL}/addresses` +
+    `?addressString=${encodeURIComponent(addressString)}` +
+    (state ? `&state=${encodeURIComponent(state)}` : '') +
+    `&perPage=1`
+  try {
+    const res = await fetchImpl(url, {
+      headers: { Authorization: key, Accept: 'application/json' },
+    })
+    if (!res.ok) return null
+    const body = (await res.json()) as { data?: unknown }
+    const first = Array.isArray(body?.data) ? (body.data[0] as Record<string, unknown>) : null
+    if (!first) return null
+    const address =
+      typeof first.address === 'string'
+        ? first.address
+        : typeof first.formattedAddress === 'string'
+          ? first.formattedAddress
+          : null
+    const addressId =
+      typeof first.addressId === 'string'
+        ? first.addressId
+        : typeof first.id === 'string'
+          ? first.id
+          : null
+    return address && addressId ? { address, addressId } : null
+  } catch {
+    return null
+  }
+}
+
+/** PURE — the first number in an address line ("223 Archer St" → "223",
+ *  "5/12 Smith St" → "5"). Used only to compare like with like. */
+export function firstStreetNumber(address: string): string | null {
+  const m = (address ?? '').match(/\d+/)
+  return m ? m[0] : null
+}
+
+/** PURE — G-NAF returns ALL CAPS; title-case it but keep AU state codes. */
+export function titleCaseAu(s: string): string {
+  return (s ?? '').replace(/[A-Za-z]+/g, (w) => {
+    const up = w.toUpperCase()
+    if ((AU_STATES as readonly string[]).includes(up)) return up
+    return up.charAt(0) + w.slice(1).toLowerCase()
+  })
 }
 
 // ── Pure helpers ─────────────────────────────────────────────────────
