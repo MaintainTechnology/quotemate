@@ -59,6 +59,46 @@ describe('dispatchQuoteMessage — WhatsApp fallback scoping', () => {
     }
   })
 
+  // Review follow-up (2026-07-23): the first cut of US-008 keyed the gate
+  // on the SENDER number alone, which also stranded every TRADIE-facing
+  // notify (owner_mobile, sent from the tenant's own number) — the exact
+  // delivery guarantee b4ccea5f added the fallback for, and the one
+  // d0dfb6a5 relied on when it removed the shared-sandbox WA send. The
+  // audience decides: customer sends stay WA-free on tenant numbers;
+  // tradie sends keep the fallback (the recipient OWNS the platform —
+  // nothing is a stranger's number to them).
+  it("audience 'tradie' keeps the WhatsApp fallback even from a tenant number", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: { body?: string }) => {
+      const body = decodeURIComponent(init?.body ?? '')
+      return Promise.resolve(body.includes('whatsapp:') ? waOk() : permanentFailure())
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await dispatchQuoteMessage({
+      to: '+61400111222',
+      text: 'new roofing lead',
+      from: TENANT_FROM,
+      audience: 'tradie',
+    })
+    expect(r.ok).toBe(true)
+    expect(r.ok && r.channel).toBe('whatsapp')
+  })
+
+  it("audience 'customer' (and the default) still blocks it on tenant numbers", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(permanentFailure())
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await dispatchQuoteMessage({
+      to: '+61400000000',
+      text: 'quote',
+      from: TENANT_FROM,
+      audience: 'customer',
+    })
+    expect(r.ok).toBe(false)
+    for (const call of fetchMock.mock.calls) {
+      const body = (call[1] as { body?: string } | undefined)?.body ?? ''
+      expect(decodeURIComponent(body)).not.toContain('whatsapp:')
+    }
+  })
+
   it('shared/dev-number thread keeps the WhatsApp fallback', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: { body?: string }) => {
       const body = decodeURIComponent(init?.body ?? '')

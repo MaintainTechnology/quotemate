@@ -166,7 +166,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           betterIncGst: disp.estimate.price.tiers.find((tier) => tier.tier === 'better')?.inc_gst ?? null,
           estimateToken: disp.estimateToken,
           appUrl: APP_BASE_URL,
-          dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from }),
+          dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
         })
         if (convId) {
           await supabase

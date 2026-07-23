@@ -172,7 +172,7 @@ export async function startWebLeadConversation(input: StartWebLeadInput): Promis
       suburb: form.suburb,
       description: form.description,
     })
-    const r = await dispatchQuoteMessage({ to: tenant.owner_mobile, text: alert, from: fromNumber })
+    const r = await dispatchQuoteMessage({ to: tenant.owner_mobile, text: alert, from: fromNumber, audience: 'tradie' })
     if (r.ok) log.ok('web-lead: tradie alerted', { sid: r.sid })
     else log.err('web-lead: tradie alert failed', null, { code: r.smsAttempt?.code })
   } catch (e: unknown) {

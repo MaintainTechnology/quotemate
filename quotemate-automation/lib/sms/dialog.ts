@@ -1214,14 +1214,20 @@ function customerHistoryDirective(hint: CustomerHistoryHint): string {
  * directive overrides the system prompt's default "we cover both" stance.
  *
  * The `trades` type is `string` (admin bulk loader, Phase 0): a trade is a
- * data row now, not a hardcoded union. The electrical / plumbing / both
- * branches are unchanged. A tenant whose trades are ALL non-pilot (e.g. a
- * trade added by the loader) gets a directive that defers the in-scope job
- * list to the TENANT CUSTOM SERVICES block (spec §6.4) — instead of the old
- * degenerate fallback that wrongly assumed electrical + plumbing.
+ * data row now, not a hardcoded union. The pilot branches carry two
+ * appendices (2026-07-23): extras the tenant ALSO covers (extraTradeLines)
+ * and a NOT OFFERED decline block for absent dedicated-flow trades
+ * (missingTradeLines, explicit trades[] only). Roofing-only tenants get a
+ * dedicated branch (roofing is the headline, never deferred to the custom-
+ * services list); other all-non-pilot tenants defer their in-scope job
+ * list to the TENANT CUSTOM SERVICES block (spec §6.4).
  *
  * Empty/undefined trades → fall back to permissive "both" (legacy pre-v6
- * single-pilot behaviour) so older traffic isn't accidentally blocked.
+ * single-pilot behaviour) so older traffic isn't accidentally blocked —
+ * with no invented declines.
+ *
+ * (Doc applies to tradeScopeDirective below; the two helper fns between
+ * this comment and the function are its appendix builders.)
  */
 /** Trades this tenant holds that are NEITHER of the two pilots. These used
  *  to be invisible to the dialog: the electrical / plumbing / both branches

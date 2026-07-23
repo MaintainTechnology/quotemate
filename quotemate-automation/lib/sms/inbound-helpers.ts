@@ -42,6 +42,13 @@ export function isGlobalOptOut(body: string | null | undefined): boolean {
   return OPT_OUT_RE.test(body ?? '')
 }
 
+/** The one confirmation an opt-out gets before the thread closes. AU long
+ *  codes have NO Twilio default opt-out handling (that covers US/CA long
+ *  codes + toll-free), so silence would leave the customer wondering
+ *  whether the STOP landed. Any later text from them re-engages normally. */
+export const OPT_OUT_CONFIRMATION =
+  "You've been unsubscribed and won't receive further messages from this number. Text us anytime if you need a quote."
+
 // ---------------------------------------------------------------------------
 // R47 — MessageSid idempotency decision.
 // ---------------------------------------------------------------------------

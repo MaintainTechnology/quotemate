@@ -392,7 +392,8 @@ export async function POST(
       shareToken: estimate.token,
       appUrl,
       released,
-      dispatch: (opts) => dispatchQuoteMessage(opts),
+      // Tradie-facing notify — keeps the WhatsApp fallback (see dispatch audience).
+      dispatch: (opts) => dispatchQuoteMessage({ ...opts, audience: 'tradie' }),
     })
   })
 

@@ -1,7 +1,12 @@
 // Unified message dispatcher with SMS-first, WhatsApp-fallback strategy.
 // Per-call: try SMS via Twilio (with retries on transient errors). If
 // carrier permanently rejects (21612 PH long-code block, 21408 geo-
-// permission, etc.), fall back to WhatsApp on the same number.
+// permission, etc.), fall back to WhatsApp on the same number — UNLESS
+// this is a customer-facing send from a tenant's own number (US-008 +
+// review follow-up 2026-07-23): the WA sender is always the global
+// platform number, a stranger's number to a customer, so the fallback is
+// scoped by `audience` (customer sends: platform-number flows only;
+// tradie notifies: always).
 // WhatsApp delivery requires the recipient to have opted in to the
 // Twilio sandbox or to a registered WABA template — production v1 (AU)
 // will normally succeed on SMS alone and never trigger the fallback.
@@ -38,7 +43,9 @@ export type DispatchFail = {
   smsAttempt: { code: string; reason: string }
   /** total SMS attempts before giving up */
   smsAttempts: number
-  /** WhatsApp attempt result if we tried (we always try when SMS fails) */
+  /** WhatsApp attempt result if we tried. Absent when the fallback was
+   *  deliberately skipped: customer-facing send from a tenant number
+   *  (see `audience` on dispatchQuoteMessage). */
   waAttempt?: { code: string; reason: string }
 }
 
@@ -142,6 +149,14 @@ export async function dispatchQuoteMessage(opts: {
    *  image). If the MMS send fails, we automatically retry as a plain SMS
    *  — the body still carries the quote-page link — before WhatsApp. */
   mediaUrl?: string | string[]
+  /** Who receives this message. Decides the WhatsApp-fallback rule
+   *  (review follow-up 2026-07-23): 'customer' (default) suppresses the
+   *  fallback on tenant-number sends — the WA sender is the global
+   *  platform number, a stranger's number to a customer. 'tradie' keeps
+   *  it — the recipient is the tenant OWNER being notified of a lead, and
+   *  losing that notification to an SMS reject is the exact failure
+   *  b4ccea5f added the fallback to prevent. */
+  audience?: 'customer' | 'tradie'
 }): Promise<DispatchResult> {
   let mediaDropped = false
   let attempt = await sendSmsWithRetry({
@@ -177,9 +192,10 @@ export async function dispatchQuoteMessage(opts: {
 
   // US-008 (audit 2026-07-23): WhatsApp always sends from the global
   // TWILIO_WHATSAPP_FROM — a WA sender can't be a tenant long code. On a
-  // tenant-number thread that re-sent a failed SMS from a STRANGER'S
-  // number, so the fallback is scoped to shared/platform-number flows.
-  if (!whatsappFallbackAllowed(opts.from)) {
+  // tenant-number CUSTOMER thread that re-sent a failed SMS from a
+  // STRANGER'S number, so the fallback is scoped to shared/platform-number
+  // flows — unless the recipient is the tradie (see `audience` above).
+  if (opts.audience !== 'tradie' && !whatsappFallbackAllowed(opts.from)) {
     return { ok: false, smsAttempt, smsAttempts }
   }
 

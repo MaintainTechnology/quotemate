@@ -44,7 +44,11 @@ export type RoofingConversationState = {
   slots: RoofingSlots
   /** The step we asked the customer about last turn (null on the opener). */
   last_step?: RoofingStep | null
-  /** Token of the saved roofing_measurements row awaiting confirmation. */
+  /** Token of the saved roofing_measurements row this thread is parked on:
+   *  awaiting the roof confirmation (confirm_roof), warm after a quote
+   *  (quoted), or awaiting the booking reply (await_booking — kept since
+   *  US-002 so the booking-confirm tradie notify can link the saved
+   *  measurement). */
   pending_quote_token?: string | null
   /** How many structures were measured (so a numbered pick can be validated). */
   pending_structure_count?: number | null
@@ -427,7 +431,12 @@ export function advanceRoofing(
  *   ask        → park at the asked step
  *   measure    → park at confirm_roof
  *   reconfirm  → stay at confirm_roof
- *   inspection → park at await_booking (waiting for "yes book it")
+ *   inspection → park at await_booking (waiting for "yes book it").
+ *                NOTE: this pure arm nulls pending_quote_token because the
+ *                decision doesn't carry it; the ROUTE persists its own
+ *                explicit state for the measure-path inspection park and
+ *                KEEPS the token there (US-002 booking-notify link) — same
+ *                route-owned-state carve-out as send_saved below.
  *   send_saved → quoted (WARM — a structure follow-up re-serves the saved
  *                measurement; the route preserves pending_quote_token +
  *                pending_structure_count, which this pure fn doesn't own)

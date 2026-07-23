@@ -163,6 +163,7 @@ export async function notifyBookingConfirmed(
         to: notifyMobile,
         text: tradieBody,
         from: tenantSmsNumber ?? undefined,
+        audience: 'tradie',
       })
       if (r.ok) {
         sms.ok('tradie booking notification sent', {

@@ -772,6 +772,7 @@ export async function POST(req: Request) {
           () => dispatchQuoteMessage({
             to: tenantOwnerMobile!,
             from: tenantSmsNumber ?? undefined,
+            audience: 'tradie',
             text: `Heads up — we couldn't text the customer their quote (${why}). Quote ready: ${appUrl}/q/${shareToken}`,
           }),
           { knobs },
@@ -1102,6 +1103,7 @@ export async function POST(req: Request) {
               to: notifyMobile,
               text: tradieBody,
               from: tenantSmsNumber ?? undefined,
+              audience: 'tradie',
             }),
             {
               knobs,
@@ -1214,6 +1216,7 @@ export async function POST(req: Request) {
               () => dispatchQuoteMessage({
                 to: tradieTo,
                 from: tenantSmsNumber ?? undefined,
+                audience: 'tradie',
                 text: `Heads up — a quote draft hit an error while sending. Check it here: ${appUrl}/q/${shareToken}`,
               }),
               { knobs },

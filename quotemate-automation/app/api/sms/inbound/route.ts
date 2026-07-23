@@ -140,6 +140,7 @@ import {
   sideEffectsAllowed,
   isNearMaxDuration,
   isGlobalOptOut,
+  OPT_OUT_CONFIRMATION,
 } from '@/lib/sms/inbound-helpers'
 
 // R42/R44/R46/R49 — SMS delivery knobs resolved once at module load. These
@@ -514,7 +515,7 @@ async function handleRoofingTurn(args: {
         address,
         betterIncGst,
         quoteUrl,
-        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from }),
+        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
       })
     } catch (e) {
       console.warn('[sms/inbound:roofing] tradie notify failed (non-fatal)', e)
@@ -1042,7 +1043,7 @@ async function handlePaintingTurn(args: {
           betterIncGst: disp.estimate.price.tiers.find((tier) => tier.tier === 'better')?.inc_gst ?? null,
           estimateToken: disp.estimateToken,
           appUrl: baseUrl,
-          dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from }),
+          dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
         })
         await persist({ slots: decision.slots, last_step: 'quoted', pending_form_token: null, pending_quote_token: disp.token }, 'open')
         return true
@@ -1807,19 +1808,41 @@ export async function POST(req: Request) {
 
       // US-003 (audit 2026-07-23) — a standard Twilio opt-out keyword as the
       // whole message ends the thread on EVERY conversation type, not just
-      // inside the roofing/painting receptionists. Twilio has already
-      // carrier-blocked this number by now (any send would 21610), so the
-      // right move is: close the conversation, send nothing.
+      // inside the roofing/painting receptionists.
+      //
+      // Review follow-up (2026-07-23): Twilio's DEFAULT opt-out handling
+      // covers US/CA long codes and toll-free — NOT the AU long codes this
+      // stack sends from. So the carrier has not blocked the number and
+      // silence here would be the exact failure mode the dispatch-retry
+      // commits exist to prevent. We confirm once (best-effort — if some
+      // upstream filter HAS blocked the number the send just fails), then
+      // close. roofing_state is only written when there is actually an
+      // active roofing flow to close (flag-off threads stay byte-identical).
       const lastInboundBody =
         [...turns].reverse().find(t => t.direction === 'inbound')?.body ?? ''
       if (isGlobalOptOut(lastInboundBody)) {
-        console.log('[sms/inbound:after] opt-out keyword — closing conversation, no reply', { conversationId })
+        console.log('[sms/inbound:after] opt-out keyword — confirming once and closing', { conversationId })
         try {
+          const res = await dispatchQuoteMessage({ to: fromNumber, from: toNumber, text: OPT_OUT_CONFIRMATION })
+          if (res.ok) {
+            await supabase.from('sms_messages').insert({
+              conversation_id: conversationId,
+              direction: 'outbound',
+              body: OPT_OUT_CONFIRMATION,
+            })
+          }
+        } catch (e) {
+          console.warn('[sms/inbound:after] opt-out confirmation not sent (non-fatal)', e)
+        }
+        try {
+          const staleRoofing = closeStaleRoofingState(
+            ((conversation as Record<string, unknown>).roofing_state ?? null) as RoofingConversationState | null,
+          )
           await supabase
             .from('sms_conversations')
             .update({
               status: 'done',
-              roofing_state: { slots: {}, last_step: 'closed' },
+              ...(staleRoofing ? { roofing_state: staleRoofing } : {}),
               updated_at: new Date().toISOString(),
             })
             .eq('id', conversationId)
@@ -3534,6 +3557,26 @@ async function maybeHandleTradieRegistration(args: {
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle()
+
+  // US-003 review follow-up (2026-07-23): this branch short-circuits BEFORE
+  // the after() opt-out check, so a bare STOP inside the 24h registration
+  // window used to be adopted as a registration reply and answered with the
+  // signup link — the one message an opted-out prospect must not get.
+  // Honour it here: close the thread, send nothing, ack Twilio.
+  if (priorTradie && isGlobalOptOut(args.inboundBody)) {
+    console.log('[sms/inbound] tradie-registration opt-out — closing thread, no reply', {
+      conversationId: priorTradie.id,
+    })
+    try {
+      await supabase
+        .from('sms_conversations')
+        .update({ status: 'done', updated_at: new Date().toISOString() })
+        .eq('id', priorTradie.id)
+    } catch (e) {
+      console.warn('[sms/inbound] registration opt-out close failed (non-fatal)', e)
+    }
+    return ackTwiml()
+  }
 
   const reusePriorTradieThread =
     priorTradie &&
