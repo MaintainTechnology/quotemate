@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   advancePainting,
   customerWantsForm,
+  expireIdlePaintingState,
   isActivePaintingFlow,
   nextPaintingConversationState,
   shouldEngagePainting,
@@ -158,6 +159,30 @@ describe('isActivePaintingFlow', () => {
     expect(isActivePaintingFlow({ slots: {}, last_step: 'scopes' })).toBe(true)
     expect(isActivePaintingFlow({ slots: {}, last_step: 'closed' })).toBe(false)
     expect(isActivePaintingFlow({ slots: {}, last_step: null })).toBe(false)
+  })
+})
+
+// Same idle-session incident as roofing (live 2026-07-24): a painting flow
+// parked at await_form / quoted / await_booking and reused hours later must be
+// treated as stale, not resumed. Mirrors expireIdleRoofingState.
+describe('expireIdlePaintingState — a parked flow left idle is stale', () => {
+  const HOUR = 60 * 60 * 1000
+  it('closes any active flow idle beyond the threshold', () => {
+    for (const step of ['scopes', 'await_form', 'quoted', 'await_booking'] as const) {
+      const expired = expireIdlePaintingState(
+        { slots: { address: 'x' }, last_step: step, pending_form_token: 'f', pending_quote_token: 'q' },
+        3 * HOUR,
+      )
+      expect(expired, step).not.toBeNull()
+      expect(expired!.last_step).toBe('closed')
+      expect(expired!.pending_form_token ?? null).toBeNull()
+      expect(expired!.pending_quote_token ?? null).toBeNull()
+    }
+  })
+  it('leaves a still-fresh flow untouched, and nothing to do on closed/absent', () => {
+    expect(expireIdlePaintingState({ slots: {}, last_step: 'scopes' }, 5 * 60 * 1000)).toBeNull()
+    expect(expireIdlePaintingState(null, 10 * HOUR)).toBeNull()
+    expect(expireIdlePaintingState({ slots: {}, last_step: 'closed' }, 10 * HOUR)).toBeNull()
   })
 })
 

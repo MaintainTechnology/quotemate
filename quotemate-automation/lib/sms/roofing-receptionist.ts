@@ -295,6 +295,7 @@ export function advanceRoofing(
   }
 
   // (3) Confirmation: replying to "is this your roof?".
+  let restartFromConfirm = false
   if (rawLastStep === 'confirm_roof') {
     const count = prev?.pending_structure_count ?? 1
     if (isNegative(inbound)) {
@@ -307,30 +308,44 @@ export function advanceRoofing(
       }
       return { action: 'ask', slots: reset, step: 'address', reply: WRONG_BUILDING_REPROMPT }
     }
-    // MULTI-pick first, but ONLY when it names ≥2 structures: "2 and 3"
-    // must serve both. The single-pick parser's digit regex grabs the
-    // FIRST number, so running it first silently narrowed "2 and 3" to
-    // structure 2 — the customer read the price as covering two buildings
-    // (money bug, same class as the 2026-07-22 included_indices fix; the
-    // warm 'quoted' step below already parsed multi-picks correctly).
-    // Single-result parses still fall through to parseStructureChoice,
-    // which alone knows "secondary structure 1" means ENTRY 2.
-    const multi = parseStructureFollowup(inbound, count)
-    if (count > 1 && Array.isArray(multi) && multi.length > 1) {
-      return { action: 'send_saved', slots, structureChoices: multi }
+    // A fresh roofing enquiry, or a NEW address (a postcode is present), means
+    // the customer has moved to a DIFFERENT property — restart the gather
+    // instead of replaying "is this your roof?" for the old measurement. Live
+    // 2026-07-24: a confirm_roof reused from a previous session replayed its
+    // "3 buildings at 670 London Road" list on a brand-new address and even
+    // on a bare "Hi". Checked BEFORE the pick parser so a real address like
+    // "223 Archer St ... QLD 4154" can't be misread as a structure number,
+    // and AFTER isNegative so a plain "no" still re-asks the address. A bare
+    // pick ("2", "2 and 3", "the main one") carries no postcode/keyword, so it
+    // still serves the saved measurement below.
+    if (looksLikeRoofingEnquiry(inbound) || parsePostcode(inbound)) {
+      restartFromConfirm = true
+    } else {
+      // MULTI-pick first, but ONLY when it names ≥2 structures: "2 and 3"
+      // must serve both. The single-pick parser's digit regex grabs the
+      // FIRST number, so running it first silently narrowed "2 and 3" to
+      // structure 2 — the customer read the price as covering two buildings
+      // (money bug, same class as the 2026-07-22 included_indices fix; the
+      // warm 'quoted' step below already parsed multi-picks correctly).
+      // Single-result parses still fall through to parseStructureChoice,
+      // which alone knows "secondary structure 1" means ENTRY 2.
+      const multi = parseStructureFollowup(inbound, count)
+      if (count > 1 && Array.isArray(multi) && multi.length > 1) {
+        return { action: 'send_saved', slots, structureChoices: multi }
+      }
+      const choice = parseStructureChoice(inbound, count)
+      if (choice != null && count > 1) {
+        return { action: 'send_saved', slots, structureChoices: [choice] }
+      }
+      // The confirm prompt offers "all" (and the page says so) — accept it.
+      if (count > 1 && multi === 'all') {
+        return { action: 'send_saved', slots, structureChoices: null }
+      }
+      if (isAffirmative(inbound)) {
+        return { action: 'send_saved', slots, structureChoices: null }
+      }
+      return { action: 'reconfirm', slots }
     }
-    const choice = parseStructureChoice(inbound, count)
-    if (choice != null && count > 1) {
-      return { action: 'send_saved', slots, structureChoices: [choice] }
-    }
-    // The confirm prompt offers "all" (and the page says so) — accept it.
-    if (count > 1 && multi === 'all') {
-      return { action: 'send_saved', slots, structureChoices: null }
-    }
-    if (isAffirmative(inbound)) {
-      return { action: 'send_saved', slots, structureChoices: null }
-    }
-    return { action: 'reconfirm', slots }
   }
 
   // (3.5) Warm 'quoted' thread — a quote was already sent. A structure
@@ -348,9 +363,11 @@ export function advanceRoofing(
     // falls through to the reset below → gather a fresh roofing quote.
   }
 
-  // (4) Closed/quoted flow — a fresh enquiry restarts from scratch.
+  // (4) Closed/quoted flow — a fresh enquiry restarts from scratch. A
+  // confirm_roof the customer abandoned for a new property (restartFromConfirm)
+  // resets here too, then falls into the opener-harvest below.
   let lastStep: RoofingStep | null = rawLastStep
-  if (rawLastStep === 'closed' || rawLastStep === 'quoted') {
+  if (rawLastStep === 'closed' || rawLastStep === 'quoted' || restartFromConfirm) {
     slots = {}
     lastStep = null
   }
@@ -485,6 +502,34 @@ export function nextRoofingConversationState(
     case 'cancel':
     case 'booking':
       return { slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }
+  }
+}
+
+/** Idle beyond this and a parked roofing flow is stale. The route reuses a
+ *  conversation for up to REUSE_OPEN_WINDOW_MS (4h); expiring the roofing flow
+ *  at 1h means a customer who walked away starts fresh next time instead of
+ *  resuming a measurement from a PREVIOUS session. Live 2026-07-24: a
+ *  confirm_roof reused hours later replayed "3 buildings at 670 London Road"
+ *  on the next "Hi Mate", then again on a new address, then on "Hey". */
+export const ROOFING_STALE_IDLE_MS = 60 * 60 * 1000
+
+/** PURE — an active roofing flow idle for longer than ROOFING_STALE_IDLE_MS is
+ *  stale: return the closed state to persist (so the route handles the new
+ *  message fresh), or null when there's nothing to expire (already
+ *  closed/empty, or still within the window). `idleMs` is the age of the
+ *  conversation's last activity, supplied by the route. Mirrors
+ *  closeStaleRoofingState's closed shape. */
+export function expireIdleRoofingState(
+  prev: RoofingConversationState | null | undefined,
+  idleMs: number,
+): RoofingConversationState | null {
+  if (!isActiveRoofingFlow(prev)) return null
+  if (idleMs < ROOFING_STALE_IDLE_MS) return null
+  return {
+    slots: {},
+    last_step: 'closed',
+    pending_quote_token: null,
+    pending_structure_count: null,
   }
 }
 

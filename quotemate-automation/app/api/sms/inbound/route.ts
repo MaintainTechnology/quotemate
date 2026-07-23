@@ -25,6 +25,7 @@ import {
   confirmedIncludedIndices,
   shouldEngageRoofing,
   closeStaleRoofingState,
+  expireIdleRoofingState,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
 import {
@@ -57,6 +58,7 @@ import type { MultiRoofQuote } from '@/lib/roofing/types'
 import {
   advancePainting,
   shouldEngagePainting,
+  expireIdlePaintingState,
   type PaintingConversationState,
 } from '@/lib/sms/painting-receptionist'
 import {
@@ -1350,6 +1352,47 @@ export async function POST(req: Request) {
         photo_paths: [],
       }
       console.log('[sms/inbound] step 3 — reset stale photo state on reused conversation', {
+        conversationId: conversation.id,
+        idleMinutes: Math.round(ageMs / 60000),
+      })
+    }
+
+    // Roofing/painting session freshness — same idea as the photo reset above.
+    // The route reuses a conversation for up to REUSE_OPEN_WINDOW_MS (4h), so a
+    // roofing/painting flow parked at confirm_roof / await_booking / quoted /
+    // await_form and left idle for hours would RESUME and replay a measurement
+    // from the previous session. Live 2026-07-24 (QM Sparky): a confirm_roof
+    // reused hours later re-sent "3 buildings at 670 London Road" on the next
+    // "Hi Mate", then again on a new address, then on "Hey" — the agent stuck
+    // replaying stale data. Expire the parked flow so the new message starts
+    // clean. Best-effort; the pure helpers own the "is it stale?" decision.
+    const convRec = conversation as Record<string, unknown>
+    const staleRoof = expireIdleRoofingState(
+      (convRec.roofing_state ?? null) as RoofingConversationState | null,
+      ageMs,
+    )
+    if (staleRoof) {
+      await supabase
+        .from('sms_conversations')
+        .update({ roofing_state: staleRoof, updated_at: new Date().toISOString() })
+        .eq('id', conversation.id)
+      convRec.roofing_state = staleRoof
+      console.log('[sms/inbound] step 3 — expired idle roofing_state on reused conversation', {
+        conversationId: conversation.id,
+        idleMinutes: Math.round(ageMs / 60000),
+      })
+    }
+    const stalePaint = expireIdlePaintingState(
+      (convRec.painting_state ?? null) as PaintingConversationState | null,
+      ageMs,
+    )
+    if (stalePaint) {
+      await supabase
+        .from('sms_conversations')
+        .update({ painting_state: stalePaint, updated_at: new Date().toISOString() })
+        .eq('id', conversation.id)
+      convRec.painting_state = stalePaint
+      console.log('[sms/inbound] step 3 — expired idle painting_state on reused conversation', {
         conversationId: conversation.id,
         idleMinutes: Math.round(ageMs / 60000),
       })

@@ -226,6 +226,29 @@ export function isActivePaintingFlow(prev: PaintingConversationState | null | un
   return step !== null && step !== 'closed'
 }
 
+/** Idle beyond this and a parked painting flow is stale — same reasoning as
+ *  ROOFING_STALE_IDLE_MS (a reused conversation must not resume a painting
+ *  session the customer walked away from hours ago). */
+export const PAINTING_STALE_IDLE_MS = 60 * 60 * 1000
+
+/** PURE — mirror of expireIdleRoofingState. An active painting flow idle for
+ *  longer than PAINTING_STALE_IDLE_MS is stale: return the closed state to
+ *  persist, or null when there's nothing to expire. `idleMs` is the age of the
+ *  conversation's last activity, supplied by the route. */
+export function expireIdlePaintingState(
+  prev: PaintingConversationState | null | undefined,
+  idleMs: number,
+): PaintingConversationState | null {
+  if (!isActivePaintingFlow(prev)) return null
+  if (idleMs < PAINTING_STALE_IDLE_MS) return null
+  return {
+    slots: {},
+    last_step: 'closed',
+    pending_form_token: null,
+    pending_quote_token: null,
+  }
+}
+
 /** PURE — should the painting receptionist engage this turn?
  *
  *  Mirror of shouldEngageRoofing: normally engages on an active painting

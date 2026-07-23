@@ -30,6 +30,7 @@ import {
   advanceRoofing,
   closeStaleRoofingState,
   confirmedIncludedIndices,
+  expireIdleRoofingState,
   parseStructureChoice,
   type RoofingConversationState,
   type RoofingTurnDecision,
@@ -491,5 +492,79 @@ describe('intent unknown is gated, not priced', () => {
   it('an unknown intent routes to inspection rather than falling through to pricing', () => {
     const step = nextRoofingStep({ ...GATHERED, intent: 'unknown', material: 'colorbond_trimdek', pitch: 'standard' })
     expect(step.step).toBe('inspection')
+  })
+})
+
+// Live 2026-07-24 (QM Sparky): a confirm_roof parked on a measurement from a
+// PREVIOUS session ("3 buildings at 670 London Road") was reused hours later
+// and replayed that exact list on the next "Hi Mate", then again on a brand
+// new address, then again on "Hey" — an agent stuck waiting, replaying stale
+// data. A flow left idle beyond the threshold must be treated as stale.
+describe('expireIdleRoofingState — a parked flow left idle is stale', () => {
+  const HOUR = 60 * 60 * 1000
+  it('closes any active flow idle beyond the threshold', () => {
+    for (const step of ['address', 'confirm_roof', 'await_booking', 'quoted'] as const) {
+      const expired = expireIdleRoofingState(
+        { slots: { address: 'x' }, last_step: step, pending_quote_token: 't', pending_structure_count: 3 },
+        3 * HOUR,
+      )
+      expect(expired, step).not.toBeNull()
+      expect(expired!.last_step).toBe('closed')
+      expect(expired!.pending_quote_token ?? null).toBeNull()
+    }
+  })
+  it('leaves a still-fresh flow untouched (idle under the threshold)', () => {
+    expect(
+      expireIdleRoofingState({ slots: { address: 'x' }, last_step: 'confirm_roof' }, 5 * 60 * 1000),
+    ).toBeNull()
+  })
+  it('nothing to expire on a closed/absent flow', () => {
+    expect(expireIdleRoofingState(null, 10 * HOUR)).toBeNull()
+    expect(expireIdleRoofingState(undefined, 10 * HOUR)).toBeNull()
+    expect(expireIdleRoofingState({ slots: {}, last_step: 'closed' }, 10 * HOUR)).toBeNull()
+  })
+})
+
+// The other half of the same incident: WITHIN a live session, a fresh enquiry
+// or a new address at confirm_roof must RESTART the gather, never re-send the
+// old "is this your roof?" list. Bare picks / yes / no must still work.
+describe('confirm_roof — fresh enquiry restarts, picks still serve', () => {
+  const parked: RoofingConversationState = {
+    slots: { address: '670 London Road' },
+    last_step: 'confirm_roof',
+    pending_quote_token: 't',
+    pending_structure_count: 3,
+  }
+
+  it('a roofing keyword + new address restarts (asks the new address), never reconfirm', () => {
+    const d = advanceRoofing(parked, 'I want to do a roofing my address is 223 Archer St, Chandler QLD 4154')
+    expect(d.action).toBe('ask')
+    expect(d.action === 'ask' && d.step).toBe('confirm_address')
+    expect(d.slots.address).toBe('223 Archer St, Chandler QLD 4154')
+  })
+
+  it('a bare new address carrying a postcode restarts, even with no keyword', () => {
+    const d = advanceRoofing(parked, '223 Archer St, Chandler QLD 4154')
+    expect(d.action).toBe('ask')
+    expect(d.action === 'ask' && d.step).toBe('confirm_address')
+  })
+
+  it('a bare structure pick still serves that structure (no false restart)', () => {
+    const d = advanceRoofing(parked, '2')
+    expect(d.action).toBe('send_saved')
+    expect(d.action === 'send_saved' && d.structureChoices).toEqual([2])
+  })
+
+  it('a multi-pick "2 and 3" still serves both (not read as a new address)', () => {
+    const d = advanceRoofing(parked, '2 and 3')
+    expect(d.action).toBe('send_saved')
+    expect(d.action === 'send_saved' && d.structureChoices).toEqual([2, 3])
+  })
+
+  it('plain yes serves all; plain no re-asks the address', () => {
+    expect(advanceRoofing(parked, 'yes').action).toBe('send_saved')
+    const no = advanceRoofing(parked, 'no')
+    expect(no.action).toBe('ask')
+    expect(no.action === 'ask' && no.step).toBe('address')
   })
 })
