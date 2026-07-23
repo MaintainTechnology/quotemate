@@ -1,0 +1,52 @@
+# CI — a MONITOR, not a gate.
+#
+# Sessions push straight to main here (no PR, by design), and Vercel deploys
+# main automatically. This workflow exists to answer one question fast: did the
+# commit that just shipped actually build?
+#
+# It checks out the PUSHED COMMIT on a clean runner, which is the only place
+# that catches a partial commit — e.g. a commit containing a file that imports
+# a module the same commit forgot to include. A local pre-push hook cannot see
+# that, because the developer's working tree still has both files.
+#
+# Nothing here blocks a push or requires an approval.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # There is no package.json at the repo root — the app is this subdir.
+        working-directory: quotemate-automation
+    steps:
+      - uses: actions/checkout@v4
+
+      # package_json_file is REQUIRED: action-setup reads `packageManager`
+      # (pnpm@10.33.2) from package.json, and the repo root has none.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: quotemate-automation/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20 # matches Dockerfile `FROM node:20-alpine`
+          cache: pnpm
+          cache-dependency-path: quotemate-automation/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      # `pnpm test` (not bare `vitest run`) — the script sets
+      # --testTimeout=20000; vitest's 5s default invents phantom timeouts.
+      - run: pnpm test
