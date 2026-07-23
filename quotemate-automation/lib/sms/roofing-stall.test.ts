@@ -593,3 +593,33 @@ describe('confirm_roof — fresh enquiry restarts, picks still serve', () => {
     expect(advanceRoofing(parked, 'yes it was built in 1990').action).toBe('send_saved')
   })
 })
+
+// Live 2026-07-24 (Atomic): after a 670 London Rd quote, the customer sent
+// "Ok can you price 652 London Rd Chandler QLD 4155" — a DIFFERENT property.
+// looksLikeRoofingEnquiry is false ("price", no roof keyword), so the warm
+// 'quoted' thread passed it to the general LLM, which faked "pulling up the
+// property details" and never measured 652; the customer still saw the old
+// 670 buildings. A new address must reopen the roofing gather, same as the
+// confirm_roof restart.
+describe('quoted thread — a new address reopens roofing, not a hollow LLM handoff', () => {
+  const quoted: RoofingConversationState = {
+    slots: {},
+    last_step: 'quoted',
+    pending_quote_token: 't',
+    pending_structure_count: 3,
+    last_served_structures: [1],
+  }
+  it('a new address (street + postcode) reopens the gather for that property', () => {
+    const d = advanceRoofing(quoted, 'Ok can you price 652 London Rd Chandler QLD 4155')
+    expect(d.action).toBe('ask')
+    expect(d.action === 'ask' && d.step).toBe('confirm_address')
+    expect(d.slots.address).toBe('652 London Rd Chandler QLD 4155')
+  })
+  it('a structure follow-up still re-serves the saved measurement', () => {
+    expect(advanceRoofing(quoted, '2 and 3').action).toBe('send_saved')
+  })
+  it('a keyword enquiry still reopens; an unrelated message still passes through', () => {
+    expect(advanceRoofing(quoted, 'can you quote another re-roof').action).toBe('ask')
+    expect(advanceRoofing(quoted, 'how much for 6 downlights?').action).toBe('passthrough')
+  })
+})

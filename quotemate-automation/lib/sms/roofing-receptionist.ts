@@ -267,6 +267,119 @@ export function confirmedIncludedIndices(
   return Array.from({ length: Math.max(0, totalStructures) }, (_, i) => i + 1)
 }
 
+// ── Cross-step intent detection ─────────────────────────────────────
+// The voice agent reasons over the whole conversation every turn; this SMS
+// step-machine used to parse ONLY the current step, so a mid-flow address
+// change / topic switch / question fell through to the miss→inspection
+// fallback (live 2026-07-24: a correction to 999 Archer St while on the
+// intent step escalated to an inspection at the STALE 223 address).
+const STREET_TYPE =
+  /\b(st|street|rd|road|ave|av|avenue|dr|drive|hwy|highway|pde|parade|ln|lane|ct|court|cres|crescent|pl|place|blvd|boulevard|tce|terrace|way|cl|close|circuit|cct|esplanade|esp)\b/
+const ADDRESS_CUE = /\b(address|addr)\b/
+const CORRECTION_CUE =
+  /\b(actually|instead|i meant|i mean|no i|no not|not the|change|changed|wrong|rather|meant to say)\b/
+const TOPIC_SWITCH =
+  /\b(also|as well|aswell|another|different job|forget the|instead of the|while you.?re|whilst you.?re|one more thing)\b/
+const INTERRUPT =
+  /\b(wait|hold on|hang on|one sec|one moment|gimme a|give me a|hold up|stop for a|two secs|two seconds)\b/
+const QUESTION_LEAD =
+  /^\s*(what|why|how|when|where|which|who|did|do|does|can|could|will|would|is|are|have|has)\b/
+// Gather steps that carry a distinct answer (excludes the confirm/profile
+// sub-steps) — the out-of-order fold tests the message against these.
+const OUT_OF_ORDER_STEPS: readonly ('address' | 'intent' | 'material' | 'pitch')[] = [
+  'address',
+  'intent',
+  'material',
+  'pitch',
+]
+// Each out-of-order step's OWN target slot, so a fold is judged on that slot
+// getting a new value (not answerLanded, which is true for address whenever
+// one already exists).
+const STEP_SLOT: Record<'address' | 'intent' | 'material' | 'pitch', keyof RoofingSlots> = {
+  address: 'address',
+  intent: 'intent',
+  material: 'material',
+  pitch: 'pitch',
+}
+
+const normAddr = (a: string | null | undefined) => (a ?? '').toLowerCase().replace(/\W+/g, '')
+
+type CrossStep = { fold: RoofingSlots } | { bail: true } | null
+
+/** PURE — when the current step's answer did NOT land, decide whether the
+ *  message is a cross-step correction / out-of-order answer (fold it) or a
+ *  topic switch / interrupt / question (bail to the general LLM dialog).
+ *  Returns null to fall through to the existing miss→inspection fallback. */
+function crossStepIntent(inbound: string, slots: RoofingSlots, lastStep: RoofingStep): CrossStep {
+  const t = (inbound ?? '').toLowerCase()
+
+  // 1. Address anywhere — high-signal only (a street-type word or the word
+  //    "address"), so "repair 3 tiles" is NOT read as an address.
+  const addr = extractStreetAddress(inbound)
+  if (addr && (STREET_TYPE.test(t) || ADDRESS_CUE.test(t))) {
+    if (!slots.address || normAddr(addr) !== normAddr(slots.address)) {
+      const s: RoofingSlots = { ...slots, address: addr, address_confirmed: false }
+      const pc = parsePostcode(inbound)
+      if (pc) s.postcode = pc
+      const st = parseAuState(inbound)
+      if (st) s.state = st
+      delete s.misses
+      return { fold: s }
+    }
+  }
+
+  // 2. A cue-gated correction of a non-address slot. The mappers are loose
+  //    (mapMaterial matches bare "tiles", mapIntent matches "cracked"), so
+  //    a correction word is REQUIRED before trusting them mid-flow.
+  if (CORRECTION_CUE.test(t)) {
+    const m = mapMaterial(inbound)
+    if (m && m !== 'unknown' && m !== slots.material) {
+      const s: RoofingSlots = { ...slots, material: m }
+      delete s.misses
+      delete s.metal_hint
+      return { fold: s }
+    }
+    const intent = mapIntent(inbound)
+    if (intent && intent !== slots.intent) {
+      const s: RoofingSlots = { ...slots, intent }
+      delete s.misses
+      return { fold: s }
+    }
+  }
+
+  // 3. Bail to the general dialog — a topic switch, an interrupt, or a
+  //    question the step parser can't answer. Checked BEFORE the
+  //    out-of-order fold so "also fix a leaking tap" isn't mis-folded as a
+  //    roof leak_trace. A question on the address/confirm_address step is
+  //    NOT a bail — re-reading the address back is the natural answer.
+  const isQuestion = inbound.includes('?') || QUESTION_LEAD.test(t)
+  const questionBail = isQuestion && lastStep !== 'address' && lastStep !== 'confirm_address'
+  if (TOPIC_SWITCH.test(t) || INTERRUPT.test(t) || questionBail) {
+    return { bail: true }
+  }
+
+  // 4. Out-of-order answer — a not-yet-asked field, answered cleanly. Fold
+  //    only when the message fills EXACTLY ONE other step's own slot;
+  //    ambiguous descriptive text ("the tiles are cracked" → material AND
+  //    intent) fills several and is left to the safe fallback. The check is
+  //    "did THIS step's target slot get a NEW value" — not answerLanded,
+  //    which returns true for address whenever an address already exists.
+  const landed: RoofingSlots[] = []
+  for (const step of OUT_OF_ORDER_STEPS) {
+    if (step === lastStep) continue
+    const applied = applyRoofingAnswer(slots, step, inbound)
+    const key = STEP_SLOT[step]
+    if (applied[key] != null && applied[key] !== slots[key]) landed.push(applied)
+  }
+  if (landed.length === 1) {
+    const s = landed[0]
+    delete s.misses
+    return { fold: s }
+  }
+
+  return null
+}
+
 /**
  * PURE — advance the roofing conversation one turn.
  */
@@ -366,9 +479,18 @@ export function advanceRoofing(
     const picks = parseStructureFollowup(inbound, count, prev?.last_served_structures ?? null)
     if (picks === 'all') return { action: 'send_saved', slots, structureChoices: null }
     if (picks && picks.length > 0) return { action: 'send_saved', slots, structureChoices: picks }
-    // Not a structure ask. Only a clear NEW roofing enquiry reopens the
-    // flow; everything else goes back to the general dialog.
-    if (!looksLikeRoofingEnquiry(inbound)) return { action: 'passthrough', slots }
+    // Not a structure ask. A fresh roofing enquiry OR a NEW address (street +
+    // postcode) reopens the flow to quote that property; everything else goes
+    // back to the general dialog. The new-address arm is the fix for live
+    // 2026-07-24: after a 670 London Rd quote the customer sent "Ok can you
+    // price 652 London Rd Chandler QLD 4155" — no roof keyword, so it passed to
+    // the general LLM, which faked "pulling up the property details" and never
+    // measured 652. The postcode requirement keeps a bare follow-up ("6
+    // downlights") from reopening. Same signal as the confirm_roof restart.
+    const newAddress = !!extractStreetAddress(inbound) && !!parsePostcode(inbound)
+    if (!looksLikeRoofingEnquiry(inbound) && !newAddress) {
+      return { action: 'passthrough', slots }
+    }
     // falls through to the reset below → gather a fresh roofing quote.
   }
 
@@ -384,6 +506,14 @@ export function advanceRoofing(
   // (5) Gathering inputs.
   let nextSlots = slots
   if (lastStep && ANSWERABLE_STEPS.has(lastStep)) {
+    // Pre-empt a topic switch / interrupt BEFORE parsing: a loose step
+    // parser would otherwise mis-land it (e.g. "also fix a leaking tap" →
+    // intent 'leak_trace'). These are never an answer to the question we
+    // asked, so hand them to the general LLM dialog. Corrections and
+    // out-of-order answers are handled AFTER the parse (crossStepIntent).
+    if (TOPIC_SWITCH.test(inbound.toLowerCase()) || INTERRUPT.test(inbound.toLowerCase())) {
+      return { action: 'passthrough', slots }
+    }
     nextSlots = applyRoofingAnswer(slots, lastStep, inbound)
 
     if (answerLanded(slots, nextSlots, lastStep)) {
@@ -391,6 +521,16 @@ export function advanceRoofing(
       // steps (one bad material answer must not shorten the pitch budget).
       delete nextSlots.misses
     } else {
+      // The answer didn't fit THIS step. Before the miss fallback, check
+      // whether it's a cross-step correction / out-of-order answer (fold
+      // it and continue) or a topic switch / interrupt / question (bail to
+      // the general LLM dialog). This is what makes the flow adaptive
+      // instead of marching through a rigid script (2026-07-24).
+      const cross = crossStepIntent(inbound, slots, lastStep)
+      if (cross && 'bail' in cross) return { action: 'passthrough', slots }
+      if (cross && 'fold' in cross) {
+        nextSlots = cross.fold
+      } else {
       // NOT understood. Re-asking the identical question forever is how
       // this flow used to dead-end ("iron", "25 degrees", "the brown
       // stuff" all mapped to nothing). Give the customer a bounded number
@@ -421,6 +561,7 @@ export function advanceRoofing(
         if (lastStep === 'address') {
           return { action: 'ask', slots: nextSlots, step: 'address', reply: ADDRESS_RETRY }
         }
+      }
       }
     }
   } else {
