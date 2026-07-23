@@ -4,6 +4,7 @@ import { pipelineLog } from '@/lib/log/pipeline'
 import { generateShareToken } from '@/lib/stripe/checkout'
 import { withRetry } from '@/lib/util/retry'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
+import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
 import { buildQuoteFailureSms } from '@/lib/sms/templates'
 
 export const maxDuration = 300
@@ -197,7 +198,22 @@ export async function POST(req: Request) {
           dispatch.err('cannot send failure SMS — no caller_number on call row', null, { call_id: callRow.id })
         } else {
           const failureBody = buildQuoteFailureSms({})
-          const failureDispatch = await dispatchQuoteMessage({ to: callerNumber, text: failureBody })
+          // From the tenant's own number, not the platform default (live
+          // incident 2026-07-23 — see lib/sms/outbound-from.ts).
+          let tenantSmsNumber: string | null = null
+          if (tenantId) {
+            const { data: t } = await supabase
+              .from('tenants')
+              .select('twilio_sms_number')
+              .eq('id', tenantId)
+              .maybeSingle()
+            tenantSmsNumber = (t?.twilio_sms_number as string | null) ?? null
+          }
+          const failureDispatch = await dispatchQuoteMessage({
+            to: callerNumber,
+            text: failureBody,
+            from: resolveOutboundFromNumber({ tenantSmsNumber, sourceChannel: 'voice' }),
+          })
           if (failureDispatch.ok) {
             dispatch.ok('failure SMS dispatched to caller', {
               channel: failureDispatch.channel,

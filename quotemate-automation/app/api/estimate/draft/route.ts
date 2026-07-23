@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import { runEstimation } from '@/lib/estimate/run'
 import { sanitizeInspectionReason } from '@/lib/estimate/inspection-reason'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
+import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
@@ -861,12 +862,14 @@ export async function POST(req: Request) {
         //     same conversation, from the same `04xx` they texted).
         //   • Legacy SMS quote (no tenant_id, pre-v6) → fall back to
         //     TWILIO_SMS_NUMBER env so the pilot pipeline still works.
-        //   • Voice-sourced quote → fall through to dispatchQuoteMessage's
-        //     default (TWILIO_PHONE_NUMBER, the voice line) — preserves
-        //     prior voice-path behaviour exactly.
-        const fromNumber = isSmsSource
-          ? (tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER)
-          : undefined
+        //   • Voice-sourced quote WITH a tenant → the tenant's own number
+        //     (live incident 2026-07-23: callers rang the tenant's line and
+        //     got the quote from the platform env number). Legacy tenant-less
+        //     voice falls through to dispatchQuoteMessage's default.
+        const fromNumber = resolveOutboundFromNumber({
+          tenantSmsNumber,
+          sourceChannel: isSmsSource ? 'sms' : 'voice',
+        })
         if (isSmsSource && !fromNumber) {
           dispatch.err('customer SMS — no tenant FROM number and TWILIO_SMS_NUMBER unset (send may use wrong line)', null, {
             quote_id: quote!.id,

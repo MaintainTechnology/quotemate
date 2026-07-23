@@ -8,6 +8,7 @@ import { reconcileJobType } from '@/lib/intake/job-type-reconcile'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { withRetry } from '@/lib/util/retry'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
+import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
 import { buildIncompleteCallSms, buildIntakeRecoverySms, buildPhotoRequestSms, buildQuoteFailureSms, type MissingIntakeField } from '@/lib/sms/templates'
 import { findOrCreateCustomer, updateCustomerFromIntake } from '@/lib/customers/lookup'
 import {
@@ -655,14 +656,13 @@ export async function POST(req: Request) {
           : buildIncompleteCallSms({ firstName: callerFirstName, source: sourceChannel })
 
         // v6 multi-tenant: send the recovery SMS from the same tenant
-        // number the customer texted, NOT the shared dev TWILIO_SMS_NUMBER.
-        // Without this the customer sees two different senders in their
-        // SMS thread (the dialog from Number A, the recovery prompt from
-        // Number B), which breaks the illusion of a single conversation
-        // with the tradie. Lazy-load the tenant row only when we know
-        // we're going to dispatch.
+        // number the customer texted OR CALLED, not a platform env number.
+        // Without this the customer sees two different senders (live
+        // incident 2026-07-23: voice caller got the incomplete-call SMS
+        // from the env-default line). Lazy-load the tenant row only when
+        // we know we're going to dispatch.
         let tenantSmsNumber: string | null = null
-        if (sourceChannel === 'sms' && tenantId) {
+        if (tenantId) {
           const { data: t } = await supabase
             .from('tenants')
             .select('twilio_sms_number')
@@ -670,10 +670,7 @@ export async function POST(req: Request) {
             .maybeSingle()
           tenantSmsNumber = (t?.twilio_sms_number as string | null) ?? null
         }
-        const fromNumber =
-          sourceChannel === 'sms'
-            ? (tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER)
-            : undefined
+        const fromNumber = resolveOutboundFromNumber({ tenantSmsNumber, sourceChannel })
         const result = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber })
         if (result.ok) {
           ds.ok('recovery SMS sent', { channel: result.channel, sid: result.sid, missing })
@@ -741,6 +738,22 @@ export async function POST(req: Request) {
   // run in after() so the response goes back to the caller (webhook)
   // immediately and the work survives the function lifetime.
   after(async () => {
+    // Tenant's own number for every send in this block (live incident
+    // 2026-07-23: voice-path sends defaulted to the platform env number).
+    let blockTenantSmsNumber: string | null = null
+    if (tenantId) {
+      const { data: t } = await supabase
+        .from('tenants')
+        .select('twilio_sms_number')
+        .eq('id', tenantId)
+        .maybeSingle()
+      blockTenantSmsNumber = (t?.twilio_sms_number as string | null) ?? null
+    }
+    const blockFromNumber = resolveOutboundFromNumber({
+      tenantSmsNumber: blockTenantSmsNumber,
+      sourceChannel,
+    })
+
     // Photo-request SMS only fires on the voice path. The SMS path has the
     // customer already in a text thread; a separate photo-request SMS would
     // be duplicative. (Phase 4 adds inbound MMS so customers can attach
@@ -758,7 +771,7 @@ export async function POST(req: Request) {
         try {
           const uploadUrl = `${process.env.APP_URL}/upload/${photoRequestToken}`
           const text = buildPhotoRequestSms({ firstName: callerFirstName, uploadUrl, source: 'voice' })
-          const result = await dispatchQuoteMessage({ to: callerNumber, text })
+          const result = await dispatchQuoteMessage({ to: callerNumber, text, from: blockFromNumber })
           if (result.ok) {
             photoLog.ok('photo-request SMS sent', { channel: result.channel, sid: result.sid })
           } else {
@@ -814,7 +827,7 @@ export async function POST(req: Request) {
           dispatch.err('cannot send failure SMS — no caller_number / from_number', null, { intake_id: intakeRow.id })
         } else {
           const failureBody = buildQuoteFailureSms({ firstName: callerFirstName })
-          const failureDispatch = await dispatchQuoteMessage({ to: callerNumber, text: failureBody })
+          const failureDispatch = await dispatchQuoteMessage({ to: callerNumber, text: failureBody, from: blockFromNumber })
           if (failureDispatch.ok) {
             dispatch.ok('failure SMS dispatched', {
               channel: failureDispatch.channel,
