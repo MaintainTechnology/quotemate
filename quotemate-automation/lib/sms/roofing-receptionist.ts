@@ -295,6 +295,7 @@ export function advanceRoofing(
   }
 
   // (3) Confirmation: replying to "is this your roof?".
+  let restartFromConfirm = false
   if (rawLastStep === 'confirm_roof') {
     const count = prev?.pending_structure_count ?? 1
     if (isNegative(inbound)) {
@@ -307,30 +308,53 @@ export function advanceRoofing(
       }
       return { action: 'ask', slots: reset, step: 'address', reply: WRONG_BUILDING_REPROMPT }
     }
-    // MULTI-pick first, but ONLY when it names ≥2 structures: "2 and 3"
-    // must serve both. The single-pick parser's digit regex grabs the
-    // FIRST number, so running it first silently narrowed "2 and 3" to
-    // structure 2 — the customer read the price as covering two buildings
-    // (money bug, same class as the 2026-07-22 included_indices fix; the
-    // warm 'quoted' step below already parsed multi-picks correctly).
-    // Single-result parses still fall through to parseStructureChoice,
-    // which alone knows "secondary structure 1" means ENTRY 2.
-    const multi = parseStructureFollowup(inbound, count)
-    if (count > 1 && Array.isArray(multi) && multi.length > 1) {
-      return { action: 'send_saved', slots, structureChoices: multi }
+    // A CLEAR new address (street number + postcode) means the customer moved
+    // to a DIFFERENT property — restart the gather instead of replaying "is
+    // this your roof?" for the old measurement. Live 2026-07-24: a confirm_roof
+    // reused from a previous session replayed its "3 buildings at 670 London
+    // Road" list on a brand-new address. Checked BEFORE the pick parser so
+    // "2 Smith St … 2026" isn't misread as structure 2; the postcode
+    // requirement keeps a multi-pick ("2 and 3") and an affirmation with a
+    // stray number ("yes, built 1990") OUT of the restart. After isNegative so
+    // a plain "no" still re-asks.
+    const newAddress = !!extractStreetAddress(inbound) && !!parsePostcode(inbound)
+    if (newAddress) {
+      restartFromConfirm = true
+    } else {
+      // MULTI-pick first, but ONLY when it names ≥2 structures: "2 and 3"
+      // must serve both. The single-pick parser's digit regex grabs the
+      // FIRST number, so running it first silently narrowed "2 and 3" to
+      // structure 2 — the customer read the price as covering two buildings
+      // (money bug, same class as the 2026-07-22 included_indices fix; the
+      // warm 'quoted' step below already parsed multi-picks correctly).
+      // Single-result parses still fall through to parseStructureChoice,
+      // which alone knows "secondary structure 1" means ENTRY 2.
+      const multi = parseStructureFollowup(inbound, count)
+      if (count > 1 && Array.isArray(multi) && multi.length > 1) {
+        return { action: 'send_saved', slots, structureChoices: multi }
+      }
+      const choice = parseStructureChoice(inbound, count)
+      if (choice != null && count > 1) {
+        return { action: 'send_saved', slots, structureChoices: [choice] }
+      }
+      // The confirm prompt offers "all" (and the page says so) — accept it.
+      if (count > 1 && multi === 'all') {
+        return { action: 'send_saved', slots, structureChoices: null }
+      }
+      // An affirmation WINS over a roofing keyword: "yeah do the re-roof" is a
+      // YES, not a request to start over — serve the saved measurement.
+      if (isAffirmative(inbound)) {
+        return { action: 'send_saved', slots, structureChoices: null }
+      }
+      // Only now, once yes / picks have had their say, does a fresh roofing
+      // enquiry with no postcode ("quote a new roof at 5 Green St") restart —
+      // a keyword the confirm step would otherwise replay over.
+      if (looksLikeRoofingEnquiry(inbound)) {
+        restartFromConfirm = true
+      } else {
+        return { action: 'reconfirm', slots }
+      }
     }
-    const choice = parseStructureChoice(inbound, count)
-    if (choice != null && count > 1) {
-      return { action: 'send_saved', slots, structureChoices: [choice] }
-    }
-    // The confirm prompt offers "all" (and the page says so) — accept it.
-    if (count > 1 && multi === 'all') {
-      return { action: 'send_saved', slots, structureChoices: null }
-    }
-    if (isAffirmative(inbound)) {
-      return { action: 'send_saved', slots, structureChoices: null }
-    }
-    return { action: 'reconfirm', slots }
   }
 
   // (3.5) Warm 'quoted' thread — a quote was already sent. A structure
@@ -348,9 +372,11 @@ export function advanceRoofing(
     // falls through to the reset below → gather a fresh roofing quote.
   }
 
-  // (4) Closed/quoted flow — a fresh enquiry restarts from scratch.
+  // (4) Closed/quoted flow — a fresh enquiry restarts from scratch. A
+  // confirm_roof the customer abandoned for a new property (restartFromConfirm)
+  // resets here too, then falls into the opener-harvest below.
   let lastStep: RoofingStep | null = rawLastStep
-  if (rawLastStep === 'closed' || rawLastStep === 'quoted') {
+  if (rawLastStep === 'closed' || rawLastStep === 'quoted' || restartFromConfirm) {
     slots = {}
     lastStep = null
   }
@@ -485,6 +511,47 @@ export function nextRoofingConversationState(
     case 'cancel':
     case 'booking':
       return { slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }
+  }
+}
+
+/** Idle beyond this and a parked roofing flow is stale. The route reuses a
+ *  conversation for up to REUSE_OPEN_WINDOW_MS (4h); expiring the roofing flow
+ *  at 1h means a customer who walked away starts fresh next time instead of
+ *  resuming a measurement from a PREVIOUS session. Live 2026-07-24: a
+ *  confirm_roof reused hours later replayed "3 buildings at 670 London Road"
+ *  on the next "Hi Mate", then again on a new address, then on "Hey". */
+export const ROOFING_STALE_IDLE_MS = 60 * 60 * 1000
+
+/** ONLY these steps REPLAY a saved measurement on resume, so ONLY these go
+ *  stale: confirm_roof re-sends "is this your roof? N buildings…", and the
+ *  warm 'quoted' thread re-serves the saved quote on a structure follow-up.
+ *  await_booking / await_form / mid-gather do NOT replay — resuming them is
+ *  correct, and expiring await_booking would DROP a genuine late "yes book
+ *  it" (no booking, no tradie notify), undoing the 2026-07-23 lead-safety
+ *  hardening. So they are deliberately excluded. */
+const ROOFING_STALE_REPLAY_STEPS: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
+  'confirm_roof',
+  'quoted',
+])
+
+/** PURE — a roofing flow parked on a stale-replay step (confirm_roof / quoted)
+ *  and idle for longer than ROOFING_STALE_IDLE_MS is stale: return the closed
+ *  state to persist (so the route handles the new message fresh), or null when
+ *  there's nothing to expire (a non-replay step, closed/empty, or still within
+ *  the window). `idleMs` is the age of the conversation's last activity,
+ *  supplied by the route. Mirrors closeStaleRoofingState's closed shape. */
+export function expireIdleRoofingState(
+  prev: RoofingConversationState | null | undefined,
+  idleMs: number,
+): RoofingConversationState | null {
+  const step = prev?.last_step ?? null
+  if (!step || !ROOFING_STALE_REPLAY_STEPS.has(step)) return null
+  if (idleMs < ROOFING_STALE_IDLE_MS) return null
+  return {
+    slots: {},
+    last_step: 'closed',
+    pending_quote_token: null,
+    pending_structure_count: null,
   }
 }
 

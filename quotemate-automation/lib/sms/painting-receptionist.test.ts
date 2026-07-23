@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   advancePainting,
   customerWantsForm,
+  expireIdlePaintingState,
   isActivePaintingFlow,
   nextPaintingConversationState,
   shouldEngagePainting,
@@ -158,6 +159,39 @@ describe('isActivePaintingFlow', () => {
     expect(isActivePaintingFlow({ slots: {}, last_step: 'scopes' })).toBe(true)
     expect(isActivePaintingFlow({ slots: {}, last_step: 'closed' })).toBe(false)
     expect(isActivePaintingFlow({ slots: {}, last_step: null })).toBe(false)
+  })
+})
+
+// Same idle-session incident as roofing (live 2026-07-24): a painting flow
+// parked at await_form / quoted / await_booking and reused hours later must be
+// treated as stale, not resumed. Mirrors expireIdleRoofingState.
+describe('expireIdlePaintingState — a parked flow left idle is stale', () => {
+  const HOUR = 60 * 60 * 1000
+  // Only the warm 'quoted' thread re-serves on resume, so only it goes stale.
+  it('closes the warm quoted thread idle beyond the threshold', () => {
+    const expired = expireIdlePaintingState(
+      { slots: { address: 'x' }, last_step: 'quoted', pending_form_token: 'f', pending_quote_token: 'q' },
+      3 * HOUR,
+    )
+    expect(expired).not.toBeNull()
+    expect(expired!.last_step).toBe('closed')
+    expect(expired!.pending_form_token ?? null).toBeNull()
+    expect(expired!.pending_quote_token ?? null).toBeNull()
+  })
+  // await_form (customer filling the self-serve form), await_booking (awaiting
+  // "yes book it") and mid-gather must survive idle — a late reply still lands.
+  it('does NOT expire await_form / await_booking / mid-gather', () => {
+    for (const step of ['await_form', 'await_booking', 'scopes'] as const) {
+      expect(
+        expireIdlePaintingState({ slots: { address: 'x' }, last_step: step }, 3 * HOUR),
+        step,
+      ).toBeNull()
+    }
+  })
+  it('leaves a still-fresh flow untouched, and nothing to do on closed/absent', () => {
+    expect(expireIdlePaintingState({ slots: {}, last_step: 'quoted' }, 5 * 60 * 1000)).toBeNull()
+    expect(expireIdlePaintingState(null, 10 * HOUR)).toBeNull()
+    expect(expireIdlePaintingState({ slots: {}, last_step: 'closed' }, 10 * HOUR)).toBeNull()
   })
 })
 
