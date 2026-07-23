@@ -198,22 +198,7 @@ export async function POST(
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
 
-  // ─── Pricing context for GST handling + grounding revalidation ─
-  // H-2 — we need the full pricing book (not just gst_registered) so
-  // the grounding validator can re-check tradie hand-edits against
-  // the same hourly_rate / call_out_minimum / markup / min-labour
-  // floor that the original draft was graded on.
-  const { data: pricingBook } = await supabase
-    .from('pricing_book')
-    .select(
-      'gst_registered, trade, hourly_rate, apprentice_rate, senior_rate, call_out_minimum, default_markup_pct, min_labour_hours, after_hours_multiplier, quote_display, quote_tier_mode',
-    )
-    .eq('tenant_id', quote.tenant_id)
-    .limit(1)
-    .maybeSingle()
-  const gstRegistered = (pricingBook?.gst_registered ?? true) as boolean
-
-  // ─── Intake context for Stripe product naming + grounding scope ─
+  // ─── Intake context FIRST — its trade scopes the pricing read below ─
   // H-2 — pull intake.trade so candidates can be trade-scoped exactly
   // like the original draft (electrical quotes don't validate against
   // plumbing rows and vice versa).
@@ -222,6 +207,29 @@ export async function POST(
     .select('job_type, scope, caller, trade, customer_id, call_id')
     .eq('id', quote.intake_id)
     .maybeSingle()
+
+  // ─── Pricing context for GST handling + grounding revalidation ─
+  // H-2 — we need the full pricing book (not just gst_registered) so
+  // the grounding validator can re-check tradie hand-edits against
+  // the same hourly_rate / call_out_minimum / markup / min-labour
+  // floor that the original draft was graded on.
+  //
+  // Scoped to the QUOTE'S trade (audit 2026-07-23): an unscoped
+  // .eq('tenant_id').limit(1) handed a multi-trade tenant whichever row
+  // Postgres returned first, so an electrical hand-edit could be GST'd
+  // and grounded against the plumbing book. The draft route and the
+  // customer page are already trade-scoped — this read must match them.
+  // Legacy intakes with no trade keep the old tenant-wide read.
+  let pricingBookQuery = supabase
+    .from('pricing_book')
+    .select(
+      'gst_registered, trade, hourly_rate, apprentice_rate, senior_rate, call_out_minimum, default_markup_pct, min_labour_hours, after_hours_multiplier, quote_display, quote_tier_mode',
+    )
+    .eq('tenant_id', quote.tenant_id)
+  const intakeTrade = (intake?.trade as string | null | undefined) ?? null
+  if (intakeTrade) pricingBookQuery = pricingBookQuery.eq('trade', intakeTrade)
+  const { data: pricingBook } = await pricingBookQuery.limit(1).maybeSingle()
+  const gstRegistered = (pricingBook?.gst_registered ?? true) as boolean
 
   // Per-trade grounding posture: catalogue trades (electrical/plumbing) are
   // gated by the grounding validator; tradie-authored trades (solar/roof/paint)

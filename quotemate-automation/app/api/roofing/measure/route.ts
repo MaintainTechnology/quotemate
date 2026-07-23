@@ -11,7 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import { MeasureRequestSchema } from '@/lib/roofing/request-schema'
 import { measureAndPriceRoof } from '@/lib/roofing/measure'
 import { MockRoofingProvider } from '@/lib/roofing/providers/mock'
-import { effectiveRateCardFromOverlay } from '@/lib/roofing/rate-card-overlay'
+import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
@@ -38,27 +38,6 @@ async function userAndTenantFromBearer(
   }
 }
 
-/** Best-effort — fetch the per-tenant roofing rate-card overlay from
- *  pricing_book.overlays.roofing_rate_card. Returns null on any miss so
- *  the caller falls back to DEFAULT_ROOFING_RATE_CARD. */
-async function loadRoofingOverlay(
-  tenantId: string,
-  primaryTrade: string | null,
-): Promise<unknown> {
-  try {
-    let q = supabase
-      .from('pricing_book')
-      .select('overlays')
-      .eq('tenant_id', tenantId)
-    if (primaryTrade) q = q.eq('trade', primaryTrade)
-    const { data } = await q.limit(1).maybeSingle()
-    const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
-    return overlays?.roofing_rate_card ?? null
-  } catch {
-    return null
-  }
-}
-
 export async function POST(req: Request) {
   const auth = await userAndTenantFromBearer(req)
   if (!auth) {
@@ -82,17 +61,12 @@ export async function POST(req: Request) {
 
   const { address, inputs, use_mock_provider } = parsed.data
 
-  // Phase 1 rate-card override — load the per-tenant overlay from
-  // pricing_book.overlays.roofing_rate_card and merge it onto the
-  // DEFAULT_ROOFING_RATE_CARD. Forward-only: this rate is used for the
-  // current measurement only; existing quotes are not re-priced.
-  let rateCard
-  if (auth.tenantId) {
-    const overlayJson = await loadRoofingOverlay(auth.tenantId, auth.primaryTrade)
-    if (overlayJson != null) {
-      rateCard = effectiveRateCardFromOverlay(overlayJson)
-    }
-  }
+  // Per-tenant rate card via the ONE shared loader (lib/roofing/solar-detect)
+  // — every surface (this route, measure-all, save, the /m reprice, the SMS
+  // receptionist) must resolve the SAME card for the same tenant. Local
+  // copies of this lookup are how the /m path drifted onto default rates.
+  // Forward-only: existing quotes are not re-priced.
+  const rateCard = await loadRoofingRateCard(supabase, auth.tenantId, auth.primaryTrade)
 
   const result = await measureAndPriceRoof(address, inputs, {
     provider: use_mock_provider ? new MockRoofingProvider() : undefined,

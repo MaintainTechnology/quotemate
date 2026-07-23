@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { MeasureAllRequestSchema } from '@/lib/roofing/request-schema'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { MockRoofingProvider } from '@/lib/roofing/providers/mock'
-import { effectiveRateCardFromOverlay } from '@/lib/roofing/rate-card-overlay'
+import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
@@ -33,21 +33,6 @@ async function userAndTenantFromBearer(
     userId: resolved.identity.userId,
     tenantId: tenant?.id ?? null,
     primaryTrade: tenant?.trade ?? null,
-  }
-}
-
-async function loadRoofingOverlay(
-  tenantId: string,
-  primaryTrade: string | null,
-): Promise<unknown> {
-  try {
-    let q = supabase.from('pricing_book').select('overlays').eq('tenant_id', tenantId)
-    if (primaryTrade) q = q.eq('trade', primaryTrade)
-    const { data } = await q.limit(1).maybeSingle()
-    const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
-    return overlays?.roofing_rate_card ?? null
-  } catch {
-    return null
   }
 }
 
@@ -74,13 +59,9 @@ export async function POST(req: Request) {
 
   const { address, inputs, perBuilding, perBuildingEdges, use_mock_provider } = parsed.data
 
-  let rateCard
-  if (auth.tenantId) {
-    const overlayJson = await loadRoofingOverlay(auth.tenantId, auth.primaryTrade)
-    if (overlayJson != null) {
-      rateCard = effectiveRateCardFromOverlay(overlayJson)
-    }
-  }
+  // Shared loader — same card resolution as measure/save//m/SMS, so every
+  // surface prices the same tenant identically.
+  const rateCard = await loadRoofingRateCard(supabase, auth.tenantId, auth.primaryTrade)
 
   const result = await measureAndPriceRoofs(address, inputs, {
     provider: use_mock_provider ? new MockRoofingProvider() : undefined,

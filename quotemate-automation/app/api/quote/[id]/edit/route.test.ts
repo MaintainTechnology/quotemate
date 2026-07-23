@@ -26,6 +26,9 @@ const state: {
   quote: Row
   tenant: Row
   pricingBook: Row
+  /** Multi-row pricing_book fixture — when set, the mock honours an
+   *  eq('trade', …) filter and returns the FIRST row when unfiltered. */
+  pricingBooks?: Row[]
   intake: Row
   updErr: unknown
 } = {
@@ -67,11 +70,27 @@ vi.mock('@supabase/supabase-js', () => ({
                 ? state.intake
                 : null
       const builder: Record<string, unknown> = {}
+      const filters: Record<string, unknown> = {}
       const chain = () => builder
       builder.select = chain
-      builder.eq = chain
+      builder.eq = (col: string, val: unknown) => {
+        filters[col] = val
+        return builder
+      }
       builder.limit = chain
-      builder.maybeSingle = async () => ({ data })
+      builder.maybeSingle = async () => {
+        // Multi-row pricing_book emulation: when state.pricingBooks is set,
+        // honour an eq('trade', …) filter and otherwise return the FIRST
+        // row — the same arbitrary-row behaviour a live unscoped limit(1)
+        // has for a multi-trade tenant.
+        if (table === 'pricing_book' && Array.isArray(state.pricingBooks)) {
+          const rows = state.pricingBooks.filter(
+            (r) => filters.trade === undefined || (r as { trade?: unknown }).trade === filters.trade,
+          )
+          return { data: rows[0] ?? null }
+        }
+        return { data }
+      }
       builder.update = (body: Record<string, unknown>) => {
         if (table === 'quotes') captured.quotesUpdate = body
         return { eq: async () => ({ error: state.updErr }) }
@@ -179,7 +198,34 @@ beforeEach(() => {
   state.tenant = { id: 't1', owner_user_id: 'owner-1' }
   // Roofing is a tradie-authored trade → no catalogue, sparse book is fine.
   state.pricingBook = { trade: 'roofing', gst_registered: true }
+  state.pricingBooks = undefined
   state.intake = { trade: 'roofing', job_type: 'reroof', caller: null, scope: null }
+})
+
+describe('POST /api/quote/[id]/edit — pricing book is scoped to the quote trade', () => {
+  it("reads the INTAKE trade's row, not whichever row limit(1) returns first", async () => {
+    // Multi-trade tenant, plumbing row FIRST — live shape (Atomic): an
+    // unscoped .eq('tenant_id').limit(1) read returns the plumbing row, so
+    // this electrical quote's GST recompute and grounding rates came from
+    // the wrong trade's book (audit 2026-07-23). The draft route and the
+    // customer page are trade-scoped; the edit route must match.
+    state.pricingBooks = [
+      { trade: 'plumbing', gst_registered: false, hourly_rate: 120, default_markup_pct: 18 },
+      { trade: 'electrical', gst_registered: true, hourly_rate: 110, default_markup_pct: 30 },
+    ]
+    state.intake = { trade: 'electrical', job_type: 'downlights', caller: null, scope: null }
+
+    const res = await POST(req(EDIT_BODY, 'tok'), params)
+    expect(res.status).toBe(200)
+    expect(captured.quotesUpdate).not.toBeNull()
+
+    // gst_registered comes from the ELECTRICAL row (true) → the persisted
+    // headline total carries GST. The plumbing-first unscoped read (false)
+    // would persist total === subtotal exactly.
+    const better = captured.quotesUpdate!.better as { subtotal_ex_gst: number }
+    const total = captured.quotesUpdate!.total_inc_gst as number
+    expect(total).toBeCloseTo(+(better.subtotal_ex_gst * 1.1).toFixed(2), 2)
+  })
 })
 
 describe('POST /api/quote/[id]/edit — cached PDF invalidation', () => {

@@ -117,6 +117,32 @@ describe('advanceRoofing — confirm_roof gate', () => {
     expect(d.action).toBe('send_saved')
     if (d.action === 'send_saved') expect(d.structureChoices).toEqual([2])
   })
+  // A MULTI-pick at confirm time must serve every named structure. The old
+  // code ran the single-pick parser first, whose regex grabs the FIRST
+  // digit — "2 and 3" quoted structure 2 alone while the customer believed
+  // both were covered (same money class as the 2026-07-22 included_indices
+  // bug, still open at this step; the warm 'quoted' step already handled it).
+  it('"2 and 3" at confirm → send_saved BOTH structures, not just 2', () => {
+    const three: RoofingConversationState = { ...measured, pending_structure_count: 3 }
+    const d = advanceRoofing(three, '2 and 3')
+    expect(d.action).toBe('send_saved')
+    if (d.action === 'send_saved') expect(d.structureChoices).toEqual([2, 3])
+  })
+  it('"buildings 1 and 3 please" → send_saved [1,3]', () => {
+    const three: RoofingConversationState = { ...measured, pending_structure_count: 3 }
+    const d = advanceRoofing(three, 'buildings 1 and 3 please')
+    expect(d.action).toBe('send_saved')
+    if (d.action === 'send_saved') expect(d.structureChoices).toEqual([1, 3])
+  })
+  // Ordering trap: "secondary structure 1" is ENTRY 2 (the list names it
+  // that way). Only the single-pick parser knows that mapping — a naive
+  // multi-first parse would read the digit 1 and serve the main dwelling.
+  it('"secondary structure 1" still maps to entry 2, never entry 1', () => {
+    const three: RoofingConversationState = { ...measured, pending_structure_count: 3 }
+    const d = advanceRoofing(three, 'secondary structure 1')
+    expect(d.action).toBe('send_saved')
+    if (d.action === 'send_saved') expect(d.structureChoices).toEqual([2])
+  })
   it('"all of them" (the prompt offers it) → send_saved all', () => {
     const d = advanceRoofing(measured, 'all of them please')
     expect(d.action).toBe('send_saved')

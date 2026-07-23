@@ -11,7 +11,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { buildStaticMapUrl } from '@/lib/roofing/google-maps'
-import { effectiveRateCardFromOverlay } from '@/lib/roofing/rate-card-overlay'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 import {
   buildSolarDetectPrompt,
@@ -22,7 +21,7 @@ import {
   solarAllowanceConfigFromCard,
   SOLAR_DETECTION_SCHEMA,
 } from '@/lib/roofing/solar'
-import { DEFAULT_ROOFING_RATE_CARD } from '@/lib/roofing/pricing'
+import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
@@ -66,18 +65,6 @@ async function userAndTenantFromBearer(
   }
 }
 
-async function loadRoofingOverlay(tenantId: string, primaryTrade: string | null): Promise<unknown> {
-  try {
-    let q = supabase.from('pricing_book').select('overlays').eq('tenant_id', tenantId)
-    if (primaryTrade) q = q.eq('trade', primaryTrade)
-    const { data } = await q.limit(1).maybeSingle()
-    const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
-    return overlays?.roofing_rate_card ?? null
-  } catch {
-    return null
-  }
-}
-
 export async function POST(req: Request) {
   const auth = await userAndTenantFromBearer(req)
   if (!auth) {
@@ -102,12 +89,9 @@ export async function POST(req: Request) {
   }
   const { address, center, intent, photos } = parsed.data
 
-  // Resolve the tenant's rate card for the (configurable) allowance.
-  let rateCard = DEFAULT_ROOFING_RATE_CARD
-  if (auth.tenantId) {
-    const overlayJson = await loadRoofingOverlay(auth.tenantId, auth.primaryTrade)
-    if (overlayJson != null) rateCard = effectiveRateCardFromOverlay(overlayJson)
-  }
+  // Resolve the tenant's rate card for the (configurable) allowance — via
+  // the ONE shared loader, so this surface can't drift from measure/save/SMS.
+  const rateCard = await loadRoofingRateCard(supabase, auth.tenantId, auth.primaryTrade)
 
   try {
     // 1. Fetch the satellite aerial (same source the measure tool shows).

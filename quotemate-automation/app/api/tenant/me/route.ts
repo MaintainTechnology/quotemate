@@ -805,12 +805,21 @@ export async function PATCH(req: Request) {
   if (updates.quote_tier_mode_by_trade) {
     for (const [trade, mode] of Object.entries(updates.quote_tier_mode_by_trade)) {
       if (!mode) continue
-      const { error } = await supabase
+      const { data: modeRows, error } = await supabase
         .from('pricing_book')
         .update({ quote_tier_mode: mode })
         .eq('tenant_id', tenant.id)
         .eq('trade', trade)
+        .select('id')
       if (error) errors.push(`quote_tier_mode[${trade}]: ${error.message}`)
+      // Audit 2026-07-23 — a trade with NO pricing_book row (cross-trade
+      // tenant, feature trade not yet seeded) matched 0 rows and this
+      // route reported success while persisting nothing. Fail loudly; the
+      // real fix (seeding a row at trade activation) is v9 registry work.
+      else if (!modeRows || modeRows.length === 0)
+        errors.push(
+          `quote_tier_mode[${trade}]: no pricing_book row for this trade — mode not saved`,
+        )
       // RC-2 — the native trade PDFs (roofing / painting) cache on a static
       // storage-path rev that does NOT capture the tier mode, so a mode change
       // would keep serving a Good/Better/Best PDF for a tenant who just switched

@@ -113,12 +113,17 @@ export async function POST(
     .select('id, caller, suburb, job_type, scope, call_id, customer_id, trade')
     .eq('id', quote.intake_id as string)
     .maybeSingle()
-  const { data: pricingBook } = await supabase
+  // Scoped to the QUOTE'S trade (audit 2026-07-23): unscoped limit(1) gave
+  // a multi-trade tenant an arbitrary row, so the approved-send SMS could
+  // present another trade's tier layout / GST wording. Legacy intakes with
+  // no trade keep the tenant-wide read.
+  let pricingBookQuery = supabase
     .from('pricing_book')
     .select('quote_display, gst_registered, quote_tier_mode')
     .eq('tenant_id', quote.tenant_id)
-    .limit(1)
-    .maybeSingle()
+  const approveIntakeTrade = (intake?.trade as string | null | undefined) ?? null
+  if (approveIntakeTrade) pricingBookQuery = pricingBookQuery.eq('trade', approveIntakeTrade)
+  const { data: pricingBook } = await pricingBookQuery.limit(1).maybeSingle()
 
   // Caller phone number — shared 4-source chain (intake.caller.phone →
   // sms_conversations → calls → customers), the same lookup the edit route

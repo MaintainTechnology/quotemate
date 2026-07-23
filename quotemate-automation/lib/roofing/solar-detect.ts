@@ -42,7 +42,21 @@ export const MAX_SOLAR_STRUCTURES = 4
 export type RoofPhoto = { base64: string; mime: string }
 
 /** Read the tenant's roofing rate card (for the allowance config + GST),
- *  falling back to defaults. Best-effort — any miss returns the defaults. */
+ *  falling back to defaults. Best-effort — any miss returns the defaults.
+ *
+ *  The card is per-tenant and trade-agnostic: the writer
+ *  (/api/tenant/roofing-rates PATCH) targets the primary-trade row but
+ *  falls back to ANY pricing_book row when the primary trade has none —
+ *  "it doesn't matter which row holds it". So this reader SEARCHES every
+ *  row rather than addressing one. The old single-row read had two live
+ *  failure modes: primaryTrade=null degenerated to an unordered limit(1)
+ *  (the /m reprice priced Atomic off its card-less plumbing row), and a
+ *  tenant whose primary trade has no row (Sparky: commercial_painting)
+ *  could save rates that were then never read.
+ *
+ *  primaryTrade is a PREFERENCE for the rare multi-card tenant, not an
+ *  address: primary-trade row first, then a 'roofing' row, then the first
+ *  carded row by trade name (deterministic, never row-order-dependent). */
 export async function loadRoofingRateCard(
   supabase: SupabaseClient,
   tenantId: string | null,
@@ -50,12 +64,21 @@ export async function loadRoofingRateCard(
 ): Promise<RoofingRateCard> {
   if (!tenantId) return DEFAULT_ROOFING_RATE_CARD
   try {
-    let q = supabase.from('pricing_book').select('overlays').eq('tenant_id', tenantId)
-    if (primaryTrade) q = q.eq('trade', primaryTrade)
-    const { data } = await q.limit(1).maybeSingle()
-    const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
-    const card = overlays?.roofing_rate_card
-    return card != null ? effectiveRateCardFromOverlay(card) : DEFAULT_ROOFING_RATE_CARD
+    const { data } = await supabase
+      .from('pricing_book')
+      .select('trade, overlays')
+      .eq('tenant_id', tenantId)
+    const rows = (Array.isArray(data) ? data : []) as Array<{
+      trade: string | null
+      overlays: Record<string, unknown> | null
+    }>
+    const carded = rows.filter((r) => r.overlays?.roofing_rate_card != null)
+    if (carded.length === 0) return DEFAULT_ROOFING_RATE_CARD
+    const pick =
+      (primaryTrade ? carded.find((r) => r.trade === primaryTrade) : undefined) ??
+      carded.find((r) => r.trade === 'roofing') ??
+      [...carded].sort((a, b) => String(a.trade).localeCompare(String(b.trade)))[0]
+    return effectiveRateCardFromOverlay(pick.overlays!.roofing_rate_card)
   } catch {
     return DEFAULT_ROOFING_RATE_CARD
   }

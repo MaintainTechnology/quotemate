@@ -300,12 +300,24 @@ export function advanceRoofing(
       }
       return { action: 'ask', slots: reset, step: 'address', reply: WRONG_BUILDING_REPROMPT }
     }
+    // MULTI-pick first, but ONLY when it names ≥2 structures: "2 and 3"
+    // must serve both. The single-pick parser's digit regex grabs the
+    // FIRST number, so running it first silently narrowed "2 and 3" to
+    // structure 2 — the customer read the price as covering two buildings
+    // (money bug, same class as the 2026-07-22 included_indices fix; the
+    // warm 'quoted' step below already parsed multi-picks correctly).
+    // Single-result parses still fall through to parseStructureChoice,
+    // which alone knows "secondary structure 1" means ENTRY 2.
+    const multi = parseStructureFollowup(inbound, count)
+    if (count > 1 && Array.isArray(multi) && multi.length > 1) {
+      return { action: 'send_saved', slots, structureChoices: multi }
+    }
     const choice = parseStructureChoice(inbound, count)
     if (choice != null && count > 1) {
       return { action: 'send_saved', slots, structureChoices: [choice] }
     }
     // The confirm prompt offers "all" (and the page says so) — accept it.
-    if (count > 1 && parseStructureFollowup(inbound, count) === 'all') {
+    if (count > 1 && multi === 'all') {
       return { action: 'send_saved', slots, structureChoices: null }
     }
     if (isAffirmative(inbound)) {
