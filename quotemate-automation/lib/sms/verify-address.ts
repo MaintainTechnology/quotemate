@@ -391,3 +391,85 @@ export async function screenConfirmAddress<S extends AddressSlotsLike>(
     reply: plan.reply,
   }
 }
+
+// ── Auto-run screen (voice) ──────────────────────────────────────────
+//
+// The VOICE path has something SMS never has: the caller already agreed the
+// address out loud, after the receptionist read it back. So it may run the
+// measure/estimate with no text read-back at all — but only when the map
+// agrees with what was heard.
+//
+// This exists because `screenConfirmAddress` cannot answer that question:
+// it returns a `reply` for EVERY successful verification (the read-back
+// wording), so "has a reply" means "verified", not "was corrected". Reading
+// it the other way inverted the gate in the first cut of the voice path —
+// clean matches refused to measure, and only UNVERIFIED addresses did.
+
+export type AutoRunAddressScreen<S> =
+  /** Map agrees (or can't be reached) — safe to run on these slots. */
+  | { kind: 'proceed'; slots: S }
+  /** Google returned a DIFFERENT address — a human must say yes first. */
+  | { kind: 'confirm'; slots: S; reply: string }
+  /** Not on the map (or absent) — ask for it again; never run. */
+  | { kind: 'reject'; slots: S; reply: string }
+
+export async function screenAddressForAutoRun<S extends AddressSlotsLike>(
+  slots: S,
+  opts: VerifyAddressOpts = {},
+): Promise<AutoRunAddressScreen<S>> {
+  const raw = slots.address
+  if (!raw) {
+    return { kind: 'reject', slots, reply: addressNotFoundReply('') }
+  }
+
+  // Keep the verification itself: its `corrected` flag also covers Google
+  // ECHOING an unconfirmed significant component (the live "223 Archer St,
+  // Chandler" case — every typed token survived but the suburb was never
+  // verified). Re-deriving correction from the strings alone would miss
+  // exactly that, and auto-measure the wrong suburb.
+  const verification = await verifyAuAddress(raw, opts)
+  const plan = planConfirmAddress(raw, verification)
+
+  // Verification unavailable — proceed on the caller's own words rather
+  // than dead-ending a lead on a third-party outage. The spoken read-back
+  // is the confirmation in that case.
+  if (plan.kind === 'keep') {
+    return { kind: 'proceed', slots: { ...slots, address_confirmed: true } as S }
+  }
+
+  if (plan.kind === 'reject') {
+    return {
+      kind: 'reject',
+      slots: {
+        ...slots,
+        address: null,
+        postcode: null,
+        state: null,
+        address_confirmed: false,
+        addr_verify_misses: (slots.addr_verify_misses ?? 0) + 1,
+      } as S,
+      reply: plan.reply,
+    }
+  }
+
+  const verified = {
+    ...slots,
+    address: plan.address,
+    postcode: plan.postcode ?? slots.postcode,
+    state: plan.state ?? slots.state,
+    addr_verified: plan.address,
+  } as S
+
+  // Corrected: the map's answer differs from what was heard on the call (or
+  // a significant component came back unconfirmed), so the spoken yes
+  // doesn't cover it — get a text yes on the corrected one.
+  if (verification.outcome === 'match' && verification.corrected) {
+    return {
+      kind: 'confirm',
+      slots: { ...verified, address_confirmed: false } as S,
+      reply: plan.reply,
+    }
+  }
+
+  return { kind: 'proceed', slots: { ...verified, address_confirmed: true } as S }
+}

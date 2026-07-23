@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const generateText = vi.fn()
 const measureAndDispatchRoofing = vi.fn()
 const dispatchQuoteMessage = vi.fn()
+const screenAddressForAutoRun = vi.fn()
 const screenConfirmAddress = vi.fn()
 
 vi.mock('ai', () => ({ generateText: (...a: unknown[]) => generateText(...a) }))
@@ -18,7 +19,13 @@ vi.mock('@ai-sdk/anthropic', () => ({ anthropic: (m: string) => m }))
 vi.mock('@/lib/sms/dispatch', () => ({
   dispatchQuoteMessage: (...a: unknown[]) => dispatchQuoteMessage(...a),
 }))
+// Mocked at the AUTO-RUN screen, whose contract is a tagged union
+// ('proceed' | 'confirm' | 'reject') — not screenConfirmAddress, whose
+// always-present `reply` a previous mock mis-modelled as "no reply on a
+// clean match". That mock hid a shipped inversion; the real contract is
+// pinned in lib/sms/verify-address-autorun.test.ts against a stubbed API.
 vi.mock('@/lib/sms/verify-address', () => ({
+  screenAddressForAutoRun: (...a: unknown[]) => screenAddressForAutoRun(...a),
   screenConfirmAddress: (...a: unknown[]) => screenConfirmAddress(...a),
 }))
 vi.mock('@/lib/sms/roofing-measure-dispatch', () => ({
@@ -79,7 +86,11 @@ const CALL_ANSWERS = {
 
 beforeEach(() => {
   generateText.mockResolvedValue({ text: JSON.stringify(CALL_ANSWERS) })
-  // Clean map-check: no correction, no rejection → safe to measure.
+  // Clean map-check: verified, uncorrected → safe to measure.
+  screenAddressForAutoRun.mockImplementation(async (slots: Record<string, unknown>) => ({
+    kind: 'proceed',
+    slots: { ...slots, address_confirmed: true, addr_verified: slots.address },
+  }))
   screenConfirmAddress.mockImplementation(async (slots: unknown) => ({ slots }))
   dispatchQuoteMessage.mockResolvedValue({ ok: true, sid: 'SM1', channel: 'sms', smsAttempt: {} })
   measureAndDispatchRoofing.mockResolvedValue({
@@ -146,9 +157,9 @@ describe('runVoiceTradeHandover — roofing call with the brief agreed', () => {
   })
 
   it('never measures an address the map check rejected — asks by text instead', async () => {
-    screenConfirmAddress.mockResolvedValue({
+    screenAddressForAutoRun.mockResolvedValue({
+      kind: 'reject',
       slots: { address: null },
-      step: 'address',
       reply: "I couldn't find that address — could you send it again?",
     })
     const recorded: Recorded[] = []

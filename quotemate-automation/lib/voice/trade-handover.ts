@@ -44,7 +44,7 @@ import {
   type PaintingSlots,
 } from '@/lib/sms/painting-intake'
 import type { PaintingConversationState } from '@/lib/sms/painting-receptionist'
-import { screenConfirmAddress } from '@/lib/sms/verify-address'
+import { screenAddressForAutoRun, screenConfirmAddress } from '@/lib/sms/verify-address'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import {
   measureAndDispatchRoofing,
@@ -233,19 +233,20 @@ export async function runVoiceTradeHandover(args: {
     measurePlan = decidePostCallRoofingAction(captured, Boolean(answers.address_confirmed))
     if (measurePlan.action === 'measure') {
       // Map-check before measuring: a misheard suburb must never be
-      // measured. Anything but a clean match (rejected or corrected by
-      // Google) drops back to the SMS read-back — the same safety net the
-      // SMS route applies at confirm_address.
-      const screened = await screenConfirmAddress(measurePlan.slots)
-      if (screened.step || screened.reply) {
+      // measured. Only a clean match auto-runs; a correction (incl. an
+      // unconfirmed suburb) or a not-found drops back to the text read-back.
+      // NB screenConfirmAddress cannot answer this — it returns a reply for
+      // every successful verification, so "has a reply" ≠ "was corrected".
+      const screened = await screenAddressForAutoRun(measurePlan.slots)
+      if (screened.kind === 'proceed') {
+        measurePlan = { ...measurePlan, slots: screened.slots }
+      } else {
         measurePlan = {
           action: 'ask',
-          slots: { ...screened.slots, address_confirmed: false },
-          step: screened.step ?? 'confirm_address',
-          question: screened.reply ?? '',
+          slots: screened.slots,
+          step: screened.kind === 'reject' ? 'address' : 'confirm_address',
+          question: screened.reply,
         }
-      } else {
-        measurePlan = { ...measurePlan, slots: screened.slots }
       }
     }
   }
@@ -256,27 +257,44 @@ export async function runVoiceTradeHandover(args: {
     const captured = mapVoiceAnswersToPaintingSlots(answers)
     paintPlan = decidePostCallPaintingAction(captured, Boolean(answers.address_confirmed))
     if (paintPlan.action === 'estimate') {
-      const screened = await screenConfirmAddress(paintPlan.slots)
-      if (screened.step || screened.reply) {
+      const screened = await screenAddressForAutoRun(paintPlan.slots)
+      if (screened.kind === 'proceed') {
+        paintPlan = { ...paintPlan, slots: screened.slots }
+      } else {
         paintPlan = {
           action: 'ask',
-          slots: { ...screened.slots, address_confirmed: false },
-          step: screened.step ?? 'confirm_address',
-          question: screened.reply ?? '',
+          slots: screened.slots,
+          step: screened.kind === 'reject' ? 'address' : 'confirm_address',
+          question: screened.reply,
         }
-      } else {
-        paintPlan = { ...paintPlan, slots: screened.slots }
       }
     }
   }
 
   const plan = measurePlan ?? paintPlan
-  const opening =
+  let opening =
     plan?.action === 'ask' && plan.question
       ? { state: { slots: plan.slots, last_step: plan.step }, question: plan.question }
       : trade === 'roofing'
         ? buildRoofingHandoverOpening(measurePlan?.slots ?? mapVoiceAnswersToRoofingSlots(answers))
         : buildPaintingHandoverOpening(paintPlan?.slots ?? mapVoiceAnswersToPaintingSlots(answers))
+
+  // A read-back we're about to TEXT must be map-checked too — the same
+  // screen the SMS route runs at confirm_address. Without it a misheard
+  // suburb gets parroted back and a "yes" locks it in. Skipped when the
+  // question already came from screenAddressForAutoRun above (that call
+  // stamps addr_verified, which makes this a no-op anyway).
+  if (opening && opening.state.last_step === 'confirm_address') {
+    const screened = await screenConfirmAddress(opening.state.slots)
+    opening = {
+      state: {
+        ...opening.state,
+        slots: screened.slots,
+        last_step: screened.step ?? opening.state.last_step,
+      },
+      question: screened.reply ?? opening.question,
+    }
+  }
 
   // A measure/estimate/inspection plan needs no opening question — that
   // dispatch (or the reason message) IS the first text.
