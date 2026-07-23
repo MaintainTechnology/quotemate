@@ -231,7 +231,13 @@ export function isActivePaintingFlow(prev: PaintingConversationState | null | un
  *  session the customer walked away from hours ago). */
 export const PAINTING_STALE_IDLE_MS = 60 * 60 * 1000
 
-/** PURE — mirror of expireIdleRoofingState. An active painting flow idle for
+/** Only the warm 'quoted' thread re-serves on resume, so only it goes stale.
+ *  await_form (customer filling the self-serve form — expected to be idle),
+ *  await_booking (awaiting "yes book it") and mid-gather must survive idle so
+ *  a genuine late reply still lands. Mirrors ROOFING_STALE_REPLAY_STEPS. */
+const PAINTING_STALE_REPLAY_STEPS: ReadonlySet<PaintingStep> = new Set<PaintingStep>(['quoted'])
+
+/** PURE — a painting flow parked on a stale-replay step ('quoted') and idle for
  *  longer than PAINTING_STALE_IDLE_MS is stale: return the closed state to
  *  persist, or null when there's nothing to expire. `idleMs` is the age of the
  *  conversation's last activity, supplied by the route. */
@@ -239,7 +245,8 @@ export function expireIdlePaintingState(
   prev: PaintingConversationState | null | undefined,
   idleMs: number,
 ): PaintingConversationState | null {
-  if (!isActivePaintingFlow(prev)) return null
+  const step = prev?.last_step ?? null
+  if (!step || !PAINTING_STALE_REPLAY_STEPS.has(step)) return null
   if (idleMs < PAINTING_STALE_IDLE_MS) return null
   return {
     slots: {},

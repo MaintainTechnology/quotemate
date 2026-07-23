@@ -308,17 +308,17 @@ export function advanceRoofing(
       }
       return { action: 'ask', slots: reset, step: 'address', reply: WRONG_BUILDING_REPROMPT }
     }
-    // A fresh roofing enquiry, or a NEW address (a postcode is present), means
-    // the customer has moved to a DIFFERENT property — restart the gather
-    // instead of replaying "is this your roof?" for the old measurement. Live
-    // 2026-07-24: a confirm_roof reused from a previous session replayed its
-    // "3 buildings at 670 London Road" list on a brand-new address and even
-    // on a bare "Hi". Checked BEFORE the pick parser so a real address like
-    // "223 Archer St ... QLD 4154" can't be misread as a structure number,
-    // and AFTER isNegative so a plain "no" still re-asks the address. A bare
-    // pick ("2", "2 and 3", "the main one") carries no postcode/keyword, so it
-    // still serves the saved measurement below.
-    if (looksLikeRoofingEnquiry(inbound) || parsePostcode(inbound)) {
+    // A CLEAR new address (street number + postcode) means the customer moved
+    // to a DIFFERENT property — restart the gather instead of replaying "is
+    // this your roof?" for the old measurement. Live 2026-07-24: a confirm_roof
+    // reused from a previous session replayed its "3 buildings at 670 London
+    // Road" list on a brand-new address. Checked BEFORE the pick parser so
+    // "2 Smith St … 2026" isn't misread as structure 2; the postcode
+    // requirement keeps a multi-pick ("2 and 3") and an affirmation with a
+    // stray number ("yes, built 1990") OUT of the restart. After isNegative so
+    // a plain "no" still re-asks.
+    const newAddress = !!extractStreetAddress(inbound) && !!parsePostcode(inbound)
+    if (newAddress) {
       restartFromConfirm = true
     } else {
       // MULTI-pick first, but ONLY when it names ≥2 structures: "2 and 3"
@@ -341,10 +341,19 @@ export function advanceRoofing(
       if (count > 1 && multi === 'all') {
         return { action: 'send_saved', slots, structureChoices: null }
       }
+      // An affirmation WINS over a roofing keyword: "yeah do the re-roof" is a
+      // YES, not a request to start over — serve the saved measurement.
       if (isAffirmative(inbound)) {
         return { action: 'send_saved', slots, structureChoices: null }
       }
-      return { action: 'reconfirm', slots }
+      // Only now, once yes / picks have had their say, does a fresh roofing
+      // enquiry with no postcode ("quote a new roof at 5 Green St") restart —
+      // a keyword the confirm step would otherwise replay over.
+      if (looksLikeRoofingEnquiry(inbound)) {
+        restartFromConfirm = true
+      } else {
+        return { action: 'reconfirm', slots }
+      }
     }
   }
 
@@ -513,17 +522,30 @@ export function nextRoofingConversationState(
  *  on the next "Hi Mate", then again on a new address, then on "Hey". */
 export const ROOFING_STALE_IDLE_MS = 60 * 60 * 1000
 
-/** PURE — an active roofing flow idle for longer than ROOFING_STALE_IDLE_MS is
- *  stale: return the closed state to persist (so the route handles the new
- *  message fresh), or null when there's nothing to expire (already
- *  closed/empty, or still within the window). `idleMs` is the age of the
- *  conversation's last activity, supplied by the route. Mirrors
- *  closeStaleRoofingState's closed shape. */
+/** ONLY these steps REPLAY a saved measurement on resume, so ONLY these go
+ *  stale: confirm_roof re-sends "is this your roof? N buildings…", and the
+ *  warm 'quoted' thread re-serves the saved quote on a structure follow-up.
+ *  await_booking / await_form / mid-gather do NOT replay — resuming them is
+ *  correct, and expiring await_booking would DROP a genuine late "yes book
+ *  it" (no booking, no tradie notify), undoing the 2026-07-23 lead-safety
+ *  hardening. So they are deliberately excluded. */
+const ROOFING_STALE_REPLAY_STEPS: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
+  'confirm_roof',
+  'quoted',
+])
+
+/** PURE — a roofing flow parked on a stale-replay step (confirm_roof / quoted)
+ *  and idle for longer than ROOFING_STALE_IDLE_MS is stale: return the closed
+ *  state to persist (so the route handles the new message fresh), or null when
+ *  there's nothing to expire (a non-replay step, closed/empty, or still within
+ *  the window). `idleMs` is the age of the conversation's last activity,
+ *  supplied by the route. Mirrors closeStaleRoofingState's closed shape. */
 export function expireIdleRoofingState(
   prev: RoofingConversationState | null | undefined,
   idleMs: number,
 ): RoofingConversationState | null {
-  if (!isActiveRoofingFlow(prev)) return null
+  const step = prev?.last_step ?? null
+  if (!step || !ROOFING_STALE_REPLAY_STEPS.has(step)) return null
   if (idleMs < ROOFING_STALE_IDLE_MS) return null
   return {
     slots: {},
