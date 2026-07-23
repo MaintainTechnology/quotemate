@@ -215,6 +215,30 @@ describe('advancePainting — cross-step intent (adaptive mid-flow)', () => {
     expect(d.action).not.toBe('passthrough')
     expect(d.action).toBe('ask')
   })
+
+  // B (round-3) — the colour_change parser sets its slot unconditionally, so
+  // the post-parse "changedNothing" bail was dead there: an interrupt at the
+  // final yes/no question committed colour_change=false and fired an estimate.
+  const onColour: PaintingConversationState = {
+    slots: {
+      address: '1 A St', address_confirmed: true, postcode: '4000', state: 'QLD',
+      scopes: ['walls'], coats: 2, condition: 'sound', ceiling_height: 'standard', storeys: 1,
+    },
+    last_step: 'colour_change',
+  }
+  it('B: an interrupt at colour_change bails, does not commit false + estimate', () => {
+    const d = advancePainting(onColour, 'wait, hold on a sec')
+    expect(d.action).toBe('passthrough')
+  })
+  it('B: a topic switch at colour_change bails, does not fire the estimate', () => {
+    const d = advancePainting(onColour, 'also can you paint the fence')
+    expect(d.action).toBe('passthrough')
+  })
+  // A genuine yes/no at colour_change must still land and proceed (regression).
+  it('B-regression: "yes same colour" at colour_change still lands', () => {
+    const d = advancePainting(onColour, 'yes keep it the same')
+    expect(d.action).not.toBe('passthrough')
+  })
 })
 
 describe('advancePainting — re-asks on junk', () => {

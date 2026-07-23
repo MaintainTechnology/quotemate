@@ -225,6 +225,21 @@ describe('advanceRoofing — cross-step intent (adaptive mid-flow)', () => {
     if (d.action === 'ask') expect(d.step).not.toBe('confirm_address')
   })
 
+  // A (round-3) — a terse, cue-less address correction AFTER confirmation
+  // ("no, 12 Smith Street") must still fold, not be silently dropped.
+  it('A: "no, 12 Smith Street Bondi" corrects a confirmed address', () => {
+    const onPitchConfirmed: RoofingConversationState = {
+      slots: { address: '670 London Rd Chandler QLD 4155', address_confirmed: true, intent: 'full_reroof', material: 'colorbond_trimdek' },
+      last_step: 'pitch',
+    }
+    const d = advanceRoofing(onPitchConfirmed, 'no, 12 Smith Street Bondi')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.slots.address).toMatch(/12 Smith Street/i)
+    }
+  })
+
   // REGRESSION — a normal landing answer must NOT trip the cross-step path.
   it('regression: a normal material answer still lands and asks pitch', () => {
     const onMaterial: RoofingConversationState = {

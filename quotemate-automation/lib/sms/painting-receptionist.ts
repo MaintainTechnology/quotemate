@@ -189,10 +189,12 @@ export function advancePainting(
     //    on the ORIGINAL slots so "no it's 22 New Rd" on confirm_address folds
     //    the new address instead of clearing + re-asking.
     const addr = extractStreetAddress(inbound)
-    const correctionCue = X_ADDRESS_CUE.test(t) || X_CORRECTION_CUE.test(t)
-    const addrStrong = before.address_confirmed
-      ? correctionCue
-      : X_STREET_TYPE.test((addr ?? '').toLowerCase()) || correctionCue
+    const streetOnAddr = X_STREET_TYPE.test((addr ?? '').toLowerCase())
+    const cue = X_ADDRESS_CUE.test(t) || X_CORRECTION_CUE.test(t)
+    // Leading negation over a REAL street address is a correction; the
+    // street-signal requirement stops "no way to tell" reading as a street.
+    const negatedAddr = /^\s*(no|nope|nah|not)\b/.test(t) && streetOnAddr
+    const addrStrong = before.address_confirmed ? cue || negatedAddr : streetOnAddr || cue
     if (addr && addrStrong && (!before.address || xNormAddr(addr) !== xNormAddr(before.address))) {
       const s: PaintingSlots = { ...before, address: addr, address_confirmed: false }
       const pc = parsePostcode(inbound)
@@ -202,12 +204,21 @@ export function advancePainting(
       return fromNextStep(s)
     }
 
-    // 2. A question → general LLM dialog BEFORE the parse, so a question
-    //    containing a mappable keyword ("which walls did you mean?") bails
-    //    instead of silently committing it. Not on address/confirm_address,
-    //    where a re-ask IS the right answer.
+    // 2. Bail to the general LLM dialog BEFORE the parse for:
+    //    - a question (a mappable keyword would otherwise be committed);
+    //    - a topic switch / interrupt on any NON-enumerable step. The
+    //      'scopes' step is excluded here because "also"/"as well" are
+    //      idiomatic scope enumerators ("walls, also the doors") — it is
+    //      bailed AFTER the parse instead (step 4). Pre-parsing the other
+    //      steps matters because some parsers (colour_change) commit an
+    //      answer for ANY message, so a post-parse "changedNothing" gate
+    //      would be dead there.
     const isQuestion = inbound.includes('?') || X_QUESTION_LEAD.test(t)
-    if (isQuestion && lastStep !== 'address' && lastStep !== 'confirm_address') {
+    const isSwitch = X_TOPIC_SWITCH.test(t) || X_INTERRUPT.test(t)
+    if (
+      (isQuestion && lastStep !== 'address' && lastStep !== 'confirm_address') ||
+      (isSwitch && lastStep !== 'scopes')
+    ) {
       return { action: 'passthrough', slots: before }
     }
 
@@ -218,14 +229,12 @@ export function advancePainting(
       return { action: 'ask', slots, step: 'address', reply: ADDRESS_RETRY }
     }
 
-    // 4. Only AFTER the parse: a topic switch / interrupt that did NOT land is
-    //    a bail. Post-parse so an idiomatic enumeration that DOES land ("walls
-    //    and ceilings, also the doors") is kept — unlike roofing (single-valued
-    //    steps), painting's scopes step enumerates, so "also"/"as well" are not
-    //    reliable topic-switch signals before the parse.
-    const changedNothing = JSON.stringify(before) === JSON.stringify(slots)
-    if (changedNothing && (X_TOPIC_SWITCH.test(t) || X_INTERRUPT.test(t))) {
-      return { action: 'passthrough', slots: before }
+    // 4. scopes only: a topic switch / interrupt that did NOT land as a scope
+    //    is a bail. Post-parse so an enumeration that DOES land is kept;
+    //    mapScopes returns null on a non-scope, so changedNothing is reliable.
+    if (lastStep === 'scopes' && isSwitch) {
+      const changedNothing = JSON.stringify(before) === JSON.stringify(slots)
+      if (changedNothing) return { action: 'passthrough', slots: before }
     }
   }
 

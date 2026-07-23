@@ -318,10 +318,14 @@ function tryAddressFold(inbound: string, slots: RoofingSlots): RoofingSlots | nu
   // a CONFIRMED address is only re-folded on an EXPLICIT correction cue
   // (ADDRESS_CUE or CORRECTION_CUE); while still gathering, a street signal
   // is enough (an out-of-order / volunteered address).
-  const correctionCue = ADDRESS_CUE.test(t) || CORRECTION_CUE.test(t)
-  const strong = slots.address_confirmed
-    ? correctionCue
-    : STREET_TYPE.test(addr.toLowerCase()) || correctionCue
+  const streetOnAddr = STREET_TYPE.test(addr.toLowerCase())
+  const cue = ADDRESS_CUE.test(t) || CORRECTION_CUE.test(t)
+  // A leading negation over a REAL street address is a correction ("no, 12
+  // Smith Street"), even without the explicit cue words. Requiring the
+  // street signal keeps "no way to tell from 2 photos" ("2 photos" has no
+  // street type) from being read as an address.
+  const negatedAddr = /^\s*(no|nope|nah|not)\b/.test(t) && streetOnAddr
+  const strong = slots.address_confirmed ? cue || negatedAddr : streetOnAddr || cue
   if (!strong) return null
   if (slots.address && normAddr(addr) === normAddr(slots.address)) return null
   const s: RoofingSlots = { ...slots, address: addr, address_confirmed: false }
