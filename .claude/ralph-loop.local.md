@@ -1,10 +1,10 @@
 ---
 active: true
 iteration: 1
-session_id: 0a499f2c-d4d9-448f-98a3-34fe58d66a24
-max_iterations: 20
+session_id: 8207146c-f066-422d-9bb3-807af0824d16
+max_iterations: 0
 completion_promise: "All tests pass"
-started_at: "2026-07-08T08:34:55Z"
+started_at: "2026-07-23T07:17:51Z"
 ---
 
-Implement specs/quote-send-sms-email.md: dashboard quote send via SMS and email with PDF attachment. Each iteration: TDD failing tests first, build to the spec, verify, review against the spec, code-review the diff, fix findings. Gates: npm test and npm run typecheck in quotemate-automation.
+Sync the Vapi voice receptionist with tenant account settings: multi-trade aware per tenants.trades, align system instructions with the SMS receptionist, upgrade assistants to claude-sonnet-5, update all live tradie assistants. TDD throughout, finish with code review.
