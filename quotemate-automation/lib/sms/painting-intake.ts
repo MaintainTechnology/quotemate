@@ -50,6 +50,13 @@ export type PaintingSlots = {
   state?: AuState | null
   /** Customer confirmed the address we read back is correct. */
   address_confirmed?: boolean
+  /** The exact address string that already passed the map check —
+   *  screenConfirmAddress skips re-verifying it. */
+  addr_verified?: string | null
+  /** How many supplied addresses the map couldn't find. Bounded by
+   *  MAX_ADDRESS_VERIFY_REJECTS, then we fall back to the plain
+   *  read-back so an unmapped new estate can still push through. */
+  addr_verify_misses?: number
   /** Which surfaces to paint — at least one once gathered. */
   scopes?: PaintScope[] | null
   coats?: 1 | 2 | 3 | null

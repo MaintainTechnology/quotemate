@@ -19,6 +19,7 @@ import {
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { toRoofingRequest, seedRoofingSlots } from '@/lib/sms/roofing-intake'
+import { screenConfirmAddress } from '@/lib/sms/verify-address'
 import {
   advanceRoofing,
   confirmedIncludedIndices,
@@ -601,8 +602,21 @@ async function handleRoofingTurn(args: {
 
   // ── Still gathering inputs — ask the next question. ──
   if (decision.action === 'ask') {
-    await persist({ slots: decision.slots, last_step: decision.step, pending_quote_token: null, pending_structure_count: null }, 'open')
-    await sendReply(decision.reply)
+    let askSlots = decision.slots
+    let askStep = decision.step
+    let askReply = decision.reply
+    // Map-check the address BEFORE reading it back — the read-back alone
+    // can't catch a suburb that doesn't exist ("safety each"). Corrected
+    // or not-found addresses revise the slots/step/reply; an unavailable
+    // API keeps the plain read-back.
+    if (decision.step === 'confirm_address') {
+      const screened = await screenConfirmAddress(decision.slots)
+      askSlots = screened.slots
+      if (screened.step) askStep = screened.step
+      if (screened.reply) askReply = screened.reply
+    }
+    await persist({ slots: askSlots, last_step: askStep, pending_quote_token: null, pending_structure_count: null }, 'open')
+    await sendReply(askReply)
     return true
   }
 
@@ -982,8 +996,18 @@ async function handlePaintingTurn(args: {
 
   // ── Still gathering inputs — ask the next question (options inlined). ──
   if (decision.action === 'ask') {
-    await persist({ slots: decision.slots, last_step: decision.step }, 'open')
-    await sendReply(decision.reply)
+    let askSlots = decision.slots
+    let askStep = decision.step
+    let askReply = decision.reply
+    // Same map check as the roofing confirm — see screenConfirmAddress.
+    if (decision.step === 'confirm_address') {
+      const screened = await screenConfirmAddress(decision.slots)
+      askSlots = screened.slots
+      if (screened.step) askStep = screened.step
+      if (screened.reply) askReply = screened.reply
+    }
+    await persist({ slots: askSlots, last_step: askStep }, 'open')
+    await sendReply(askReply)
     return true
   }
 
