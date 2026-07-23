@@ -278,25 +278,23 @@ const STREET_TYPE =
 const ADDRESS_CUE = /\b(address|addr)\b/
 const CORRECTION_CUE =
   /\b(actually|instead|i meant|i mean|no i|no not|not the|change|changed|wrong|rather|meant to say)\b/
+// NOTE: "as well" is deliberately excluded — it is idiomatic for enumerating
+// answers ("walls as well as ceilings"), not a topic switch.
 const TOPIC_SWITCH =
-  /\b(also|as well|aswell|another|different job|forget the|instead of the|while you.?re|whilst you.?re|one more thing)\b/
+  /\b(also|another|different job|forget the|instead of the|while you.?re|whilst you.?re|one more thing)\b/
 const INTERRUPT =
   /\b(wait|hold on|hang on|one sec|one moment|gimme a|give me a|hold up|stop for a|two secs|two seconds)\b/
 const QUESTION_LEAD =
   /^\s*(what|why|how|when|where|which|who|did|do|does|can|could|will|would|is|are|have|has)\b/
 // Gather steps that carry a distinct answer (excludes the confirm/profile
 // sub-steps) — the out-of-order fold tests the message against these.
-const OUT_OF_ORDER_STEPS: readonly ('address' | 'intent' | 'material' | 'pitch')[] = [
-  'address',
-  'intent',
-  'material',
-  'pitch',
-]
+// Out-of-order fold considers only these non-address fields (address has its
+// own precision-guarded fold in tryAddressFold; the raw address parser here
+// would read "2 storeys" as an address).
+const OUT_OF_ORDER_STEPS: readonly ('intent' | 'material' | 'pitch')[] = ['intent', 'material', 'pitch']
 // Each out-of-order step's OWN target slot, so a fold is judged on that slot
-// getting a new value (not answerLanded, which is true for address whenever
-// one already exists).
-const STEP_SLOT: Record<'address' | 'intent' | 'material' | 'pitch', keyof RoofingSlots> = {
-  address: 'address',
+// getting a new value.
+const STEP_SLOT: Record<'intent' | 'material' | 'pitch', keyof RoofingSlots> = {
   intent: 'intent',
   material: 'material',
   pitch: 'pitch',
@@ -304,77 +302,97 @@ const STEP_SLOT: Record<'address' | 'intent' | 'material' | 'pitch', keyof Roofi
 
 const normAddr = (a: string | null | undefined) => (a ?? '').toLowerCase().replace(/\W+/g, '')
 
-type CrossStep = { fold: RoofingSlots } | { bail: true } | null
+/** PURE — a clear address ANYWHERE (a correction or an out-of-order answer),
+ *  folded and marked for re-confirmation. High precision: the street-type
+ *  test runs on the EXTRACTED address, not the whole message, so "no way to
+ *  tell from 2 photos" (the word "way" is in the prefix, not the "2 photos"
+ *  match) is NOT read as an address. Returns null when there is no address,
+ *  the signal is weak, or it matches the address we already have. */
+function tryAddressFold(inbound: string, slots: RoofingSlots): RoofingSlots | null {
+  const addr = extractStreetAddress(inbound)
+  if (!addr) return null
+  const t = (inbound ?? '').toLowerCase()
+  // Once the address is confirmed, a bare restatement inside a step answer
+  // ("full reroof at 670 London Rd") is NOT a correction — it would clobber
+  // the confirmed address with a degraded value and drop the real answer. So
+  // a CONFIRMED address is only re-folded on an EXPLICIT correction cue
+  // (ADDRESS_CUE or CORRECTION_CUE); while still gathering, a street signal
+  // is enough (an out-of-order / volunteered address).
+  const correctionCue = ADDRESS_CUE.test(t) || CORRECTION_CUE.test(t)
+  const strong = slots.address_confirmed
+    ? correctionCue
+    : STREET_TYPE.test(addr.toLowerCase()) || correctionCue
+  if (!strong) return null
+  if (slots.address && normAddr(addr) === normAddr(slots.address)) return null
+  const s: RoofingSlots = { ...slots, address: addr, address_confirmed: false }
+  const pc = parsePostcode(inbound)
+  if (pc) s.postcode = pc
+  const st = parseAuState(inbound)
+  if (st) s.state = st
+  delete s.misses
+  return s
+}
 
-/** PURE — when the current step's answer did NOT land, decide whether the
- *  message is a cross-step correction / out-of-order answer (fold it) or a
- *  topic switch / interrupt / question (bail to the general LLM dialog).
- *  Returns null to fall through to the existing miss→inspection fallback. */
-function crossStepIntent(inbound: string, slots: RoofingSlots, lastStep: RoofingStep): CrossStep {
+/** PURE — a topic switch / interrupt / question that the step parser must
+ *  NOT try to answer (a loose mapper would mis-commit "also fix a leaking
+ *  tap" as a roof leak, or "is it colorbond?" as a material). Checked BEFORE
+ *  the parse. A question on the address/confirm_address step is NOT a bail —
+ *  re-reading the address back is the natural answer. */
+function shouldBailToDialog(inbound: string, lastStep: RoofingStep): boolean {
+  const t = (inbound ?? '').toLowerCase()
+  const isQuestion = inbound.includes('?') || QUESTION_LEAD.test(t)
+  const questionBail = isQuestion && lastStep !== 'address' && lastStep !== 'confirm_address'
+  return TOPIC_SWITCH.test(t) || INTERRUPT.test(t) || questionBail
+}
+
+/** PURE — when the current step's answer did NOT land AND it wasn't an
+ *  address / bail, fold a cue-gated correction of a non-address slot or an
+ *  out-of-order answer to a not-yet-filled field. Returns the folded slots
+ *  or null (fall through to the miss→inspection fallback). */
+function crossStepFold(inbound: string, slots: RoofingSlots, lastStep: RoofingStep): RoofingSlots | null {
   const t = (inbound ?? '').toLowerCase()
 
-  // 1. Address anywhere — high-signal only (a street-type word or the word
-  //    "address"), so "repair 3 tiles" is NOT read as an address.
-  const addr = extractStreetAddress(inbound)
-  if (addr && (STREET_TYPE.test(t) || ADDRESS_CUE.test(t))) {
-    if (!slots.address || normAddr(addr) !== normAddr(slots.address)) {
-      const s: RoofingSlots = { ...slots, address: addr, address_confirmed: false }
-      const pc = parsePostcode(inbound)
-      if (pc) s.postcode = pc
-      const st = parseAuState(inbound)
-      if (st) s.state = st
-      delete s.misses
-      return { fold: s }
-    }
-  }
-
-  // 2. A cue-gated correction of a non-address slot. The mappers are loose
-  //    (mapMaterial matches bare "tiles", mapIntent matches "cracked"), so
-  //    a correction word is REQUIRED before trusting them mid-flow.
+  // A cue-gated correction of a non-address slot. The mappers are loose
+  // (mapMaterial matches bare "tiles", mapIntent matches "cracked"), so a
+  // correction word is REQUIRED before trusting them mid-flow.
   if (CORRECTION_CUE.test(t)) {
     const m = mapMaterial(inbound)
     if (m && m !== 'unknown' && m !== slots.material) {
       const s: RoofingSlots = { ...slots, material: m }
       delete s.misses
       delete s.metal_hint
-      return { fold: s }
+      return s
     }
     const intent = mapIntent(inbound)
     if (intent && intent !== slots.intent) {
       const s: RoofingSlots = { ...slots, intent }
       delete s.misses
-      return { fold: s }
+      return s
     }
   }
 
-  // 3. Bail to the general dialog — a topic switch, an interrupt, or a
-  //    question the step parser can't answer. Checked BEFORE the
-  //    out-of-order fold so "also fix a leaking tap" isn't mis-folded as a
-  //    roof leak_trace. A question on the address/confirm_address step is
-  //    NOT a bail — re-reading the address back is the natural answer.
-  const isQuestion = inbound.includes('?') || QUESTION_LEAD.test(t)
-  const questionBail = isQuestion && lastStep !== 'address' && lastStep !== 'confirm_address'
-  if (TOPIC_SWITCH.test(t) || INTERRUPT.test(t) || questionBail) {
-    return { bail: true }
-  }
-
-  // 4. Out-of-order answer — a not-yet-asked field, answered cleanly. Fold
-  //    only when the message fills EXACTLY ONE other step's own slot;
-  //    ambiguous descriptive text ("the tiles are cracked" → material AND
-  //    intent) fills several and is left to the safe fallback. The check is
-  //    "did THIS step's target slot get a NEW value" — not answerLanded,
-  //    which returns true for address whenever an address already exists.
+  // Out-of-order answer — a not-yet-asked, still-EMPTY field, answered
+  // cleanly. Fold only when the message fills EXACTLY ONE other step's own
+  // (currently empty) slot; ambiguous descriptive text ("the tiles are
+  // cracked" → material AND intent) fills several and is left to the safe
+  // fallback. Empty-only so a description at a later step never overwrites
+  // an already-gathered slot (that path is the cue-gated correction above).
+  // Address is deliberately excluded — it is handled by tryAddressFold with
+  // its precision guard; the raw applyRoofingAnswer('address') parser here
+  // would fold "2 storeys" as an address.
   const landed: RoofingSlots[] = []
   for (const step of OUT_OF_ORDER_STEPS) {
     if (step === lastStep) continue
-    const applied = applyRoofingAnswer(slots, step, inbound)
     const key = STEP_SLOT[step]
-    if (applied[key] != null && applied[key] !== slots[key]) landed.push(applied)
+    if (slots[key] != null) continue // empty-only: a set slot is a correction, not out-of-order
+    const applied = applyRoofingAnswer(slots, step, inbound)
+    if (applied[key] != null) landed.push(applied) // slot was empty, now filled
+
   }
   if (landed.length === 1) {
     const s = landed[0]
     delete s.misses
-    return { fold: s }
+    return s
   }
 
   return null
@@ -503,34 +521,34 @@ export function advanceRoofing(
     lastStep = null
   }
 
-  // (5) Gathering inputs.
+  // (5) Gathering inputs. Adaptive, not a rigid script (2026-07-24):
+  //   a. A clear address ANYWHERE wins first — even over an interrupt word
+  //      ("wait, change it to 999 X St") — so a correction is never lost.
+  //   b. A topic switch / interrupt / question then bails to the general LLM
+  //      dialog BEFORE the loose parser can mis-commit it.
+  //   c. Otherwise parse the step; a not-landed answer may still be a
+  //      cue-gated correction or an out-of-order answer (crossStepFold).
   let nextSlots = slots
   if (lastStep && ANSWERABLE_STEPS.has(lastStep)) {
-    // Pre-empt a topic switch / interrupt BEFORE parsing: a loose step
-    // parser would otherwise mis-land it (e.g. "also fix a leaking tap" →
-    // intent 'leak_trace'). These are never an answer to the question we
-    // asked, so hand them to the general LLM dialog. Corrections and
-    // out-of-order answers are handled AFTER the parse (crossStepIntent).
-    if (TOPIC_SWITCH.test(inbound.toLowerCase()) || INTERRUPT.test(inbound.toLowerCase())) {
+    const addrFold = tryAddressFold(inbound, slots)
+    if (addrFold) {
+      nextSlots = addrFold
+    } else if (shouldBailToDialog(inbound, lastStep)) {
       return { action: 'passthrough', slots }
-    }
-    nextSlots = applyRoofingAnswer(slots, lastStep, inbound)
-
-    if (answerLanded(slots, nextSlots, lastStep)) {
-      // Understood — clear the counter so misses never accumulate across
-      // steps (one bad material answer must not shorten the pitch budget).
-      delete nextSlots.misses
     } else {
-      // The answer didn't fit THIS step. Before the miss fallback, check
-      // whether it's a cross-step correction / out-of-order answer (fold
-      // it and continue) or a topic switch / interrupt / question (bail to
-      // the general LLM dialog). This is what makes the flow adaptive
-      // instead of marching through a rigid script (2026-07-24).
-      const cross = crossStepIntent(inbound, slots, lastStep)
-      if (cross && 'bail' in cross) return { action: 'passthrough', slots }
-      if (cross && 'fold' in cross) {
-        nextSlots = cross.fold
+      nextSlots = applyRoofingAnswer(slots, lastStep, inbound)
+
+      if (answerLanded(slots, nextSlots, lastStep)) {
+        // Understood — clear the counter so misses never accumulate across
+        // steps (one bad material answer must not shorten the pitch budget).
+        delete nextSlots.misses
       } else {
+        // The answer didn't fit THIS step and wasn't an address / bail —
+        // it may still be a cue-gated correction or an out-of-order answer.
+        const fold = crossStepFold(inbound, slots, lastStep)
+        if (fold) {
+          nextSlots = fold
+        } else {
       // NOT understood. Re-asking the identical question forever is how
       // this flow used to dead-end ("iron", "25 degrees", "the brown
       // stuff" all mapped to nothing). Give the customer a bounded number
@@ -563,6 +581,7 @@ export function advanceRoofing(
         }
       }
       }
+    }
     }
   } else {
     // ── Harvest the OPENING message ──────────────────────────────────

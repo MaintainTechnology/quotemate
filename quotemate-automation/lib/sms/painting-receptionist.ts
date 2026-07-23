@@ -32,9 +32,13 @@ import {
   isStopRequest,
   looksLikePaintingEnquiry,
   nextPaintingStep,
+  parseAuState,
+  parsePostcode,
   type PaintingSlots,
   type PaintingStep,
 } from './painting-intake'
+// Generic AU-address detector — pure, no roofing coupling (shared helper).
+import { extractStreetAddress } from './roofing-intake'
 
 /** Persisted on sms_conversations.painting_state (jsonb), decoupled from
  *  the electrical/plumbing conversation_state.slots and the roofing_state. */
@@ -169,17 +173,82 @@ export function advancePainting(
     return { action: 'passthrough', slots }
   }
 
-  // (7) Gathering inputs — fold the answer into the step we last asked.
+  // (7) Gathering inputs — adaptive, mirroring the roofing receptionist
+  // (2026-07-24): a clear address anywhere wins first (even over an interrupt
+  // word), then a topic switch / interrupt / question bails to the general
+  // dialog BEFORE a loose parser can mis-commit it, then the step is parsed.
   if (ANSWERABLE_STEPS.has(lastStep)) {
+    const before = slots
+    const t = (inbound ?? '').toLowerCase()
+
+    // 1. A clear address ANYWHERE → confirm the NEW address. The street-type
+    //    test runs on the EXTRACTED address (not the whole message), so "no way
+    //    to tell" isn't a street. Once the address is CONFIRMED, only an
+    //    explicit correction cue re-folds it — a bare restatement in a step
+    //    answer ("walls and ceilings at 22 New Rd") must NOT clobber it. Runs
+    //    on the ORIGINAL slots so "no it's 22 New Rd" on confirm_address folds
+    //    the new address instead of clearing + re-asking.
+    const addr = extractStreetAddress(inbound)
+    const correctionCue = X_ADDRESS_CUE.test(t) || X_CORRECTION_CUE.test(t)
+    const addrStrong = before.address_confirmed
+      ? correctionCue
+      : X_STREET_TYPE.test((addr ?? '').toLowerCase()) || correctionCue
+    if (addr && addrStrong && (!before.address || xNormAddr(addr) !== xNormAddr(before.address))) {
+      const s: PaintingSlots = { ...before, address: addr, address_confirmed: false }
+      const pc = parsePostcode(inbound)
+      if (pc) s.postcode = pc
+      const st = parseAuState(inbound)
+      if (st) s.state = st
+      return fromNextStep(s)
+    }
+
+    // 2. A question → general LLM dialog BEFORE the parse, so a question
+    //    containing a mappable keyword ("which walls did you mean?") bails
+    //    instead of silently committing it. Not on address/confirm_address,
+    //    where a re-ask IS the right answer.
+    const isQuestion = inbound.includes('?') || X_QUESTION_LEAD.test(t)
+    if (isQuestion && lastStep !== 'address' && lastStep !== 'confirm_address') {
+      return { action: 'passthrough', slots: before }
+    }
+
+    // 3. Parse the current step.
     slots = applyPaintingAnswer(slots, lastStep, inbound)
     // An address answer that didn't parse → clarify, don't store junk.
     if (lastStep === 'address' && !slots.address) {
       return { action: 'ask', slots, step: 'address', reply: ADDRESS_RETRY }
     }
+
+    // 4. Only AFTER the parse: a topic switch / interrupt that did NOT land is
+    //    a bail. Post-parse so an idiomatic enumeration that DOES land ("walls
+    //    and ceilings, also the doors") is kept — unlike roofing (single-valued
+    //    steps), painting's scopes step enumerates, so "also"/"as well" are not
+    //    reliable topic-switch signals before the parse.
+    const changedNothing = JSON.stringify(before) === JSON.stringify(slots)
+    if (changedNothing && (X_TOPIC_SWITCH.test(t) || X_INTERRUPT.test(t))) {
+      return { action: 'passthrough', slots: before }
+    }
   }
 
   return fromNextStep(slots)
 }
+
+// Cross-step detectors — twin of the set in lib/sms/roofing-receptionist.ts;
+// duplicated (small, pure regex) to keep each money-path self-contained
+// rather than coupling both to a shared module.
+const X_STREET_TYPE =
+  /\b(st|street|rd|road|ave|av|avenue|dr|drive|hwy|highway|pde|parade|ln|lane|ct|court|cres|crescent|pl|place|blvd|boulevard|tce|terrace|way|cl|close|circuit|cct|esplanade|esp)\b/
+const X_ADDRESS_CUE = /\b(address|addr)\b/
+const X_CORRECTION_CUE =
+  /\b(actually|instead|i meant|i mean|no i|no not|not the|change|changed|wrong|rather|meant to say)\b/
+// "as well" is deliberately excluded — idiomatic for enumerating scopes
+// ("walls as well as ceilings"), not a topic switch.
+const X_TOPIC_SWITCH =
+  /\b(also|another|different job|forget the|instead of the|while you.?re|whilst you.?re|one more thing)\b/
+const X_INTERRUPT =
+  /\b(wait|hold on|hang on|one sec|one moment|gimme a|give me a|hold up|stop for a|two secs|two seconds)\b/
+const X_QUESTION_LEAD =
+  /^\s*(what|why|how|when|where|which|who|did|do|does|can|could|will|would|is|are|have|has)\b/
+const xNormAddr = (a: string | null | undefined) => (a ?? '').toLowerCase().replace(/\W+/g, '')
 
 /**
  * PURE — the painting_state to persist after a turn. The route augments

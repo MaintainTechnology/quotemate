@@ -71,6 +71,185 @@ describe('advanceRoofing — gather then measure', () => {
   })
 })
 
+// ── Cross-step intent: mid-flow corrections, topic switches, questions ──
+// The step machine used to parse ONLY the current step, so a mid-flow
+// address change was ignored and the flow escalated to inspection at the
+// STALE address (live 2026-07-24, "Sparky": customer corrected to 999 Archer
+// St while on the intent step; bot quoted an inspection at the old 223).
+// Fix = fold a clear address anywhere, cue-gated fold for other corrections,
+// bail to the LLM dialog for topic switches / interrupts / questions.
+describe('advanceRoofing — cross-step intent (adaptive mid-flow)', () => {
+  const onIntent: RoofingConversationState = {
+    slots: { address: '223 Archer St, Gumdale QLD 4154', address_confirmed: true },
+    last_step: 'intent',
+  }
+
+  // S1 — the screenshot. Address correction on a non-address step.
+  it('S1: folds a mid-flow address correction and re-confirms the NEW address', () => {
+    const d = advanceRoofing(onIntent, 'Oh I want to change address sorry its actually 999 Archer Street Gumdale')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.slots.address).toMatch(/999 Archer Street/i)
+      expect(d.slots.address_confirmed).toBe(false)
+    }
+  })
+  it('S1: never escalates to inspection at the stale address', () => {
+    const d = advanceRoofing(onIntent, 'change my address to 999 Archer Street Gumdale please')
+    expect(d.action).not.toBe('inspection')
+    if (d.action === 'ask') expect(d.slots.address).not.toMatch(/223/)
+  })
+
+  // S1 follow-up — the "DID YOU GET THE ADDRESS" turn (now on confirm_address).
+  it('S1b: a worried "did you get the address" re-reads the corrected address, not inspection', () => {
+    const onConfirm: RoofingConversationState = {
+      slots: { address: '999 Archer Street Gumdale', address_confirmed: false },
+      last_step: 'confirm_address',
+    }
+    const d = advanceRoofing(onConfirm, 'DID YOU GET THE ADDRESS')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.reply).toMatch(/999/)
+    }
+  })
+
+  // S2 — topic switch to another trade → hand to the general LLM dialog.
+  it('S2: a topic switch ("also fix a leaking tap") bails to the general dialog', () => {
+    const d = advanceRoofing(onIntent, "also can you fix a leaking tap while you're there")
+    expect(d.action).toBe('passthrough')
+  })
+
+  // S3 — correction of a NON-address slot, cue-gated.
+  it('S3: "no I meant colorbond kliplok" folds the material correction, stays in flow', () => {
+    const onPitch: RoofingConversationState = {
+      slots: { address: '1 A St', address_confirmed: true, intent: 'full_reroof', material: 'concrete_tile' },
+      last_step: 'pitch',
+    }
+    const d = advanceRoofing(onPitch, 'no I meant colorbond kliplok')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') expect(d.slots.material).toBe('colorbond_kliplok')
+  })
+
+  // S4 — multi-intent: address correction + another field in one text.
+  it('S4: a combined address change + detail folds the address and re-confirms first', () => {
+    const d = advanceRoofing(onIntent, "change the address to 45 Ocean Road Bondi, it's a metal roof")
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.slots.address).toMatch(/45 Ocean Road/i)
+      expect(d.slots.address_confirmed).toBe(false)
+    }
+  })
+
+  // S5 — out-of-order answer (a not-yet-asked field), no correction cue.
+  it('S5: an out-of-order clean answer ("its a colorbond kliplok roof") is captured', () => {
+    const d = advanceRoofing(onIntent, "oh and it's a colorbond kliplok roof")
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') expect(d.slots.material).toBe('colorbond_kliplok')
+  })
+
+  // S6 — interrupt that is NOT an explicit stop/opt-out keyword.
+  it('S6: an interrupt ("wait, hold on a sec") bails to the dialog, not cancel', () => {
+    const onMaterial: RoofingConversationState = {
+      slots: { address: '1 A St', address_confirmed: true, intent: 'full_reroof' },
+      last_step: 'material',
+    }
+    const d = advanceRoofing(onMaterial, 'wait, hold on a sec')
+    expect(d.action).toBe('passthrough')
+  })
+
+  // S7 — a clarification question the step parser cannot answer.
+  it('S7: a clarification question on a non-address step bails to the dialog', () => {
+    const onPitch: RoofingConversationState = {
+      slots: { address: '1 A St', address_confirmed: true, intent: 'full_reroof', material: 'colorbond_trimdek' },
+      last_step: 'pitch',
+    }
+    const d = advanceRoofing(onPitch, 'what number did you say again?')
+    expect(d.action).toBe('passthrough')
+  })
+
+  // Stage-3 review defects (2026-07-24) — precision holes the first pass missed.
+  const midPitch: RoofingConversationState = {
+    slots: { address: '670 London Rd Chandler QLD 4155', address_confirmed: true, intent: 'full_reroof', material: 'colorbond_corrugated' },
+    last_step: 'pitch',
+  }
+  // A — a numeric NON-address answer to "how steep?" must NOT be folded as
+  // an address (out-of-order reused the unguarded address parser).
+  it('A: "it\'s about 2 storeys" at pitch never clobbers the confirmed address', () => {
+    const d = advanceRoofing(midPitch, "it's about 2 storeys")
+    if (d.action === 'ask' || d.action === 'inspection') {
+      expect(d.slots.address).toBe('670 London Rd Chandler QLD 4155')
+      expect(d.slots.address_confirmed).not.toBe(false)
+    }
+  })
+  // B — "way" is ordinary English, not a street type on the whole message.
+  it('B: "no way to tell from 2 photos" is not read as an address', () => {
+    const d = advanceRoofing(midPitch, 'no way to tell from 2 photos')
+    if (d.action === 'ask' || d.action === 'inspection' || d.action === 'passthrough') {
+      expect(d.slots.address).toBe('670 London Rd Chandler QLD 4155')
+    }
+  })
+  // D — an address correction that opens with an interrupt word must still
+  // FOLD the address, not bail (address wins over the pre-empt).
+  it('D: "wait, change the address to 999 Archer Street" folds the address', () => {
+    const d = advanceRoofing(onIntent, 'wait, change the address to 999 Archer Street Gumdale')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.slots.address).toMatch(/999 Archer Street/i)
+    }
+  })
+  // E — a question that happens to contain a mappable keyword must bail to
+  // the dialog, not silently commit that keyword as the answer.
+  it('E: "is it colorbond or tile?" at material bails, does not commit a material', () => {
+    const onMaterial: RoofingConversationState = {
+      slots: { address: '1 A St', address_confirmed: true, intent: 'full_reroof' },
+      last_step: 'material',
+    }
+    const d = advanceRoofing(onMaterial, 'is it colorbond or tile?')
+    expect(d.action).toBe('passthrough')
+  })
+
+  // F1 (reorder defect) — a step answer that INCIDENTALLY restates the
+  // confirmed address must take the answer, not clobber the address with a
+  // degraded value and bounce back to confirm_address.
+  it('F1: "full reroof at 670 London Rd" keeps the confirmed address, takes the intent', () => {
+    const onIntentConfirmed: RoofingConversationState = {
+      slots: { address: '670 London Rd Chandler QLD 4155', address_confirmed: true },
+      last_step: 'intent',
+    }
+    const d = advanceRoofing(onIntentConfirmed, 'full reroof at 670 London Rd')
+    expect(d.slots.address).toBe('670 London Rd Chandler QLD 4155')
+    expect(d.slots.intent).toBe('full_reroof')
+    if (d.action === 'ask') expect(d.step).not.toBe('confirm_address')
+  })
+
+  // REGRESSION — a normal landing answer must NOT trip the cross-step path.
+  it('regression: a normal material answer still lands and asks pitch', () => {
+    const onMaterial: RoofingConversationState = {
+      slots: { address: '1 A St', address_confirmed: true, intent: 'full_reroof' },
+      last_step: 'material',
+    }
+    const d = advanceRoofing(onMaterial, 'colorbond trimdek')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('pitch')
+      expect(d.slots.material).toBe('colorbond_trimdek')
+    }
+  })
+
+  // REGRESSION — genuine junk still uses the bounded miss → inspection fallback.
+  it('regression: unrecognisable junk still miss-counts to inspection, not passthrough', () => {
+    const onPitch: RoofingConversationState = {
+      slots: { address: '1 A St', address_confirmed: true, intent: 'full_reroof', material: 'colorbond_trimdek', misses: 1 },
+      last_step: 'pitch',
+    }
+    const d = advanceRoofing(onPitch, 'the brown stuff')
+    expect(d.action).toBe('inspection')
+  })
+})
+
 describe('advanceRoofing — inspection fallback', () => {
   it('routes fibro/asbestos to inspection', () => {
     const { decisions } = runConversation([

@@ -535,15 +535,20 @@ async function handleRoofingTurn(args: {
     return { address: (data.address as string) ?? '', quote, token }
   }
 
-  // ── Warm 'quoted' thread got a non-structure, non-roofing message ──
-  // Hand it back to the general dialog (return false, no reply), AND close
-  // the roofing thread so the warm window ends here. Without the close, a
-  // later number in an interleaved electrical conversation (e.g. answering
-  // "how many?" with "2") would be hijacked as a roofing structure pick.
-  // The route's isActiveRoofingFlow + looksLikeRoofingEnquiry guard keeps
-  // subsequent messages out of roofing once it's closed.
+  // ── Passthrough → hand the turn to the general LLM dialog (return false).
+  // Two cases, distinguished by the state we came from:
+  //   • Warm 'quoted' thread: CLOSE the roofing thread so the warm window
+  //     ends here — otherwise a later number in an interleaved electrical
+  //     chat ("how many?" → "2") would be hijacked as a structure pick.
+  //   • Mid-GATHER bail (a topic switch / interrupt / question, 2026-07-24):
+  //     do NOT close — leave the gather state so the customer's next
+  //     roofing answer resumes exactly where they left off (the general
+  //     dialog handles just this one turn). Closing here would silently
+  //     discard everything gathered so far.
   if (decision.action === 'passthrough') {
-    await persist({ slots: {}, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'open')
+    if (prevState?.last_step === 'quoted') {
+      await persist({ slots: {}, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'open')
+    }
     return false
   }
 
@@ -914,9 +919,15 @@ async function handlePaintingTurn(args: {
   }
   const baseUrl = ROOFING_APP_BASE_URL
 
-  // ── Warm 'quoted' thread got an unrelated message — hand back + close. ──
+  // ── Passthrough → hand the turn to the general LLM dialog (return false).
+  // Warm 'quoted' thread: CLOSE (end the warm window). Mid-GATHER bail (a
+  // topic switch / interrupt / question, 2026-07-24): do NOT close — leave
+  // the gather state so the customer's next painting answer resumes where
+  // they left off; closing would silently discard everything gathered.
   if (decision.action === 'passthrough') {
-    await persist({ slots: {}, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'open')
+    if (prevState?.last_step === 'quoted') {
+      await persist({ slots: {}, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'open')
+    }
     return false
   }
 

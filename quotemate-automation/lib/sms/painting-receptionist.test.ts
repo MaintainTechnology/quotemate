@@ -120,6 +120,103 @@ describe('advancePainting — inspection + booking', () => {
   })
 })
 
+// Cross-step intent — the same adaptivity the roofing receptionist got
+// (2026-07-24). Painting had NO miss concept: an unmatched mid-flow message
+// was silently dropped and the next scripted question asked. A mid-flow
+// address change / topic switch / interrupt / question must now be handled.
+describe('advancePainting — cross-step intent (adaptive mid-flow)', () => {
+  const onScopes: PaintingConversationState = {
+    slots: { address: '1 Old St', address_confirmed: true, postcode: '4000', state: 'QLD', scopes: ['walls'] },
+    last_step: 'scopes',
+  }
+
+  it('P-S1: folds a mid-flow address correction and re-confirms the NEW address', () => {
+    const d = advancePainting(onScopes, 'actually change the address to 22 New Road Bondi NSW 2026')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.slots.address).toMatch(/22 New Road/i)
+      expect(d.slots.address_confirmed).toBe(false)
+    }
+  })
+
+  it('P-S1b: a correction ON confirm_address keeps the NEW address, not a bare re-ask', () => {
+    const onConfirm: PaintingConversationState = {
+      slots: { address: '1 Wrong St', address_confirmed: false },
+      last_step: 'confirm_address',
+    }
+    const d = advancePainting(onConfirm, "no it's 22 New Road Bondi")
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.slots.address).toMatch(/22 New Road/i)
+    }
+  })
+
+  it('P-S2: a topic switch bails to the general dialog', () => {
+    const d = advancePainting(onScopes, "also can you fix a leaking tap while you're there")
+    expect(d.action).toBe('passthrough')
+  })
+
+  it('P-S6: an interrupt ("wait, hold on") bails, not cancel', () => {
+    const d = advancePainting(onScopes, 'wait, hold on a sec')
+    expect(d.action).toBe('passthrough')
+  })
+
+  it('P-S7: a clarification question on a non-address step bails to the dialog', () => {
+    const d = advancePainting(onScopes, 'what did you ask me again?')
+    expect(d.action).toBe('passthrough')
+  })
+
+  it('regression: a normal scopes answer still lands and moves on', () => {
+    const d = advancePainting(onScopes, 'walls and ceilings')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') expect(d.step).not.toBe('scopes')
+  })
+
+  // Stage-3 review defects (2026-07-24).
+  // C — "as well" is idiomatic for enumerating surfaces, NOT a topic switch.
+  it('C: "walls as well as ceilings" lands as scopes, does not bail', () => {
+    const d = advancePainting(onScopes, 'walls as well as ceilings')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') expect(d.step).not.toBe('scopes')
+  })
+  // D — an address correction opening with an interrupt word must still fold.
+  it('D: "wait, change the address to 22 New Rd Bondi" folds the address', () => {
+    const onCoats: PaintingConversationState = {
+      slots: { address: '1 Old St', address_confirmed: true, postcode: '4000', state: 'QLD', scopes: ['walls'] },
+      last_step: 'coats',
+    }
+    const d = advancePainting(onCoats, 'wait, change the address to 22 New Road Bondi NSW 2026')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('confirm_address')
+      expect(d.slots.address).toMatch(/22 New Road/i)
+    }
+  })
+  // E — a question containing a scope keyword must bail, not commit.
+  it('E: "which walls did you mean?" at scopes bails, does not commit scopes', () => {
+    const d = advancePainting(onScopes, 'which walls did you mean?')
+    expect(d.action).toBe('passthrough')
+  })
+
+  // F2 (reorder defect) — a scopes answer that restates the address must NOT
+  // clobber the confirmed address; take the scopes.
+  it('F2: "walls and ceilings at 22 New Rd" keeps the confirmed address', () => {
+    const d = advancePainting(onScopes, 'walls and ceilings at 22 New Rd')
+    expect(d.slots.address).toBe('1 Old St')
+    expect(d.action).not.toBe('passthrough')
+  })
+
+  // F3 (reorder defect) — "also" is idiomatic scope enumeration; a landing
+  // multi-surface answer must NOT bail.
+  it('F3: "walls and ceilings, also the doors" lands as scopes, does not bail', () => {
+    const d = advancePainting(onScopes, 'walls and ceilings, also the doors')
+    expect(d.action).not.toBe('passthrough')
+    expect(d.action).toBe('ask')
+  })
+})
+
 describe('advancePainting — re-asks on junk', () => {
   it('re-asks the address when the reply has no street number', () => {
     const d = advancePainting({ slots: {}, last_step: 'address' }, 'somewhere in town')
