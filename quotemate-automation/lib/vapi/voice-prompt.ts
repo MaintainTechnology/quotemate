@@ -15,10 +15,13 @@
 //     lib/vapi/trade-questions.ts (those trades have no SMS question array to
 //     import — see that file's header).
 //
-// PIPELINE REALITY: the Vapi post-call webhook only feeds /api/intake/structure
-// (electrical/plumbing intake). Only those two produce an auto-quote from a
-// call; the rest are qualify-and-hand-off — the prompt sets that expectation
-// per trade (VoiceTradeBlock.mode / .closing) and never promises a phone price.
+// PIPELINE REALITY (updated 2026-07-23): electrical/plumbing calls feed
+// /api/intake/structure (auto-quote). Roofing/painting calls hand over to the
+// SMS receptionist thread post-call (lib/voice/trade-handover.ts) — the
+// customer confirms the address by text and the SAME SMS measure→quote chain
+// runs. Other trades are qualify-and-hand-off via the generic pipeline. In
+// every case the prompt never promises a phone price (VoiceTradeBlock.mode /
+// .closing).
 //
 // `VoicePromptOverride` is the trade_prompts hook (spec §6.3): a trade may
 // supply bespoke `voice_greeting` / `voice_system_prompt` text. electrical

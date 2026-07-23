@@ -6,6 +6,7 @@ import { withRetry } from '@/lib/util/retry'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
 import { buildQuoteFailureSms } from '@/lib/sms/templates'
+import { runVoiceTradeHandover } from '@/lib/voice/trade-handover'
 
 export const maxDuration = 300
 
@@ -160,6 +161,35 @@ export async function POST(req: Request) {
   // gate centralised — a single decision point per call.
   after(async () => {
     const dispatch = pipelineLog('webhook', callRow.id)
+
+    // ── Voice → SMS-receptionist handover (roofing/painting) ─────────
+    // A roofing or painting call is processed by the SAME deterministic
+    // pipeline the SMS receptionist runs: seed an sms_conversations row
+    // with the slots captured on the call and text the machine's own next
+    // question; the reply flows through the unchanged /api/sms/inbound
+    // engine (map-checked confirm → measure → confirm-roof → priced
+    // quote → tradie notify). Electrical/plumbing and trades without an
+    // SMS machine fall through to the generic intake→estimate pipeline
+    // below — as does ANY handover failure (extraction, DB, SMS send).
+    try {
+      const handled = await runVoiceTradeHandover({
+        supabase,
+        tenantId,
+        callerNumber: call.customer?.number ?? null,
+        transcript: transcript ?? '',
+      })
+      if (handled) {
+        dispatch.ok('handled by voice→SMS trade handover — generic intake pipeline skipped', {
+          call_id: callRow.id,
+        })
+        return
+      }
+    } catch (e) {
+      dispatch.err('voice trade handover threw — falling through to generic intake', e, {
+        call_id: callRow.id,
+      })
+    }
+
     dispatch.step('dispatching to /api/intake/structure (with retry)')
     // Wrapped in withRetry — the entire quote pipeline depends on this
     // POST landing. Silent failure = customer never gets a quote.

@@ -11,12 +11,14 @@
 // So there is no single SMS "question array" to import — these are derived
 // faithfully from those flows' required inputs, reworded for the phone.
 //
-// PIPELINE REALITY (verified 2026-07-09): the Vapi post-call webhook only feeds
-// /api/intake/structure, whose IntakeSchema.trade enum is ['electrical',
-// 'plumbing']. Roofing/painting/solar/aircon/commercial each have their OWN
-// measure/estimate pipelines the voice path never reaches. So for those trades
-// voice can only QUALIFY + capture the lead — it must never imply an instant
-// quote. The `mode` + `closing` below encode exactly that expectation.
+// PIPELINE REALITY (updated 2026-07-23): roofing and painting calls now HAND
+// OVER post-call to the SMS receptionist thread (lib/voice/trade-handover.ts):
+// the webhook seeds roofing_state/painting_state from the transcript and the
+// customer finishes in the SAME deterministic SMS flow (map-checked address
+// confirm → measure → priced quote). Solar/aircon/commercial still go through
+// the generic /api/intake/structure pipeline (they have no SMS trade machine).
+// Either way the CALL itself never prices anything — the `mode` + `closing`
+// below still encode "no price on the call", and the quote arrives by text.
 
 export type VoiceTradeMode =
   | 'auto_quote' // electrical/plumbing — real quote drafts after the call
