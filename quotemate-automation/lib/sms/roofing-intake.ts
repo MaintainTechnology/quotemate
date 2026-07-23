@@ -336,7 +336,11 @@ export function isStopRequest(text: string): boolean {
  * Returns null when there's nothing addressable, so the caller re-asks.
  */
 export function extractStreetAddress(text: string): string | null {
-  const t = (text ?? '').trim()
+  // SMS bodies wrap — the match regex's `.` stops at \n, so a two-line
+  // address lost everything after the first line. Live 2026-07-23:
+  // "15 schfofieod\nDrive" was stored (and confirmed, and measured) as
+  // "15 schfofieod". Collapse all whitespace before matching.
+  const t = (text ?? '').replace(/\s+/g, ' ').trim()
   if (!t || isStopRequest(t)) return null
   // A street number is digits (optionally 12a, 5/12, 1-3) followed by the
   // street name. A trailing postcode alone can never match.

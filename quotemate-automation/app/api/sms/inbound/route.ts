@@ -36,6 +36,7 @@ import {
   composeConfirmMessage,
   composeInspectionReasonMessage,
   composeMeasureUnavailableMessage,
+  isInspectionOnlyQuote,
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
@@ -714,25 +715,39 @@ async function handleRoofingTurn(args: {
         buildRoofingReplyMessage({ quote: finalQuote, address: pending.address, quoteUrl: servedUrl, firstName, pdfUrl: roofPdfUrl, tierMode: roofingTierMode }),
         roofPdfMedia,
       )
-      // Quote delivered → WARM 'quoted' state (status stays 'open', token
-      // preserved): a follow-up like "give me 2 and 3" / "the others" re-
-      // serves the SAVED measurement instead of falling to the electrical
-      // dialog. An unrelated message passes through to the general dialog.
+      // The persisted step must FOLLOW THE MESSAGE just sent. An
+      // inspection-only send ends "Reply YES and we'll book a time that
+      // suits you" — parking it 'quoted' made that YES a structure-pick
+      // miss → passthrough to the electrical LLM, which improvised a fake
+      // "you're all booked in" and ran an electrical intake on the roofing
+      // thread (live 2026-07-23, "15 schfofieod"). await_booking mirrors
+      // the measure-path inspection park below, keyed on the SAME
+      // predicate the composer used so message and state can't drift. A
+      // priced send stays WARM 'quoted': a follow-up like "give me 2 and
+      // 3" / "the others" re-serves the SAVED measurement.
+      const inspectionOnly = isInspectionOnlyQuote(finalQuote)
       await persist({
         slots: decision.slots,
-        last_step: 'quoted',
+        last_step: inspectionOnly ? 'await_booking' : 'quoted',
         pending_quote_token: pending.token,
         pending_structure_count: totalStructures,
         last_served_structures: confirmedIndices,
       }, 'open')
       // US-002 — the quote just went to the customer; tell the tradie,
       // with the same solar-inclusive better total the dashboard shows.
-      await notifyTradie(
-        'quote_sent',
-        pending.address,
-        applySolarToTiers(finalQuote.combined.tiers, finalQuote.solar ?? null)[1]?.inc_gst ?? null,
-        servedUrl,
-      )
+      // NOT on an inspection-only send: its combined better tier is $0, so
+      // this fired "roofing quote sent at $0 inc GST" while the customer
+      // read an indicative $32k range. The booking arm sends the real
+      // 'inspection_booked' notify when the customer confirms — the same
+      // contract as the measure-path inspection park.
+      if (!inspectionOnly) {
+        await notifyTradie(
+          'quote_sent',
+          pending.address,
+          applySolarToTiers(finalQuote.combined.tiers, finalQuote.solar ?? null)[1]?.inc_gst ?? null,
+          servedUrl,
+        )
+      }
       // Per-tenant file-store ingest (best-effort, never blocks the send).
       // Archive the priced roofing quote PDF + minimized KB markdown.
       // Skipped for inspection-routed quotes (no priced doc to ingest).
@@ -1915,7 +1930,13 @@ export async function POST(req: Request) {
             fromNumber,
             tenantId: tenant?.id ?? null,
             tenantTrade: tenant?.trade ?? null,
-            firstName: customer?.first_name ?? guessFirstName(turns) ?? null,
+            // NO guessFirstName here: every receptionist turn answers a
+            // closed-ended question we asked, which is exactly the shape
+            // the heuristic can't tell from a name — live 2026-07-23 it
+            // greeted the customer "Hi Classic" (a Colorbond profile)
+            // then "Hi Main" (a building pick). Dialog-gathered name
+            // first, tenant-scoped CRM name second, else nameless.
+            firstName: initialConversationState.slots.first_name ?? customer?.first_name ?? null,
             followupPinActive,
             roofingOnly: tenantIsRoofingOnly(tenant?.trades),
             // Hand over ONLY what the customer said in this conversation.
@@ -1985,7 +2006,9 @@ export async function POST(req: Request) {
             toNumber,
             fromNumber,
             tenantId: tenant?.id ?? null,
-            firstName: customer?.first_name ?? guessFirstName(turns) ?? null,
+            // Same rule as the roofing receptionist above — never guess a
+            // name from answers to our own gathering questions.
+            firstName: initialConversationState.slots.first_name ?? customer?.first_name ?? null,
             followupPinActive,
           })
           if (handledPainting) {

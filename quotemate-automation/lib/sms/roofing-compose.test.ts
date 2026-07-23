@@ -18,6 +18,7 @@ import {
   composeMeasureUnavailableMessage,
   composeInspectionReasonMessage,
   fmtAud,
+  isInspectionOnlyQuote,
   narrowQuoteToStructure,
   narrowQuoteToStructures,
 } from './roofing-compose'
@@ -393,5 +394,29 @@ describe('narrowQuoteToStructures (multi-pick follow-ups)', () => {
   it('out-of-range / empty selection → unchanged', () => {
     const quote = priceMultiRoof({ structures: [house, shed] })
     expect(narrowQuoteToStructures(quote, [9]).structures).toHaveLength(2)
+  })
+})
+
+// The route parks an inspection-only send at await_booking keyed on this
+// predicate (live 2026-07-23: state said 'quoted' while the message said
+// "Reply YES and we'll book a time" — the YES fell through to the
+// electrical LLM). It must agree with buildRoofingReplyMessage forever.
+describe('isInspectionOnlyQuote', () => {
+  it('is true only when NOTHING is firm-priced, matching the message sent', () => {
+    const inspectionOnly = priceMultiRoof({
+      structures: [{ ...house, inputs: inputs({ material: 'cement_sheet' }) }],
+    })
+    expect(isInspectionOnlyQuote(inspectionOnly)).toBe(true)
+    expect(
+      buildRoofingReplyMessage({ ...CTX, quote: inspectionOnly }),
+    ).toContain("Reply YES and we'll book a time")
+
+    const mixed = priceMultiRoof({
+      structures: [house, { ...shed, inputs: inputs({ material: 'cement_sheet' }) }],
+    })
+    expect(isInspectionOnlyQuote(mixed)).toBe(false)
+    expect(
+      buildRoofingReplyMessage({ ...CTX, quote: mixed }),
+    ).not.toContain("Reply YES and we'll book a time")
   })
 })

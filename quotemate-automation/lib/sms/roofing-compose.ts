@@ -179,12 +179,24 @@ export function composeInspectionMessage(ctx: RoofingReplyContext): string {
  * when present, an indicative range when the whole job is on-site.
  */
 export function buildRoofingReplyMessage(ctx: RoofingReplyContext): string {
-  const structures = ctx.quote.structures ?? []
-  const anyQuotable = structures.some((s) => s.price.routing.decision !== 'inspection_required')
-  if (!anyQuotable) {
+  if (isInspectionOnlyQuote(ctx.quote)) {
     return composeInspectionMessage(ctx)
   }
   return composeEstimateMessage(ctx)
+}
+
+/**
+ * PURE — nothing in the quote is firm-priced, so buildRoofingReplyMessage
+ * sends composeInspectionMessage ("Reply YES and we'll book a time").
+ * The route keys the persisted step on the SAME predicate so the state
+ * can never disagree with the message that went out: an inspection-only
+ * send parks at await_booking (the YES books), a priced send stays
+ * 'quoted' (warm structure follow-ups). Live 2026-07-23: they disagreed,
+ * and the customer's YES fell through to the electrical LLM, which
+ * improvised a fake "you're all booked in".
+ */
+export function isInspectionOnlyQuote(quote: MultiRoofQuote): boolean {
+  return !(quote.structures ?? []).some((s) => s.price.routing.decision !== 'inspection_required')
 }
 
 /**

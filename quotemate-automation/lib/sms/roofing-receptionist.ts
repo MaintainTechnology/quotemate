@@ -106,7 +106,11 @@ export function parseStructureChoice(inbound: string, count: number): number | n
     const n = Number(secondary[1]) + 1 // "secondary structure 1" is entry 2
     if (n >= 1 && n <= count) return n
   }
-  if (/\b(main dwelling|main house|main building|main structure|main roof|the main one|main one)\b/.test(t)) {
+  // Bare "main" counts as a pick — the list we sent literally says
+  // "1) Main dwelling" (live 2026-07-23: "Main" re-sent the identical
+  // list). The lookahead keeps street names out: "the one on Main Road"
+  // is an address correction, not a pick.
+  if (/\bmain\b(?!\s*(?:st\b|street|rd\b|road|ave\b|av\b|avenue|dr\b|drive|hwy\b|highway|pde\b|parade|ln\b|lane|ct\b|court|cres\b|crescent|pl\b|place))/.test(t)) {
     return 1
   }
   for (const [word, n] of Object.entries(ORDINALS)) {

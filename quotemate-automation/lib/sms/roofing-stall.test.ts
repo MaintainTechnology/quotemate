@@ -18,6 +18,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyRoofingAnswer,
+  extractStreetAddress,
   isAmbiguousMetal,
   mapMaterial,
   mapPitch,
@@ -248,6 +249,18 @@ describe('live transcript replay — 2026-07-22 stuck roofing thread', () => {
   })
 })
 
+// SMS bodies wrap. Live 2026-07-23: "15 schfofieod\nDrive" lost everything
+// after the newline — the fragment was read back, confirmed, geocoded and
+// stored as the job's address.
+describe('extractStreetAddress across line breaks', () => {
+  it('keeps the part of the address after a newline', () => {
+    expect(extractStreetAddress('15 schfofieod\nDrive')).toBe('15 schfofieod Drive')
+    expect(extractStreetAddress('15 Schofield Dr\nSafety Beach NSW 2456')).toBe(
+      '15 Schofield Dr Safety Beach NSW 2456',
+    )
+  })
+})
+
 // The building list names each structure ("1) Main dwelling", "2) Secondary
 // structure 1"), so customers answer with the NAME as readily as the number.
 // Live thread 2026-07-22: "Main dwelling" was not understood and the whole
@@ -259,6 +272,11 @@ describe('structure picks by name, not just number', () => {
     expect(parseStructureChoice('the main one', 3)).toBe(1)
     expect(parseStructureChoice('Secondary structure 1', 3)).toBe(2)
     expect(parseStructureChoice('secondary structure 2', 3)).toBe(3)
+    // Live 2026-07-23: a bare "Main" re-sent the identical list.
+    expect(parseStructureChoice('Main', 3)).toBe(1)
+    // …but "main" as a STREET name is an address, not a pick.
+    expect(parseStructureChoice('the one on main road', 3)).toBeNull()
+    expect(parseStructureChoice('14 Main St', 3)).toBeNull()
     // Numbers and ordinals must keep working exactly as before.
     expect(parseStructureChoice('1', 3)).toBe(1)
     expect(parseStructureChoice('the second', 3)).toBe(2)
