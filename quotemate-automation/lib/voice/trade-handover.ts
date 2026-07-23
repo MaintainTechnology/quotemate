@@ -46,6 +46,18 @@ import {
 import type { PaintingConversationState } from '@/lib/sms/painting-receptionist'
 import { screenConfirmAddress } from '@/lib/sms/verify-address'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
+import {
+  measureAndDispatchRoofing,
+  ROOFING_APP_BASE_URL,
+} from '@/lib/sms/roofing-measure-dispatch'
+import {
+  composeInspectionReasonMessage,
+  composeMeasureUnavailableMessage,
+} from '@/lib/sms/roofing-compose'
+import { estimateAndDispatchPainting } from '@/lib/sms/painting-estimate-dispatch'
+import { buildPaintingInspectionSms } from '@/lib/sms/painting-compose'
+import { decidePostCallRoofingAction } from './post-call-roofing'
+import { decidePostCallPaintingAction } from './post-call-painting'
 import { pipelineLog } from '@/lib/log/pipeline'
 
 // ── Extraction (the one LLM step) ────────────────────────────────────
@@ -55,6 +67,9 @@ const AnswersSchema = z.object({
   first_name: z.string().nullish(),
   /** Full property address as spoken, incl. suburb/state/postcode. */
   address: z.string().nullish(),
+  /** The receptionist read the address back and the caller agreed. Gates
+   *  measuring straight off the call instead of re-asking by text. */
+  address_confirmed: z.boolean().nullish(),
   // Roofing answers — customer's words verbatim.
   material: z.string().nullish(),
   pitch: z.string().nullish(),
@@ -76,7 +91,7 @@ Return ONLY a JSON object, no prose, with these fields (null when not stated):
 {
   "trade": "roofing" | "painting" | "other",
   "first_name": string | null,
-  "address": string | null,
+  "address": string | null, "address_confirmed": boolean,
   "material": string | null, "pitch": string | null, "intent": string | null,
   "surfaces": string | null, "coats": string | null, "condition": string | null,
   "ceiling_height": string | null, "storeys": string | null, "colour_change": string | null
@@ -86,6 +101,7 @@ Rules:
 - trade is "roofing" ONLY when the caller wants roof work (re-roof, roof repair, leak, gutters). "painting" ONLY for residential painting jobs. EVERYTHING else — electrical, plumbing, solar, aircon, signage, commercial painting, unclear — is "other".
 - Copy the CALLER'S OWN WORDS verbatim into each answer field (e.g. material: "colorbond", pitch: "pretty steep", intent: "full re-roof"). Do not normalise or interpret.
 - address = the full property address as the caller stated it (street, suburb, state, postcode when given).
+- address_confirmed = true ONLY when the receptionist read the address back and the caller agreed it was right ("yep", "that's it", "correct"). false if it was never read back, or the caller corrected it and the correction was not re-confirmed.
 - first_name = the caller's first name if they gave one.`
 
 export async function extractVoiceTradeAnswers(
@@ -190,7 +206,7 @@ export async function runVoiceTradeHandover(args: {
   // never pay for an extraction that can't hand over.
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id, business_name, trades, twilio_sms_number')
+    .select('id, business_name, trade, trades, twilio_sms_number')
     .eq('id', tenantId)
     .maybeSingle()
   const trades = (tenant?.trades as string[] | null) ?? []
@@ -201,24 +217,72 @@ export async function runVoiceTradeHandover(args: {
   const trade = decideVoiceTradeHandover(answers.trade, trades)
   if (!trade) return false
 
-  const opening =
-    trade === 'roofing'
-      ? buildRoofingHandoverOpening(mapVoiceAnswersToRoofingSlots(answers))
-      : buildPaintingHandoverOpening(mapVoiceAnswersToPaintingSlots(answers))
-  if (!opening) return false
-
-  // Map-check the address BEFORE reading it back — identical to the SMS
-  // route's confirm_address screening (a misheard suburb must not pass).
-  if (opening.state.last_step === 'confirm_address') {
-    const screened = await screenConfirmAddress(opening.state.slots)
-    opening.state.slots = screened.slots
-    if (screened.step) opening.state.last_step = screened.step
-    if (screened.reply) opening.question = screened.reply
-  }
-
   const fromNumber =
     (tenant?.twilio_sms_number as string | null) ?? process.env.TWILIO_SMS_NUMBER ?? null
   const stateCol = trade === 'roofing' ? 'roofing_state' : 'painting_state'
+  const firstName = (answers.first_name ?? '').trim().split(/\s+/)[0] || null
+
+  // ── Roofing: measure off the call, don't re-ask what was agreed ──────
+  // The caller gave the address, roof type and job on the phone and the
+  // receptionist read the address back for a yes. So the FIRST text is the
+  // same buildings/confirm-roof message the SMS receptionist sends after
+  // ITS measure — not the address question all over again.
+  let measurePlan: ReturnType<typeof decidePostCallRoofingAction> | null = null
+  if (trade === 'roofing') {
+    const captured = mapVoiceAnswersToRoofingSlots(answers)
+    measurePlan = decidePostCallRoofingAction(captured, Boolean(answers.address_confirmed))
+    if (measurePlan.action === 'measure') {
+      // Map-check before measuring: a misheard suburb must never be
+      // measured. Anything but a clean match (rejected or corrected by
+      // Google) drops back to the SMS read-back — the same safety net the
+      // SMS route applies at confirm_address.
+      const screened = await screenConfirmAddress(measurePlan.slots)
+      if (screened.step || screened.reply) {
+        measurePlan = {
+          action: 'ask',
+          slots: { ...screened.slots, address_confirmed: false },
+          step: screened.step ?? 'confirm_address',
+          question: screened.reply ?? '',
+        }
+      } else {
+        measurePlan = { ...measurePlan, slots: screened.slots }
+      }
+    }
+  }
+
+  // ── Painting: same rule — a complete brief is estimated, not re-asked ─
+  let paintPlan: ReturnType<typeof decidePostCallPaintingAction> | null = null
+  if (trade === 'painting') {
+    const captured = mapVoiceAnswersToPaintingSlots(answers)
+    paintPlan = decidePostCallPaintingAction(captured, Boolean(answers.address_confirmed))
+    if (paintPlan.action === 'estimate') {
+      const screened = await screenConfirmAddress(paintPlan.slots)
+      if (screened.step || screened.reply) {
+        paintPlan = {
+          action: 'ask',
+          slots: { ...screened.slots, address_confirmed: false },
+          step: screened.step ?? 'confirm_address',
+          question: screened.reply ?? '',
+        }
+      } else {
+        paintPlan = { ...paintPlan, slots: screened.slots }
+      }
+    }
+  }
+
+  const plan = measurePlan ?? paintPlan
+  const opening =
+    plan?.action === 'ask' && plan.question
+      ? { state: { slots: plan.slots, last_step: plan.step }, question: plan.question }
+      : trade === 'roofing'
+        ? buildRoofingHandoverOpening(measurePlan?.slots ?? mapVoiceAnswersToRoofingSlots(answers))
+        : buildPaintingHandoverOpening(paintPlan?.slots ?? mapVoiceAnswersToPaintingSlots(answers))
+
+  // A measure/estimate/inspection plan needs no opening question — that
+  // dispatch (or the reason message) IS the first text.
+  const acting =
+    plan?.action === 'measure' || plan?.action === 'estimate' || plan?.action === 'inspection_reason'
+  if (!acting && !opening) return false
 
   // Reuse an open conversation for this (caller, tenant) or create one —
   // the /api/sms/inbound receptionist owns it from the first reply on.
@@ -232,13 +296,17 @@ export async function runVoiceTradeHandover(args: {
     .limit(1)
     .maybeSingle()
 
+  // Seed with the gathered slots; the measure/estimate below overwrites the
+  // state with the machine's own post-run one (confirm_roof + token, etc.).
+  const seedState = opening?.state ?? { slots: plan?.slots ?? {}, last_step: null }
+
   let conversationId: string
   if (existing?.id) {
     conversationId = existing.id as string
     const { error } = await supabase
       .from('sms_conversations')
       .update({
-        [stateCol]: opening.state,
+        [stateCol]: seedState,
         last_message_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -256,7 +324,7 @@ export async function runVoiceTradeHandover(args: {
         status: 'open',
         conversation_type: 'customer_quote',
         tenant_id: tenantId,
-        [stateCol]: opening.state,
+        [stateCol]: seedState,
         turn_count: 0,
       })
       .select('id')
@@ -268,30 +336,147 @@ export async function runVoiceTradeHandover(args: {
     conversationId = convo.id as string
   }
 
-  // One short bridge line, then the machine's OWN question — every
-  // message after this comes verbatim from the SMS receptionist.
-  const first = (answers.first_name ?? '').trim().split(/\s+/)[0]
-  const business = (tenant?.business_name as string | null) ?? 'the team'
-  const opener = `${first ? `Hi ${first}, thanks` : 'Thanks'} for calling ${business}! Let's finish your ${trade} quote by text. `
-  const text = opener + opening.question
-
-  const res = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber ?? undefined })
-  if (!res.ok) {
-    log.err('voice-handover: opening SMS failed on both channels', null, {
-      sms_code: res.smsAttempt.code,
+  /** Send one SMS to the caller and record it on the thread. */
+  const sendReply = async (text: string) => {
+    const res = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber ?? undefined })
+    if (!res.ok) {
+      log.err('voice-handover: SMS failed on both channels', null, { sms_code: res.smsAttempt.code })
+      return res
+    }
+    await supabase.from('sms_messages').insert({
+      conversation_id: conversationId,
+      direction: 'outbound',
+      body: text,
+      twilio_message_sid: res.sid,
     })
-    return false
+    return res
   }
-  await supabase.from('sms_messages').insert({
-    conversation_id: conversationId,
-    direction: 'outbound',
-    body: text,
-    twilio_message_sid: res.sid,
-  })
-  await supabase
-    .from('sms_conversations')
-    .update({ turn_count: 1, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq('id', conversationId)
+  const persistState = async (state: RoofingConversationState | PaintingConversationState) => {
+    await supabase
+      .from('sms_conversations')
+      .update({
+        [stateCol]: state,
+        turn_count: 1,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId)
+  }
+
+  // ── The measure runs here, off the call's own brief ──────────────────
+  if (measurePlan?.action === 'measure') {
+    const dispatched = await measureAndDispatchRoofing({
+      supabase,
+      tenantId,
+      tenantTrade: (tenant?.trade as string | null) ?? null,
+      conversationId,
+      customerPhone: callerNumber,
+      replyFrom: fromNumber ?? undefined,
+      firstName,
+      baseUrl: ROOFING_APP_BASE_URL,
+      slots: measurePlan.slots,
+      isInspection: measurePlan.isInspection,
+      inspectionReason: measurePlan.reason,
+      sendReply,
+    })
+    if (dispatched.ok) {
+      await persistState(dispatched.state)
+      log.ok('voice-handover: measured off the call, confirm SMS sent', {
+        conversation_id: conversationId,
+        token: dispatched.token,
+        structures: dispatched.quote.structures.length,
+      })
+      return true
+    }
+    // Measure unavailable despite a complete brief — same safe landing as
+    // the SMS route: say so and park at await_booking so a "yes" books the
+    // site visit. The lead is never lost.
+    await sendReply(
+      composeMeasureUnavailableMessage(firstName, measurePlan.slots.address ?? 'your property'),
+    )
+    await persistState({
+      slots: measurePlan.slots,
+      last_step: 'await_booking',
+      pending_quote_token: null,
+      pending_structure_count: null,
+    })
+    return true
+  }
+
+  // ── Painting: run the estimate off the call's brief ──────────────────
+  if (paintPlan?.action === 'estimate') {
+    const dispatched = await estimateAndDispatchPainting({
+      supabase,
+      tenantId,
+      customerPhone: callerNumber,
+      firstName,
+      baseUrl: ROOFING_APP_BASE_URL,
+      slots: paintPlan.slots,
+      sendReply,
+    })
+    if (dispatched.ok) {
+      await persistState(dispatched.state)
+      log.ok('voice-handover: painting estimated off the call', {
+        conversation_id: conversationId,
+        token: dispatched.token,
+        inspection: dispatched.inspection,
+      })
+      return true
+    }
+    // Same landing as the SMS route when the estimate can't be produced.
+    await sendReply("Thanks, we've got your painting details. Our team will confirm your quote shortly.")
+    await persistState({
+      slots: paintPlan.slots,
+      last_step: 'closed',
+      pending_form_token: null,
+      pending_quote_token: null,
+    })
+    return true
+  }
+
+  // ── The brief itself forces a site visit — say why (SMS parity) ──────
+  if (measurePlan?.action === 'inspection_reason') {
+    await sendReply(
+      composeInspectionReasonMessage(
+        firstName,
+        measurePlan.slots.address ?? 'your property',
+        measurePlan.reason,
+      ),
+    )
+    await persistState({
+      slots: measurePlan.slots,
+      last_step: 'await_booking',
+      pending_quote_token: null,
+      pending_structure_count: null,
+    })
+    return true
+  }
+  if (paintPlan?.action === 'inspection_reason') {
+    await sendReply(
+      buildPaintingInspectionSms({
+        firstName,
+        address: paintPlan.slots.address ?? 'your property',
+        reason: paintPlan.reason,
+      }),
+    )
+    await persistState({
+      slots: paintPlan.slots,
+      last_step: 'await_booking',
+      pending_form_token: null,
+      pending_quote_token: null,
+    })
+    return true
+  }
+
+  // ── Something's genuinely missing — ask THAT question by text ────────
+  // One short bridge line, then the machine's OWN question; every message
+  // after this comes verbatim from the SMS receptionist.
+  if (!opening) return false
+  const business = (tenant?.business_name as string | null) ?? 'the team'
+  const opener = `${firstName ? `Hi ${firstName}, thanks` : 'Thanks'} for calling ${business}! Let's finish your ${trade} quote by text. `
+  const res = await sendReply(opener + opening.question)
+  if (!res.ok) return false
+  await persistState(opening.state)
 
   log.ok('voice-handover: SMS receptionist thread seeded', {
     conversation_id: conversationId,

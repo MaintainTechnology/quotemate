@@ -47,13 +47,13 @@ import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import {
   measureAndDispatchRoofing,
   sendRoofPhotoMms,
+  ROOFING_APP_BASE_URL,
 } from '@/lib/sms/roofing-measure-dispatch'
 import { newMeasurementTokens } from '@/lib/roofing/tokens'
 import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
 import { tenantHasRoofingTrade, tenantIsRoofingOnly } from '@/lib/roofing/tenant'
 import { tenantHasFeature } from '@/lib/features/catalog'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
-import { toPaintingRequest } from '@/lib/sms/painting-intake'
 import {
   advancePainting,
   shouldEngagePainting,
@@ -61,13 +61,11 @@ import {
 } from '@/lib/sms/painting-receptionist'
 import {
   buildPaintingFormOffer,
-  buildPaintingHoldingSms,
   buildPaintingInspectionSms,
   composePaintingBooking,
   composePaintingCancel,
 } from '@/lib/sms/painting-compose'
-import { runAndSavePaintingQuote } from '@/lib/painting/quote-dispatch'
-import { notifyPaintingTradie } from '@/lib/painting/release'
+import { estimateAndDispatchPainting } from '@/lib/sms/painting-estimate-dispatch'
 import {
   formatActiveFollowupContext,
   parseFollowupQuoteContext,
@@ -188,9 +186,8 @@ const SMS_ROOFING_ENABLED = process.env.SMS_ROOFING_ENABLED === '1'
 // .painting_state + painting_lead_requests).
 const SMS_PAINTING_ENABLED = process.env.SMS_PAINTING_ENABLED === '1'
 
-const ROOFING_APP_BASE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.quotemax.com.au'
-).replace(/\/$/, '')
+// Defined in lib/sms/roofing-measure-dispatch.ts (imported above) so the
+// voice handover builds byte-identical /q/roof links.
 
 // Twilio webhook ack. We send the real customer reply via the REST API
 // inside after() — never as TwiML in the webhook response — so this
@@ -524,14 +521,6 @@ async function handleRoofingTurn(args: {
       console.warn('[sms/inbound:roofing] tradie notify failed (non-fatal)', e)
     }
   }
-  // Best-effort roof-photo MMS sent BEFORE the confirm SMS. One image for a
-  // single building, one per building (capped) for several. Uses sendSms
-  // directly (NOT dispatchQuoteMessage) so a failure or a non-MMS number
-  // just means no photo — we never fall back to a plain SMS here, which
-  // would spam non-MMS numbers with extra texts. The confirm SMS that
-  // follows carries the page link, so this is purely a bonus. Never throws.
-  const sendRoofPhotos = (token: string, quote: MultiRoofQuote) =>
-    sendRoofPhotoMms({ supabase, conversationId, to: fromNumber, from: replyFrom, baseUrl, token, quote })
   const loadPending = async (token: string | null) => {
     if (!token) return null
     const { data } = await supabase
@@ -997,57 +986,21 @@ async function handlePaintingTurn(args: {
 
   // ── Enough gathered cleanly — run the estimate, save it, send the quote. ──
   if (decision.action === 'estimate') {
-    const request = toPaintingRequest(decision.slots)
-    if (request) {
-      const disp = await runAndSavePaintingQuote({
-        supabase,
-        tenantId,
-        customerPhone: fromNumber,
-        customerName: firstName,
-        request,
-        appUrl: baseUrl,
-      })
-      if (disp.ok) {
-        const address = request.address.address
-        if (disp.inspection) {
-          // No price to audit — keep the existing inspection/booking flow
-          // (send the on-site-measure message, park at await_booking).
-          await sendReply(buildPaintingInspectionSms({ firstName, address, reason: disp.estimate.price.routing.reason, quoteUrl: `${baseUrl}/q/paint/${disp.token}` }))
-          await persist({ slots: decision.slots, last_step: 'await_booking', pending_form_token: null, pending_quote_token: disp.token }, 'open')
-          return true
-        }
-        // Priced — DRAFT and hold: do NOT send the customer the price.
-        // Acknowledge the customer, then notify the tradie to review/edit/send.
-        const { data: t } = tenantId
-          ? await supabase
-              .from('tenants')
-              .select('owner_mobile, owner_first_name, twilio_sms_number, business_name')
-              .eq('id', tenantId)
-              .maybeSingle()
-          : { data: null }
-        const tenantRow = (t as {
-          owner_mobile?: string | null
-          owner_first_name?: string | null
-          twilio_sms_number?: string | null
-          business_name?: string | null
-        } | null) ?? null
-        await sendReply(buildPaintingHoldingSms({ firstName, businessName: tenantRow?.business_name ?? null }))
-        await notifyPaintingTradie({
-          tenant: {
-            owner_mobile: tenantRow?.owner_mobile ?? null,
-            owner_first_name: tenantRow?.owner_first_name ?? null,
-            twilio_sms_number: tenantRow?.twilio_sms_number ?? null,
-          },
-          customerName: firstName,
-          address,
-          betterIncGst: disp.estimate.price.tiers.find((tier) => tier.tier === 'better')?.inc_gst ?? null,
-          estimateToken: disp.estimateToken,
-          appUrl: baseUrl,
-          dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
-        })
-        await persist({ slots: decision.slots, last_step: 'quoted', pending_form_token: null, pending_quote_token: disp.token }, 'open')
-        return true
-      }
+    // The sequence (estimate → save → hold/inspection message → tradie
+    // notify) lives in lib/sms/painting-estimate-dispatch.ts so the VOICE
+    // path runs the identical one after a call.
+    const dispatched = await estimateAndDispatchPainting({
+      supabase,
+      tenantId,
+      customerPhone: fromNumber,
+      firstName,
+      baseUrl,
+      slots: decision.slots,
+      sendReply,
+    })
+    if (dispatched.ok) {
+      await persist(dispatched.state, 'open')
+      return true
     }
     // Couldn't estimate (provider down / missing fields) — fall back.
     await sendReply("Thanks, we've got your painting details. Our team will confirm your quote shortly.")
