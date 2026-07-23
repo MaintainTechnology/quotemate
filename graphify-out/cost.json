@@ -11,6 +11,13 @@
       "input_tokens": 600709,
       "output_tokens": 21334,
       "files": 2145
+    },
+    {
+      "date": "2026-07-24",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 740,
+      "mode": "incremental-ast-code-only"
     }
   ],
   "total_input_tokens": 1472523,

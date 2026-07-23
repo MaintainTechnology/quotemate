@@ -1,159 +1,189 @@
 # Engineering context for Claude
 
 > See [README.md](README.md) for the public overview and [docs/strategy.md](docs/strategy.md) for the living strategy + re-evaluation history.
-> **This file describes what is actually built and running as of 2026-05-18.** Where the running system has drifted from a documented strategy decision, that drift is called out explicitly (⚠) rather than hidden.
+> **This file describes what is actually built and running as of 2026-07-24.** Where the running system has drifted from a documented strategy decision, that drift is called out explicitly (⚠) rather than hidden. When a "decisions" entry diverges from reality, the honest move is to **append a new `docs/strategy.md` iteration entry** documenting the why — not to quietly bury the drift.
 
-## Project state — NOT greenfield anymore
+## Project state — a multi-trade AI quoting platform, NOT a 2-trade pilot
 
-The app is built and the two pilot channels (voice + SMS) are live end-to-end against a real Supabase instance. Earlier copies of this file (and `README.md`, and parts of `docs/strategy.md`) still say "greenfield, no code" — that is **stale**; treat this section as ground truth.
+The app is built and live end-to-end against a real Supabase instance across **three channels** (tradie portal + SMS + voice) and **eight trades**. Any copy of this file, `README.md`, or `docs/strategy.md` that still says "greenfield", "electrical + plumbing only", or "third trade not yet built" is **stale** — treat this section as ground truth.
 
 - **Application lives in [`quotemate-automation/`](quotemate-automation/)** — a Next.js 16 App Router app. The repo root holds planning docs/assets; the product is the subdirectory.
-- **Voice channel is shipped** (Vapi → `/api/vapi/webhook` → intake → estimate → quote SMS). ⚠ The strategy doc still files voice under "v3+ premium tier, deferred". Reality: it shipped in v1. Not yet reconciled in `docs/strategy.md`.
-- **SMS channel is shipped end-to-end** (Twilio → `/api/sms/inbound` → AI dialog → same intake/estimate pipeline → quote SMS + HTML quote page). All 5 SMS phases done; see [`docs/markdown/sms-progress.md`](docs/markdown/sms-progress.md).
-- **v5 multi-trade is live**: electrical (NSW/NECA) + plumbing (QLD/QBCC) share one DB, routed by `intake.trade`. **4 tenants currently active** (2 electrical-only, 1 plumbing-only, 1 cross-trade — incl. "Pilot Sparky"/"Pilot Plumber" seed tenants). A stub Sparky tenant (no Vapi, zero traffic) was hard-deleted 2026-05-20 via migration 038.
-- **v6 self-serve tradie onboarding is the current work**: `/signup`, `/onboard/*`, `/api/onboard/*`, Twilio/Vapi auto-provisioning (`lib/twilio/provision.ts`, `lib/vapi/provision.ts`), tenant-owned custom assemblies (migration 023). Provisioning flags (`TWILIO_PROVISIONING_ENABLED`, `VAPI_PROVISIONING_ENABLED`) are currently `false` in dev.
-- **Production**: `https://quote-mate-rho.vercel.app` (Vercel, with the SMS-cleanup cron). Repo is also Railway-deployable (`Dockerfile` + `railway.json`, `output: 'standalone'`). Vapi dev webhook runs via ngrok.
-- **Money path is test-mode only**: Stripe test keys; per-tier deposit Checkout + $99 inspection link work, but **Stripe Connect Express is not wired** (`tenants.stripe_connect_account_id` is null for every tenant; `payments` table has 0 rows). Funds-split is still TODO.
+- **Eight trades are LIVE** (present in `tenants.trades[]` and served by real pipelines): **electrical, plumbing, roofing, solar, painting, commercial_painting, aircon, signage**. The old "electrical + plumbing, no third trade" boundary is fully superseded — the `trades` registry + admin CSV loader (`docs/strategy.md` v9) shipped (migration 155 `register_activatable_trades`, 171 `register_roofing_trade`; `lib/admin-loader/*`, `/admin/loader`).
+- **8 tenants, all `active`.** Mix of single-trade (3 roofing-only, 1 electrical-only) and multi-trade (two hold all 8 trades). Seed "Pilot Sparky/Plumber" tenants are gone.
+- **Three intake channels, all shipped:**
+  - **Voice** — Vapi → `/api/vapi/webhook` → intake → estimate → quote SMS. Persona "jon".
+  - **SMS** — Twilio → `/api/sms/inbound`. This one route fans out to **four different receptionists** depending on the tenant's trades and the message (see *How the pipelines work*).
+  - **Web forms** — self-serve customer forms for solar (`/solar/[tenantSlug]`), painting (`/paint-request/[token]`), aircon plan upload, etc.
+- **Tradie self-serve onboarding is live** (`/signup`, `/onboard/*`, `/api/onboard/*`), with Twilio + Vapi auto-provisioning (`lib/twilio/provision.ts`, `lib/vapi/provision.ts`). Provisioning flags (`TWILIO_PROVISIONING_ENABLED`, `VAPI_PROVISIONING_ENABLED`) are `false` in dev; every live tenant already has a provisioned SMS + voice number.
+- **Auth is Clerk** (`@clerk/nextjs`, `tenants.clerk_user_id`, migration 163; `lib/clerk/*`, `lib/tenant/current.ts` resolves a Clerk **or** legacy Supabase JWT). Supabase PKCE is the older path still present in `/auth/callback`.
+- **Production**: custom domain **`https://www.quotemax.com.au`** on Vercel (the `APP_URL` default), served by the Vercel deployment `quote-mate-rho.vercel.app`. ⚠ Provisioned Twilio numbers are split: the 5 older numbers point their SMS webhook at `quote-mate-rho.vercel.app`, the 3 newest (roofing) at `www.quotemax.com.au` — both resolve to the same app, but the webhook URL is written once at provision time and never re-asserted. Also Railway-deployable (`Dockerfile` + `railway.json`, `output: 'standalone'`).
+- **Money path: Stripe test mode, but Connect Express IS now wired** (migration 160 `connect_payouts`; `lib/stripe/connect.ts`, `checkout.connect.ts`). The `/r/*` deposit mints route with `transfer_data` + a platform `application_fee` for electrical/plumbing/solar/roofing. **1 of 8 tenants** has a connected account onboarded so far. ⚠ Two known gaps: **painting checkout does NOT route through Connect** (money lands in the platform account), and `payments` as a table no longer exists (deposit state lives on the `quotes`/measurement rows + Stripe).
 
 ## The decisions that shape the work
 
-Settled after substantive re-evaluation (see iteration history at the end of `docs/strategy.md`). Don't drift silently — if work demands a change, **add a new iteration entry to `docs/strategy.md`** before changing this table.
+Settled after substantive re-evaluation (iteration history at the end of `docs/strategy.md`). Don't drift silently — if work demands a change, **add a new iteration entry to `docs/strategy.md`** before changing this table.
 
 | Decision | What it means in practice | Status in the running system |
 |---|---|---|
-| **Portal + SMS + voice intake** | Tradie-typed portal was the v1 wedge; voice and SMS intake were added. | Voice **and** SMS both live. The v3-deferral was contradicted in practice; drift logged in `docs/strategy.md` v6 (2026-05-20). |
-| **Electrical (NSW) + plumbing (QLD)** | Two parallel single-trade pilots. | Live. `trade` column on `pricing_book`/`shared_assemblies`/`shared_materials`/`intakes`. ⚠ The "no third trade" boundary is **superseded** by `docs/strategy.md` v9 (2026-05-21), which authorizes trades-as-data expansion (carpentry, etc.) via a `trades` registry table + admin CSV loader. v9 is **not yet built** — electrical + plumbing remain the only **live** trades. |
-| **Four agents, not ten** | Quote Drafter, Quote Reviewer, Inspection Coordinator, Conversion Engine. | Drafter (Opus) + grounding validator + confidence router shipped. Reviewer/Conversion partial (tradie-notify, booking); no follow-up sequence yet. |
-| **Build the pricing book WITH the tradie** | Ship base assembly library per trade; capture tradie overlay via onboarding. | `shared_assemblies`/`shared_materials` seeded; per-tenant overlay via `pricing_book.overlays`, `tenant_material_preferences`, `tenant_custom_assemblies`, `tenant_service_offerings`. |
-| **Eval framework before prompt iteration** | 100 hold-out (intake → quote) pairs, 5-dim rubric. | ⚠ **Not built yet.** Prompts iterate without delta measurement. A parity harness (`scripts/test-sms-parity.mjs`, 70 assertions) exists but is not the eval rubric. |
-| **Stripe Connect Express** for marketplace flow | Each tradie owns funds; QuoteMax takes a platform fee. | ⚠ **Not wired.** Test-mode Checkout only; no Connect accounts, no fee split. |
-| **No auto-send in v1** | Tradie human-in-loop is the liability shield. | ⚠ **Superseded.** Live behaviour is Path B: every drafted quote auto-sends to the customer; the tradie is notified and reviews after-the-fact. Investor-pack commits `ad72ab8` + `602915e` made the switch. Drift logged in `docs/strategy.md` v6 (2026-05-20). Strategic rationale still owed there. **Solar joined Path B for _clean_ estimates in `docs/strategy.md` v12 (2026-06-16)** — gated by `SOLAR_AUTO_RELEASE` (default on); a flagged or inspection-routed solar estimate stays forced-confirm (the publish gate hides prices on flagged rows), as do roofing + commercial painting (v10/v11 review-required overrides). |
-| **Pay-first booking funnel** | Every funnel is quote → Stripe → `/book` (calendar only) → `/thanks`. | Live since 2026-07-22 (`docs/strategy.md` v16). **Supersedes the WP6 "book first, pay last" reorder for deposit tiers**; the $99 inspection and the trade surfaces were already pay-first. Two invariants an engineer can silently break: (1) the early-booking discount MUST be realised at the Stripe mint (`resolveMintDiscount` in `/r/[token]/[tier]`) — the old book-route branch is unreachable now, and moving it back kills the discount for everyone; (2) `canTakePayment()` MUST gate every mint, so a tenant with zero bookable windows is never charged for a visit nobody can schedule. |
-
-When a "decisions" entry diverges from reality, the honest move is to **append a new `docs/strategy.md` iteration entry** documenting the why — not to quietly edit the prior decision.
+| **Portal + SMS + voice intake** | Tradie-typed portal was the v1 wedge; voice, SMS, and web forms were added. | All live. Voice + SMS + self-serve web forms all ship. Original v3 "voice deferred" is contradicted; drift logged `docs/strategy.md` v6. |
+| **Trades-as-data, not hand-wired** | A trade is a `trades` registry row + admin CSV loader, not code. | **Built and live.** 8 trades in production. Registry tables (`trades`, `trade_prompts`, `trade_pricing_defaults`, `trade_spec_defs`) + `lib/admin-loader/*` + `/admin/loader`. `docs/strategy.md` v9 is realised. |
+| **Four agents, not ten** | Quote Drafter, Reviewer, Inspection Coordinator, Conversion Engine. | Drafter (Opus) + grounding validator + confidence router shipped; reviewer/conversion partial (tradie-notify, booking, 2h follow-up mig 159). No full follow-up sequence yet. |
+| **Build the pricing book WITH the tradie** | Base assembly library per trade; tradie overlay via onboarding. | `shared_assemblies` (63) / `shared_materials` (46) seeded; per-tenant overlay via `pricing_book.overlays`, `tenant_custom_assemblies`, `tenant_material_catalogue/preferences`, `tenant_service_offerings` (221), `tenant_tier_ladder`, historical-quote import (`lib/historical-quotes/*`). |
+| **Eval framework before prompt iteration** | Hold-out (intake → quote) pairs, rubric scoring. | ⚠ **Partially built.** `eval_runs` + `eval_run_items` tables (55 rows), `/admin/agents/eval-fixture` scorer. Still not the full 100-pair 5-dim rubric; prompts largely iterate without delta measurement. |
+| **Stripe Connect Express** | Each tradie owns funds; QuoteMax takes a platform fee. | **Now wired** (mig 160). `/r/*` mints use `transfer_data` + `application_fee` for elec/plumb/solar/roofing. 1/8 tenants onboarded to Connect. ⚠ Painting still bypasses Connect. Still Stripe **test** keys. |
+| **Auto-send vs review-required** | Path B: drafted quote auto-sends; tradie reviews after. | Live, per-trade nuance: electrical/plumbing/roofing auto-send; **solar** auto-releases only *clean* estimates (`SOLAR_AUTO_RELEASE` default on — flagged/inspection held); **painting + commercial painting** are review-required (customer sees no price until the tradie releases). See *review gates* below. |
+| **Pay-first booking funnel** | Every funnel is quote → Stripe → `/book` (calendar only) → `/thanks`. | Live since 2026-07-22 (`docs/strategy.md` v16). Two invariants an engineer can silently break: (1) the early-booking discount MUST be realised at the Stripe mint (`resolveMintDiscount` in the `/r/*` routes) — moving it back to the book route kills the discount for everyone; (2) `canTakePayment()` MUST gate every mint, so a tenant with zero bookable windows is never charged. ⚠ Both invariants have known holes on tenant-less rows (see debt). |
 
 ## Repository layout
 
 ```
 .
 ├── CLAUDE.md                          # this file
-├── README.md                          # public overview (updated 2026-05-20: 4 active tenants, voice live)
+├── README.md                          # public overview (⚠ lags: still says fewer tenants/trades)
 ├── docs/
 │   ├── strategy.md                    # living strategy (v16; pay-first booking funnel logged 2026-07-22)
 │   ├── skills-toolkit.md              # skills/agents/commands → build-phase mapping
-│   └── *.html + markdown/*.md         # build guide, SOPs, progress, wireframe, agent architecture
-├── assets/                            # flow SVG, experience map, Maintain logo
+│   └── *.html + markdown/*.md + superpowers/specs/*  # build guide, SOPs, progress, specs
+├── assets/                            # flow SVG, experience map, logo
+├── PRODUCT.md / DESIGN.md / .impeccable/  # design system sources of truth (see Design Context)
+├── redesign/DesignSystem/             # canonical QuoteMax design system + quotemax-design skill
 ├── .claude/                           # vendored skills/agents/commands (see .claude/PLUGINS.md)
 └── quotemate-automation/              # ◀── THE APPLICATION
     ├── AGENTS.md                      # ⚠ "This is NOT the Next.js you know" — READ FIRST
     ├── CLAUDE.md                      # just `@AGENTS.md`
-    ├── app/                           # Next.js App Router: pages + /api routes
-    ├── lib/                           # estimate, intake, sms, preview, routing, onboard, twilio, vapi, stripe, supabase, voice
-    ├── sql/                           # init.sql + migrations/002…181
-    ├── scripts/                       # ~90 ops/diagnostic .mjs (run: node --env-file=.env.local …)
-    ├── tests/ + *.test.ts             # vitest unit + playwright e2e
+    ├── app/                           # Next.js App Router: pages + /api routes (see below)
+    ├── lib/                           # ~55 domain modules (see below)
+    ├── sql/                           # init.sql + migrations/002…182 (216 files incl. *_down)
+    ├── scripts/                       # ~150 ops/diagnostic .mjs (run: node --env-file=.env.local …)
+    ├── tests/ + *.test.ts             # vitest unit (6400+ tests) + playwright e2e
     ├── Dockerfile, railway.json, vercel.json, next.config.ts
     └── .env.local                     # all live secrets — NEVER commit, NEVER paste into docs
 ```
 
+### `lib/` domain modules (largest first)
+
+`solar` · `roofing` · `sms` · `quote` · `estimate` · `painting` · `dashboard` · `signage` · `filestore` · `admin-loader` · `onboard` · `aircon` · `historical-quotes` · `commercial-painting` · `estimation` · `vapi` · `flyer` · `canva` · `crm` · `ig-engine` (image gen) · `email` · `tenant` · `stripe` · `voice` · `clerk` · `videos` (trust videos) · `intake` · `pdf` · `twilio` · `studio` · `features` · `agents` · `marketing` · `billing` · `pylon` · `opensolar` · `customers` · `routing` · `trades` · plus `qr`, `invoice`, `catalogue`, `supabase`, `log`, `phone`, `prompt-template`, `kb-sync`, `auth`.
+
 ### The webpage surface (App Router)
 
-Customer-facing: `/` (marketing landing, Maintain design system, "v5 live"), `/q/[token]` (mobile quote page — Good/Better/Best, Gemini preview/sample images, per-tier Stripe deposit, licence footer), `/q/[token]/cancelled`, `/upload/[token]` (camera/gallery photo upload), `/r/[token]/[tier]` (Stripe redirect).
+**Customer-facing quote + booking pages** — one funnel per trade, all pay-first (quote → `/r/*` Stripe → `/book` calendar → `/thanks`):
 
-**The booking flow is three pages per funnel** (pay-first since 2026-07-22 — `docs/strategy.md` v16, spec `docs/superpowers/specs/2026-07-22-booking-three-page-split-design.md`):
+| Funnel | Customer view | Booking | Thank-you | Stripe redirect |
+|---|---|---|---|---|
+| electrical / plumbing / solar | `/q/[token]` | `/q/[token]/book` | `/q/[token]/thanks` | `/r/[token]/[tier]` |
+| roofing | `/q/roof/[token]` | `/q/roof/[token]/book` | `/q/roof/[token]/thanks` | `/r/roof/[token]/[tier]` |
+| painting | `/q/paint/[token]` | `/q/paint/[token]/book` | `/q/paint/[token]/thanks` | `/r/paint/[token]/[tier]` |
+| aircon / commercial paint / plan | `/q/aircon`, `/q/commercial-paint`, `/q/plan`, `/q/choose` | via the generic funnel | | |
 
-| Funnel | Customer view | Booking (calendar only) | Thank-you |
-|---|---|---|---|
-| electrical / plumbing / solar | `/q/[token]` | `/q/[token]/book` | `/q/[token]/thanks` |
-| roofing | `/q/roof/[token]` | `/q/roof/[token]/book` | `/q/roof/[token]/thanks` |
-| painting | `/q/paint/[token]` | `/q/paint/[token]/book` | `/q/paint/[token]/thanks` |
+- Solar has no pages of its own — it books on the generic `/q/[token]` funnel via a **twin `quotes` row** sharing the same token.
+- One picker serves every funnel: `app/q/_chrome/BookingCalendar.tsx`.
+- ⚠ `/q/[token]/paid` is **not** a rendered page — it's the Stripe `success_url` router (resolves the webhook race via `confirmPaidFromSession`, then redirects to `/book`/`/thanks`/quote).
+- Other customer surfaces: `/upload/[token]` (photo upload), `/s/*` `/share/*` `/t/*` `/p/*` (share/short links, marketing QRs), `/solar/[tenantSlug]` and `/paint-request/[token]` (self-serve intake forms), `/legal/*`, `/pricing`.
 
-⚠ `/q/[token]/paid` is **no longer a rendered page** — it is the Stripe `success_url` router: it resolves the webhook race (`confirmPaidFromSession`) then redirects to `/book`, `/thanks`, or the quote. The confirmation surface it used to render lives on `/thanks`.
+**Tradie-facing** (`/dashboard/*`, Clerk-authed): overview/KPIs/pipeline, plus per-trade tabs — `crm`, `estimator`, `quote`, `roofing`, `painting`, `aircon`, `signage`, `studio`, `flyer`, `pricing-wizard`, `invites`. The **`/m/[measure_token]`** page is the tradie-facing Measurement Results surface for roofing (toggle structures, correct measurements → re-price, "save as quote"). Auth/onboarding: `/sign-in` `/sign-up` (Clerk), `/signin` `/signup` `/auth/callback` (legacy Supabase), `/onboard/*`, `/account`, `/forgot-password`.
 
-One picker serves every funnel: `app/q/_chrome/BookingCalendar.tsx` (month grid → date → time). The old day-strip `SlotPicker` was deleted. Solar has no pages of its own — it books on the generic quote pages via the twin `quotes` row.
+**Admin** (`/admin/*`): `tenants`, `customers`, `loader` (trades CSV loader), `agents` (+ eval fixtures), `files`, `metrics`, `invites`, `docs`. **Studio** (`/studio`, `/s`): marketing-asset generation (Canva, flyers, trust videos).
 
-Tradie-facing: `/signin` `/signup` `/signup/verify` `/auth/callback` (Supabase PKCE auth), `/onboard` `/onboard/check-email` `/onboard/success` (self-serve onboarding), `/dashboard` (CRM: overview/KPIs/pipeline, quotes, chats, services editor).
+**Key API routes** (`app/api/*`): `sms/inbound`, `vapi/webhook` (+ `vapi/tools/*`), `intake/structure`, `estimate/draft`, `quote/[id]/edit`, `stripe/webhook`, `cron/*`; per-trade `roofing/*` (measure, measure-all, save, save-as-quote, measurement, static-map, detect-solar, layout-plan, model3d, verify-photo, q/*), `solar/*` (`[tenantSlug]/estimate`, confirm, redraft, q/[token]/select-building, q/[token]/pdf), `painting/*` (estimate, save, edit, release, preview, structures, detect-material), `aircon`, `signage`, `commercial-paint`; `tenant/*` (`me`, `trades`, `services`, `chats`, `trade-jobs`, `commercial-painting`), `onboard/*`, `admin/*`, `paint-request/[token]`, `filestore/*`, `billing/*`, `health` + `health/deep`.
 
-Docs pages: `/docs/{sms-onboarding-architecture,sms-onboarding-flow,tradie-onboarding-architecture,tradie-onboarding-plan,tradie-onboarding-plan-sms}` + static HTML in `public/docs/` (investor pack, build guide, SOPs).
-
-Key API routes: `/api/vapi/webhook`, `/api/vapi/tools/send-sms-photo-link`, `/api/sms/inbound`, `/api/intake/structure` (channel-agnostic), `/api/estimate/draft`, `/api/quote/[id]/edit`, `/api/q/[token]/book`, `/api/stripe/webhook`, `/api/cron/sms-cleanup`, `/api/onboard/{preflight,activate,intent/[token],retry-provision}`, `/api/tenant/{me,chats,services,trades}`, `/api/health` + `/api/health/deep`.
-
-## Tech stack — as actually wired (not the strategy-doc plan)
+## Tech stack — as actually wired
 
 | Layer | Reality |
 |---|---|
 | Framework | **Next.js 16.2.4** App Router, React 19.2, Turbopack, `output: 'standalone'`. ⚠ Breaking changes vs older Next — `quotemate-automation/AGENTS.md` mandates reading `node_modules/next/dist/docs/` before writing Next code. |
-| LLM | **Vercel AI SDK v6** (`ai`, `@ai-sdk/anthropic`) calling Claude **directly via `ANTHROPIC_API_KEY`** — *not* through Vercel AI Gateway (despite the strategy.md/README plan). Opus 4.7 = intake structuring + estimation; SMS dialog/slot/intent upgraded Haiku 4.5 → Sonnet 4.6 (commit `be6128d`). Anthropic prompt caching on the system prompt. |
-| RAG / rerank | Supabase `pgvector` 0.8 (`embedding vector(1536)`, `match_intakes` fn). Voyage embeddings + reranker (`VOYAGE_API_KEY`; `lib/estimate/rag.ts`, `rerank.ts`); stubs if unset. |
-| Image gen | Two paths. **Trade "after" renders (roofing re-roof + painting/commercial-painting repaint) = Hugging Face** (`HUGGING_FACE_API_TOKEN`, FLUX.1-Kontext-dev image-to-image via HF Inference Providers) since 2026-07-14 — primary, with Replicate then Gemini as fallbacks; selector `lib/ig-engine/providers/edit-select.ts`, per-trade override `ROOFING_IMAGE_PROVIDER` / `PAINTING_IMAGE_PROVIDER`. The **SMS-receptionist preview/samples** (electrical + plumbing) keep their own text-to-image selector (`lib/ig-engine/providers/select.ts`, `IG_IMAGE_PROVIDER`, currently Replicate). Gemini is still used for **vision/text** (detect-material, detect-solar, judge). |
-| DB / auth / storage | **Supabase** (Postgres 17 + pgvector), project ref `bobvihqwhtcbxneelfns`. Auth = Supabase PKCE. Storage bucket `intake-photos`. Server routes use `SUPABASE_SERVICE_ROLE_KEY`. (Neon MCP may be available in-session but is **not** this project's DB.) |
-| Voice | Vapi + Deepgram (STT) + ElevenLabs (TTS) — **shipped**, persona "jon". |
-| SMS / WhatsApp | Twilio AU long codes; SMS-first with WhatsApp fallback (`lib/sms/dispatch.ts`). Dev SMS number `+61481613464`. |
-| Payments | Stripe **test mode** (Checkout + webhook). Connect Express **not** implemented. |
-| Email | Resend. |
-| PDF | **Gotenberg HTML→PDF** (`lib/pdf/gotenberg.ts`) renders the customer quote PDF from `lib/quote/report-html.ts`; cached at `quotes.pdf_path` and lazily regenerated when the tenant's tier mode or the report template changes (`quotes.pdf_signature`, mig 146). The live HTML quote page still exists at `/q/[token]`; no react-pdf. |
-| Analytics / errors | **No PostHog, no Sentry** yet (strategy plan only). Observability = `lib/log/pipeline.ts` + platform logs + `scripts/`. |
-| Deploy | Vercel (prod, cron) and/or Railway (Docker). See `quotemate-automation/DEPLOY.md`. |
+| LLM | **Vercel AI SDK v6** (`ai` 6.0, `@ai-sdk/anthropic` 3.0) calling Claude **directly via `ANTHROPIC_API_KEY`** (not the Vercel AI Gateway). **Intake structuring + estimation = Opus 4.8** (`lib/intake/structure.ts`, `lib/estimate/run.ts`). **SMS receptionists (dialog + slot extraction + intent) = `claude-sonnet-5`** (`lib/sms/model.ts` — one shared const, `maxOutputTokens` set explicitly because the pinned `@ai-sdk/anthropic@3.0.71` predates the model id). Vapi voice persona = Haiku 4.5 (`VAPI_VOICE_MODEL`). Anthropic prompt caching on the system prompt. ⚠ The pinned provider has no `claude-sonnet-5` capability entry — see `lib/sms/model.ts` for why `maxOutputTokens`/structured-output need explicit handling. |
+| RAG / rerank | Supabase `pgvector` 0.8 (`embedding vector(1536)`, `match_intakes`). Voyage embeddings; Cohere reranker (`RAG_RERANK_PROVIDER`; `lib/estimate/rag.ts`, `rerank.ts`); stubs if unset. |
+| Measurement providers | **Roofing** — Geoscape (primary, `GEOSCAPE_API_KEY`) + PropRadar + Google satellite/tiles; `ROOFING_PROVIDER`, semantic edge analysis (`ROOFING_EDGE_ANALYSIS_ENABLED`), 3D model (Tripo, `TRIPO_*`). **Solar** — Google Solar API building-insights + a manual bucket fallback when uncovered; Felt map (`FELT_API_KEY`); OpenSolar + Pylon cross-checks (`PYLON_ENABLED`, `lib/opensolar/*`, `lib/pylon/*`). **Painting** — Google Solar building lookup + street-view for wall area. |
+| Image / vision | **Trade "after" renders** (roofing re-roof, painting/commercial repaint) via **Hugging Face** FLUX.1-Kontext-dev (`HF_IMAGE_PROVIDER`/`HF_IMAGE_MODEL`), Replicate → Gemini fallbacks; per-trade `ROOFING_IMAGE_PROVIDER`/`PAINTING_IMAGE_PROVIDER`. **SMS preview/samples** keep a text-to-image selector (`IG_IMAGE_PROVIDER`). Vision/detect (material, solar, signage, judge) spread across Gemini, Cloudflare, NVIDIA, Stability (`*_VISION_MODEL` flags). Selectors in `lib/ig-engine/providers/*`. |
+| DB / auth / storage | **Supabase** (Postgres 17 + pgvector), project ref `bobvihqwhtcbxneelfns`. **Auth = Clerk** (primary) + legacy Supabase PKCE. Storage buckets: `intake-photos`, tenant files, tenant videos. Server routes use `SUPABASE_SERVICE_ROLE_KEY` (RLS bypassed — tenancy is app-layer). |
+| Voice | Vapi + Deepgram (STT) + ElevenLabs (TTS) — shipped, persona "jon". Prompt sync via `VAPI_PROMPT_SYNC_ENABLED`. |
+| SMS / WhatsApp | Twilio AU long codes; SMS-first with WhatsApp fallback (`lib/sms/dispatch.ts`). Dev shared number `+61481613464`. |
+| Payments | Stripe **test mode**, **Connect Express wired** (`transfer_data` + platform `application_fee`) for elec/plumb/solar/roofing; painting bypasses Connect. |
+| Email | Resend (`lib/email/*`, campaigns + transactional). |
+| PDF | **Gotenberg HTML→PDF** (`lib/pdf/gotenberg.ts`) from `lib/quote/report-html.ts` and the per-trade report-html builders; cached on the row, lazily regenerated on template/tier-mode change. Live HTML quote pages still exist; no react-pdf. |
+| CRM / marketing | CRM push (`lib/crm/*`, `crm_connections`); Canva designs, flyers, marketing QRs, trust videos (`lib/{canva,flyer,marketing,videos}/*`). |
+| Analytics / errors | No PostHog/Sentry yet. Observability = `lib/log/pipeline.ts` + **`pipeline_traces`** table (structured per-request traces) + platform logs + `scripts/`. |
+| Deploy | Vercel (prod + crons) and/or Railway (Docker). See `quotemate-automation/DEPLOY.md`. |
 
 ## The live database (Supabase `bobvihqwhtcbxneelfns`)
 
-18 base tables in `public`. For ad-hoc inspection connect with `pg` via `SUPABASE_DB_URL` (pattern: `scripts/run-migration-*.mjs`). Schema/seed source of truth: `sql/init.sql` + `sql/migrations/002…023`.
+**85 base tables** in `public` (was 18). For ad-hoc inspection connect with `pg` via `SUPABASE_DB_URL` (pattern: `scripts/run-migration-*.mjs`). Schema/seed source of truth: `sql/init.sql` + `sql/migrations/002…182`. Grouped by domain:
 
-**Reference / config (per-trade, per-tenant overlay):**
-- `pricing_book` (5 rows) — `trade`, `tenant_id`, `hourly_rate`, `call_out_minimum`, `apprentice_rate`/`senior_rate`, `default_markup_pct`, `risk_buffer_pct`, `min_labour_hours`, GST, licence, `overlays` jsonb. Electrical ≈ $110/hr × 28–36% markup; plumbing = $120/hr × 15–20% (see [[project_plumbing_routing_rules]]).
-- `shared_assemblies` (43: 20 electrical / 23 plumbing), `shared_materials` (37, categorised), `tenant_custom_assemblies` (0 — migration 023, tradie-owned), `tenant_service_offerings` (54 — which assemblies a tenant offers), `tenant_material_preferences` (0 — soft brand hints), `tenant_licences` (0).
+- **Trades registry (v9):** `trades`, `trade_prompts`, `trade_pricing_defaults`, `trade_spec_defs`, `job_type_bounds`.
+- **Pricing / reference:** `pricing_book` (6), `shared_assemblies` (63), `shared_materials` (46), `shared_assembly_bom`, `supplier_catalogue`/`supplier_price_refs`, `paint_rates`, `signage_rules` (882), `categories`, `brands`.
+- **Tenancy / onboarding:** `tenants` (8), `tenant_service_offerings` (221), `tenant_custom_assemblies`, `tenant_assembly_overrides`/`_bom`, `tenant_material_catalogue`/`_preferences`, `tenant_tier_ladder`, `tenant_licences`, `tenant_file_documents`/`_comments`, `tenant_historical_quotes`/`_import_batches`, `tenant_trade_videos`, `onboarding_codes`, `code_redemptions`, `tradie_signup_intents`, `tradie_edit_patterns`, `admin_users`, `admin_audit_log`, `orgs`.
+- **Pipeline (per trade):** `intakes` (241), `quotes` (228 — G/B/B line items in `good`/`better`/`best` jsonb; `quote_line_items` does not exist / never used), `roofing_measurements` (100), `solar_estimates` (34) + `solar_building_cache` + `solar_config`, `painting_measurements` (22) + `painting_lead_requests`, `paint_runs`, `aircon_recommendations` + `plan_uploads`/`plan_upload_requests`/`plan_extractions`, `signage_requests`/`_assessments`/`_sweeps`/`_photo_submissions`, `pricing_suggestions`, `calls`, `customers` (6), `crm_contacts`/`_connections`, `quote_followup_events`, `trade_paid_amount` (mig 181).
+- **SMS:** `sms_conversations` (210; `conversation_type`, `conversation_state`/`roofing_state`/`painting_state` jsonb, follow-up pins), `sms_messages` (2597), `lead_throttle`.
+- **Integrations / assets:** `opensolar_proposals`, `pylon_proposals`, `canva_connections`/`_designs`/`_oauth_states`, `flyers`, `marketing_qrs`/`qr_scans`, `studios`, `email_campaigns`/`_sends`/`_unsubscribes`, `invoice_uploads`/`_extractions`, `catalogue_findings`, `import_batches`/`import_staged_rows`, `kb_sync_state`.
+- **Eval / observability:** `eval_runs`/`eval_run_items` (55), `pipeline_traces` (1661).
 
-**Tenancy / onboarding:** `tenants` (5, all `active`; `trade`+`trades[]`, twilio/vapi/stripe ids, branding), `tradie_signup_intents` (2), legacy `tradies` (1).
+**RLS reality:** RLS is **ON for 78 of 85 tables**. The 7 with RLS off are backup/staging/internal tables (`*_backup_mig*`, `kb_sync_state`, `job_type_bounds`, `painting_lead_requests`, `supplier_price_refs`). Multi-tenant isolation in API routes + server components is still **app-layer `tenant_id` filtering** (service-role key bypasses RLS). ⚠ The audits found tenancy holes on **token-only** endpoints (see debt) — the RLS-on status does not by itself close them.
 
-**Pipeline:** `calls` (49), `intakes` (157 — `scope/access/property/risks/timing/caller` jsonb, `embedding`, `confidence`, `trade`), `quotes` (137 — **G/B/B line items live in `good`/`better`/`best` jsonb**, plus preview/sample image columns, `routing_decision`, stripe links), `quote_line_items` (**0 — unused; do not assume normalized line items**), `payments` (0), `customers` (4).
+## How the pipelines work — FOUR distinct shapes
 
-**SMS:** `sms_conversations` (89; `conversation_type` customer_quote|tradie_registration, `conversation_state` jsonb), `sms_messages` (1038).
+The system is not one pipeline. Which one runs depends on the trade:
 
-**RLS reality (updated 2026-05-20):** RLS is now ON across 22 public tables after migration 040 (Phase 1). The 13 previously-leaking tables (`tenants/customers/sms_*/tradie_signup_intents/tenant_*/shared_assembly_bom`) had RLS off and were exposed to the public `NEXT_PUBLIC_SUPABASE_ANON_KEY` — anon smoke test confirms that's now closed (0 rows visible to anon). One positive policy (`tenants_self_select`) covers the auth-callback's `select id, status, business_name from tenants where owner_user_id = auth.uid()` read. Multi-tenant isolation in API routes + server components is still **app-layer `tenant_id` filtering** because they use the service-role key (RLS bypassed) — Phase 2 will add tenant-scoped policies for defense in depth.
+**1. Electrical / plumbing — LLM intake → estimate (the original).**
+`intake (voice/SMS/portal)` → `lib/intake/structure.ts` (Opus 4.8 vision + Zod) → embedding → `lib/estimate/run.ts` (RAG + brand hint → Opus 4.8 with **tool-calling only** for prices via `lib/estimate/tools.ts`) → JSON draft → **`lib/estimate/validate.ts` grounding check** (every line-item price must derive from `pricing_book` + `shared_*` + `tenant_custom_assemblies` scoped to `intake.trade`; any failure downgrades the whole quote to the $99 inspection route) → `lib/routing/decide.ts` → `quotes` row + Stripe sessions + customer SMS + tradie notify. Trade prompt in `lib/estimate/prompt.ts`.
 
-**Quote funnel snapshot (2026-05-18):** 137 quotes, all `draft` except 1 `sent`; 0 sent/accepted/paid. Routing: 80 `tradie_review`, 38 `inspection_required`, 19 null. Intakes: electrical 66 MED / 46 LOW, plumbing 39 MED / 6 LOW. Top job types: downlights (43), hot_water (17), power_points (14), ceiling_fans (12), blocked_drain (10).
+**2. Roofing — deterministic SMS receptionist + dashboard measure.**
+Zero LLM in the customer-facing flow. `app/api/sms/inbound/route.ts` `handleRoofingTurn` gates on `tenants.trades` containing `roofing` (a roofing-only tenant engages without a keyword), then walks a **pure state machine** (`lib/sms/roofing-{intake,receptionist,compose}.ts`): address → map-verify (`lib/sms/verify-address.ts`) → confirm → intent → material → (Colorbond profile) → pitch → `measureAndPriceRoofs` (Geoscape et al) → send roof photos + "which building(s)?" → priced SMS + `/q/roof/[token]` link + PDF. The tradie also has a **dashboard path** (`/api/roofing/{measure,save,save-as-quote}` + the `/m/[measure_token]` page). Two tokens minted as a pair (`lib/roofing/tokens.ts`): customer `public_token` (`/q/roof/…`), tradie `measure_token` (`/m/…`).
 
-## How the quote pipeline works
+**3. Solar — deterministic web-form engine (no SMS).**
+Public `POST /api/solar/[tenantSlug]/estimate` from the `/solar/[tenantSlug]` form. Fully deterministic chain (`lib/solar/*`): geocode → Google Solar coverage gate → roof facts (or manual bucket fallback) → sizing into G/B/B tiers (capped by roof + DNSP export limit) → annual AC production (CEC cross-check) → price (gross − STC rebate = net, CER postcode→zone table) → savings/payback economics → guardrails. Persists three rows (an `intakes` row, a `solar_estimates` row, and a **twin `quotes` row** for the generic pay-first funnel). Review gate: `SOLAR_AUTO_RELEASE` auto-releases a *clean, priced, non-inspection* estimate in `after()`; flagged/inspection estimates are held behind `lib/solar/publish.ts`. Background OpenSolar + Pylon cross-checks can add guardrail flags. No LLM writes prices; the one AI feature (the "roof intelligence" brief, `lib/solar/ai-brief.ts`, Sonnet) is prompted with zero dollar figures and validated.
 
-`intake (voice/SMS)` → `lib/intake/structure.ts` (Opus 4.7 vision + Zod schema) → embedding → `lib/estimate/run.ts`: RAG context + brand-preference hint → Opus 4.7 with **tool-calling only** for prices (`lib/estimate/tools.ts` reads shared + tenant_custom assemblies) → JSON draft → **`lib/estimate/validate.ts` grounding check**: every line-item price must derive from `pricing_book` + `shared_*` + `tenant_custom_assemblies` *scoped to `intake.trade`*; **any failure downgrades the whole quote to the $99 inspection route**. Then `lib/routing/decide.ts` → `quotes` row + Stripe sessions + customer SMS + tradie notify (SMS+WhatsApp). Trade prompt selected in `lib/estimate/prompt.ts` (`electrical-prompt.ts` / `plumbing-prompt.ts`).
+**4. Painting — deterministic SMS receptionist + self-serve form, review-required.**
+Mirrors roofing (`lib/sms/painting-*.ts`, `handlePaintingTurn`) or the `/paint-request/[token]` form. Area from Google Solar building lookup + street-view; pricing in `lib/painting/pricing.ts`. **Review-required**: the customer sees a holding message, and prices/deposit links only unlock after the tradie presses "Send" (`lib/painting/publish-gate.ts` gates `/q/paint/[token]` and `/r/paint/*`). Commercial painting is a **separate stack** (`lib/commercial-painting/*`, `paint_rates`/`paint_runs`) that texts the price immediately (⚠ divergent delivery rule vs residential).
+
+**Aircon** (`lib/aircon/*`): plan-upload → sizing/design → recommendation (`aircon_recommendations`). **Signage** (`lib/signage/*`): photo/vision assessment against `signage_rules` (882 rows). Both hang off the dashboard + generic funnel.
+
+## Review gates & the money invariants (get these right)
+
+- **Who holds prices:** painting + commercial-painting = held until tradie release; solar = held unless clean+auto-release; electrical/plumbing/roofing = auto-send. Each trade has its own gate module — do not assume one covers another.
+- **Pay-first:** discount realised at the `/r/*` mint (`resolveMintDiscount`); `canTakePayment()` must gate every mint.
+- **Grounding:** money-touching LLM steps are **tool-calling only**; the grounding validator + inspection fallback is the hard backstop. Roofing/solar/painting pricers are pure and deterministic — no LLM in the money path.
 
 ## Conventions
 
-- Currency stored ex-GST; displayed inc-GST. Quotes embed their numbers in `good/better/best` jsonb (line items not normalized).
+- Currency stored ex-GST, displayed inc-GST. Quotes embed numbers in `good/better/best` jsonb (not normalized).
 - AU/NZ-first formatting, language, dates, addresses.
-- **Money-touching LLM steps use tool-calling only** — never free-form prices. The grounding validator is the hard backstop; inspection-fallback is the safe failure mode.
-- Multi-trade scoping is by the `trade` column everywhere (assemblies, materials, pricing_book, intakes, prompts, validator candidates).
-- New trade ⇒ 5-component bundle (assemblies, intake rules, pricing defaults, G/B/B framing, licence schema) — see `public/docs/onboarding-bundle.html`. ⚠ This hand-wired per-trade model is **superseded by `docs/strategy.md` v9** (2026-05-21): a third trade is now authorized via the `trades` registry table + admin CSV loader, not by hand-wiring in code. v9 is not yet built; until Phase 0 ships, electrical + plumbing remain the only live trades.
-- Webhook routes fast-ack (<500ms) then run heavy work in `next/server` `after()`; idempotency on Twilio `MessageSid`. `maxDuration` raised on Sonnet/Opus routes (Vercel Hobby's 10s times out — needs Pro or Railway).
-- Scripts run with `node --env-file=.env.local scripts/X.mjs`. Don't commit `.env.local` or paste its secrets anywhere (this file included).
+- Multi-trade scoping is by the `trade` column / `tenants.trades[]` everywhere (assemblies, materials, pricing_book, intakes, prompts, validator candidates, SMS receptionist gates).
+- A new trade = a `trades` registry row + admin CSV load (`/admin/loader`), **not** hand-wired code. Registry drives prompts (`trade_prompts`), pricing defaults (`trade_pricing_defaults`), spec fields (`trade_spec_defs`).
+- Webhook routes fast-ack (<500ms) then run heavy work in `next/server` `after()`; idempotency on Twilio `MessageSid`; `maxDuration` raised on LLM/measure routes (Vercel Hobby's 10s times out — needs Pro or Railway). ⚠ The 60s inflight lock is shorter than the worst-case turn — see debt.
+- Scripts run with `node --env-file=.env.local scripts/X.mjs`. Never commit `.env.local` or paste its secrets.
+- DB changes = a new `sql/migrations/NNN_*.sql` (+ a `NNN_down.sql`) + a `scripts/run-migration-NNN.mjs`, applied to prod Supabase; keep `sql/init.sql` representative.
 
 ## Working in this repo
 
 - **Before writing any Next.js code**, read `quotemate-automation/AGENTS.md` and the relevant `node_modules/next/dist/docs/` guide — Next 16 has breaking changes vs training-data knowledge.
-- **Strategy/product questions** — `docs/strategy.md` first, but cross-check against this file; the doc lags reality on voice, auto-send, and the eval framework.
-- **Third trade is authorized** by `docs/strategy.md` v9 (2026-05-21) via the `trades` registry — not by hand-wiring a new trade in code. The boundary moved from "electrical + plumbing only" to "N admin-loaded trades", but v9 is **not yet built**: electrical + plumbing are still the only live trades, and any new-trade work must follow the v9 phased plan (Phase 0 foundation first).
-- **Don't rebuild ServiceM8/Tradify features** (calendar/CRM/invoicing) — the wedge is the AI quote draft + paid inspection flow.
-- **After editing `docs/strategy.md`**, invoke the `strategy-reviewer` agent (catches drift across README/CLAUDE/assets). The voice + auto-send + eval-framework drifts above are overdue for a new iteration entry.
-- **DB changes** = a new `sql/migrations/NNN_*.sql` + a `scripts/run-migration-NNN.mjs`, applied to prod Supabase; keep `sql/init.sql` representative.
-- Skills/agents/commands toolkit is vendored in `.claude/` (hyphenated names, e.g. `/vercel-nextjs`, `/supabase-supabase`, `/stripe-best-practices`); built-ins keep bare names (`/review`, `/simplify`, `/security-review`). Phase→tool mapping: [`docs/skills-toolkit.md`](docs/skills-toolkit.md); plugin landscape: [`.claude/PLUGINS.md`](.claude/PLUGINS.md).
+- **Strategy/product questions** — `docs/strategy.md` first, but cross-check against this file; the doc lags reality (voice, auto-send, trades-as-data, Connect all shipped past their strategy entries).
+- **Adding a trade** = the registry + loader flow, not code (the "electrical + plumbing only" boundary is gone).
+- **Don't rebuild ServiceM8/Tradify features** (calendar/CRM/invoicing beyond what exists) — the wedge is the AI quote draft + paid inspection flow.
+- **After editing `docs/strategy.md`**, invoke the `strategy-reviewer` agent (catches drift across README/CLAUDE/assets).
+- Skills/agents/commands toolkit is vendored in `.claude/` (hyphenated plugin names, e.g. `/vercel-nextjs`, `/supabase-supabase`, `/stripe-best-practices`; built-ins keep bare names). Phase→tool map: [`docs/skills-toolkit.md`](docs/skills-toolkit.md); plugin landscape: [`.claude/PLUGINS.md`](.claude/PLUGINS.md).
 
 ## Known debt / honest gaps
 
-- ⚠ Stripe Connect Express not implemented — no real funds flow.
-- ⚠ RLS enabled but policy-less; tenancy is app-layer only.
-- ⚠ Eval framework (100 hold-out pairs, 5-dim rubric) not built; prompts iterate without delta measurement.
-- ⚠ Voice + auto-send shipped but the original `docs/strategy.md` entries (v3/v4/v5) still document them as deferred/forbidden. The 2026-05-20 v6 iteration entry records the drift but does NOT supply the strategic rationale — that's still owed by whoever made the call.
-- **RLS Phase 1 applied 2026-05-20** (migration 040). The 13 leaking tables (`tenants`/`customers`/`sms_*`/`tradie_signup_intents`/`tenant_*`/`shared_assembly_bom`) now have RLS enabled; anon-role smoke test confirms 0 rows visible (was full leak). One positive policy `tenants_self_select` on `tenants` covers the auth-callback's own-tenant lookup. Service role still bypasses RLS so every `/api/*` route + server component works unchanged. Phase 2 (tenant-scoped policies for the per-tenant tables) deferred — see [`quotemate-automation/docs/rls-design.md`](quotemate-automation/docs/rls-design.md). Pending: live browser smoke-test of the post-signup auth-callback flow next time a new user signs up.
-- **`customers.tenant_id` code fix 2026-05-20** — `lib/customers/lookup.ts`'s `findOrCreateCustomer()` now accepts a `tenantId` parameter and stamps it on insert, with heal-in-place on existing NULL rows. Callers updated: `app/api/sms/inbound/route.ts:313` (passes `tenant?.id ?? null`) and `app/api/intake/structure/route.ts:312` (passes the resolved `tenantId`). Closes the recurring orphan source.
-- **Pre-existing orphan `tenant_id IS NULL` rows** (audit 2026-05-20, 363 rows total): `calls 49/49` (100% — pre vapi_assistant_id stamping on tenants), `customers 4/4` (now self-heal via the code fix on next inbound), `sms_conversations 74/117` (legacy traffic to the dev shared number `+61481613464` + `tradie_registration` rows that are NULL-by-design until activation), `intakes 127/176` + `quotes 108/155` (parent is itself orphan — no FK source to propagate from). FK propagation via `scripts/backfill-orphan-tenant-ids.mjs --apply` resolved 1 intake; the rest are unrecoverable historical test traffic. Accept and document; do not delete (still referenced).
-- `quote_line_items` table exists but is unused (0 rows) — line items are denormalized into `quotes.good/better/best`.
+Recent audits (roofing SMS, then the roofing/solar/painting trade-job services) surfaced a live backlog. The load-bearing ones:
+
+- **Solar auto-release can send a $0 confirmed quote** when the engine can't size a system (no imagery, roof too small, or **any Google Solar outage**) — `finaliseSolarEstimate` overwrites the `inspection_required` decision. Treat as critical.
+- **Solar "held for review" is cosmetic on token routes** — the PDF route and the `/r/*` deposit link check `routing` but not `confirmed_at`/`released_at`, so a flagged estimate is still downloadable/payable by anyone with the link. Same class of hole on the **painting PDF** route.
+- **Cross-tenant solar actions** — `/api/solar/{confirm,redraft}` check *signed in*, not *owns the quote*; keyed off the customer's own token.
+- **Painting deposits bypass Stripe Connect** — money lands in the platform account, not the tradie's.
+- **Tenant-less rows skip the `canTakePayment` guard** on `/r/paint` and `/r/roof` (tenant_id NULL → mint anyway).
+- **SMS receptionist blockers** (roofing + painting share the class): stop-word false-positives cancel live threads; `y`/`👍`/`ya` not accepted as yes; AU idiom ("no worries") parses as no; multi-pick "1 and 2" truncates; mapper vocabulary gaps route quotable jobs to inspection; the roofing bot's trigger words (gutter/eaves/fascia/paint) hijack painting enquiries; "solar quote please" is a dead lead (no SMS solar flow).
+- **Silent notify black holes** — a held quote with no `owner_mobile` (and no `TRADIE_NOTIFY_NUMBER`) notifies nobody; several save/update routes return HTTP 200 on failure.
+- **Roofing map-verify layer** (`lib/sms/verify-address.ts`) — unbounded loop when Google "corrects" to the wrong address; no timeout on the inline Google call inside the SMS turn.
+- **60s inflight lock vs ~200–300s worst-case turn** — a slow measure lets a second webhook take the lock and run concurrently (duplicate/out-of-order replies).
+- **Stripe Connect** onboarded on only 1/8 tenants; **eval framework** partial; **RLS Phase 2** (tenant-scoped positive policies) still deferred — tenancy is app-layer + token-gated only.
+- Historical orphan `tenant_id IS NULL` rows from legacy/dev-number traffic remain (accepted, documented; do not delete — still referenced).
 
 ## Design Context (impeccable)
 
 Design sources of truth for any UI/frontend work (initialized 2026-07-06 via `/impeccable init`):
 
-- **[PRODUCT.md](PRODUCT.md)** — strategic design context: register (`brand` by default; the tradie `/dashboard`+`/admin` layer is a secondary `product` register), users, purpose, brand personality, anti-references, design principles, accessibility. Wins on strategy/voice decisions.
-- **[DESIGN.md](DESIGN.md)** + **`.impeccable/design.json`** — the visual system (DESIGN.md format spec): palette, type, elevation, components, do's/don'ts. Wins on visual decisions.
+- **[PRODUCT.md](PRODUCT.md)** — strategic design context: register (`brand` default; tradie `/dashboard`+`/admin` is a secondary `product` register), users, purpose, brand personality, anti-references, principles, accessibility. Wins on strategy/voice.
+- **[DESIGN.md](DESIGN.md)** + **`.impeccable/design.json`** — the visual system: palette, type, elevation, components, do's/don'ts. Wins on visual decisions.
 - **[redesign/DesignSystem/](redesign/DesignSystem/)** — the canonical, fuller QuoteMax design system (tokens, foundations, React primitives, UI kits). The `quotemax-design` skill (`redesign/DesignSystem/SKILL.md`) is user-invocable.
 - **North Star:** "The Command Centre" — warm-charcoal canvas `#16120F`, one accent (Caterpillar yellow `#FFC400`), Manrope + JetBrains Mono, square corners, borders/lit-edges/grain over shadows, Australian English, zero emoji.
 - ⚠ **Retired identity:** the old navy `#0E1622` + orange `#FF5A1F` "Maintain" palette and the vendored `.claude/skills/maintain-design-system/` skill are **deprecated** — do not reintroduce. Yellow + charcoal is canonical.
