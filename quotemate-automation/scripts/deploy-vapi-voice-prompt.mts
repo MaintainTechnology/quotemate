@@ -1,10 +1,16 @@
 // Deploy the composed multi-trade voice prompt to the LIVE Vapi assistant.
 //
-// This is the ONE deploy path that shares lib/vapi/voice-prompt.ts with the
-// auto-provision flow (provision.ts / update-assistant.ts) — so the live
-// assistant and any future auto-provisioned assistant speak the SAME script,
-// which mirrors the SMS receptionist. It replaces the hand-copied prompt body
-// in the older scripts/update-vapi-prompt-*.mjs one-offs.
+// The MANUAL single-assistant deploy path (env VAPI_ASSISTANT_ID) sharing
+// lib/vapi/voice-prompt.ts with the auto-provision flow (provision.ts /
+// update-assistant.ts) — so the live assistant and any auto-provisioned
+// assistant speak the SAME script, which mirrors the SMS receptionist. It
+// replaces the hand-copied prompt body in the older
+// scripts/update-vapi-prompt-*.mjs one-offs.
+//
+// For ALL tenants at once use scripts/sync-vapi-assistants.mts (2026-07-23),
+// which goes through updateVapiAssistant/buildAssistantPatch and ALSO bumps
+// the model via resolveVoiceModel(); this script deliberately preserves the
+// assistant's existing model and only swaps the prompt.
 //
 // It also pulls the tenant's ENABLED services + their MUST-ASK questions
 // straight from Supabase (shared_assemblies / tenant_custom_assemblies

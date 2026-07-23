@@ -27,6 +27,7 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { defaultsForTrade } from '@/lib/onboard/schema'
 import { updateVapiAssistant } from '@/lib/vapi/update-assistant'
+import { fetchTenantVoiceServices } from '@/lib/vapi/tenant-services'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
@@ -324,6 +325,9 @@ export async function POST(req: Request) {
       assistantId: tenant.vapi_assistant_id,
       businessName: tenant.business_name ?? '',
       trades: nextTrades,
+      // Same enabled-services + MUST-ASK set the SMS dialog injects — voice
+      // and SMS ask identical per-service questions (best-effort []).
+      customServices: await fetchTenantVoiceServices(supabase, tenant.id, nextTrades),
     })
     if (!vapiRes.ok) {
       vapiWarning = `AI assistant prompt refresh failed: ${vapiRes.reason}. Old prompt remains active.`

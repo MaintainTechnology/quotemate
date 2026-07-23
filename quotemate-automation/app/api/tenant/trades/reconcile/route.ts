@@ -28,6 +28,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { updateVapiAssistant } from '@/lib/vapi/update-assistant'
+import { fetchTenantVoiceServices } from '@/lib/vapi/tenant-services'
 import { listManageableTrades } from '@/lib/trades/manageable'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
@@ -209,6 +210,7 @@ export async function POST(req: Request) {
       assistantId: tenant.vapi_assistant_id as string,
       businessName: tenant.business_name as string,
       trades: nextTrades,
+      customServices: await fetchTenantVoiceServices(supabase, tenant.id, nextTrades),
     })
     if (!vapiRes.ok) {
       warning = `AI assistant prompt refresh failed: ${vapiRes.reason}. Your trades are live for quotes; the Voice agent updates on the next provision.`

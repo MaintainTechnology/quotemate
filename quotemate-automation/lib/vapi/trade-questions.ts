@@ -33,6 +33,10 @@ export type VoiceTradeBlock = {
   /** How the call CLOSES for this trade — sets the caller's expectation.
    *  Never promises an on-call price for a non-auto-quote trade. */
   closing: string
+  /** Spoken facts for "how does it work?" questions — the voice twin of the
+   *  process explanations the SMS receptionists give. Honest, no prices,
+   *  1-2 short sentences each. Rendered only when the trade is enabled. */
+  howItWorks: string[]
 }
 
 export const VOICE_TRADE_QUESTIONS: Record<string, VoiceTradeBlock> = {
@@ -49,6 +53,11 @@ export const VOICE_TRADE_QUESTIONS: Record<string, VoiceTradeBlock> = {
       'Fibro / cement / asbestos sheet, a very steep or unknown pitch, or a leak trace all need a roofer on site — stop the questions and offer to book a site visit. Never ask the year the house was built.',
     closing:
       "We can't price a roof over the phone — I'll get a roofer to confirm the measurements off the satellite imagery and we'll send the quote through. No price on the call.",
+    howItWorks: [
+      'We measure the roof from satellite and aerial imagery of the property — nobody needs to climb up for the quote.',
+      'The quote comes through by text with a picture of the roof and priced options, and you can book and pay a deposit from the same link.',
+      "If the roof can't be measured remotely, a roofer comes out and checks it on site instead.",
+    ],
   },
 
   painting: {
@@ -67,6 +76,10 @@ export const VOICE_TRADE_QUESTIONS: Record<string, VoiceTradeBlock> = {
       'Poor / flaking surfaces, raked or extra-high ceilings, or 3+ storeys need an on-site measure — offer to book it instead of promising a figure.',
     closing:
       "We'll confirm the measure and get your painting quote across — no price on the call.",
+    howItWorks: [
+      'We price off your surfaces, coats and condition, and the quote lands by text with priced options you can book from.',
+      'Tricky or damaged surfaces and very high ceilings get an on-site measure before the price is final.',
+    ],
   },
 
   solar: {
@@ -84,6 +97,10 @@ export const VOICE_TRADE_QUESTIONS: Record<string, VoiceTradeBlock> = {
       "Address, postcode and state are the only ones you must get. 'Not sure' is a perfectly good answer on grade and phase — accept it and move on, don't push.",
     closing:
       "We can't size a solar system over the phone — our installer confirms the roof from satellite imagery and we'll send the design and quote through.",
+    howItWorks: [
+      'Our installer checks your roof from satellite imagery, works out the panel layout, and texts the design and quote through.',
+      'Rebates and feed-in details are confirmed with the quote — no pushy sales call.',
+    ],
   },
 
   aircon: {
@@ -101,6 +118,9 @@ export const VOICE_TRADE_QUESTIONS: Record<string, VoiceTradeBlock> = {
       'Address, postcode, state, ceiling height, insulation, the situation, and at least one room count are the minimum. Sizing always needs a site assessment — keep it indicative.',
     closing:
       "I'll get us out for a quick site assessment so we can size it properly — I can't give a firm price on the call, but we'll have it across straight after.",
+    howItWorks: [
+      'Air con is sized properly at a quick site assessment — rooms, ceilings and insulation all matter — and the quote follows straight after.',
+    ],
   },
 
   commercial_painting: {
@@ -114,5 +134,8 @@ export const VOICE_TRADE_QUESTIONS: Record<string, VoiceTradeBlock> = {
       'Commercial painting is priced off the plan set — there is no surface-by-surface Q&A over the phone. Capture the project, the site and get the plans sent through.',
     closing:
       'Send the plans through on that link and our estimator will put the tender together — no price on the call.',
+    howItWorks: [
+      'Commercial painting is priced off the plan set — you upload the plans on a link we text you, and our estimator puts the tender together from there.',
+    ],
   },
 }

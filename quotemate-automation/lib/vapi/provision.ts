@@ -12,6 +12,7 @@ import {
   buildVoiceFirstMessage,
   buildVoiceSystemPrompt,
 } from './voice-prompt'
+import { resolveVoiceModel } from './voice-model'
 
 const VAPI_API = 'https://api.vapi.ai'
 
@@ -62,7 +63,7 @@ export async function provisionVapiAssistant(opts: {
     firstMessage,
     model: {
       provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
+      model: resolveVoiceModel(),
       temperature: 0.2,
       systemPrompt,
     },

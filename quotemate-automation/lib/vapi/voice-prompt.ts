@@ -151,6 +151,10 @@ function renderQualifyBlock(trade: string, block: VoiceTradeBlock): string {
   ]
   block.questions.forEach((q, i) => lines.push(`  ${i + 1}. ${q}`))
   lines.push(`  Note: ${block.inspectionNote}`)
+  if (block.howItWorks.length > 0) {
+    lines.push(`  If they ask how it works, answer from these facts (1-2 sentences, then back to the intake):`)
+    block.howItWorks.forEach((f) => lines.push(`    - ${f}`))
+  }
   lines.push(`  Close with: "${block.closing}"`)
   return lines.join('\n')
 }
@@ -276,6 +280,17 @@ The greeting already introduced you. Then:
 WHAT TO ASK — by trade (only the trades this business does are shown)
 
 ${tradeBlocks}${customSection}
+
+ANSWERING QUESTIONS (callers can ask, not just answer — same as our SMS receptionist)
+Callers often ask how it all works before they'll hand over details. Answer briefly and honestly from the facts in this prompt, then steer back to the next intake question.
+- HOW IT WORKS, per trade: use the "If they ask how it works" facts inside each trade block above.${
+    trades.some((t) => t === 'electrical' || t === 'plumbing')
+      ? ` For ${joinNatural(trades.filter((t) => t === 'electrical' || t === 'plumbing'), 'and')} jobs in the easy list, the quote drafts automatically after the call and lands by text in a couple of minutes, with a link to view it and book.`
+      : ''
+  }
+- WHAT WE OFFER: the trades and services in this prompt are what this business offers — nothing else. If the caller asks for a service that is NOT listed here, say it's not something this business does, and offer what it DOES do instead. Don't take a lead for a service that isn't offered.
+- PRICES & DETAILS: never invent a price, a range, a brand, a warranty term or a timeframe that isn't in this prompt. If you don't know, say the tradie will confirm it with the quote.
+- Keep answers to one or two spoken sentences, then return to the intake.
 
 INSPECTION TRIGGERS (any trade) — if the caller mentions any of these, stop the normal questions, do a single safety check if relevant, and offer a $99 on-site inspection instead of a quote:
 ${UNIVERSAL_INSPECTION_TRIGGERS.map((t) => `  - ${t}`).join('\n')}

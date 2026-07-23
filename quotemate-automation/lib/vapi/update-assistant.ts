@@ -1,18 +1,32 @@
 // Update an existing Vapi assistant in place.
 //
-// Used when the tenant's trade portfolio changes after activation —
-// e.g. a sparky adds plumbing to their account, and the AI receptionist
-// needs to start greeting plumbing callers without losing the existing
-// assistant ID (which Twilio routing depends on).
+// Used when the tenant's trade portfolio or enabled services change after
+// activation — e.g. a sparky enables roofing in account settings, and the AI
+// receptionist must start handling roofing callers without losing the
+// existing assistant ID (which Twilio routing depends on).
 //
-// Gated by the same VAPI_PROVISIONING_ENABLED flag as the create call.
-// When stubbed, returns ok+stubbed so the caller can proceed without
-// hitting the network.
+// 2026-07-23 rewrite (voice/SMS sync):
+//   • DECOUPLED from VAPI_PROVISIONING_ENABLED. That flag guards resource
+//     CREATION (new assistants/numbers); refreshing an existing assistant's
+//     prompt works whenever VAPI_API_KEY is set — the old coupling meant
+//     account-settings toggles silently never reached the live receptionist.
+//     Opt-out: VAPI_PROMPT_SYNC_ENABLED=false.
+//   • GET-then-PATCH via buildAssistantPatch (pure, tested): tools, voice,
+//     transcriber and temperature survive; only the prompt, firstMessage,
+//     model id and metadata.trades change. The old code PATCHed a fresh
+//     `model` object, nuking tools and resetting the model to Haiku.
+//   • Accepts the tenant's enabled services (+ MUST-ASK questions) so the
+//     voice prompt carries the SAME per-service set the SMS dialog uses —
+//     fetch them with lib/vapi/tenant-services.ts.
+//   • Model resolves through lib/vapi/voice-model.ts (Sonnet 5 default).
 
 import {
   buildVoiceFirstMessage,
   buildVoiceSystemPrompt,
+  type VoiceCustomService,
 } from './voice-prompt'
+import { buildAssistantPatch } from './assistant-patch'
+import { resolveVoiceModel } from './voice-model'
 
 const VAPI_API = 'https://api.vapi.ai'
 
@@ -27,8 +41,17 @@ export async function updateVapiAssistant(opts: {
   /** Full trade portfolio after the change. Any registered trade names
    *  (data-driven since the admin bulk loader, Phase 0). */
   trades: string[]
+  /** Tenant's enabled services + MUST-ASK questions (same rows the SMS
+   *  dialog injects). Optional so legacy callers keep working; pass them
+   *  via fetchTenantVoiceServices for full SMS parity. */
+  customServices?: VoiceCustomService[]
 }): Promise<VapiUpdateResult> {
-  if (process.env.VAPI_PROVISIONING_ENABLED !== 'true') {
+  if (process.env.VAPI_PROMPT_SYNC_ENABLED === 'false') {
+    return { ok: true, stubbed: true }
+  }
+  // A stubbed provision (VAPI_PROVISIONING_ENABLED off) stores ids like
+  // "vapi-stub-<tenant>" — there is no live assistant to update.
+  if (opts.assistantId.startsWith('vapi-stub-')) {
     return { ok: true, stubbed: true }
   }
   const apiKey = process.env.VAPI_API_KEY
@@ -40,35 +63,39 @@ export async function updateVapiAssistant(opts: {
   }
 
   const firstMessage = buildVoiceFirstMessage(opts.businessName, opts.trades)
-  const systemPrompt = buildVoiceSystemPrompt(opts.businessName, opts.trades)
+  const systemPrompt = buildVoiceSystemPrompt(
+    opts.businessName,
+    opts.trades,
+    undefined,
+    opts.customServices,
+  )
 
-  // Vapi documents PATCH /assistant/{id} as the canonical partial-update
-  // endpoint. We only send the fields that depend on the trade portfolio
-  // — leaving voice, transcriber, server URL, etc. untouched.
-  const body = {
-    firstMessage,
-    model: {
-      provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
-      temperature: 0.2,
-      systemPrompt,
-    },
-    metadata: { trades: opts.trades },
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
   }
+  const url = `${VAPI_API}/assistant/${encodeURIComponent(opts.assistantId)}`
 
   try {
-    const res = await fetch(
-      `${VAPI_API}/assistant/${encodeURIComponent(opts.assistantId)}`,
-      {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-      },
-    )
+    // GET the live assistant so the patch preserves tools/voice/transcriber
+    // and writes the prompt into whichever slot (messages vs systemPrompt)
+    // the assistant actually uses.
+    const getRes = await fetch(url, { headers })
+    if (!getRes.ok) {
+      const text = await getRes.text()
+      return { ok: false, reason: `fetch assistant failed: HTTP ${getRes.status}: ${text.slice(0, 200)}` }
+    }
+    const existing = await getRes.json()
+
+    const body = buildAssistantPatch(existing, {
+      firstMessage,
+      systemPrompt,
+      modelId: resolveVoiceModel(),
+      trades: opts.trades,
+    })
+
+    const res = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) })
     if (!res.ok) {
       const text = await res.text()
       const parsed = (() => {
@@ -85,10 +112,6 @@ export async function updateVapiAssistant(opts: {
     return { ok: true, stubbed: false }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, reason: `Vapi PATCH threw: ${msg}` }
+    return { ok: false, reason: `Vapi update threw: ${msg}` }
   }
 }
-
-// The voice greeting + system prompt builders are shared with provision.ts
-// in lib/vapi/voice-prompt.ts — kept in one place so a create and an update
-// can never drift.
