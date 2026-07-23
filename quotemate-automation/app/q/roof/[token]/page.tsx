@@ -404,7 +404,14 @@ export default async function RoofingQuotePage({
     {
       k: 'Roof area',
       v: areaM2 != null ? `${Math.round(areaM2)}` : '—',
-      sub: areaM2 != null ? 'm² measured aerial' : 'measured aerial',
+      // Pre-pick the area sums EVERY measured building — say so, or a customer
+      // about to pick one building reads the total as "their" roof.
+      sub:
+        areaM2 != null
+          ? !confirmed && structures.length > 1
+            ? `m² · all ${structures.length} buildings`
+            : 'm² measured aerial'
+          : 'measured aerial',
     },
     {
       k: 'Material',
@@ -935,15 +942,68 @@ export default async function RoofingQuotePage({
           issued={placeLabel ?? undefined}
         />
 
+        {/* Multi-building pre-confirm: choosing the building IS this page's
+            job, so the measured buildings lead — photo, area and the reply
+            number for each — before any quote furniture (stats, scope,
+            tiers). Feedback 2026-07-23: the old layout read as a quote
+            document with the choice buried below the fold. */}
+        {!confirmed && structures.length > 1 && (
+          <SheetSection eyebrow="Which building is yours?" eyebrowAccent>
+            <p style={{ margin: '10px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              Reply to our text with the building number for just one, YES for all of them, or NO if none are right.
+            </p>
+            <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+              {satelliteImages.map((img) => {
+                const area = structures[img.index1Based - 1]?.metrics?.sloped_area_m2
+                return (
+                  <figure
+                    key={img.index1Based}
+                    className="qm-duotone"
+                    style={{ margin: 0, position: 'relative', border: '1px solid var(--ink-line)', overflow: 'hidden' }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={structureStaticMapPath(row.public_token, img.index1Based)}
+                      alt={`Satellite view of ${img.label} at ${row.address ?? 'the property'}`}
+                      style={{ display: 'block', width: '100%', aspectRatio: '4 / 3', objectFit: 'cover' }}
+                    />
+                    <figcaption
+                      style={{
+                        ...MONO,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        gap: 10,
+                        padding: '9px 12px',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        borderTop: '1px solid var(--ink-line)',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-pri)' }}>
+                        {`${img.index1Based}) ${img.label}`}
+                        {area != null ? (
+                          <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>{` · ~${Math.round(area)} m²`}</span>
+                        ) : null}
+                      </span>
+                      <span style={{ color: 'var(--accent)', whiteSpace: 'nowrap' }}>Reply {img.index1Based}</span>
+                    </figcaption>
+                  </figure>
+                )
+              })}
+            </div>
+          </SheetSection>
+        )}
+
         <StatGrid items={summaryStats} />
 
-        {/* Pre-confirmation notice — explain why there's no price yet. */}
-        {!confirmed && (
-          <SheetSection eyebrow={structures.length > 1 ? 'Which building is yours?' : 'Is this your roof?'} eyebrowAccent>
+        {/* Single-building pre-confirm notice — explain why there's no price yet. */}
+        {!confirmed && structures.length === 1 && (
+          <SheetSection eyebrow="Is this your roof?" eyebrowAccent>
             <p style={{ margin: '10px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-              {structures.length > 1
-                ? "We found more than one building at this address. Reply to our text with YES for all of them, the building number for just one, or NO, and we'll send your full priced quote."
-                : "Reply YES to our text and we'll send your full priced quote for this roof."}
+              Reply YES to our text and we&apos;ll send your full priced quote for this roof.
             </p>
           </SheetSection>
         )}
