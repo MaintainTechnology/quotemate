@@ -28,7 +28,6 @@
 
 import {
   applyPaintingAnswer,
-  isAffirmative,
   isNegative,
   isStopRequest,
   looksLikePaintingEnquiry,
@@ -131,8 +130,12 @@ export function advancePainting(
   }
 
   // (2) Awaiting "shall we book the inspection?".
+  // Only an explicit decline closes without notifying the tradie; a
+  // question or a proposed time is a LIVE lead (same single-shot drop the
+  // roofing receptionist had — audit 2026-07-23). isStopRequest is handled
+  // above, so a genuine opt-out never reaches here.
   if (lastStep === 'await_booking') {
-    return { action: 'booking', slots, confirmed: isAffirmative(inbound) && !isNegative(inbound) }
+    return { action: 'booking', slots, confirmed: !isNegative(inbound) }
   }
 
   // (3) Reply to the form offer — use the form, or start the questions.

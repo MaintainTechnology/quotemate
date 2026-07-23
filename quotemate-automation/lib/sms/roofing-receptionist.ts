@@ -284,7 +284,14 @@ export function advanceRoofing(
 
   // (2) Awaiting "shall we book the inspection?".
   if (rawLastStep === 'await_booking') {
-    return { action: 'booking', slots, confirmed: isAffirmative(inbound) && !isNegative(inbound) }
+    // Only an explicit decline closes the thread without notifying the
+    // tradie. A question ("what does it cost?"), a proposed time ("Tuesday
+    // works"), or anything unclear is a LIVE inspection lead — confirm it
+    // so the tradie is notified and a human follows up. The old
+    // `isAffirmative && !isNegative` dropped every non-"yes" reply with a
+    // dismissive "text us whenever" and no notify (audit 2026-07-23).
+    // isStopRequest is handled above, so a genuine opt-out never lands here.
+    return { action: 'booking', slots, confirmed: !isNegative(inbound) }
   }
 
   // (3) Confirmation: replying to "is this your roof?".

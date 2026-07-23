@@ -112,6 +112,10 @@ describe('advancePainting — inspection + booking', () => {
     expect(advancePainting(parked, 'yes please book it').action).toBe('booking')
     expect(advancePainting(parked, 'yes please book it')).toMatchObject({ action: 'booking', confirmed: true })
     expect(advancePainting(parked, 'no thanks')).toMatchObject({ action: 'booking', confirmed: false })
+    // Same single-shot drop the roofing receptionist had (audit 2026-07-23):
+    // a question or a proposed time is a LIVE LEAD, not a decline.
+    expect(advancePainting(parked, 'what does it cost?')).toMatchObject({ action: 'booking', confirmed: true })
+    expect(advancePainting(parked, 'Tuesday works for me')).toMatchObject({ action: 'booking', confirmed: true })
   })
 })
 

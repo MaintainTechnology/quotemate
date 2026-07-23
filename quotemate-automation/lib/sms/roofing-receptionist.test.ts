@@ -180,14 +180,28 @@ describe('advanceRoofing — stop / cancel / booking / closed', () => {
     expect(advanceRoofing(confirm, 'no').action).toBe('ask') // wrong building → re-ask
   })
 
-  it('await_booking: yes → booking confirmed; otherwise not confirmed', () => {
+  // await_booking used to be single-shot: confirmed = isAffirmative && !isNegative,
+  // so ANY non-"yes" reply → confirmed=false → "text us whenever" + the thread
+  // closed with NO tradie notify. A hot inspection lead who asked a question or
+  // proposed a day was silently dropped (audit 2026-07-23). The fix: only an
+  // explicit decline closes without notifying; everything else is a live lead.
+  it('await_booking: yes → booking confirmed', () => {
     const base: RoofingConversationState = { slots: {}, last_step: 'await_booking' }
-    const yes = advanceRoofing(base, 'yes please book it')
-    expect(yes.action).toBe('booking')
-    if (yes.action === 'booking') expect(yes.confirmed).toBe(true)
-    const no = advanceRoofing(base, 'not right now')
-    expect(no.action).toBe('booking')
-    if (no.action === 'booking') expect(no.confirmed).toBe(false)
+    expect(advanceRoofing(base, 'yes please book it')).toMatchObject({ action: 'booking', confirmed: true })
+  })
+  it('await_booking: a clarifying question is a LIVE LEAD → confirmed (tradie notified), not dropped', () => {
+    const base: RoofingConversationState = { slots: {}, last_step: 'await_booking' }
+    expect(advanceRoofing(base, 'what does the inspection cost?')).toMatchObject({ action: 'booking', confirmed: true })
+  })
+  it('await_booking: a proposed time is booking intent → confirmed', () => {
+    const base: RoofingConversationState = { slots: {}, last_step: 'await_booking' }
+    expect(advanceRoofing(base, 'Tuesday works for me')).toMatchObject({ action: 'booking', confirmed: true })
+  })
+  it('await_booking: an explicit no still declines gracefully (no notify)', () => {
+    const base: RoofingConversationState = { slots: {}, last_step: 'await_booking' }
+    expect(advanceRoofing(base, 'no thanks')).toMatchObject({ action: 'booking', confirmed: false })
+    // "not right now" is a soft decline (matches the deny set) — stays declined.
+    expect(advanceRoofing(base, 'not right now')).toMatchObject({ action: 'booking', confirmed: false })
   })
 
   it('a closed flow re-opens only on a fresh enquiry and resets slots', () => {
