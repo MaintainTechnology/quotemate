@@ -333,6 +333,9 @@ type Quote = {
   trade: string | null
   inspection_required: boolean | null
   deposit_paid: boolean
+  /** Tradie-facing Measurement Results page (/m/[measure_token]) for a
+   *  roofing quote promoted from a saved measurement. Null otherwise. */
+  measure_href: string | null
   // Communication channel that produced this quote (Phase A + voice).
   //   'sms'   → conversation_id points at sms_conversations
   //   'voice' → messages come from parsed calls.transcript
@@ -9441,6 +9444,21 @@ function QuoteDetail({
               className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap bg-accent px-5 py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press"
             >
               View customer page →
+            </Link>
+          )}
+          {/* Measurement Results (/m/[measure_token]) for a roofing quote
+              promoted from a saved measurement. Promotion drops the job from
+              /api/tenant/trade-jobs so it doesn't double-render, which used
+              to strip this link entirely — a sold roofing job had no way back
+              to its measured structures. Null for non-roofing quotes. */}
+          {q.measure_href && (
+            <Link
+              href={q.measure_href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+            >
+              Measurement results →
             </Link>
           )}
           {/* Copy the /r/{token}/{tier} deposit short-link (never charges from

@@ -325,6 +325,65 @@ describe('shouldEngageRoofing — follow-up pin guard (spec 2026-07-05 Part A2)'
   })
 })
 
+// Reported 2026-07-23: "when the address has already been provided in the
+// first query, it asks for the address again". Root cause: the opening-turn
+// branch of advanceRoofing harvested only intent + year_built.
+// Production proof (tenant "Ricardos Roofing"):
+//   CUSTOMER: "I am looking to get a new roof at 670 London road Chandler"
+//   BOT:      "Happy to sort a roofing quote for you. What's the property
+//              address, including suburb and postcode?"
+describe('advanceRoofing — harvests the opening message', () => {
+  it('does not re-ask for an address given in the first message', () => {
+    const d = advanceRoofing(null, 'I am looking to get a new roof at 670 London road Chandler')
+    expect(d.action).toBe('ask')
+    if (d.action !== 'ask') return
+    // Straight to the read-back, not back to "what's the address?"
+    expect(d.step).toBe('confirm_address')
+    expect(d.reply).toContain('670 London road Chandler')
+    expect(d.slots.address).toContain('670 London road Chandler')
+    expect(d.slots.intent).toBe('full_reroof')
+  })
+
+  it('captures postcode and state from the opening message', () => {
+    const d = advanceRoofing(null, 'need my roof replaced at 1434 Numinbah Road Chillingham NSW 2484')
+    if (d.action !== 'ask') throw new Error('expected ask')
+    expect(d.slots.postcode).toBe('2484')
+    expect(d.slots.state).toBe('NSW')
+  })
+
+  it('harvests a named material from the opening message', () => {
+    const d = advanceRoofing(null, 'my terracotta tile roof at 12 Smith St needs repointing')
+    if (d.action !== 'ask') throw new Error('expected ask')
+    expect(d.slots.material).toBe('terracotta_tile')
+  })
+
+  // A bare brand name still must not pick a profile — that was the bug that
+  // quoted Trimdek for a customer who said "Colorbond".
+  it('records a metal HINT rather than guessing a profile', () => {
+    const d = advanceRoofing(null, 'colorbond roof at 12 Smith St needs replacing')
+    if (d.action !== 'ask') throw new Error('expected ask')
+    expect(d.slots.material).toBeFalsy()
+    expect(d.slots.metal_hint).toBe(true)
+  })
+
+  // Harvesting must never invent an address out of a plain enquiry.
+  it('invents nothing when the opener carries no address', () => {
+    for (const m of ['do you do roofing?', 'need a roofer', 'how much for a re-roof', 'roof quote please']) {
+      const d = advanceRoofing(null, m)
+      if (d.action !== 'ask') throw new Error(`expected ask for "${m}"`)
+      expect(d.slots.address).toBeFalsy()
+      expect(d.step).toBe('address')
+    }
+  })
+
+  // The harvested address is still read back exactly once.
+  it('leaves a harvested address unconfirmed', () => {
+    const d = advanceRoofing(null, 'reroof quote for 670 London Road, Chandler QLD 4155')
+    if (d.action !== 'ask') throw new Error('expected ask')
+    expect(d.slots.address_confirmed).toBe(false)
+  })
+})
+
 // A tenant whose only trade is roofing has nothing to route to. Requiring a
 // roofing keyword there hands their customers to the electrical/plumbing
 // dialog. Observed live on "Bills roofing" (trades = ['roofing']): the

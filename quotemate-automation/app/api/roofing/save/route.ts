@@ -8,7 +8,6 @@
 // views; the full quote + structures are stored verbatim.
 
 import { createClient } from '@supabase/supabase-js'
-import { randomBytes } from 'node:crypto'
 import { SaveRoofMeasurementSchema } from '@/lib/roofing/request-schema'
 import type { MultiRoofQuote, RoofJobIntent } from '@/lib/roofing/types'
 import {
@@ -19,6 +18,7 @@ import {
 } from '@/lib/roofing/selection'
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
 import { detectSolarForJob, loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import { newMeasurementTokens } from '@/lib/roofing/tokens'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
@@ -172,12 +172,12 @@ export async function POST(req: Request) {
     // page + PDF narrow to this. Defaults to roof-only (the primary structure)
     // unless the dashboard sent the tradie's explicit include toggles.
     included_indices: includedIndices,
-    // Unguessable share token so the saved job has a customer-facing page
-    // at /q/roof/[token] (same surface the SMS receptionist links to).
-    public_token: randomBytes(16).toString('hex'),
-    // Second unguessable token for the tradie-facing Measurement Results
-    // page at /m/[measure_token] — distinct link from the customer page.
-    measure_token: randomBytes(16).toString('hex'),
+    // Both capability tokens, minted as a pair by the shared minter (the
+    // SMS receptionist uses the same one, so the two write paths cannot
+    // drift apart again):
+    //   public_token  → /q/roof/[public_token]  customer's priced quote
+    //   measure_token → /m/[measure_token]      tradie Measurement Results
+    ...newMeasurementTokens(),
     // Dashboard saves are bearer-authed (the tradie) and the tradie has
     // already picked the structures — so the quote is confirmed at save
     // time. Stamping confirmed_at lets /q/roof show full prices immediately
