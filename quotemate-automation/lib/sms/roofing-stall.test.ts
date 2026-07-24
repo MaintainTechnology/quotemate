@@ -799,6 +799,44 @@ describe('roofingTurnInput harvests the burst address at the address step (F4)',
     ]
     expect(roofingTurnInput('confirm_roof', pick).decision).toBe('just the shed thanks')
   })
+  // F4 recovery net (live 2026-07-24): the burst-race left the address BEHIND
+  // the last outbound, so latestInboundBurst can't see it. At the address step,
+  // recover the most recent address the customer sent that we never read back.
+  it('recovers a dropped burst address from history at the address step', () => {
+    const turns = [
+      { direction: 'inbound', body: 'can you do my roof' },
+      { direction: 'inbound', body: '670 London Road Chandler QLD 4155' },
+      { direction: 'outbound', body: "Happy to sort a roofing quote for you. What's the property address, including suburb and postcode?" },
+      { direction: 'inbound', body: 'thanks heaps mate' },
+    ]
+    expect(roofingTurnInput('address', turns).decision).toContain('670 London Road')
+  })
+  it('does NOT recover an address the customer already rejected (read back then cleared)', () => {
+    const turns = [
+      { direction: 'inbound', body: '670 London Road Chandler QLD 4155' },
+      { direction: 'outbound', body: 'Just to confirm, the property is "670 London Rd, Chandler QLD 4155". Is that right? Reply yes or no.' },
+      { direction: 'inbound', body: 'no' },
+      { direction: 'outbound', body: "Happy to sort a roofing quote for you. What's the property address?" },
+      { direction: 'inbound', body: 'hmm hang on' },
+    ]
+    expect(roofingTurnInput('address', turns).decision).not.toContain('670 London')
+  })
+  it('does NOT recover an address the geocoder refused (not-found reply)', () => {
+    const turns = [
+      { direction: 'inbound', body: '123 Fakey Street Nowheresville 9999' },
+      { direction: 'outbound', body: 'Sorry, I can\'t find "123 Fakey Street Nowheresville 9999" on the map. Could you double-check the spelling and send the full address again?' },
+      { direction: 'inbound', body: 'one sec' },
+    ]
+    expect(roofingTurnInput('address', turns).decision).not.toContain('Fakey')
+  })
+  it('does not recover at a non-address step (last-line-only preserved)', () => {
+    const turns = [
+      { direction: 'outbound', body: 'which building? 1) main 2) shed' },
+      { direction: 'inbound', body: '670 London Road was the old address' },
+      { direction: 'inbound', body: '1' },
+    ]
+    expect(roofingTurnInput('confirm_roof', turns).decision).toBe('1')
+  })
 })
 
 // F8 (live 2026-07-24): a mid-gather flow idle 2h resumed and measured the stale

@@ -466,7 +466,41 @@ export function roofingTurnInput(
   // digit/deny. The deeper webhook/leader-election race (60s inflight-lock
   // debt) is out of scope here.
   const awaitingAddress = prevLastStep === 'address' || prevLastStep === 'confirm_address'
-  return { engage: burst, decision: coldStart || awaitingAddress ? burst : lastLine }
+  let decision = coldStart || awaitingAddress ? burst : lastLine
+  // F4 recovery net (live 2026-07-24): the burst-race can leave the address in
+  // an EARLIER inbound (behind our racy "what's the address?" ask), which
+  // latestInboundBurst no longer sees. When awaiting the address and the chosen
+  // input has none, recover the most recent address the customer sent that we
+  // never READ BACK — so a read-back the customer rejected is not re-harvested.
+  if (awaitingAddress && !extractStreetAddress(decision)) {
+    const recovered = recoverDroppedAddress(turns)
+    if (recovered) decision = recovered
+  }
+  return { engage: burst, decision }
+}
+
+/** An address the customer already saw us respond to — a confirm-step read-back
+ *  (confirmAddressQuestion's two wordings) OR a geocoder "can't find it"
+ *  rejection (addressNotFoundReply). The F4 recovery net skips these so it never
+ *  re-harvests an address the customer rejected OR one the map already refused. */
+const ADDRESS_READ_BACK = /just to confirm, the property is|closest address i can find|can['’]?t find/i
+
+/** PURE — the most recent inbound carrying a street address that was NEVER read
+ *  back to the customer (so never confirmed/rejected). null when there is none.
+ *  Recovers an address dropped by the burst/leader race without ever
+ *  re-harvesting one the customer already rejected at confirm_address. */
+function recoverDroppedAddress(
+  turns: ReadonlyArray<{ direction: string; body: string }>,
+): string | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i]
+    if (t.direction !== 'inbound' || !extractStreetAddress(t.body)) continue
+    const readBack = turns
+      .slice(i + 1)
+      .some((o) => o.direction === 'outbound' && ADDRESS_READ_BACK.test(o.body))
+    if (!readBack) return t.body
+  }
+  return null
 }
 
 /**
