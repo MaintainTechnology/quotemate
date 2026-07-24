@@ -233,10 +233,19 @@ async function lookupGeoscapeAddress(
   }
 }
 
-/** PURE — the first number in an address line ("223 Archer St" → "223",
- *  "5/12 Smith St" → "5"). Used only to compare like with like. */
+/** PURE — the STREET number in an address line, for like-with-like comparison
+ *  in the wrong-parcel guard. AU unit format puts the unit BEFORE the street
+ *  number ("3/50 Connor St" = unit 3, street 50; "unit 2 21 Vernon Tce" = unit
+ *  2, street 21), so take the number after the slash / unit designator — else a
+ *  valid unit is refused against the parcel's street number (Geoscape drops the
+ *  unit and returns "50 Connor St"). "223 Archer St" → "223". */
 export function firstStreetNumber(address: string): string | null {
-  const m = (address ?? '').match(/\d+/)
+  const s = (address ?? '').toLowerCase()
+  const slash = s.match(/\b\d+\s*\/\s*(\d+)/)
+  if (slash) return slash[1]
+  const unitWord = s.match(/\b(?:unit|flat|apt|apartment|u)\s*\d+\s+(\d+)/)
+  if (unitWord) return unitWord[1]
+  const m = s.match(/\d+/)
   return m ? m[0] : null
 }
 

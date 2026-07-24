@@ -620,10 +620,17 @@ export function pickAddressLabel(body: unknown): string | null {
   return null
 }
 
-/** PURE — the first run of digits in an address line ("223 Archer St" → "223",
- *  "5/12 Smith St" → "5"). Mirrors verify-address.ts firstStreetNumber. */
+/** PURE — the STREET number in an address line ("223 Archer St" → "223"), taking
+ *  the number after the slash / unit designator for AU unit format ("3/50 Connor
+ *  St" → "50") so a valid unit is not refused against the parcel's street number.
+ *  Mirrors verify-address.ts firstStreetNumber. */
 function firstNumber(s: string | null | undefined): string | null {
-  const m = (s ?? '').match(/\d+/)
+  const t = (s ?? '').toLowerCase()
+  const slash = t.match(/\b\d+\s*\/\s*(\d+)/)
+  if (slash) return slash[1]
+  const unitWord = t.match(/\b(?:unit|flat|apt|apartment|u)\s*\d+\s+(\d+)/)
+  if (unitWord) return unitWord[1]
+  const m = t.match(/\d+/)
   return m ? m[0] : null
 }
 

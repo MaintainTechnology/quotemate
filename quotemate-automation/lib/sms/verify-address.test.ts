@@ -205,9 +205,13 @@ describe('Geoscape cross-check', () => {
 })
 
 describe('firstStreetNumber / titleCaseAu', () => {
-  it('takes the first number and title-cases G-NAF caps, keeping state codes', () => {
+  it('takes the STREET number (after the / for units) and title-cases G-NAF caps, keeping state codes', () => {
     expect(firstStreetNumber('223 ARCHER ST, GUMDALE QLD 4154')).toBe('223')
-    expect(firstStreetNumber('5/12 Smith St')).toBe('5')
+    // Unit format: the STREET number is after the slash, not the unit number —
+    // else a valid unit ("3/50 Connor St") is refused against the parcel "50".
+    expect(firstStreetNumber('5/12 Smith St')).toBe('12')
+    expect(firstStreetNumber('3/50 Connor St Kangaroo Point QLD 4169')).toBe('50')
+    expect(firstStreetNumber('unit 2 21 Vernon Terrace')).toBe('21')
     expect(firstStreetNumber('no digits here')).toBeNull()
     expect(titleCaseAu('223 ARCHER ST, GUMDALE QLD 4154')).toBe('223 Archer St, Gumdale QLD 4154')
     expect(titleCaseAu('15 SCHOFIELD DR, SAFETY BEACH NSW 2456')).toBe('15 Schofield Dr, Safety Beach NSW 2456')
