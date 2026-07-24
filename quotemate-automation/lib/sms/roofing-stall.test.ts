@@ -623,6 +623,26 @@ describe('roofingTurnInput — burst for engagement + cold opener, last line whe
   })
 })
 
+// U4 (2026-07-24) — determinism pin. Once the debounce window has captured the
+// burst (turns hold every line), a cold-start decision must ALWAYS contain the
+// address line regardless of where it sits in the burst — the coalescing layer
+// is order-independent. The live scenario-runner S4/S11 proves the debounce
+// window itself captured the burst end-to-end; this pins the pure layer.
+describe('roofingTurnInput — cold-start burst always harvests the address (U4)', () => {
+  const opener = { direction: 'inbound', body: 'can you do my roof' }
+  const addr = { direction: 'inbound', body: '670 London Road Chandler QLD 4155' }
+  const noise = { direction: 'inbound', body: 'thanks heaps mate' }
+  for (const order of [
+    [opener, addr, noise],
+    [addr, opener, noise],
+    [opener, noise, addr],
+  ]) {
+    it(`harvests the address from burst order [${order.map(t => t.body.slice(0, 10)).join(' | ')}]`, () => {
+      expect(roofingTurnInput(null, order).decision).toContain('670 London Road')
+    })
+  }
+})
+
 // Live 2026-07-24 (QM Sparky): a confirm_roof parked on a measurement from a
 // PREVIOUS session ("3 buildings at 670 London Road") was reused hours later
 // and replayed that exact list on the next "Hi Mate", then again on a brand

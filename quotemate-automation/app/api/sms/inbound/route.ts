@@ -37,7 +37,7 @@ import {
   composeConfirmMessage,
   composeInspectionReasonMessage,
   composeMeasureUnavailableMessage,
-  isInspectionOnlyQuote,
+  shouldSendRoofInspectionMessage,
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
@@ -707,7 +707,7 @@ async function handleRoofingTurn(args: {
       // predicate the composer used so message and state can't drift. A
       // priced send stays WARM 'quoted': a follow-up like "give me 2 and
       // 3" / "the others" re-serves the SAVED measurement.
-      const inspectionOnly = isInspectionOnlyQuote(finalQuote)
+      const inspectionOnly = shouldSendRoofInspectionMessage(finalQuote)
       await persist({
         slots: decision.slots,
         last_step: inspectionOnly ? 'await_booking' : 'quoted',
@@ -2178,6 +2178,7 @@ export async function POST(req: Request) {
                 try {
                   await writeCustomerCorrections({
                     customerId: customer.id,
+                    tenantId: tenant?.id ?? null,
                     fields: gatedFields,
                   })
                 } catch (e: any) {

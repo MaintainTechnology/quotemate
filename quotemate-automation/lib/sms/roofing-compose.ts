@@ -170,33 +170,43 @@ export function composeInspectionMessage(ctx: RoofingReplyContext): string {
 }
 
 /**
- * PURE — pick the right message for the quote. Lead with a FIRM price whenever
- * any structure is quotable (the estimate message already lists the firm
- * secondaries and flags any inspection-needed structure as "needs a look on
- * site"). Only a job with NOTHING quotable — a whole-job on-site quote — uses
- * the inspection message (which now carries an indicative range when the roof
- * has real numbers). This mirrors the customer quote page: firm secondaries
- * when present, an indicative range when the whole job is on-site.
+ * PURE — pick the right message for the quote. The JOB-level routing decision
+ * wins: when the engine routed the whole job to inspection_required (the PRIMARY
+ * needs an on-site look, e.g. unknown intent or an asbestos-suspect primary), we
+ * send the inspection message even if a SECONDARY is firm-priced — a firm
+ * headline for the shed while the main dwelling is unpriceable is misleading, and
+ * disagreed with the measurement row (live S7: "2 structures, $159,885" on a
+ * structs:3 / inspection_required roof). A genuine mixed job with a quotable
+ * PRIMARY stays tradie_review and keeps its firm lead (firm secondaries + a
+ * "needs a look on site" flag), mirroring the customer quote page.
  */
 export function buildRoofingReplyMessage(ctx: RoofingReplyContext): string {
-  if (isInspectionOnlyQuote(ctx.quote)) {
+  if (shouldSendRoofInspectionMessage(ctx.quote)) {
     return composeInspectionMessage(ctx)
   }
   return composeEstimateMessage(ctx)
 }
 
 /**
- * PURE — nothing in the quote is firm-priced, so buildRoofingReplyMessage
- * sends composeInspectionMessage ("Reply YES and we'll book a time").
- * The route keys the persisted step on the SAME predicate so the state
- * can never disagree with the message that went out: an inspection-only
- * send parks at await_booking (the YES books), a priced send stays
- * 'quoted' (warm structure follow-ups). Live 2026-07-23: they disagreed,
- * and the customer's YES fell through to the electrical LLM, which
- * improvised a fake "you're all booked in".
+ * PURE — nothing in the quote is firm-priced (every structure is
+ * inspection_required). One input to the send decision; see
+ * shouldSendRoofInspectionMessage for the full rule.
  */
 export function isInspectionOnlyQuote(quote: MultiRoofQuote): boolean {
   return !(quote.structures ?? []).some((s) => s.price.routing.decision !== 'inspection_required')
+}
+
+/**
+ * PURE — the single predicate buildRoofingReplyMessage AND the route both key
+ * on, so the persisted step can never disagree with the message that went out
+ * (inspection send → await_booking, the YES books; priced send → 'quoted', warm
+ * follow-ups). Live 2026-07-23: they disagreed and the customer's YES fell
+ * through to the electrical LLM, which faked "you're all booked in". U3: the
+ * JOB routing decision is authoritative — a whole-job on-site quote shows
+ * inspection framing even with a firm secondary.
+ */
+export function shouldSendRoofInspectionMessage(quote: MultiRoofQuote): boolean {
+  return quote.routing?.decision === 'inspection_required' || isInspectionOnlyQuote(quote)
 }
 
 /**

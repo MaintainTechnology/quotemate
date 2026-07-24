@@ -19,6 +19,8 @@ import {
   normaliseBuildingBody,
   normaliseGeoscapeRoofForm,
   pickAddressId,
+  pickAddressLabel,
+  parcelNumberMismatch,
   pickBestSummary,
   pickBuildingIds,
   pickBuildingSummaries,
@@ -1002,5 +1004,37 @@ describe('GeoscapeProvider.measure — error envelope (with stub fetch)', () => 
     if (r.ok) {
       expect(r.warnings.some((w) => /complex/i.test(w))).toBe(true)
     }
+  })
+})
+
+// U2 (2026-07-24) — a scoreless fuzzy top-1 from /addresses can silently return
+// a NEIGHBOUR parcel (a postcode digit out → "223 Archer St" resolves to "33
+// Archer St Gumdale"). The measurement resolve step guards on the street number,
+// mirroring lib/sms/verify-address.ts, and refuses rather than measure a
+// different house. A net, never a gate: an absent number never blocks.
+describe('pickAddressLabel', () => {
+  it('plucks the matched address string across envelope shapes', () => {
+    expect(pickAddressLabel({ data: [{ address: '223 ARCHER ST, CHANDLER QLD 4155' }] })).toBe('223 ARCHER ST, CHANDLER QLD 4155')
+    expect(pickAddressLabel({ data: [{ formattedAddress: '33 ARCHER ST, GUMDALE QLD 4154' }] })).toBe('33 ARCHER ST, GUMDALE QLD 4154')
+    expect(pickAddressLabel({ address: '5 SMITH ST' })).toBe('5 SMITH ST')
+  })
+  it('returns null when no address string is present', () => {
+    expect(pickAddressLabel({ data: [{ id: 'abc' }] })).toBeNull()
+    expect(pickAddressLabel(null)).toBeNull()
+    expect(pickAddressLabel({})).toBeNull()
+  })
+})
+
+describe('parcelNumberMismatch', () => {
+  it('flags a street-number disagreement (the 223 → 33 wrong-parcel case)', () => {
+    expect(parcelNumberMismatch('223 Archer St, Chandler QLD 4155', '33 ARCHER ST, GUMDALE QLD 4154')).toBe(true)
+  })
+  it('agrees when the numbers match (suburb/echo differences do not matter)', () => {
+    expect(parcelNumberMismatch('223 Archer St, Chandler', '223 ARCHER STREET, CHANDLER QLD 4155')).toBe(false)
+  })
+  it('never blocks when either side has no number (net, not gate)', () => {
+    expect(parcelNumberMismatch('Somewhere in town', '5 Smith St')).toBe(false)
+    expect(parcelNumberMismatch('5 Smith St', 'a matched label with no number')).toBe(false)
+    expect(parcelNumberMismatch('5 Smith St', null)).toBe(false)
   })
 })

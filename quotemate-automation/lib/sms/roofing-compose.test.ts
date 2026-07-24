@@ -19,6 +19,7 @@ import {
   composeInspectionReasonMessage,
   fmtAud,
   isInspectionOnlyQuote,
+  shouldSendRoofInspectionMessage,
   narrowQuoteToStructure,
   narrowQuoteToStructures,
 } from './roofing-compose'
@@ -195,12 +196,18 @@ describe('composeInspectionMessage + routing', () => {
     expect(msg).toContain(fmtAud(better))
   })
 
-  it('buildRoofingReplyMessage leads with a firm price whenever anything is quotable', () => {
+  it('buildRoofingReplyMessage leads firm for a quotable PRIMARY, inspection framing when the JOB is inspection-routed (U3)', () => {
     const clean = priceMultiRoof({ structures: [house, shed] })
     expect(buildRoofingReplyMessage({ ...CTX, quote: clean })).toMatch(/here's your roofing estimate/)
-    // Primary needs inspection but the shed is quotable → firm shed price.
+    // U3 (was: firm shed price) — when the PRIMARY dwelling itself needs an
+    // on-site look the whole job is inspection_required, so we show inspection
+    // framing (indicative + "confirmed on site"), never a firm headline for just
+    // the shed. That firm headline mismatched the measurement structure count
+    // (live S7: "2 structures, $159,885" on a structs:3 / inspection_required roof).
     const mixed = priceMultiRoof({ structures: [asbestosHouse, shed] })
-    expect(buildRoofingReplyMessage({ ...CTX, quote: mixed })).toMatch(/here's your roofing estimate/)
+    expect(mixed.routing.decision).toBe('inspection_required')
+    expect(buildRoofingReplyMessage({ ...CTX, quote: mixed })).toMatch(/inspection on site/i)
+    expect(buildRoofingReplyMessage({ ...CTX, quote: mixed })).not.toMatch(/here's your roofing estimate/)
     // Nothing quotable → the inspection message.
     const allOnSite = priceMultiRoof({ structures: [asbestosHouse] })
     expect(buildRoofingReplyMessage({ ...CTX, quote: allOnSite })).toMatch(/inspection on site/i)
@@ -418,5 +425,44 @@ describe('isInspectionOnlyQuote', () => {
     expect(
       buildRoofingReplyMessage({ ...CTX, quote: mixed }),
     ).not.toContain("Reply YES and we'll book a time")
+  })
+})
+
+// U3 (2026-07-24) — a job routed inspection_required at the JOB level (the
+// PRIMARY needs an on-site look, e.g. unknown intent / asbestos-suspect primary)
+// must show inspection framing, never a firm headline with a mismatched
+// structure count. A quotable SECONDARY does not make it a firm quote. Genuine
+// mixed jobs with a quotable PRIMARY stay tradie_review and keep their firm lead.
+describe('shouldSendRoofInspectionMessage — job-level routing wins (U3)', () => {
+  // Primary is asbestos-suspect (inspection) but the shed is quotable: the
+  // job routes inspection_required while a structure is still firm-priced.
+  const primaryInspection = priceMultiRoof({
+    structures: [{ ...house, inputs: inputs({ material: 'cement_sheet' }) }, shed],
+  })
+
+  it('the target case: job inspection_required with a quotable secondary', () => {
+    expect(primaryInspection.routing.decision).toBe('inspection_required')
+    expect(isInspectionOnlyQuote(primaryInspection)).toBe(false) // shed is firm-priced
+    expect(shouldSendRoofInspectionMessage(primaryInspection)).toBe(true)
+  })
+
+  it('buildRoofingReplyMessage shows inspection framing, not a firm headline', () => {
+    const msg = buildRoofingReplyMessage({ ...CTX, quote: primaryInspection })
+    expect(msg).toContain("Reply YES and we'll book a time")
+    expect(msg).not.toMatch(/here's your roofing estimate/)
+    // No "N structures, $X" firm scope headline for an inspection-routed job.
+    expect(msg).not.toMatch(/\d+ structures, ~\d+ m² total/)
+  })
+
+  it('a firm mixed job (quotable primary) is unaffected — still the estimate', () => {
+    const firmMixed = priceMultiRoof({ structures: [house, { ...shed, inputs: inputs({ material: 'cement_sheet' }) }] })
+    expect(firmMixed.routing.decision).toBe('tradie_review')
+    expect(shouldSendRoofInspectionMessage(firmMixed)).toBe(false)
+    expect(buildRoofingReplyMessage({ ...CTX, quote: firmMixed })).toMatch(/here's your roofing estimate/)
+  })
+
+  it('an all-firm quote stays firm', () => {
+    const clean = priceMultiRoof({ structures: [house, shed] })
+    expect(shouldSendRoofInspectionMessage(clean)).toBe(false)
   })
 })

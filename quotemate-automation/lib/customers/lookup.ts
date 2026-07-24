@@ -21,6 +21,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { verifyAuAddress, gateUnverifiedProfileAddress } from '@/lib/sms/verify-address'
+import { customerMemoryAllowed } from './memory-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -147,6 +148,9 @@ export async function updateCustomerFromIntake(opts: {
     address?: string | null
     suburb?: string | null
   }
+  /** U1 — the tenant this intake is FOR. customers rows are phone-keyed and
+   *  globally shared, so a write must never land on another tenant's row. */
+  tenantId?: string | null
 }): Promise<void> {
   if (!opts.customerId) return
 
@@ -158,6 +162,18 @@ export async function updateCustomerFromIntake(opts: {
 
   if (fetchErr || !cust) {
     console.error('[customers] fetch for update failed', { customerId: opts.customerId, err: fetchErr?.message })
+    return
+  }
+
+  // U1 — never overwrite a customer row owned by a DIFFERENT tenant. Same
+  // predicate the READ side uses (memory-scope.ts). Null on either side heals /
+  // allows (first-writer-wins stamp on the row, or a tenant-less legacy intake).
+  if (!customerMemoryAllowed((cust as { tenant_id?: string | null }).tenant_id, opts.tenantId)) {
+    console.warn('[customers] skipped cross-tenant intake write-back', {
+      customerId: opts.customerId,
+      rowTenant: (cust as { tenant_id?: string | null }).tenant_id,
+      intakeTenant: opts.tenantId,
+    })
     return
   }
 
@@ -240,6 +256,8 @@ export async function writeCustomerCorrections(opts: {
     address?: string | null
     email?: string | null
   }
+  /** U1 — the tenant this correction is FOR (see updateCustomerFromIntake). */
+  tenantId?: string | null
 }): Promise<void> {
   const update: Record<string, unknown> = {
     last_contacted_at: new Date().toISOString(),
@@ -269,6 +287,25 @@ export async function writeCustomerCorrections(opts: {
   // Nothing actionable — bail without a DB round-trip.
   const writeKeys = Object.keys(update).filter(k => k !== 'last_contacted_at' && k !== 'updated_at')
   if (writeKeys.length === 0) return
+
+  // U1 — gate on the row's owning tenant before the eager write. One cheap
+  // indexed read by PK (only when there IS something to write); keeps the guard
+  // with the write so no caller can bypass it. Fail-open: if the tenant read
+  // errors the write still proceeds (net, not gate) and the finish-time sink
+  // re-verifies with the full row fetch.
+  const { data: owner } = await supabase
+    .from('customers')
+    .select('tenant_id')
+    .eq('id', opts.customerId)
+    .maybeSingle()
+  if (owner && !customerMemoryAllowed((owner as { tenant_id?: string | null }).tenant_id, opts.tenantId)) {
+    console.warn('[customers] skipped cross-tenant eager write-back', {
+      customerId: opts.customerId,
+      rowTenant: (owner as { tenant_id?: string | null }).tenant_id,
+      currentTenant: opts.tenantId,
+    })
+    return
+  }
 
   const { error: updErr } = await supabase
     .from('customers')

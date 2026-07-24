@@ -316,6 +316,16 @@ export function isNegative(text: string): boolean {
   return DENY.test((text ?? '').toLowerCase())
 }
 
+// U5c ("no wait yes" should confirm) was attempted and REVERTED. Three
+// independent adversarial reviews each proved that every minimal last-signal /
+// strong-flip heuristic false-CONFIRMS a real rejection on the wrong-roof money
+// path — a negated weak affirm ("no that isn't correct") or a trailing
+// agreement tag ("that's wrong, yeah") is indistinguishable from a genuine flip
+// ("no wait yes") by token position alone. The confirm_address branch below
+// keeps the proven-safe baseline (isAffirmative && !isNegative); "no wait yes"
+// safely re-asks. Doing it correctly needs a real intent classifier, not a
+// regex — logged as deferred in specs/sms-roofing-u1-u5.md.
+
 // ── Stop / cancel / opt-out ──────────────────────────────────────────
 // Checked FIRST on every turn so the customer can always bail. Bare "no"
 // is NOT a stop (it's a valid confirm answer); explicit stop words and

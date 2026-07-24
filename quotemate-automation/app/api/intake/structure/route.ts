@@ -522,6 +522,7 @@ export async function POST(req: Request) {
     try {
       await updateCustomerFromIntake({
         customerId: customer.id,
+        tenantId,
         intake: {
           caller: intake.caller,
           address: intake.address,

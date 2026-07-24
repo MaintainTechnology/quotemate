@@ -247,6 +247,18 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
         `Geoscape could not resolve the address "${input.address}".`,
       )
     }
+    // U2 — /addresses is a scoreless fuzzy top-1: a postcode digit out can
+    // silently return a NEIGHBOUR parcel ("223 Archer St" → "33 Archer St
+    // Gumdale"). Refuse a street-number disagreement rather than measure and
+    // price a different house; 'address_not_resolved' routes the caller to the
+    // safe on-site inspection fallback. Fails open when either number is absent.
+    const matchedLabel = pickAddressLabel(res.body)
+    if (parcelNumberMismatch(input.address, matchedLabel)) {
+      return failure(
+        'address_not_resolved',
+        `Geoscape matched a different parcel ("${matchedLabel}") for "${input.address}"; needs on-site confirmation.`,
+      )
+    }
     return { ok: true, addressId }
   }
 
@@ -577,6 +589,55 @@ export function pickAddressId(body: unknown): string | null {
     }
   }
   return null
+}
+
+/**
+ * PURE — the matched address STRING from an Addresses API response (the
+ * label of the top-1 fuzzy match), mirroring pickAddressId's envelope walk.
+ * U2: the street number of THIS is compared against the requested address so
+ * a scoreless fuzzy match onto a neighbour parcel is refused, not measured.
+ */
+export function pickAddressLabel(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null
+  const b = body as Record<string, unknown>
+  if (typeof b.address === 'string') return b.address
+  if (typeof b.formattedAddress === 'string') return b.formattedAddress
+  for (const key of ['data', 'results'] as const) {
+    const arr = (b as Record<string, unknown>)[key]
+    if (Array.isArray(arr) && arr.length > 0) {
+      const label = pickAddressLabel(arr[0])
+      if (label) return label
+    }
+  }
+  const features = (b as { features?: unknown }).features
+  if (Array.isArray(features) && features.length > 0) {
+    const first = features[0] as { properties?: unknown }
+    if (first?.properties) {
+      const label = pickAddressLabel(first.properties)
+      if (label) return label
+    }
+  }
+  return null
+}
+
+/** PURE — the first run of digits in an address line ("223 Archer St" → "223",
+ *  "5/12 Smith St" → "5"). Mirrors verify-address.ts firstStreetNumber. */
+function firstNumber(s: string | null | undefined): string | null {
+  const m = (s ?? '').match(/\d+/)
+  return m ? m[0] : null
+}
+
+/**
+ * PURE — U2 money-path guard, mirroring verify-address.ts:120-124. True when
+ * the requested and matched addresses BOTH carry a street number and they
+ * disagree (Geoscape returned a different house). A net, not a gate: when
+ * either side has no number we never block — verification failing open must
+ * never dead-end a lead.
+ */
+export function parcelNumberMismatch(requested: string, matched: string | null): boolean {
+  const want = firstNumber(requested)
+  const got = firstNumber(matched)
+  return !!want && !!got && want !== got
 }
 
 /** PURE — does the response represent "no building records"? */
