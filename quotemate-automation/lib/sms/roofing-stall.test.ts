@@ -498,6 +498,76 @@ describe('intent unknown is gated, not priced', () => {
   })
 })
 
+// B1 (CRITICAL, live 2026-07-24 S7/S8): at the intent step, "ok now can you
+// price 12 Smith Street Bondi NSW 2026" produced an estimate for the
+// previously-confirmed 670 London Road, not 12 Smith Street. A DIFFERENT full
+// address (street + postcode) mid-gather must re-confirm the NEW property,
+// never let the old confirmed address be measured.
+describe('B1 — a new full address mid-gather re-confirms the new property', () => {
+  const atIntent = (addr = '670 London Rd, Chandler QLD 4155') =>
+    ({ slots: { address: addr, address_confirmed: true }, last_step: 'intent' as const })
+
+  it('a different street+postcode at the intent step folds and asks to confirm the NEW address', () => {
+    const d = advanceRoofing(atIntent(), 'ok now can you price 12 Smith Street Bondi NSW 2026')
+    expect(d.action).toBe('ask')
+    expect(d.action === 'ask' && d.step).toBe('confirm_address')
+    expect(d.slots.address).toBe('12 Smith Street Bondi NSW 2026')
+    expect(d.slots.address_confirmed).toBe(false)
+  })
+
+  it('a bare restatement of the SAME confirmed address is not a change (parses the intent)', () => {
+    const d = advanceRoofing(atIntent(), 'full reroof at 670 London Rd')
+    expect(d.action === 'ask' && d.step === 'confirm_address').toBe(false)
+    if (d.action === 'ask') expect(d.slots.intent ?? null).not.toBeNull()
+  })
+
+  it('a street WITHOUT a postcode never hijacks a confirmed address', () => {
+    const d = advanceRoofing(
+      { slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: true }, last_step: 'material' },
+      'its the one on 5 Random St',
+    )
+    const hijacked = d.action === 'ask' && d.step === 'confirm_address' && d.slots.address === '5 Random St'
+    expect(hijacked).toBe(false)
+  })
+
+  // B9 (S2): after a mid-flow address change the asked STEP must be
+  // confirm_address (not the pre-change gather step), so the customer's "yes"
+  // confirms the new address instead of being parsed as a material answer.
+  it('B9: a cued address change at the material step asks confirm_address, not material', () => {
+    const d = advanceRoofing(
+      { slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: true, intent: 'full_reroof' }, last_step: 'material' },
+      'actually make it 15 Schofield Drive Safety Beach NSW 2456',
+    )
+    expect(d.action).toBe('ask')
+    expect(d.action === 'ask' && d.step).toBe('confirm_address')
+  })
+
+  // B4 (S9): a stray/junk answer at a gather step must never clear the
+  // confirmed address or reset the gather to "what's the address?".
+  it('B4: a junk answer at the pitch step keeps the confirmed address', () => {
+    const d = advanceRoofing(
+      { slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: true, intent: 'full_reroof', material: 'colorbond_corrugated' }, last_step: 'pitch' },
+      'asdfghjkl',
+    )
+    if (d.action === 'ask') {
+      expect(d.slots.address).toBe('670 London Rd, Chandler QLD 4155')
+      expect(d.slots.address_confirmed).toBe(true)
+      expect(d.step).not.toBe('address')
+    }
+  })
+
+  // B3 (S9): a self-correction with an interrupt word ("no wait yes") at the
+  // address-confirm step must stay in the roofing flow, not bail to the general
+  // LLM which then asks "quick one, what's your first name?".
+  it('B3: "no wait yes" at confirm_address is not handed to the general dialog', () => {
+    const d = advanceRoofing(
+      { slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: false }, last_step: 'confirm_address' },
+      'no wait yes',
+    )
+    expect(d.action).not.toBe('passthrough')
+  })
+})
+
 // P3 (live 2026-07-24): a rapid burst "can you do my roof" | "670 London Road
 // Chandler QLD 4155" | "its colorbond" (debounce-coalesced) engaged the general
 // LLM, not the roofing receptionist, because only the LAST line ("its

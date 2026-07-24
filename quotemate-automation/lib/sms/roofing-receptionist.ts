@@ -325,7 +325,16 @@ function tryAddressFold(inbound: string, slots: RoofingSlots): RoofingSlots | nu
   // street signal keeps "no way to tell from 2 photos" ("2 photos" has no
   // street type) from being read as an address.
   const negatedAddr = /^\s*(no|nope|nah|not)\b/.test(t) && streetOnAddr
-  const strong = slots.address_confirmed ? cue || negatedAddr : streetOnAddr || cue
+  // A DIFFERENT full address (street signal AND a postcode) is an unambiguous
+  // property change even without a cue word — B1 (live 2026-07-24 S7/S8): at
+  // the intent step "ok now price 12 Smith Street Bondi NSW 2026" after 670
+  // London Rd was confirmed was NOT folded, so the OLD address got measured.
+  // The same-address guard below still blocks a bare/full restatement of the
+  // confirmed address (mirrors the 'quoted'-step street+postcode reopen).
+  const differentFullAddress = streetOnAddr && !!parsePostcode(inbound)
+  const strong = slots.address_confirmed
+    ? cue || negatedAddr || differentFullAddress
+    : streetOnAddr || cue
   if (!strong) return null
   if (slots.address && normAddr(addr) === normAddr(slots.address)) return null
   const s: RoofingSlots = { ...slots, address: addr, address_confirmed: false }
@@ -344,9 +353,15 @@ function tryAddressFold(inbound: string, slots: RoofingSlots): RoofingSlots | nu
  *  re-reading the address back is the natural answer. */
 function shouldBailToDialog(inbound: string, lastStep: RoofingStep): boolean {
   const t = (inbound ?? '').toLowerCase()
+  const onAddressStep = lastStep === 'address' || lastStep === 'confirm_address'
   const isQuestion = inbound.includes('?') || QUESTION_LEAD.test(t)
-  const questionBail = isQuestion && lastStep !== 'address' && lastStep !== 'confirm_address'
-  return TOPIC_SWITCH.test(t) || INTERRUPT.test(t) || questionBail
+  const questionBail = isQuestion && !onAddressStep
+  // An INTERRUPT ("wait", "hold on") on the address / confirm_address step is a
+  // self-correction, not a topic switch. B3 (live 2026-07-24 S9): "no wait yes"
+  // bailed to the general LLM which then asked "quick one, what's your first
+  // name?" instead of resolving the address confirmation.
+  const interruptBail = INTERRUPT.test(t) && !onAddressStep
+  return TOPIC_SWITCH.test(t) || interruptBail || questionBail
 }
 
 /** PURE — when the current step's answer did NOT land AND it wasn't an
