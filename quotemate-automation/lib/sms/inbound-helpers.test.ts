@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   arrivalTimestampsFromTurns,
+  hasUnrepliedInbound,
   classifyInboundInsert,
   decideConversationUpsert,
   decideSidDedup,
@@ -245,5 +246,42 @@ describe('isNearMaxDuration', () => {
     expect(isNearMaxDuration(-1, 300)).toBe(false)
     expect(isNearMaxDuration(10_000, 0)).toBe(false)
     expect(isNearMaxDuration(NaN, 300)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Round 4 — hasUnrepliedInbound (post-quote orphan drain)
+// A follow-up that arrives while the leader is mid-pipeline loses the lock and
+// is orphaned: the leader already read history, so nobody ever replies. The
+// leader checks this before releasing the lock. Live 2026-07-25: a price
+// objection / clarifying question after a quote got no reply at all.
+// ---------------------------------------------------------------------------
+
+describe('hasUnrepliedInbound', () => {
+  const READ = '2026-07-25T10:00:00.000Z'
+  it('true when an inbound landed after the leader read history', () => {
+    expect(hasUnrepliedInbound([
+      { direction: 'inbound', created_at: '2026-07-25T09:59:59.000Z' },
+      { direction: 'inbound', created_at: '2026-07-25T10:00:30.000Z' },
+    ], READ)).toBe(true)
+  })
+  // The leader's OWN sends land at the END of a long run, AFTER the orphan.
+  // A position-based check would call this "replied" and re-silence it.
+  it('stays true when the leader own outbounds land after the orphan', () => {
+    expect(hasUnrepliedInbound([
+      { direction: 'inbound', created_at: '2026-07-25T10:00:30.000Z' },
+      { direction: 'outbound', created_at: '2026-07-25T10:00:58.000Z' },
+      { direction: 'outbound', created_at: '2026-07-25T10:00:59.000Z' },
+    ], READ)).toBe(true)
+  })
+  it('false when every inbound predates the history read', () => {
+    expect(hasUnrepliedInbound([
+      { direction: 'inbound', created_at: '2026-07-25T09:59:00.000Z' },
+      { direction: 'outbound', created_at: '2026-07-25T10:00:10.000Z' },
+    ], READ)).toBe(false)
+  })
+  it('false on empty input or a missing read timestamp', () => {
+    expect(hasUnrepliedInbound([], READ)).toBe(false)
+    expect(hasUnrepliedInbound([{ direction: 'inbound', created_at: '2026-07-25T10:00:30.000Z' }], null)).toBe(false)
   })
 })

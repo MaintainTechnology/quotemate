@@ -29,8 +29,10 @@ import {
   isNegative,
   isStopRequest,
   looksLikeRoofingEnquiry,
+  looksCommercial,
   mapIntent,
   mapMaterial,
+  mapPitch,
   nextRoofingStep,
   parseAuState,
   parsePostcode,
@@ -115,6 +117,18 @@ export function parseStructureChoice(inbound: string, count: number): number | n
   // is an address correction, not a pick.
   if (/\bmain\b(?!\s*(?:st\b|street|rd\b|road|ave\b|av\b|avenue|dr\b|drive|hwy\b|highway|pde\b|parade|ln\b|lane|ct\b|court|cres\b|crescent|pl\b|place))/.test(t)) {
     return 1
+  }
+  // G7 (live 2026-07-25): "just the big one" re-sent the identical list. The
+  // list is ordered largest-first with the dwelling at 1, so the size/house
+  // words resolve to the primary; a named secondary resolves by label.
+  // Gated to a SHORT, non-question reply: without that, "can you send that to
+  // my home email instead?" read as a pick and fired a narrowed priced quote.
+  const words = t.trim().split(/\s+/).filter(Boolean)
+  const picky = !t.includes('?') && words.length <= 6
+  if (picky) {
+    if (/\b(big|biggest|large|largest|house|home|dwelling|primary)\b/.test(t)) return 1
+    const SECONDARY_LABELS = ['shed', 'garage', 'carport', 'granny', 'outbuilding']
+    if (count > 1 && SECONDARY_LABELS.some((w) => new RegExp(`\\b${w}\\b`).test(t))) return 2
   }
   for (const [word, n] of Object.entries(ORDINALS)) {
     if (new RegExp(`\\b${word}\\b`).test(t) && n <= count) return n
@@ -611,7 +625,24 @@ export function advanceRoofing(
     // measured 652. The postcode requirement keeps a bare follow-up ("6
     // downlights") from reopening. Same signal as the confirm_roof restart.
     const newAddress = !!extractStreetAddress(inbound) && !!parsePostcode(inbound)
-    if (!looksLikeRoofingEnquiry(inbound) && !newAddress) {
+    // G10 (live 2026-07-25): a post-quote QUESTION ("does that price include the
+    // gutters?") contains a roofing keyword, so it fell through to the reset and
+    // RESTARTED the gather ("What's the property address?") on a customer who
+    // already has a quote. A question is never a new job: hand it to the general
+    // dialog, which answers it. Only a NEW address or a keyword enquiry that is
+    // not a question reopens.
+    // Only a question ABOUT the quote we just sent (anaphoric "that price",
+    // "does that include…") passes through; "can you quote another re-roof" is
+    // a genuine new job and still reopens.
+    const lower = (inbound ?? '').toLowerCase()
+    const isQuestion = inbound.includes('?') || QUESTION_LEAD.test(lower)
+    // Anaphora ONLY. A bare include/cover arm swallowed genuine new jobs
+    // ("can you quote a new roof, does that include gutters?") and the
+    // passthrough CLOSES a quoted thread, killing the lead.
+    const aboutSentQuote =
+      /\b(that|this|it|the)\s+(price|quote|estimate|total|cost|figure|number)\b/.test(lower) ||
+      /\bdoes\s+(that|this|it)\b/.test(lower)
+    if ((!looksLikeRoofingEnquiry(inbound) && !newAddress) || (isQuestion && aboutSentQuote && !newAddress)) {
       return { action: 'passthrough', slots }
     }
     // falls through to the reset below → gather a fresh roofing quote.
@@ -726,6 +757,16 @@ export function advanceRoofing(
       const m = mapMaterial(inbound)
       if (m) nextSlots.material = m
       else if (isAmbiguousMetal(inbound)) nextSlots.metal_hint = true
+    }
+    if (!nextSlots.commercial && looksCommercial(inbound)) {
+      // R5 — a commercial roof must not be auto-quoted on the residential card.
+      nextSlots.commercial = true
+    }
+    if (!nextSlots.pitch) {
+      // R1 (live 2026-07-25): a one-shot brief ("full reroof at 670 London Rd,
+      // colorbond corrugated, standard pitch") had its pitch ignored and re-asked.
+      const p = mapPitch(inbound)
+      if (p) nextSlots.pitch = p
     }
     if (nextSlots.year_built == null) {
       const y = parseYearBuilt(inbound)

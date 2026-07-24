@@ -54,6 +54,11 @@ export type RoofingSlots = {
    *  understood the answer, we just need to know WHICH. Drives the
    *  'material_profile' follow-up; cleared once the profile lands. */
   metal_hint?: boolean
+  /** R5 — the customer named a COMMERCIAL property (warehouse, factory,
+   *  strata, apartment block). The residential rate card and per-building
+   *  measure do not apply, so the job routes to an on-site inspection
+   *  instead of auto-sending a firm price. */
+  commercial?: boolean
   /** Consecutive unrecognised answers to the step we're currently asking.
    *  Bounded by the receptionist so a reply we can't map routes to the
    *  on-site inspection instead of re-asking the same question forever.
@@ -106,7 +111,19 @@ const ROOFING_KEYWORDS = [
   // electrical dialog (live 2026-07-24, scenario E). These phrases are
   // unambiguous — an electrical/plumbing enquiry never says "do my roof".
   'do my roof', 'do the roof', 'do our roof', 'do your roof',
+  // G6 — roof-SPECIFIC emergency phrasing. Bare "storm"/"tree"/"urgent" is NOT
+  // used: on a cross-trade tenant "storm last night, my switchboard is wet and
+  // the aerial on the roof is bent" would hijack an electrical job.
+  'through the roof', 'roof collapsed', 'roof caved',
 ]
+
+/** PURE — R5: the customer named a COMMERCIAL property. Residential pricing and
+ *  the per-building measure do not apply, so these route on site. */
+const COMMERCIAL_RE =
+  /\b(warehouse|factory|industrial|commercial|strata|body corporate|apartment block|unit block|shopping cent(?:re|er)|office block|childcare|school|church|hangar)\b/
+export function looksCommercial(text: string): boolean {
+  return COMMERCIAL_RE.test((text ?? '').toLowerCase())
+}
 
 /** A "roof" that is a LOCATION, not the job. These are electrical/plumbing
  *  sentences ("the downlight near the roof cavity flickers") and must never
@@ -132,7 +149,7 @@ const ROOF_SPECIFIC =
  *  "quoted". Same class of bug as the one already fixed in mapIntent below
  *  (see its NOTE about `replac\w*`); it was never back-ported here. */
 const ROOFING_WORK =
-  /\b(quot\w*|estimat\w*|price[sd]?|pricing|cost\w*|how much|replac\w*|repair\w*|fix\w*|leak\w*|redo|redone|restor\w*|paint\w*|inspect\w*|broken|cracked|damaged|old|new|done|doing|need\w*|want\w*|look\w* at|sort\w* out|do you do)\b/
+  /\b(quot\w*|estimat\w*|price[sd]?|pricing|cost\w*|how much|replac\w*|repair\w*|fix\w*|leak\w*|redo|redone|restor\w*|paint\w*|inspect\w*|broken|cracked|damaged|old|new|done|doing|need\w*|want\w*|look\w* at|sort\w* out|do you do|collaps\w*|cav(?:e|ing) in|caved in|fall\w* in|fell in|sag\w+|hole|holes|blew off|blown off)\b/
 
 /**
  * PURE — does this message read like a roofing enquiry? Used to branch
@@ -388,9 +405,15 @@ export function extractStreetAddress(text: string): string | null {
   // "15 schfofieod". Collapse all whitespace before matching.
   const t = (text ?? '').replace(/\s+/g, ' ').trim()
   if (!t || isStopRequest(t)) return null
+  // G1 (live 2026-07-25) — prefer the number that BEGINS a plausible street
+  // (number + name + a street type/suburb word), so a spurious leading number
+  // does not become the street number: "$1 at 670 London Road Chandler" used to
+  // extract "1 at 670 London Road…". Falls back to the first number + name.
+  const street =
+    t.match(/\d[\d/\-a-zA-Z]*\s+[A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*)*\s+(?:st|street|rd|road|ave|av|avenue|dr|drive|hwy|highway|pde|parade|ln|lane|ct|court|cres|crescent|pl|place|blvd|boulevard|tce|terrace|way|cl|close|circuit|cct|esplanade|esp)\b.*/i)
   // A street number is digits (optionally 12a, 5/12, 1-3) followed by the
   // street name. A trailing postcode alone can never match.
-  const m = t.match(/\d[\d/\-a-zA-Z]*\s+[A-Za-z].*/)
+  const m = street ?? t.match(/\d[\d/\-a-zA-Z]*\s+[A-Za-z].*/)
   if (!m) return null
   const addr = m[0].trim().replace(/\s+/g, ' ')
   return addr.length >= 6 ? addr : null
@@ -598,6 +621,10 @@ export function nextRoofingStep(slots: RoofingSlots): {
       step: 'confirm_address',
       question: `Just to confirm, the property is "${slots.address}". Is that right? Reply yes or no.`,
     }
+  }
+  // R5 — a commercial property never gets an auto-sent residential firm price.
+  if (slots.commercial) {
+    return { step: 'inspection', reason: 'commercial roofs are quoted on site' }
   }
   if (!slots.intent) return { step: 'intent', question: QUESTIONS.intent }
   // The pricer has no rule for an unknown intent — it would silently price

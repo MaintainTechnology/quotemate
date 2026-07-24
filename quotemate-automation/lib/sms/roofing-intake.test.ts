@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyRoofingAnswer,
+  extractStreetAddress,
   isAffirmative,
   isNegative,
   isStopRequest,
@@ -58,6 +59,21 @@ describe('applyRoofingAnswer address validation', () => {
   })
   it('accepts a real address with a street number', () => {
     expect(applyRoofingAnswer({}, 'address', '5 Smith St, Bondi NSW 2026').address).toBe('5 Smith St, Bondi NSW 2026')
+  })
+})
+
+// G1 (live 2026-07-25): "$1 at 670 London Road…" made extraction grab
+// "1 at 670…" because it started at the FIRST digit run.
+describe('extractStreetAddress ignores a spurious leading number (G1)', () => {
+  it('starts at the number that begins a plausible street', () => {
+    expect(extractStreetAddress('$1 at 670 London Road Chandler QLD 4155')).toBe('670 London Road Chandler QLD 4155')
+    expect(extractStreetAddress('call me on 0412 345 678, its 12 Smith St Bondi NSW 2026'))
+      .toContain('12 Smith St')
+  })
+  it('does not regress normal or unit addresses', () => {
+    expect(extractStreetAddress('223 Archer St, Chandler')).toBe('223 Archer St, Chandler')
+    expect(extractStreetAddress('3/50 Connor St Kangaroo Point QLD 4169')).toBe('3/50 Connor St Kangaroo Point QLD 4169')
+    expect(extractStreetAddress('670 London Road Chandler QLD 4155')).toBe('670 London Road Chandler QLD 4155')
   })
 })
 
@@ -124,6 +140,16 @@ describe('looksLikeRoofingEnquiry', () => {
     expect(looksLikeRoofingEnquiry('need a roofer')).toBe(true)
     expect(looksLikeRoofingEnquiry('roofer?')).toBe(true)
     expect(looksLikeRoofingEnquiry('do you have roofers')).toBe(true)
+  })
+  // G6 (live 2026-07-25): "MY ROOF IS COLLAPSING RIGHT NOW" fell to the general
+  // electrical dialog because the emergency/damage vocabulary was missing.
+  it('engages on a roof emergency / storm damage', () => {
+    expect(looksLikeRoofingEnquiry('MY ROOF IS COLLAPSING RIGHT NOW help me')).toBe(true)
+    expect(looksLikeRoofingEnquiry('my roof is caving in')).toBe(true)
+    expect(looksLikeRoofingEnquiry('theres a hole in my roof')).toBe(true)
+    expect(looksLikeRoofingEnquiry('roof blew off in the storm')).toBe(true)
+    expect(looksLikeRoofingEnquiry('tree came through the roof')).toBe(true)
+    expect(looksLikeRoofingEnquiry('my roof is sagging')).toBe(true)
   })
   it('does not trip on incidental "roof" in an electrical context', () => {
     expect(looksLikeRoofingEnquiry('the downlight near the roof cavity flickers')).toBe(false)

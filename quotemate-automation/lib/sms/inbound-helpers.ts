@@ -193,6 +193,35 @@ export type TimedMessageRow = {
 }
 
 /**
+ * PURE — is there an inbound we have NOT replied to yet (an inbound after our
+ * most recent outbound)?
+ *
+ * The leader holds the per-conversation lock for the whole pipeline (measure +
+ * sends + PDF can run ~90s) but reads history near the START. A follow-up that
+ * lands in that window loses the lock claim and bails, and the leader never
+ * sees it — so nobody ever replies. Live 2026-07-25: a price objection and a
+ * clarifying question sent right after a quote both got silence. The leader
+ * calls this before releasing the lock so an orphaned follow-up is served.
+ *
+ * TIME-based, not position-based: the leader's OWN later outbounds (the photo
+ * and quote SMS it sends at the END of a long run) sit after the orphan in the
+ * table, so "is the last row inbound?" would mask exactly the mid-pipeline
+ * orphan this exists to catch. `sinceIso` is when the leader read history, so
+ * any inbound newer than that was never processed by anyone.
+ */
+export function hasUnrepliedInbound(
+  rows: readonly TimedMessageRow[] | null | undefined,
+  sinceIso: string | null | undefined,
+): boolean {
+  if (!rows || !sinceIso) return false
+  const since = Date.parse(sinceIso)
+  if (!Number.isFinite(since)) return false
+  return rows.some(
+    (r) => r.direction === 'inbound' && Number.isFinite(Date.parse(r.created_at ?? '')) && Date.parse(r.created_at ?? '') > since,
+  )
+}
+
+/**
  * Extract the epoch-ms arrival timestamps of the INBOUND messages in the
  * current un-replied burst — i.e. every inbound that landed after the most
  * recent outbound — for `adaptiveDebounceMs`.

@@ -18,7 +18,7 @@ import {
 } from '@/lib/sms/twilio-validator'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
-import { toRoofingRequest, seedRoofingSlots } from '@/lib/sms/roofing-intake'
+import { toRoofingRequest, seedRoofingSlots, isStopRequest } from '@/lib/sms/roofing-intake'
 import { screenConfirmAddress, verifyAuAddress, gateUnverifiedProfileAddress } from '@/lib/sms/verify-address'
 import {
   advanceRoofing,
@@ -140,6 +140,7 @@ import {
   classifyInboundInsert,
   decideConversationUpsert,
   arrivalTimestampsFromTurns,
+  hasUnrepliedInbound,
   throwIfDispatchFailed,
   sideEffectsAllowed,
   isNearMaxDuration,
@@ -1762,6 +1763,10 @@ export async function POST(req: Request) {
     // when the heavy pipeline is approaching the maxDuration budget and emit the
     // after_near_max_duration alert before sends get cut off mid-flight.
     const afterStartedAt = Date.now()
+    // When we read the authoritative history. Any inbound newer than this was
+    // never processed by us — the orphan-drain check in `finally` needs it, so
+    // it is declared out here rather than inside the try.
+    let historyReadAt: string | null = null
     try {
       // ─────── In-flight continuation ───────
       // The customer texted while their PREVIOUS quote is still being
@@ -1818,6 +1823,7 @@ export async function POST(req: Request) {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
 
+      historyReadAt = new Date().toISOString()
       const turns: ConversationTurn[] = (historyRows ?? []).map(m => ({
         direction: m.direction as 'inbound' | 'outbound',
         body: m.body,
@@ -3532,6 +3538,70 @@ export async function POST(req: Request) {
         stack: e?.stack?.split('\n').slice(0, 6).join('\n'),
       })
     } finally {
+      // ─────── Post-quote orphan drain (round 4, live 2026-07-25) ───────
+      // We hold the lock for the WHOLE pipeline (measure + sends + PDF can run
+      // ~90s) but read history near the START. A follow-up landing in that
+      // window loses its lock claim and bails, and we never saw it — so nobody
+      // ever replies. Live: a price objection, a clarifying question and a
+      // second-property request after a quote all got total silence.
+      //
+      // Before releasing the lock (so no second webhook can race us), check for
+      // an inbound we never answered and serve it: re-run the roofing turn, and
+      // if the state machine hands it back (a question / objection it will not
+      // answer) send one honest acknowledgement. ONE pass, never re-drafts a
+      // quote, and every failure is swallowed so the lock is always released.
+      try {
+        // Deliberately an ACKNOWLEDGEMENT ONLY — it never re-runs the roofing
+        // state machine. Re-running it here would re-enter the measure/quote
+        // pipeline outside the roofingEnabled / inflight guards and, because
+        // the 60s lock has usually EXPIRED by the end of a ~90s run, could race
+        // a second webhook into a duplicate measurement, duplicate priced SMS
+        // and a second mintable quote link. One honest ack invites the customer
+        // to resend, and that next turn is processed normally under a fresh lock.
+        const { data: drainRows } = await supabase
+          .from('sms_messages')
+          .select('direction, body, created_at')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: true })
+        if (hasUnrepliedInbound(drainRows ?? [], historyReadAt)) {
+          // Only ack while we PROVABLY still hold the lock: a 90s pipeline
+          // outruns the 60s lock, and once it lapses another webhook owns the
+          // conversation and will reply itself.
+          const { data: lockNow } = await supabase
+            .from('sms_conversations')
+            .select('processing_until, roofing_state')
+            .eq('id', conversationId)
+            .maybeSingle()
+          const lockRow = lockNow as { processing_until?: string | null; roofing_state?: unknown } | null
+          const stillOwnLock = !!lockRow?.processing_until && new Date(lockRow.processing_until) > new Date()
+          const drainStep = (lockRow?.roofing_state as RoofingConversationState | null)?.last_step ?? null
+          const roofingActive = !!drainStep && drainStep !== 'closed'
+          const lastInbound = [...(drainRows ?? [])].reverse().find(m => m.direction === 'inbound')?.body ?? ''
+          // Never reply to an opt-out, and never start work we cannot finish.
+          const optedOut = isStopRequest(lastInbound) || isGlobalOptOut(lastInbound)
+          const outOfBudget = isNearMaxDuration(Date.now() - afterStartedAt, DELIVERY_KNOBS.maxDurationSec)
+          console.log('[sms/inbound:after] orphaned follow-up detected before lock release', {
+            conversationId, roofingStep: drainStep, roofingActive, stillOwnLock, optedOut, outOfBudget,
+          })
+          if (roofingActive && stillOwnLock && !optedOut && !outOfBudget) {
+            const ack =
+              "Thanks, I've passed that to the roofer and they'll come back to you shortly. If you'd like another property quoted, just send the address."
+            await dispatchQuoteMessage({ to: fromNumber, text: ack, from: toNumber })
+            await supabase.from('sms_messages').insert({
+              conversation_id: conversationId,
+              direction: 'outbound',
+              body: ack,
+            })
+            console.log('[sms/inbound:after] orphaned follow-up acknowledged', { conversationId })
+          }
+        }
+      } catch (drainErr: any) {
+        console.warn('[sms/inbound:after] orphan drain failed (non-fatal)', {
+          conversationId,
+          message: drainErr?.message ?? String(drainErr),
+        })
+      }
+
       // ─────── Release the per-conversation lock ───────
       // Always runs — whether the work succeeded, threw, or was downgraded
       // to the fallback. Clearing processing_until lets the next inbound

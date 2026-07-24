@@ -778,6 +778,66 @@ describe('quoted thread — a new address reopens roofing, not a hollow LLM hand
   })
 })
 
+// ── Round 4 (live 2026-07-25) ──────────────────────────────────────────
+describe('quoted thread: a post-quote QUESTION must not restart the gather (G10)', () => {
+  const quoted: RoofingConversationState = {
+    slots: { address: '12 Smith St, Surry Hills NSW 2010', address_confirmed: true },
+    last_step: 'quoted',
+    pending_structure_count: 1,
+  }
+  it('a clarifying question does not reset to the address step', () => {
+    const d = advanceRoofing(quoted, 'does that price include the gutters?')
+    expect(d.action === 'ask' && (d as { step?: string }).step === 'address').toBe(false)
+  })
+  it('a price objection does not reset to the address step', () => {
+    const d = advanceRoofing(quoted, 'thats way too expensive can you do better')
+    expect(d.action === 'ask' && (d as { step?: string }).step === 'address').toBe(false)
+  })
+  it('a structure follow-up still re-serves and a new full address still reopens', () => {
+    expect(advanceRoofing({ ...quoted, pending_structure_count: 3 }, 'just 2 and 3').action).toBe('send_saved')
+    expect(advanceRoofing(quoted, 'can you price 670 London Road Chandler QLD 4155').action).toBe('ask')
+  })
+})
+
+describe('opener harvest reads the pitch too (R1)', () => {
+  it('a complete one-shot brief captures the pitch, so confirming the address goes straight to measure', () => {
+    const d = advanceRoofing(null, 'I need a full reroof at 670 London Road Chandler QLD 4155, colorbond corrugated, standard pitch')
+    expect(d.slots.pitch).toBe('standard')
+    // Address is read back once (confirm_address); a YES then has everything.
+    const confirmed = advanceRoofing({ slots: d.slots, last_step: 'confirm_address' }, 'yes')
+    expect(confirmed.action).toBe('measure')
+  })
+})
+
+// R5 (live 2026-07-25): "warehouse roof at 670 London Rd" was measured and
+// FIRM-priced through the residential flow. A commercial roof is a different
+// job; a wrong firm price is a money-path risk, so route it on site.
+describe('commercial property routes to inspection (R5)', () => {
+  it('a warehouse enquiry ends in an inspection, not a firm auto-quote', () => {
+    const d = advanceRoofing(null, 'need a quote for our warehouse roof at 670 London Road Chandler QLD 4155')
+    expect(d.slots.commercial).toBe(true)
+    const confirmed = advanceRoofing({ slots: d.slots, last_step: 'confirm_address' }, 'yes')
+    expect(confirmed.action).toBe('inspection')
+  })
+  it('a normal residential enquiry is unaffected', () => {
+    const d = advanceRoofing(null, 'quote my roof at 670 London Road Chandler QLD 4155')
+    expect(d.slots.commercial).toBeFalsy()
+  })
+})
+
+describe('natural-language structure picks (G7)', () => {
+  it('maps size/label words to a structure', () => {
+    expect(parseStructureChoice('just the big one', 3)).toBe(1)
+    expect(parseStructureChoice('the biggest one thanks', 3)).toBe(1)
+    expect(parseStructureChoice('the main one', 3)).toBe(1)
+    expect(parseStructureChoice('just the house', 3)).toBe(1)
+    expect(parseStructureChoice('the shed', 3)).toBe(2)
+  })
+  it('stays null when genuinely ambiguous', () => {
+    expect(parseStructureChoice('hmm not sure', 3)).toBeNull()
+  })
+})
+
 // F4 (live 2026-07-24): a burst "opener | 670 London Rd | thanks" while at the
 // address step dropped the address (decision used only the last line "thanks").
 describe('roofingTurnInput harvests the burst address at the address step (F4)', () => {
