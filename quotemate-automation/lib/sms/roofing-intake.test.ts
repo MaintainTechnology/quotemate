@@ -32,6 +32,23 @@ describe('isStopRequest', () => {
       expect(isStopRequest(s)).toBe(false)
     }
   })
+  // F11 (live 2026-07-24): "will the old roof stop leaking after this?" cancelled
+  // the thread. "stop leaking"/"stop the leak" is a roofing outcome, not an opt-out.
+  it('does NOT cancel when "stop" is asking to stop a roofing problem', () => {
+    for (const s of [
+      'will the old roof stop leaking after this?',
+      'can you make it stop leaking',
+      'how do we stop the leak',
+      'stop the roof leaking please',
+    ]) {
+      expect(isStopRequest(s)).toBe(false)
+    }
+  })
+  it('still catches genuine opt-outs incl. embedded cancel/stop', () => {
+    for (const s of ['stop', 'STOP', 'stop please', 'please stop', "let's cancel now", 'just stop this session', 'unsubscribe', 'cancel']) {
+      expect(isStopRequest(s)).toBe(true)
+    }
+  })
 })
 
 describe('applyRoofingAnswer address validation', () => {
@@ -41,6 +58,41 @@ describe('applyRoofingAnswer address validation', () => {
   })
   it('accepts a real address with a street number', () => {
     expect(applyRoofingAnswer({}, 'address', '5 Smith St, Bondi NSW 2026').address).toBe('5 Smith St, Bondi NSW 2026')
+  })
+})
+
+// F15c (live 2026-07-24): at confirm_address "not quite right" CONFIRMED the
+// address (bare "right" matched AFFIRM, no DENY token) and advanced to intent,
+// measuring the wrong roof. A negation cue must block the confirm and re-ask.
+describe('applyRoofingAnswer confirm_address is conservative on negation (F15c)', () => {
+  const slots = { address: '12 Smith St, Surry Hills NSW 2010', postcode: '2010', address_confirmed: false }
+  it('a negated affirm re-asks the address, never confirms', () => {
+    for (const neg of ['not quite right', 'not correct', "isn't right", 'not sure', "that's not the right one"]) {
+      const out = applyRoofingAnswer(slots, 'confirm_address', neg)
+      expect(out.address_confirmed).not.toBe(true)
+      expect(out.address).toBeNull()
+    }
+  })
+  it('a plain affirm still confirms', () => {
+    for (const yes of ['yes', 'yep thats right', 'correct', 'ok']) {
+      const out = applyRoofingAnswer(slots, 'confirm_address', yes)
+      expect(out.address_confirmed).toBe(true)
+      expect(out.address).toBe('12 Smith St, Surry Hills NSW 2010')
+    }
+  })
+  // Review: NEGATION_CUE must not trip on the trailing "nt" of ordinary
+  // address-confirm words (apartment/front/point) — only real negations.
+  it('confirms an affirm containing an "nt"-ending word (apartment/front)', () => {
+    for (const yes of ["yep that's the apartment", "yes it's the one out the front", 'yes at that point']) {
+      const out = applyRoofingAnswer(slots, 'confirm_address', yes)
+      expect(out.address_confirmed).toBe(true)
+    }
+  })
+  it('an explicit deny still clears (F15a/F15b unchanged)', () => {
+    for (const no of ['no that isn\'t correct', "that's wrong yeah", 'no']) {
+      const out = applyRoofingAnswer(slots, 'confirm_address', no)
+      expect(out.address).toBeNull()
+    }
   })
 })
 
@@ -76,6 +128,25 @@ describe('looksLikeRoofingEnquiry', () => {
   it('does not trip on incidental "roof" in an electrical context', () => {
     expect(looksLikeRoofingEnquiry('the downlight near the roof cavity flickers')).toBe(false)
     expect(looksLikeRoofingEnquiry('I need 6 downlights')).toBe(false)
+  })
+  // F14 (live 2026-07-24): "quote painting my gutters, eaves and fascia" engaged
+  // roofing via the gutter/eaves/fascia keywords. An explicit paint job with no
+  // strong roofing-replacement term is NOT a roofing enquiry.
+  it('does not hijack an explicit painting enquiry', () => {
+    expect(looksLikeRoofingEnquiry('hi can you quote painting my gutters, eaves and fascia')).toBe(false)
+    expect(looksLikeRoofingEnquiry('paint my fascia and gutters')).toBe(false)
+    expect(looksLikeRoofingEnquiry('repaint the eaves')).toBe(false)
+  })
+  it('keeps a roofing job that merely mentions paint', () => {
+    expect(looksLikeRoofingEnquiry('reroof, no paint needed')).toBe(true)
+    expect(looksLikeRoofingEnquiry('new roof and paint the gutters after')).toBe(true)
+  })
+  // F14 review: a roofing repair/restoration lead that co-mentions paint must
+  // NOT be dropped to painting when a roof-specific term is present.
+  it('keeps a roof repair/restoration lead that co-mentions paint', () => {
+    expect(looksLikeRoofingEnquiry('my roof needs repainting and the gutters are rusted')).toBe(true)
+    expect(looksLikeRoofingEnquiry("roof leaking, fix it don't repaint")).toBe(true)
+    expect(looksLikeRoofingEnquiry('roof restoration and repaint the eaves')).toBe(true)
   })
   // The broadened verb list must not leak into other trades: these all
   // carry a work word AND the token "roof", but the roof is a LOCATION.

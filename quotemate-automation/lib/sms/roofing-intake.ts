@@ -114,6 +114,17 @@ const ROOFING_KEYWORDS = [
  *  first, so widening the verb list below can't leak into other trades. */
 const NOT_ROOFING = /\broof\s?(cavity|space|void)\b|\bin the roof\b|\bunder the roof\b/
 
+/** F14 — an explicit paint job is a PAINTING enquiry, not roofing, even when it
+ *  names the shared parts (gutter/eaves/fascia). But a ROOF-SPECIFIC term keeps
+ *  it roofing even if paint is mentioned ("roof needs repainting and gutters
+ *  rusted"). ROOF_SPECIFIC deliberately excludes gutter/eaves/fascia (shared
+ *  with painting) and mirrors the painting slice's own `\broof` exclusion, so a
+ *  roof+paint message is never refused by BOTH receptionists. Live 2026-07-24:
+ *  "quote painting my gutters, eaves and fascia" ran a roofing measure. */
+const PAINT_ENQUIRY = /\b(?:re)?paint\w*\b/
+const ROOF_SPECIFIC =
+  /\broof\w*\b|\bre-?roof\w*\b|\bridge ?caps?\b|\bvalley iron\b|\bwhirly ?bird\b|\bsarking\b|\bdown ?pipe\b/
+
 /** Work the customer might want done, as STEMS.
  *
  *  These were exact words until 2026-07-22, which is why "Can you quoted my
@@ -133,6 +144,8 @@ export function looksLikeRoofingEnquiry(text: string): boolean {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return false
   if (NOT_ROOFING.test(t)) return false
+  // F14 — explicit paint job with NO roof-specific term is painting.
+  if (PAINT_ENQUIRY.test(t) && !ROOF_SPECIFIC.test(t)) return false
   if (ROOFING_KEYWORDS.some((k) => t.includes(k))) return true
   // bare "roof" only when paired with an action/condition word
   if (/\broofs?\b/.test(t) && ROOFING_WORK.test(t)) return true
@@ -308,6 +321,15 @@ export function parseAuState(text: string): AuState | null {
 
 const AFFIRM = /\b(yes|yep|yeah|yup|correct|right|that'?s right|that'?s it|confirmed|sure|ok|okay|👍)\b/
 const DENY = /\b(no|nope|nah|wrong|incorrect|not right|different)\b/
+// F15c — a negation cue BEYOND the DENY vocabulary. "not quite right" / "isn't
+// right" / "not sure" carry an affirm token (right/sure) but NO deny token, so
+// at confirm_address they wrongly confirmed and measured the wrong roof (live
+// 2026-07-24). Consulted only to BLOCK a confirm and re-ask, so it can never
+// cause a wrong confirm.
+// Explicit negations/contractions only — a bare `n'?t\b` suffix wrongly matched
+// the trailing "nt" of ordinary confirm words (apartment/front/point).
+const NEGATION_CUE =
+  /\bnot\b|\bcannot\b|\bnever\b|\b(?:is|are|was|were|do|does|did|ca|could|wo|would|should|has|have|had|ai|must|need|sha)n['’]?t\b/
 
 export function isAffirmative(text: string): boolean {
   return AFFIRM.test((text ?? '').toLowerCase())
@@ -332,11 +354,17 @@ export function isNegative(text: string): boolean {
 // clear frustration are.
 const STOP_RE = /\b(stop|cancel|cancelled|unsubscribe|quit|end this|end the|not interested|leave me alone|go away|never ?mind|forget it)\b/
 const FRUSTRATION_RE = /\b(f+u+c+k+|f\*+ck|fck|stfu|piss off|bugger off|bullsh|shut up)\b/
+// F11 — "stop"/"end" a LEAK is a roofing outcome the customer wants, not a
+// request to end the conversation. Live 2026-07-24: "will the old roof stop
+// leaking after this?" cancelled the thread. Carve it out before the opt-out
+// check (a genuine opt-out reads "stop", "stop texting me", "let's cancel now").
+const STOP_OUTCOME = /\b(stop|end)\b(?:\s+\w+){0,3}\s+(leak\w*|drip\w*|water|rain\w*)\b/
 
 /** PURE — true when the customer wants to stop / cancel / opt out. */
 export function isStopRequest(text: string): boolean {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return false
+  if (STOP_OUTCOME.test(t)) return false
   return STOP_RE.test(t) || FRUSTRATION_RE.test(t)
 }
 
@@ -459,10 +487,13 @@ export function applyRoofingAnswer(
         next.address_confirmed = false
         break
       }
-      if (isAffirmative(msg) && !isNegative(msg)) {
+      // F15c — a negation cue (deny word OR "not/isn't/n't …") blocks the
+      // confirm and re-asks; a plain affirm with no negation still confirms.
+      const negated = isNegative(msg) || NEGATION_CUE.test((msg ?? '').toLowerCase())
+      if (isAffirmative(msg) && !negated) {
         next.address_confirmed = true
-      } else if (isNegative(msg)) {
-        // Customer says it's wrong — clear so we re-ask the address.
+      } else if (negated) {
+        // Customer says it's wrong / unsure — clear so we re-ask the address.
         next.address = null
         next.postcode = null
         next.state = null

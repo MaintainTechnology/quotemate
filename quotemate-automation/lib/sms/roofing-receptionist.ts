@@ -79,7 +79,10 @@ export type RoofingTurnDecision =
   // a stop, or a fresh roofing enquiry — hand it back to the general dialog
   // (the route returns false) so a new electrical/plumbing question is
   // handled normally instead of being trapped in roofing.
-  | { action: 'passthrough'; slots: RoofingSlots }
+  // `close` (F6): a genuine topic switch to another trade — the route closes
+  // the roofing_state so the next message stays with the general dialog instead
+  // of re-grabbing roofing. Absent/false on an interrupt/question bail (resume-able).
+  | { action: 'passthrough'; slots: RoofingSlots; close?: boolean }
 
 const WRONG_BUILDING_REPROMPT =
   "No worries. What's the correct property address, with suburb and postcode?"
@@ -456,7 +459,14 @@ export function roofingTurnInput(
   const burst = latestInboundBurst(turns)
   const lastLine = [...turns].reverse().find((t) => t.direction === 'inbound')?.body ?? ''
   const coldStart = !prevLastStep || prevLastStep === 'closed'
-  return { engage: burst, decision: coldStart ? burst : lastLine }
+  // F4 (live 2026-07-24): a burst "opener | 670 London Rd | thanks" while
+  // awaiting the address dropped the address because only the last line was
+  // tested. When awaiting the address, harvest from the WHOLE burst; the
+  // last-line-only rule still protects the pick/booking steps from a stray
+  // digit/deny. The deeper webhook/leader-election race (60s inflight-lock
+  // debt) is out of scope here.
+  const awaitingAddress = prevLastStep === 'address' || prevLastStep === 'confirm_address'
+  return { engage: burst, decision: coldStart || awaitingAddress ? burst : lastLine }
 }
 
 /**
@@ -595,54 +605,57 @@ export function advanceRoofing(
     if (addrFold) {
       nextSlots = addrFold
     } else if (shouldBailToDialog(inbound, lastStep)) {
-      return { action: 'passthrough', slots }
+      // F6 — a genuine topic switch to another trade closes the gather; an
+      // interrupt/question is resume-able, so it leaves the state alone.
+      return { action: 'passthrough', slots, close: TOPIC_SWITCH.test((inbound ?? '').toLowerCase()) }
     } else {
       nextSlots = applyRoofingAnswer(slots, lastStep, inbound)
 
+      // The answer didn't fit THIS step — it may still be a cue-gated correction
+      // or an out-of-order answer to another (empty) field. Harvest it, but the
+      // step we ASKED may STILL be unanswered afterward.
+      if (!answerLanded(slots, nextSlots, lastStep)) {
+        const fold = crossStepFold(inbound, slots, lastStep)
+        if (fold) nextSlots = fold
+      }
+
       if (answerLanded(slots, nextSlots, lastStep)) {
-        // Understood — clear the counter so misses never accumulate across
-        // steps (one bad material answer must not shorten the pitch budget).
+        // The asked step is answered — clear the counter so misses never
+        // accumulate across steps (one bad material answer must not shorten the
+        // pitch budget).
         delete nextSlots.misses
       } else {
-        // The answer didn't fit THIS step and wasn't an address / bail —
-        // it may still be a cue-gated correction or an out-of-order answer.
-        const fold = crossStepFold(inbound, slots, lastStep)
-        if (fold) {
-          nextSlots = fold
+        // F7/F13 (live 2026-07-24): the step we ASKED is STILL unanswered, even
+        // if a fold harvested a DIFFERENT slot out of order. Count the miss so
+        // we don't re-ask the identical question forever ("What do you need
+        // done?" looped while the customer answered material/pitch); at the
+        // budget, set the 'unknown' sentinel / route to inspection — the same
+        // safe fallback the rest of the flow uses when it can't price.
+        const misses = (slots.misses ?? 0) + 1
+        if (misses >= missBudget(lastStep)) {
+          delete nextSlots.misses
+          if (lastStep === 'material') nextSlots.material = 'unknown'
+          else if (lastStep === 'pitch') nextSlots.pitch = 'unknown'
+          else if (lastStep === 'intent') nextSlots.intent = 'unknown'
+          // Address is different: with no usable address there is nothing to
+          // measure AND nothing to put on a job sheet, so hand the lead to the
+          // tradie directly rather than pretending we can quote it.
+          else {
+            return {
+              action: 'inspection',
+              slots: nextSlots,
+              reason: "we couldn't confirm the property address",
+            }
+          }
         } else {
-      // NOT understood. Re-asking the identical question forever is how
-      // this flow used to dead-end ("iron", "25 degrees", "the brown
-      // stuff" all mapped to nothing). Give the customer a bounded number
-      // of goes, then fall back to the on-site inspection — the same safe
-      // failure mode the rest of QuoteMax uses when it can't price.
-      const misses = (slots.misses ?? 0) + 1
-      if (misses >= missBudget(lastStep)) {
-        delete nextSlots.misses
-        // For the three slots that HAVE an 'unknown' sentinel, set it and
-        // let the existing gates in nextRoofingStep route to inspection.
-        if (lastStep === 'material') nextSlots.material = 'unknown'
-        else if (lastStep === 'pitch') nextSlots.pitch = 'unknown'
-        else if (lastStep === 'intent') nextSlots.intent = 'unknown'
-        // Address is different: with no usable address there is nothing to
-        // measure AND nothing to put on a job sheet, so hand the lead to
-        // the tradie directly rather than pretending we can quote it.
-        else {
-          return {
-            action: 'inspection',
-            slots: nextSlots,
-            reason: "we couldn't confirm the property address",
+          nextSlots = { ...nextSlots, misses }
+          // An address answer that didn't parse as an address → clarify, don't
+          // store junk (and don't silently re-send the same prompt).
+          if (lastStep === 'address') {
+            return { action: 'ask', slots: nextSlots, step: 'address', reply: ADDRESS_RETRY }
           }
         }
-      } else {
-        nextSlots = { ...nextSlots, misses }
-        // An address answer that didn't parse as an address → clarify, don't
-        // store junk (and don't silently re-send the same prompt).
-        if (lastStep === 'address') {
-          return { action: 'ask', slots: nextSlots, step: 'address', reply: ADDRESS_RETRY }
-        }
       }
-      }
-    }
     }
   } else {
     // ── Harvest the OPENING message ──────────────────────────────────
@@ -753,6 +766,17 @@ export const ROOFING_STALE_IDLE_MS = 60 * 60 * 1000
 const ROOFING_STALE_REPLAY_STEPS: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
   'confirm_roof',
   'quoted',
+  // F8 (live 2026-07-24): a mid-gather flow resumed hours later measured the
+  // STALE address ("223 Archer St" typed, 670 London Rd quoted). A half-finished
+  // gather is stale too — expire it so the thread starts fresh. await_booking
+  // stays EXCLUDED (a late "yes book it" must still book, per the note above);
+  // ready/inspection/closed are terminal / transient.
+  'address',
+  'confirm_address',
+  'intent',
+  'material',
+  'material_profile',
+  'pitch',
 ])
 
 /** PURE — a roofing flow parked on a stale-replay step (confirm_roof / quoted)

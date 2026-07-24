@@ -553,7 +553,11 @@ async function handleRoofingTurn(args: {
   //     dialog handles just this one turn). Closing here would silently
   //     discard everything gathered so far.
   if (decision.action === 'passthrough') {
-    if (prevState?.last_step === 'quoted') {
+    // F6 — a genuine topic switch to another trade (decision.close) closes the
+    // roofing gather so the next message stays with the general dialog instead
+    // of bouncing back to the roofing intent. A warm 'quoted' thread also closes.
+    // An interrupt/question bail leaves the gather intact (resume-able).
+    if (decision.close || prevState?.last_step === 'quoted') {
       await persist({ slots: {}, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'open')
     }
     return false

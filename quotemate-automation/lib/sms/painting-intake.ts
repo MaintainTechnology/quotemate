@@ -139,11 +139,15 @@ export function isNegative(text: string): boolean {
 // clear frustration are.
 const STOP_RE = /\b(stop|cancel|cancelled|unsubscribe|quit|end this|end the|not interested|leave me alone|go away|never ?mind|forget it)\b/
 const FRUSTRATION_RE = /\b(f+u+c+k+|f\*+ck|fck|stfu|piss off|bugger off|bullsh|shut up)\b/
+// F11 (shared shape) — "stop"/"end" a leak is a roofing/plumbing outcome the
+// customer wants, not a request to end the conversation. Carve it out first.
+const STOP_OUTCOME = /\b(stop|end)\b(?:\s+\w+){0,3}\s+(leak\w*|drip\w*|water|rain\w*)\b/
 
 /** PURE — true when the customer wants to stop / cancel / opt out. */
 export function isStopRequest(text: string): boolean {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return false
+  if (STOP_OUTCOME.test(t)) return false
   return STOP_RE.test(t) || FRUSTRATION_RE.test(t)
 }
 

@@ -664,16 +664,22 @@ describe('expireIdleRoofingState — a parked flow left idle is stale', () => {
       expect(expired!.pending_quote_token ?? null).toBeNull()
     }
   })
-  // await_booking and mid-gather do NOT replay a measurement — resuming them
-  // is correct. Expiring await_booking would drop a genuine late "yes book it"
-  // (no booking, no tradie notify) — the exact lead-loss the 2026-07-23
-  // hardening fixed. So they must survive idle.
-  it('does NOT expire await_booking or a mid-gather step — a late reply must still resume', () => {
-    for (const step of ['address', 'material', 'pitch', 'await_booking'] as const) {
+  // await_booking must SURVIVE idle: expiring it would drop a genuine late "yes
+  // book it" (no booking, no tradie notify) — the exact lead-loss the 2026-07-23
+  // hardening fixed.
+  it('does NOT expire await_booking — a late "yes book it" must still book', () => {
+    expect(
+      expireIdleRoofingState({ slots: { address: 'x' }, last_step: 'await_booking' }, 3 * HOUR),
+    ).toBeNull()
+  })
+  // F8 (live 2026-07-24): a mid-gather flow resumed hours later measured the
+  // STALE address. A half-finished gather idle beyond the window is stale too.
+  it('DOES expire a mid-gather step idle beyond the window (F8)', () => {
+    for (const step of ['address', 'confirm_address', 'intent', 'material', 'pitch'] as const) {
       expect(
-        expireIdleRoofingState({ slots: { address: 'x' }, last_step: step }, 3 * HOUR),
+        expireIdleRoofingState({ slots: { address: 'x' }, last_step: step }, 3 * HOUR)?.last_step,
         step,
-      ).toBeNull()
+      ).toBe('closed')
     }
   })
   it('leaves a still-fresh confirm_roof untouched (idle under the threshold)', () => {
@@ -769,5 +775,85 @@ describe('quoted thread — a new address reopens roofing, not a hollow LLM hand
   it('a keyword enquiry still reopens; an unrelated message still passes through', () => {
     expect(advanceRoofing(quoted, 'can you quote another re-roof').action).toBe('ask')
     expect(advanceRoofing(quoted, 'how much for 6 downlights?').action).toBe('passthrough')
+  })
+})
+
+// F4 (live 2026-07-24): a burst "opener | 670 London Rd | thanks" while at the
+// address step dropped the address (decision used only the last line "thanks").
+describe('roofingTurnInput harvests the burst address at the address step (F4)', () => {
+  const burst = [
+    { direction: 'inbound', body: 'can you do my roof' },
+    { direction: 'outbound', body: "What's the property address?" },
+    { direction: 'inbound', body: '670 London Road Chandler QLD 4155' },
+    { direction: 'inbound', body: 'thanks heaps mate' },
+  ]
+  it('the decision includes the address even when it is not the last line', () => {
+    expect(roofingTurnInput('address', burst).decision).toContain('670 London Road')
+    expect(roofingTurnInput('confirm_address', burst).decision).toContain('670 London Road')
+  })
+  it('a pick/booking step still uses the last line only (anti-hijack preserved)', () => {
+    const pick = [
+      { direction: 'outbound', body: 'which building? 1) main 2) shed' },
+      { direction: 'inbound', body: '1 quick question' },
+      { direction: 'inbound', body: 'just the shed thanks' },
+    ]
+    expect(roofingTurnInput('confirm_roof', pick).decision).toBe('just the shed thanks')
+  })
+})
+
+// F8 (live 2026-07-24): a mid-gather flow idle 2h resumed and measured the stale
+// address. Mid-gather steps must expire; await_booking must NOT (late yes books).
+describe('expireIdleRoofingState covers mid-gather steps (F8)', () => {
+  const twoH = 2 * 60 * 60 * 1000
+  it('a mid-gather step idle beyond the window is expired to closed', () => {
+    for (const step of ['address', 'confirm_address', 'intent', 'material', 'pitch'] as const) {
+      const out = expireIdleRoofingState({ slots: { address: '670 London Rd' }, last_step: step }, twoH)
+      expect(out?.last_step).toBe('closed')
+    }
+  })
+  it('await_booking is NOT expired (a late "yes book it" must still book)', () => {
+    expect(expireIdleRoofingState({ slots: {}, last_step: 'await_booking' }, twoH)).toBeNull()
+  })
+  it('within the idle window nothing expires', () => {
+    expect(expireIdleRoofingState({ slots: {}, last_step: 'intent' }, 5 * 60 * 1000)).toBeNull()
+  })
+})
+
+// F7/F13 (live 2026-07-24): at the intent step, answering with material/pitch
+// looped "What do you need done?" forever because the out-of-order fold reset
+// the intent miss counter, so the inspection fallback never fired.
+describe('intent step does not loop forever on out-of-order answers (F7/F13)', () => {
+  const start: RoofingConversationState = {
+    slots: { address: '670 London Rd, Chandler QLD 4155', postcode: '4155', address_confirmed: true },
+    last_step: 'intent',
+  }
+  it('material then pitch at the intent step terminates (not still asking intent)', () => {
+    const d1 = advanceRoofing(start, 'colorbond corrugated')
+    const next1: RoofingConversationState = { slots: d1.slots, last_step: 'intent' }
+    const d2 = advanceRoofing(next1, 'standard')
+    expect(d2.action === 'ask' && (d2 as { step?: string }).step === 'intent').toBe(false)
+  })
+  it('a valid intent still advances (no false inspection)', () => {
+    const d = advanceRoofing(start, 'full reroof')
+    expect(d.action).toBe('ask')
+    expect((d as { step?: string }).step).not.toBe('intent')
+  })
+})
+
+// F6 (live 2026-07-24): a topic switch bailed to the general LLM but left the
+// roofing_state active, so the next message bounced back to the roofing intent.
+describe('topic switch closes the roofing gather (F6)', () => {
+  const gathering: RoofingConversationState = {
+    slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: true },
+    last_step: 'intent',
+  }
+  it('a topic switch to another trade returns passthrough with close=true', () => {
+    const d = advanceRoofing(gathering, 'also can you fix a leaking tap')
+    expect(d.action).toBe('passthrough')
+    expect((d as { close?: boolean }).close).toBe(true)
+  })
+  it('an interrupt/question bail does not close (customer may resume roofing)', () => {
+    const d = advanceRoofing(gathering, 'wait what do you need from me?')
+    if (d.action === 'passthrough') expect((d as { close?: boolean }).close).toBeFalsy()
   })
 })

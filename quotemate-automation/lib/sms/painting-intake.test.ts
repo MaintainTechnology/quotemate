@@ -56,6 +56,12 @@ describe('isStopRequest', () => {
       expect(isStopRequest(s)).toBe(false)
     }
   })
+  // F11 (shared shape): "stop leaking"/"stop the leak" is an outcome, not an opt-out.
+  it('does NOT cancel when "stop" is asking to stop a leak', () => {
+    for (const s of ['will the roof stop leaking after this?', 'can you make it stop leaking', 'how do we stop the leak']) {
+      expect(isStopRequest(s)).toBe(false)
+    }
+  })
 })
 
 describe('applyPaintingAnswer address validation', () => {
