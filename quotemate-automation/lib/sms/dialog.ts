@@ -1245,6 +1245,10 @@ function extraTradeLines(set: ReadonlySet<string>): string[] {
     '    These are IN SCOPE. NEVER tell the customer we do not do them, and never',
     '    end_conversation because a job is one of these — that is the wrong-trade',
     '    redirect, and this is not the wrong trade.',
+    // P2 (live 2026-07-24): a "Hi" to a cross-trade tenant greeted "electrical
+    // and plumbing" only. The opener must advertise the FULL trade list.
+    `  - In the opener invite, ALSO mention these trades so the customer knows the`,
+    `    full list of what we do, not just the pilot trades: ${extras.join(', ')}.`,
   ]
   if (set.has('roofing')) {
     lines.push(

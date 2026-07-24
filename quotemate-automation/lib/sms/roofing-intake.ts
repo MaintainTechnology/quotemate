@@ -101,6 +101,11 @@ const ROOFING_KEYWORDS = [
   // incidental, so it needs no accompanying work verb. "Need a roofer" and
   // "roofer?" both reached the electrical dialog before 2026-07-22.
   'roofer',
+  // "do my/the/our/your roof" is inherently a roofing job, but "do" is not in
+  // ROOFING_WORK (only "do you do"), so "can you do my roof" fell to the
+  // electrical dialog (live 2026-07-24, scenario E). These phrases are
+  // unambiguous — an electrical/plumbing enquiry never says "do my roof".
+  'do my roof', 'do the roof', 'do our roof', 'do your roof',
 ]
 
 /** A "roof" that is a LOCATION, not the job. These are electrical/plumbing

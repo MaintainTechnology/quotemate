@@ -19,13 +19,14 @@ import {
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { toRoofingRequest, seedRoofingSlots } from '@/lib/sms/roofing-intake'
-import { screenConfirmAddress } from '@/lib/sms/verify-address'
+import { screenConfirmAddress, verifyAuAddress, gateUnverifiedProfileAddress } from '@/lib/sms/verify-address'
 import {
   advanceRoofing,
   confirmedIncludedIndices,
   shouldEngageRoofing,
   closeStaleRoofingState,
   expireIdleRoofingState,
+  roofingTurnInput,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
 import {
@@ -445,8 +446,14 @@ async function handleRoofingTurn(args: {
         ? { slots: seedRoofingSlots({}, args.generalAddress), last_step: null }
         : null)
 
-  const latestInbound =
-    [...turns].reverse().find((t) => t.direction === 'inbound')?.body ?? ''
+  // P3 — a rapid burst (all inbounds since our last outbound) is coalesced so
+  // the ENGAGEMENT check sees the whole burst (a multi-message opener like "can
+  // you do my roof" | "670 London Road…" | "its colorbond" engaged the general
+  // LLM because only the last line was tested). The DECISION input, though, is
+  // the whole burst only on a cold start (harvest the opener's address) and the
+  // NEWEST line alone on an active flow — so a stray digit or deny token in an
+  // earlier burst line can't hijack a structure pick or flip a booking.
+  const { engage, decision: decisionInput } = roofingTurnInput(prevState?.last_step, turns)
 
   // Engage only if we're in an ACTIVE roofing flow (mid-gather / awaiting
   // a reply), or THIS message reads like a roofing enquiry. A closed flow
@@ -455,9 +462,9 @@ async function handleRoofingTurn(args: {
   // When a follow-up pin is active the thread was just chased about a
   // DIFFERENT quote, so a stale roofing_state must not resume — only a
   // genuinely new roofing enquiry may engage (spec 2026-07-05 Part A2).
-  if (!shouldEngageRoofing(prevState, latestInbound, followupPinActive, args.roofingOnly)) return false
+  if (!shouldEngageRoofing(prevState, engage, followupPinActive, args.roofingOnly)) return false
 
-  const decision = advanceRoofing(prevState, latestInbound)
+  const decision = advanceRoofing(prevState, decisionInput)
 
   // Reply FROM the number the customer texted (the tradie's own
   // provisioned number) — same as every other reply in this route. Never
@@ -2138,6 +2145,31 @@ export async function POST(req: Request) {
                 for (const k of correctedProfileSlots) {
                   fields[k] = (next.slots[k] as string | undefined) ?? null
                 }
+                // P1 — never remember an address the map check refuses. Verify
+                // the corrected street address (with its suburb) and drop both
+                // when not_found, so a bogus "45 Wimbledon Crescent, Faketon"
+                // can't become the customer's stored address and resurface next
+                // conversation. Best-effort: a map outage keeps today's write.
+                let gatedFields = fields
+                if (fields.address) {
+                  // Verify the FULL address: a correction may carry only the
+                  // street ("update my address to 12 Archer St") while the
+                  // suburb sits in the merged state — verifying the bare street
+                  // would false-not_found and drop a valid address.
+                  const suburbForCheck = fields.suburb ?? (next.slots.suburb as string | undefined) ?? null
+                  const line = [fields.address, suburbForCheck].filter(Boolean).join(', ')
+                  const v = await verifyAuAddress(line)
+                  const outcome =
+                    v.outcome === 'match' ? 'match' : v.outcome === 'not_found' ? 'not_found' : 'unavailable'
+                  gatedFields = gateUnverifiedProfileAddress(fields, outcome)
+                  if (gatedFields.address == null && fields.address != null) {
+                    console.log('[sms/inbound:after] dropped unverified corrected address from memory', {
+                      conversationId,
+                      customerId: customer.id,
+                      refused: line,
+                    })
+                  }
+                }
                 console.log('[sms/inbound:after] eager profile write-back triggered', {
                   conversationId,
                   customerId: customer.id,
@@ -2146,7 +2178,7 @@ export async function POST(req: Request) {
                 try {
                   await writeCustomerCorrections({
                     customerId: customer.id,
-                    fields,
+                    fields: gatedFields,
                   })
                 } catch (e: any) {
                   console.warn('[sms/inbound:after] eager write-back threw - non-fatal, finish-time backfill will retry', {

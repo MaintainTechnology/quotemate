@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   type AddressSlotsLike,
   firstStreetNumber,
+  gateUnverifiedProfileAddress,
   titleCaseAu,
   MAX_ADDRESS_VERIFY_REJECTS,
   planConfirmAddress,
@@ -324,5 +325,27 @@ describe('screenConfirmAddress', () => {
     const slots = { address: '15 Schofield drive safety each' }
     const r = await screenConfirmAddress(slots, { apiKey: 'K', fetchImpl: boom as never })
     expect(r).toEqual({ slots })
+  })
+})
+
+// P1 (live 2026-07-24): the general dialog remembered "45 Wimbledon Crescent,
+// Faketon" as the customer's address even though the map check REFUSED it, and
+// resurrected it in a later conversation. A rejected address must never be
+// written to customer memory; an outage must never block a write.
+describe('gateUnverifiedProfileAddress — a rejected address is never remembered', () => {
+  const base = { first_name: 'Sam', email: 'sam@x.com', address: '45 Wimbledon Crescent', suburb: 'Faketon' }
+  it('drops the address AND the co-arriving suburb when the address is not_found', () => {
+    const g = gateUnverifiedProfileAddress(base, 'not_found')
+    expect(g.address).toBeNull()
+    expect(g.suburb).toBeNull()
+    expect(g.first_name).toBe('Sam') // name / email are never gated
+    expect(g.email).toBe('sam@x.com')
+  })
+  it('keeps everything on a verified match', () => {
+    expect(gateUnverifiedProfileAddress(base, 'match')).toEqual(base)
+  })
+  it('keeps everything on unavailable / absent — verification is a net, not a gate', () => {
+    expect(gateUnverifiedProfileAddress(base, 'unavailable')).toEqual(base)
+    expect(gateUnverifiedProfileAddress(base, 'absent')).toEqual(base)
   })
 })

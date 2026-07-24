@@ -20,6 +20,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js'
+import { verifyAuAddress, gateUnverifiedProfileAddress } from '@/lib/sms/verify-address'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -166,6 +167,27 @@ export async function updateCustomerFromIntake(opts: {
   const newAddress = (opts.intake.address ?? '').trim() || null
   const newSuburb = (opts.intake.suburb ?? '').trim() || null
 
+  // P1 — never remember an address the map check refuses. This is the
+  // finish-time write sink; at finish the transcript's full address is known,
+  // so verify street + suburb together and drop BOTH on not_found. A
+  // match/outage keeps today's write (verification is a net, not a gate). Live
+  // 2026-07-24: a bogus "45 Wimbledon Crescent, Faketon" was remembered and
+  // resurfaced next conversation.
+  let gatedAddress = newAddress
+  let gatedSuburb = newSuburb
+  if (newAddress) {
+    const v = await verifyAuAddress([newAddress, newSuburb].filter(Boolean).join(', '))
+    const g = gateUnverifiedProfileAddress(
+      { address: newAddress, suburb: newSuburb },
+      v.outcome === 'not_found' ? 'not_found' : 'match',
+    )
+    gatedAddress = g.address
+    gatedSuburb = g.suburb
+    if (gatedAddress == null) {
+      console.warn('[customers] dropped unverified intake address from memory', { customerId: opts.customerId })
+    }
+  }
+
   const update: Record<string, unknown> = {
     last_contacted_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -177,8 +199,8 @@ export async function updateCustomerFromIntake(opts: {
   if (newFullName && newFullName !== cust.full_name) update.full_name = newFullName
   if (newFirstName && newFirstName !== cust.first_name) update.first_name = newFirstName
   if (newEmail && newEmail !== cust.email) update.email = newEmail
-  if (newAddress && newAddress !== cust.address) update.address = newAddress
-  if (newSuburb && newSuburb !== cust.suburb) update.suburb = newSuburb
+  if (gatedAddress && gatedAddress !== cust.address) update.address = gatedAddress
+  if (gatedSuburb && gatedSuburb !== cust.suburb) update.suburb = gatedSuburb
 
   const { error: updErr } = await supabase
     .from('customers')

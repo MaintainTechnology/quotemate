@@ -249,6 +249,26 @@ export function titleCaseAu(s: string): string {
   })
 }
 
+/** The outcome of verifying a customer-corrected address before remembering
+ *  it: 'absent' when the turn corrected no address at all. */
+export type AddressGateOutcome = 'match' | 'not_found' | 'unavailable' | 'absent'
+
+/**
+ * PURE — P1 guard. Customer memory must never remember an address the map
+ * check REFUSED. Live 2026-07-24: "45 Wimbledon Crescent, Faketon" was refused
+ * ("can't find it") yet stored on the customer row and resurrected next
+ * conversation. On `not_found` drop the address AND the suburb that arrived
+ * with it (a bogus pair); on `match`/`unavailable`/`absent` keep everything —
+ * verification is a net, never a gate, so a map outage never blocks a write.
+ * Name/email are never touched.
+ */
+export function gateUnverifiedProfileAddress<
+  F extends { address?: string | null; suburb?: string | null },
+>(fields: F, outcome: AddressGateOutcome): F {
+  if (outcome !== 'not_found') return fields
+  return { ...fields, address: null, suburb: null }
+}
+
 // ── Pure helpers ─────────────────────────────────────────────────────
 
 /** PURE — drop the trailing ", Australia" for the SMS read-back. */

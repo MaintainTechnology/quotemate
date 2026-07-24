@@ -31,7 +31,10 @@ import {
   closeStaleRoofingState,
   confirmedIncludedIndices,
   expireIdleRoofingState,
+  latestInboundBurst,
   parseStructureChoice,
+  roofingTurnInput,
+  shouldEngageRoofing,
   type RoofingConversationState,
   type RoofingTurnDecision,
 } from './roofing-receptionist'
@@ -492,6 +495,61 @@ describe('intent unknown is gated, not priced', () => {
   it('an unknown intent routes to inspection rather than falling through to pricing', () => {
     const step = nextRoofingStep({ ...GATHERED, intent: 'unknown', material: 'colorbond_trimdek', pitch: 'standard' })
     expect(step.step).toBe('inspection')
+  })
+})
+
+// P3 (live 2026-07-24): a rapid burst "can you do my roof" | "670 London Road
+// Chandler QLD 4155" | "its colorbond" (debounce-coalesced) engaged the general
+// LLM, not the roofing receptionist, because only the LAST line ("its
+// colorbond") was tested for engagement. Coalesce the burst so the opener is
+// visible.
+describe('latestInboundBurst — a rapid burst is coalesced for engagement', () => {
+  it('joins every inbound since the last outbound so the roofing opener is seen', () => {
+    const burst = latestInboundBurst([
+      { direction: 'outbound', body: 'What can I help with?' },
+      { direction: 'inbound', body: 'can you do my roof' },
+      { direction: 'inbound', body: '670 London Road Chandler QLD 4155' },
+      { direction: 'inbound', body: 'its colorbond' },
+    ])
+    expect(burst).toContain('can you do my roof')
+    expect(burst).toContain('670 London Road')
+    // The whole burst engages roofing; the last line alone would not.
+    expect(shouldEngageRoofing(null, burst, false, false)).toBe(true)
+    expect(shouldEngageRoofing(null, 'its colorbond', false, false)).toBe(false)
+  })
+  it('a single message is returned unchanged', () => {
+    expect(latestInboundBurst([{ direction: 'inbound', body: 'quote my roof' }])).toBe('quote my roof')
+  })
+  it('empty / no inbound is the empty string', () => {
+    expect(latestInboundBurst([{ direction: 'outbound', body: 'hi' }])).toBe('')
+    expect(latestInboundBurst([])).toBe('')
+  })
+})
+
+// Review of the P3 diff (2026-07-24): feeding the coalesced burst to
+// advanceRoofing on an ACTIVE flow let a stray digit in an earlier burst line
+// hijack a structure pick (money bug) and a deny token flip a booking. The
+// burst is for ENGAGEMENT + the COLD opener only; an active flow parses the
+// newest line alone.
+describe('roofingTurnInput — burst for engagement + cold opener, last line when active', () => {
+  const turns = [
+    { direction: 'outbound', body: 'Is this your roof? 1) Main 2) Shed 3) Garage' },
+    { direction: 'inbound', body: '1 quick question how long does it take?' },
+    { direction: 'inbound', body: 'yeah just do the garage' },
+  ]
+  it('a cold start harvests the WHOLE burst for both engagement and the decision', () => {
+    const r = roofingTurnInput(null, turns)
+    expect(r.engage).toContain('1 quick question')
+    expect(r.decision).toContain('1 quick question')
+    expect(r.decision).toContain('yeah just do the garage')
+  })
+  it('an active confirm_roof engages on the burst but decides on the newest line only', () => {
+    const r = roofingTurnInput('confirm_roof', turns)
+    expect(r.engage).toContain('1 quick question') // engagement still sees the whole burst
+    expect(r.decision).toBe('yeah just do the garage') // no stray "1" to mis-pick
+  })
+  it('a closed flow counts as a cold start (fresh enquiry harvests the burst)', () => {
+    expect(roofingTurnInput('closed', turns).decision).toContain('1 quick question')
   })
 })
 

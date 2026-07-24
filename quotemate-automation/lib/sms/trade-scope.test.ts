@@ -142,6 +142,16 @@ describe('tradeScopeDirective — roofing must never be declined', () => {
     }
   })
 
+  // P2 (live 2026-07-24): "Hi" to Sparky (electrical+plumbing+roofing+painting+...)
+  // greeted "we do electrical and plumbing" only — the opener omitted the extra
+  // trades. The opener instruction must tell the model to mention them too.
+  it('P2: the opener is told to mention the extra trades, not just the pilots', () => {
+    const d = tradeScopeDirective(LIVE.atomic)
+    expect(d).toMatch(/opener[^\n]*mention these/i)
+    // a pilot-only tenant keeps the byte-identical pinned opener (no extras).
+    expect(tradeScopeDirective(['electrical', 'plumbing'])).not.toMatch(/mention these/i)
+  })
+
   it('a roofing-only tenant is NOT told to decline everything absent from custom services', () => {
     const d = tradeScopeDirective(LIVE.roofingOnly)
     expect(d).toContain('ROOFING IS THEIR TRADE')

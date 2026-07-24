@@ -403,6 +403,48 @@ function crossStepFold(inbound: string, slots: RoofingSlots, lastStep: RoofingSt
 }
 
 /**
+ * PURE — the customer's inbound to act on this turn. A rapid burst (several
+ * inbounds arriving since our last outbound, coalesced by the route's
+ * debounce) is joined so the engagement check AND the opener harvest see the
+ * WHOLE burst, not just its last line. Live 2026-07-24: "can you do my roof" |
+ * "670 London Road Chandler QLD 4155" | "its colorbond" engaged the general
+ * LLM instead of roofing because only "its colorbond" was tested. Mirrors the
+ * general dialog's own coalescing in app/api/sms/inbound/route.ts.
+ */
+export function latestInboundBurst(
+  turns: ReadonlyArray<{ direction: string; body: string }>,
+): string {
+  let lastOut = -1
+  for (let i = 0; i < turns.length; i++) if (turns[i].direction === 'outbound') lastOut = i
+  const pending = turns
+    .slice(lastOut + 1)
+    .filter((t) => t.direction === 'inbound')
+    .map((t) => t.body)
+  if (pending.length > 1) return pending.join('\n')
+  return pending[0] ?? [...turns].reverse().find((t) => t.direction === 'inbound')?.body ?? ''
+}
+
+/**
+ * PURE — the two inputs a roofing turn needs from a (possibly coalesced)
+ * burst: `engage` is the whole burst so a multi-message opener is seen by the
+ * engagement check; `decision` is the whole burst ONLY on a cold start (so a
+ * multi-message opener's address/material are harvested) but the NEWEST line
+ * alone on an active flow. Live review 2026-07-24: feeding the burst to
+ * advanceRoofing on an active flow let a stray digit in an earlier burst line
+ * ("1 quick question") hijack a structure pick, and a deny token flip a
+ * booking. A closed flow is a cold start (a fresh enquiry restarts).
+ */
+export function roofingTurnInput(
+  prevLastStep: RoofingStep | null | undefined,
+  turns: ReadonlyArray<{ direction: string; body: string }>,
+): { engage: string; decision: string } {
+  const burst = latestInboundBurst(turns)
+  const lastLine = [...turns].reverse().find((t) => t.direction === 'inbound')?.body ?? ''
+  const coldStart = !prevLastStep || prevLastStep === 'closed'
+  return { engage: burst, decision: coldStart ? burst : lastLine }
+}
+
+/**
  * PURE — advance the roofing conversation one turn.
  */
 export function advanceRoofing(
