@@ -117,6 +117,43 @@ const ROOFING_KEYWORDS = [
   'through the roof', 'roof collapsed', 'roof caved',
 ]
 
+/** PURE — the customer is naming a DIFFERENT trade, so the roofing/painting
+ *  gather must hand off instead of parsing it (or counting it as a failed
+ *  answer). Live 2026-07-25 (QM Sparky): "How about electrical" and "No im
+ *  asking electrical" were each counted as a failed intent answer, and two
+ *  misses fired a ROOFING inspection for an ELECTRICAL enquiry. Roof words are
+ *  excluded so "gutters" or "re-roof" never reads as another trade. */
+// Deliberately ONLY unambiguous trade nouns. Earlier drafts included solar,
+// tap, toilet, drain, downlight and hot water: all of those appear in ordinary
+// roofing answers ("need the solar taken off and new sheets on", "water coming
+// through around the downlights"), and treating them as a trade switch threw
+// away a live gather. A roof word still wins outright.
+const OTHER_TRADE =
+  /\b(electrical|electrician|sparky|plumber|plumbing|aircon|air ?con|split system|signage)\b/
+export function namesOtherTrade(text: string): boolean {
+  const t = (text ?? '').toLowerCase()
+  if (!t.trim()) return false
+  // `\b(?:re-?)?roof` also catches the unhyphenated "reroof" (a \broof guard
+  // missed it, so the most on-topic answer possible looked like another trade).
+  if (/\b(?:re-?)?roof|gutter|downpipe|eaves|fascia|ridge cap|sarking/.test(t)) return false
+  return OTHER_TRADE.test(t)
+}
+
+/** PURE — a bare greeting / pleasantry. It is not an answer to the step we
+ *  asked, but it is not a failed answer either: counting it burns the miss
+ *  budget toward the inspection fallback (live 2026-07-25: "Hi there mate!"). */
+// NOTE ok/okay/sure/cool/great/sweet/"no worries" are deliberately EXCLUDED:
+// they are AFFIRM tokens, and matching them here swallowed a valid "ok" at
+// confirm_address into an unbounded re-ask loop (no miss is counted, so it
+// never escalated) plus a live map lookup every turn.
+const GREETING_ONLY =
+  /^\s*(hi|hey|hello|yo|gday|g'day|good (morning|afternoon|evening)|hi there|hey there|thanks|thank you|cheers)\b[\s!.,]*(mate|guys|team|there)?[\s!.,]*$/
+export function isGreetingOnly(text: string): boolean {
+  const t = (text ?? '').toLowerCase().trim()
+  if (isAffirmative(t) || isNegative(t)) return false
+  return GREETING_ONLY.test(t)
+}
+
 /** PURE — R5: the customer named a COMMERCIAL property. Residential pricing and
  *  the per-building measure do not apply, so these route on site. */
 const COMMERCIAL_RE =

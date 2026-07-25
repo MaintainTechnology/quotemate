@@ -116,6 +116,18 @@ export function looksLikePaintingEnquiry(text: string): boolean {
   if (!t.trim()) return false
   // Roof work — even "paint the roof" — belongs to the roofing slice.
   if (/\broof/.test(t)) return false
+  // Round 5 (live 2026-07-25, QM Sparky): "You do paint?" is a QUESTION, not a
+  // job request, and it started a painting intake + form link. A bare question
+  // about whether we offer painting is answered by the general dialog; only a
+  // request ("quote my painting", "need my walls painted") engages the flow.
+  // ONLY the bare capability question ("you do paint?", "do you do painting?")
+  // is handed to the dialog to be answered. Deliberately narrow: a broader
+  // "question without a target" rule dropped genuine leads such as "how much
+  // for painting?" and "can you paint kitchen cupboards?", and on a warm quoted
+  // thread it closed the conversation, losing an upsell.
+  if (/^\s*(so\s+)?(do|does)?\s*(you|yous|u|ya)\s*(guys\s*)?(do|offer)?\s*(re-?)?paint\w*\s*\??\s*$/.test(t)) {
+    return false
+  }
   return /\bre-?paints?\b|\bpaints?\b|\bpainting\b|\bpainter\b|\bpainted\b|\bpaintwork\b|\bcoat of paint\b|\bfeature wall\b|\bunder-?coat\b/.test(
     t,
   )

@@ -778,6 +778,67 @@ describe('quoted thread — a new address reopens roofing, not a hollow LLM hand
   })
 })
 
+// ── Round 5 (QM Sparky screenshot, reproduced 2026-07-25) ──────────────
+// State trace from the repro: roofing sat at `intent` while painting advanced
+// independently, and the roofing gather silently counted "Hi there mate!" and
+// "No im asking electrical" as failed intent answers. Two misses = budget =>
+// intent 'unknown' => a ROOFING inspection booked for an ELECTRICAL enquiry.
+describe('a trade switch or greeting never burns the gather miss budget (round 5)', () => {
+  const gathering: RoofingConversationState = {
+    slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: true },
+    last_step: 'intent',
+  }
+  it('naming ANOTHER trade hands off WITHOUT destroying the gather', () => {
+    for (const msg of ['How about electrical', 'No im asking electrical', 'actually I need a plumber']) {
+      const d = advanceRoofing(gathering, msg)
+      expect(d.action, msg).toBe('passthrough')
+      // Non-destructive on purpose: a false positive must cost one turn, not a
+      // confirmed address. Review found several roofing answers that would
+      // otherwise have wiped a live lead.
+      expect((d as { close?: boolean }).close, msg).toBeFalsy()
+      expect(d.slots.address, msg).toBe('670 London Rd, Chandler QLD 4155')
+    }
+  })
+  it('ordinary roofing answers are NEVER read as another trade', () => {
+    for (const msg of [
+      'whole reroof, solar comes off',
+      'need the solar taken off and new sheets on',
+      'water coming through around the downlights',
+      'the downpipe drains into the tank',
+      'gutters and downpipes',
+    ]) {
+      expect(advanceRoofing(gathering, msg).action, msg).not.toBe('passthrough')
+    }
+  })
+  it('a bare greeting does not count as a miss', () => {
+    const d = advanceRoofing(gathering, 'Hi there mate!')
+    expect(d.slots.misses ?? 0).toBe(0)
+  })
+  // "ok"/"okay" are AFFIRM tokens. Treating them as greetings looped
+  // confirm_address forever (no miss counted, so it never escalated).
+  it('an affirmation is never treated as a greeting', () => {
+    const atConfirm: RoofingConversationState = {
+      slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: false },
+      last_step: 'confirm_address',
+    }
+    for (const yes of ['ok', 'okay', 'sure']) {
+      expect(advanceRoofing(atConfirm, yes).slots.address_confirmed, yes).toBe(true)
+    }
+  })
+  // The exact live sequence: two non-answers must NOT reach the inspection fallback.
+  it('the screenshot sequence never fires the inspection fallback', () => {
+    const a = advanceRoofing(gathering, 'Hi there mate!')
+    const b = advanceRoofing({ slots: a.slots, last_step: 'intent' }, 'No im asking electrical')
+    expect(b.action).not.toBe('inspection')
+    expect(b.slots.intent).not.toBe('unknown')
+  })
+  it('a genuine unrecognised intent answer still counts (fallback preserved)', () => {
+    const a = advanceRoofing(gathering, 'the brown stuff')
+    const b = advanceRoofing({ slots: a.slots, last_step: 'intent' }, 'dunno really')
+    expect(b.action === 'inspection' || b.slots.intent === 'unknown').toBe(true)
+  })
+})
+
 // ── Round 4 (live 2026-07-25) ──────────────────────────────────────────
 describe('quoted thread: a post-quote QUESTION must not restart the gather (G10)', () => {
   const quoted: RoofingConversationState = {

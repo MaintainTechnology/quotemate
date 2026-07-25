@@ -31,6 +31,27 @@ describe('looksLikePaintingEnquiry', () => {
     expect(looksLikePaintingEnquiry('quote to paint my interior walls')).toBe(true)
     expect(looksLikePaintingEnquiry('the paintwork is looking tired')).toBe(true)
   })
+  // Round 5 (live 2026-07-25, QM Sparky): "You do paint?" started a painting
+  // intake + form link. A capability QUESTION must be answered, not converted
+  // into a job; a request that names a target is still a job.
+  it('does not engage on a bare capability question', () => {
+    expect(looksLikePaintingEnquiry('You do paint?')).toBe(false)
+    expect(looksLikePaintingEnquiry('do you do painting?')).toBe(false)
+    expect(looksLikePaintingEnquiry('do you paint')).toBe(false)
+  })
+  it('still engages on every real lead, including question-shaped ones', () => {
+    for (const msg of [
+      'can you repaint my house',
+      'can you also repaint the back deck?',
+      'how much for painting?',
+      'can you paint kitchen cupboards?',
+      'do you paint fences?',
+      'what would it cost to repaint a house',
+      'keen to get painting done, how much?',
+    ]) {
+      expect(looksLikePaintingEnquiry(msg), msg).toBe(true)
+    }
+  })
   it('leaves roof work to the roofing slice (does not poach)', () => {
     expect(looksLikePaintingEnquiry('repaint the roof')).toBe(false)
     expect(looksLikePaintingEnquiry('paint my roof restoration')).toBe(false)

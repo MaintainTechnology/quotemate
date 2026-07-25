@@ -29,8 +29,10 @@ import {
   isNegative,
   isStopRequest,
   looksLikeRoofingEnquiry,
+  isGreetingOnly,
   looksCommercial,
   mapIntent,
+  namesOtherTrade,
   mapMaterial,
   mapPitch,
   nextRoofingStep,
@@ -669,6 +671,21 @@ export function advanceRoofing(
     const addrFold = tryAddressFold(inbound, slots)
     if (addrFold) {
       nextSlots = addrFold
+    } else if (namesOtherTrade(inbound)) {
+      // Round 5 — the customer named another trade. Hand this TURN to the
+      // general dialog without counting a miss, which is what fired a roofing
+      // inspection for an electrical enquiry. Deliberately NOT a close: closing
+      // wipes the gather (confirmed address included), and any false positive
+      // would destroy a live lead. Leaving the state intact means a false
+      // positive costs one turn, and the customer's next roofing answer resumes.
+      return { action: 'passthrough', slots }
+    } else if (isGreetingOnly(inbound)) {
+      // A pleasantry is not an answer, but it is not a failed answer either —
+      // re-ask the pending question without spending the miss budget.
+      const q = nextRoofingStep(slots)
+      return q.step === 'ready' || q.step === 'inspection'
+        ? { action: 'passthrough', slots }
+        : { action: 'ask', slots, step: q.step, reply: q.question ?? '' }
     } else if (shouldBailToDialog(inbound, lastStep)) {
       // F6 — a genuine topic switch to another trade closes the gather; an
       // interrupt/question is resume-able, so it leaves the state alone.
