@@ -45,9 +45,15 @@ import {
   type PaintingTurnDecision,
 } from './painting-receptionist'
 import {
+  isAffirmative,
   isGreetingOnly,
+  isNegative,
   isStopRequest,
+  mapMaterial,
+  mapPitch,
   nextRoofingStep,
+  parseAuState,
+  parsePostcode,
   type RoofingSlots,
   type RoofingStep,
 } from './roofing-intake'
@@ -416,8 +422,35 @@ const baseDecision = {
   structure_choices: z.union([z.array(z.number().int().min(1).max(20)), z.literal('all')]).nullish().default(null),
 }
 
-export const RoofingTurnDecisionSchema = z.object({ ...baseDecision, slots: RoofingSlotPatch.default({}) })
-export const PaintingTurnDecisionSchema = z.object({ ...baseDecision, slots: PaintingSlotPatch.default({}) })
+/**
+ * The model often sends `slots` as a JSON STRING rather than an object.
+ * Measured 2026-07-26 over a 10-scenario live run: 14 of ~60 turns, every
+ * single fallback in that run. Rejecting them threw away a quarter of the
+ * conversation for a quoting difference, so parse the string and validate
+ * the result exactly as if it had arrived as an object — nothing is
+ * trusted, the same field schema still runs.
+ */
+const objectish = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => {
+    if (typeof v !== 'string') return v
+    const t = v.trim()
+    if (!t || t === 'null') return {}
+    try {
+      const parsed = JSON.parse(t)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }, inner)
+
+export const RoofingTurnDecisionSchema = z.object({
+  ...baseDecision,
+  slots: objectish(RoofingSlotPatch).default({}),
+})
+export const PaintingTurnDecisionSchema = z.object({
+  ...baseDecision,
+  slots: objectish(PaintingSlotPatch).default({}),
+})
 
 export type LlmTurnDecision = {
   tool: LlmTool
@@ -669,6 +702,24 @@ function sonnetDecider(schema: z.ZodTypeAny): LlmDecider {
  *  not "clear"), so a patch can never erase a slot we already hold. */
 function applyPatch<T extends object>(base: T, patch: Record<string, unknown>): T {
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) }
+  // A CHANGED address invalidates the postcode and state that belonged to
+  // the old one. Without this, "actually make it 12 Smith Street Bondi NSW
+  // 2026" kept postcode 4155 / QLD from the previous address, and the
+  // measurement provider was handed a Bondi street with a Chandler postcode
+  // — a different property in a different state. fillAddressParts below then
+  // re-derives them from the new address text.
+  // Compared NORMALISED. The model re-states the address most turns and
+  // punctuates it differently each time ("670 London Road, Chandler QLD
+  // 4155"), which against a raw string compare looked like a new address
+  // and cleared address_confirmed on every single turn — so the brief was
+  // never ready and the job was never priced.
+  const nextAddr = patch.address
+  if (typeof nextAddr === 'string' && nextAddr.trim() && norm(nextAddr) !== norm(String(out.address ?? ''))) {
+    out.postcode = null
+    out.state = null
+    out.addr_verified = null
+    out.address_confirmed = false
+  }
   for (const [k, v] of Object.entries(patch)) {
     if (v !== null && v !== undefined) out[k] = v
   }
@@ -678,6 +729,85 @@ function applyPatch<T extends object>(base: T, patch: Record<string, unknown>): 
   // here meant a thread that alternated LLM and fallback turns could never
   // reach the F7/F13 inspection escalation.
   return out as T
+}
+
+/**
+ * Stamp address_confirmed when the customer answers the read-back "yes".
+ *
+ * The model does not set this field, and nothing else on the AI path did,
+ * so `roofingReadiness` never saw a confirmed address: measured 2026-07-26,
+ * four of ten scenarios sat on confirm_address forever, re-asking "is that
+ * right?" after the customer had already said yes, and the job was never
+ * priced.
+ *
+ * Uses the state machine's own predicate — `isAffirmative && !isNegative`,
+ * the proven-safe baseline on the wrong-roof money path (see the U5c note
+ * in roofing-intake). A "no" or a correction is deliberately NOT handled
+ * here: that is a real conversational turn and belongs to the model.
+ */
+function confirmAddressIfAffirmed<S extends { address?: string | null; address_confirmed?: boolean }>(
+  slots: S,
+  prevStep: string | null,
+  inbound: string,
+): S {
+  if (prevStep !== 'confirm_address' || !slots.address || slots.address_confirmed) return slots
+  if (!isAffirmative(inbound) || isNegative(inbound)) return slots
+  return { ...slots, address_confirmed: true }
+}
+
+/**
+ * Strip an `unknown` the model did not earn.
+ *
+ * `unknown` is not "I have not gathered this yet" — it is a SENTINEL that
+ * forces the job on site. The model uses it as a placeholder, so a
+ * perfectly quotable re-roof was routed to an inspection because the model
+ * wrote `intent: "unknown"` on the address-confirmation turn (measured
+ * 2026-07-26, scenario S6).
+ *
+ * Material and pitch keep it only when the customer's own words express
+ * uncertainty — decided by the SAME mappers the state machine uses, so the
+ * two paths cannot disagree about what "no idea" means. Intent never keeps
+ * it: on the deterministic path that value only ever comes from the miss
+ * budget, never from a single message.
+ */
+function dropUnearnedUnknowns(patch: Record<string, unknown>, inbound: string): Record<string, unknown> {
+  const out = { ...patch }
+  if (out.material === 'unknown' && mapMaterial(inbound) !== 'unknown') delete out.material
+  if (out.pitch === 'unknown' && mapPitch(inbound) !== 'unknown') delete out.pitch
+  if (out.intent === 'unknown') delete out.intent
+  return out
+}
+
+/**
+ * Fill postcode/state from the address text when the model left them out.
+ *
+ * Load-bearing, and it was a live defect. The model reliably puts the whole
+ * address in `slots.address` and reliably does NOT split out the postcode
+ * and state, while the deterministic path always parsed them with these two
+ * functions. toRoofingRequest does not reject the gap — it substitutes
+ * `postcode: ''` and `state: 'NSW'` — so a Chandler QLD 4155 property was
+ * handed to the measurement provider as NSW with no postcode, which can
+ * resolve to a different property in another state.
+ *
+ * Uses the SAME parsers the state machine uses, over the address plus what
+ * the customer typed, so the two paths cannot drift.
+ */
+function fillAddressParts<S extends { address?: string | null; postcode?: string | null; state?: unknown }>(
+  slots: S,
+  inbound: string,
+): S {
+  if (!slots.address) return slots
+  const source = `${slots.address} ${inbound}`
+  const out: S = { ...slots }
+  if (!out.postcode) {
+    const pc = parsePostcode(slots.address) ?? parsePostcode(source)
+    if (pc) out.postcode = pc
+  }
+  if (!out.state) {
+    const st = parseAuState(slots.address) ?? parseAuState(source)
+    if (st) (out as { state?: unknown }).state = st
+  }
+  return out
 }
 
 /** An address the model produced must appear in what the customer actually
@@ -805,7 +935,14 @@ async function runTurn<D, S extends object>(args: {
   // below fall back to reply_to_send whenever a deterministic composer has
   // no wording for the step, so a tool-scoped check left an escape hatch a
   // fabricated price could still walk through.
-  const slots = applyPatch(args.prevSlots, patch)
+  const slots = confirmAddressIfAffirmed(
+    fillAddressParts(
+      applyPatch(args.prevSlots, dropUnearnedUnknowns(patch, args.inbound)),
+      args.inbound,
+    ),
+    args.step,
+    args.inbound,
+  )
   const reply = scrubLlmReply(d.reply_to_send)
   const g = assertGroundedReply(reply, [...authoritative, JSON.stringify(slots)], conversational)
   if (!g.ok) return bail(g.reason)
@@ -862,7 +999,10 @@ export async function roofingTurnViaLlm(args: {
     cancel: () => ({ action: 'cancel', slots: prevSlots }),
     fallback: () => advanceRoofing(args.prev, args.inbound),
     reask: () => ({ action: 'ask', slots: prevSlots, step: 'await_booking', reply: BOOKING_REASK }),
-    map: (d, slots) => mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
+    map: (d, slots) =>
+      enforceRoofingReadiness(
+        mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
+      ),
   })
 
   // A booking re-ask has to survive the turn or the second unclear reply
@@ -874,6 +1014,32 @@ export async function roofingTurnViaLlm(args: {
     result.carry.booking_reask = reasked + 1
   }
   return result
+}
+
+/**
+ * The state machine prices a job the moment the brief is complete. The
+ * model, left alone, keeps chatting: measured 2026-07-26, four of ten
+ * scenarios ended one turn behind with EVERY pricing field already
+ * gathered, so the customer waited for a quote that was ready to send.
+ *
+ * Whatever the model chose to say, once the deterministic readiness check
+ * says the brief is done, the job is priced (or routed on site) on this
+ * turn — the same trigger, on the same inputs, as with the flag off. Only
+ * the lifecycle steps are exempt: an address read-back and a booking
+ * re-ask are questions the flow itself owns.
+ */
+const READINESS_EXEMPT: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
+  'confirm_address', 'confirm_roof', 'await_booking', 'quoted', 'closed',
+])
+
+function enforceRoofingReadiness(d: RoofingTurnDecision | null): RoofingTurnDecision | null {
+  if (!d || d.action !== 'ask' || READINESS_EXEMPT.has(d.step)) return d
+  const q = nextRoofingStep(d.slots)
+  if (q.step === 'ready') return { action: 'measure', slots: d.slots }
+  if (q.step === 'inspection') {
+    return { action: 'inspection', slots: d.slots, reason: q.reason ?? 'on-site inspection required' }
+  }
+  return d
 }
 
 function mapRoofingTool(
@@ -900,8 +1066,19 @@ function mapRoofingTool(
   }
 
   switch (d.tool) {
-    case 'ask_for_detail':
-      return { action: 'ask', slots, step: askStep(), reply: d.reply_to_send }
+    case 'ask_for_detail': {
+      // The model wants to gather, but there may be nothing left to gather.
+      // Measured 2026-07-26: with a COMPLETE brief it still chose to ask,
+      // so the customer sat one turn behind the state machine and the job
+      // was never priced. When the brief is done, the deterministic
+      // readiness check decides — exactly as it does with the flag off.
+      const q = nextRoofingStep(slots)
+      if (q.step === 'ready') return { action: 'measure', slots }
+      if (q.step === 'inspection') {
+        return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
+      }
+      return { action: 'ask', slots, step: q.step, reply: d.reply_to_send }
+    }
 
     case 'answer_business_question':
       return { action: 'ask', slots, step: holdStep(), reply: d.reply_to_send }
@@ -922,6 +1099,18 @@ function mapRoofingTool(
 
     case 'verify_address': {
       if (!slots.address) return null
+      // ALREADY confirmed — the customer just said yes. Re-asking would
+      // un-confirm it, and the model picks this value freely, so the flow
+      // sat on "is that right?" forever and never priced the job (measured
+      // 2026-07-26, 4 of 10 scenarios). Carry on with the gather instead.
+      if (slots.address_confirmed) {
+        const q = nextRoofingStep(slots)
+        if (q.step === 'ready') return { action: 'measure', slots }
+        if (q.step === 'inspection') {
+          return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
+        }
+        return { action: 'ask', slots, step: q.step, reply: q.question ?? d.reply_to_send }
+      }
       const s: RoofingSlots = { ...slots, address_confirmed: false }
       // The route runs screenConfirmAddress (Google + Geoscape) on this
       // step and overrides the reply; this wording is only the fallback for
