@@ -10,11 +10,21 @@
 // already imports from extract-slots.ts — hanging the const off either
 // would make the other's import circular.
 //
-// NOTE — the roofing and painting receptionists are NOT here. They are
-// deterministic state machines with zero LLM calls (lib/sms/roofing-*.ts,
-// lib/sms/painting-*.ts); every customer-facing string on those paths is
-// a literal template. Changing this constant cannot alter their
-// behaviour, and no LLM "polish" step should ever be added to them.
+// ROOFING + PAINTING (updated 2026-07-26, docs/strategy.md v17) — these
+// two receptionists WERE deterministic state machines with zero LLM
+// calls. They now run this same model for the CONVERSATION layer via
+// lib/sms/llm-receptionist.ts, behind SMS_LLM_RECEPTIONIST_ENABLED
+// (default OFF — with the flag unset they are byte-identical to the old
+// machines and this constant still cannot affect them).
+//
+// The old note here forbade an LLM "polish" step, and that prohibition
+// STANDS in its real sense: no model output is ever post-processed into a
+// price. The conversation layer picks a TOOL; every dollar figure, area,
+// structure count, measured address, quote link and booking confirmation
+// still comes from lib/roofing/{measure,pricing}, lib/sms/roofing-compose,
+// lib/sms/verify-address and lib/painting/pricing, and a grounding
+// validator discards any turn whose text states one the tools did not
+// produce. Rewriting a composed price through the model is still banned.
 // ════════════════════════════════════════════════════════════════════
 
 /** Claude Sonnet 5. Note the id carries NO date suffix — the dated forms

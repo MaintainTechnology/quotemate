@@ -40,6 +40,15 @@ import {
   shouldSendRoofInspectionMessage,
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
+import {
+  llmReceptionistEnabled,
+  buildTenantFacts,
+  composeDeflect,
+  roofingTurnViaLlm,
+  paintingTurnViaLlm,
+  type TenantFacts,
+  type TurnCarry,
+} from '@/lib/sms/llm-receptionist'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { ensureRoofQuotePdf, roofQuotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { quotePdfMmsEnabled } from '@/lib/sms/send-quote-pdf'
@@ -436,6 +445,9 @@ async function handleRoofingTurn(args: {
    *  a mid-thread roofing engage doesn't re-ask it. The caller must strip
    *  from_memory slots first — see seedRoofingSlots. */
   generalAddress?: { address?: string | null; suburb?: string | null } | null
+  /** Grounded tenant facts for the LLM receptionist (business name, owner
+   *  first name, trades, state). Absent ⇒ the LLM path cannot run. */
+  tenantFacts?: TenantFacts | null
 }): Promise<boolean> {
   const { conversationId, turns, toNumber, fromNumber, tenantId, tenantTrade, firstName, followupPinActive } = args
   const prevStateRaw = (args.roofingStateRaw ?? null) as RoofingConversationState | null
@@ -465,7 +477,31 @@ async function handleRoofingTurn(args: {
   // genuinely new roofing enquiry may engage (spec 2026-07-05 Part A2).
   if (!shouldEngageRoofing(prevState, engage, followupPinActive, args.roofingOnly)) return false
 
-  const decision = advanceRoofing(prevState, decisionInput)
+  // ── The conversation layer. Flag OFF (the default) ⇒ exactly the call
+  // this route has always made, and not one extra token spent. Flag ON ⇒
+  // Sonnet 5 decides the turn and picks a tool, and ANY failure — a throw,
+  // a timeout, an unusable shape, or a figure the model invented — returns
+  // the deterministic decision for this turn instead. The I/O below is
+  // untouched either way, which is what keeps every price coming out of
+  // measureAndPriceRoofs + the roofing composer.
+  const useLlm = !!args.tenantFacts && llmReceptionistEnabled(tenantId)
+  const turn = useLlm
+    ? await roofingTurnViaLlm({
+        prev: prevState,
+        inbound: decisionInput,
+        history: turns,
+        facts: args.tenantFacts as TenantFacts,
+      })
+    : null
+  if (turn) {
+    console.log('[sms/inbound:roofing] LLM receptionist turn', {
+      conversationId,
+      source: turn.source,
+      action: turn.decision.action,
+    })
+  }
+  const decision = turn ? turn.decision : advanceRoofing(prevState, decisionInput)
+  const carry: TurnCarry = turn?.carry ?? {}
 
   // Reply FROM the number the customer texted (the tradie's own
   // provisioned number) — same as every other reply in this route. Never
@@ -482,9 +518,26 @@ async function handleRoofingTurn(args: {
   }
   const persist = async (state: RoofingConversationState, status: 'open' | 'done') => {
     try {
+      // declined_trades / booking_reask are conversation-scoped memory, not
+      // per-step state: every branch below writes its own explicit shape
+      // (several of them reset slots to {}), so without carrying these
+      // forward a refusal would be forgotten the moment the flow closed —
+      // which is the bug this exists to fix. `carry` (this turn) wins over
+      // the previous value; both are absent on the deterministic path, so
+      // the flag-OFF write is byte-identical to before.
+      const merged: RoofingConversationState = {
+        ...(prevState?.declined_trades ? { declined_trades: prevState.declined_trades } : {}),
+        ...(prevState?.booking_reask != null ? { booking_reask: prevState.booking_reask } : {}),
+        ...state,
+        ...carry,
+      }
+      // booking_reask counts re-asks of ONE booking question. Carrying it
+      // past that question would let a later enquiry in the same thread
+      // auto-confirm on its FIRST unclear reply.
+      if (merged.last_step !== 'await_booking') delete merged.booking_reask
       await supabase
         .from('sms_conversations')
-        .update({ roofing_state: state, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .update({ roofing_state: merged, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', conversationId)
     } catch (e) {
       console.warn('[sms/inbound:roofing] roofing_state persist failed (migration 085?)', e)
@@ -499,6 +552,7 @@ async function handleRoofingTurn(args: {
     address: string,
     betterIncGst: number | null,
     quoteUrl: string,
+    question?: string,
   ) => {
     try {
       const { data: t } = tenantId
@@ -525,6 +579,7 @@ async function handleRoofingTurn(args: {
         address,
         betterIncGst,
         quoteUrl,
+        question,
         dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
       })
     } catch (e) {
@@ -597,14 +652,50 @@ async function handleRoofingTurn(args: {
     // can't catch a suburb that doesn't exist ("safety each"). Corrected
     // or not-found addresses revise the slots/step/reply; an unavailable
     // API keeps the plain read-back.
-    if (decision.step === 'confirm_address') {
+    //
+    // Skipped when the LLM turn is NOT an address turn. holdStep keeps a
+    // question parked on confirm_address, and screenConfirmAddress returns a
+    // reply for EVERY successful verification — so it overwrote the answer
+    // with the address read-back. The customer heard the address question
+    // again while the tradie was told "we said you would come back to them".
+    const addressTurn = !turn || turn.tool === 'verify_address'
+    if (decision.step === 'confirm_address' && addressTurn) {
       const screened = await screenConfirmAddress(decision.slots)
       askSlots = screened.slots
       if (screened.step) askStep = screened.step
       if (screened.reply) askReply = screened.reply
     }
-    await persist({ slots: askSlots, last_step: askStep, pending_quote_token: null, pending_structure_count: null }, 'open')
+    // Nulling the pending measurement is right when the ask MOVES the
+    // customer (a new gather step means the old measurement is stale). It is
+    // wrong when the ask HOLDS them where they were — a question answered at
+    // confirm_roof, or a booking re-ask — because the token is the only
+    // handle on a measured, priced job. Losing it stranded the customer on
+    // "Sorry, I lost track of that one" and restarted the address gather.
+    // Gated on the LLM path (`turn`), not merely on the step comparison.
+    // advanceRoofing re-asks the same gather step often, so the comparison
+    // alone is reachable with the flag off; gating on `turn` makes the
+    // flag-off write byte-identical by construction rather than by an
+    // argument about which states can hold a token.
+    const holdsPending = !!turn && askStep === prevState?.last_step
+    await persist({
+      slots: askSlots,
+      last_step: askStep,
+      pending_quote_token: holdsPending ? (prevState?.pending_quote_token ?? null) : null,
+      pending_structure_count: holdsPending ? (prevState?.pending_structure_count ?? null) : null,
+    }, 'open')
     await sendReply(askReply)
+    // The LLM receptionist just told the customer we'd check something and
+    // come back to them. That promise is only honest if a human hears about
+    // it, so the deflect and this alert ship as a pair.
+    if (turn?.notify === 'question_asked') {
+      await notifyTradie(
+        'question_asked',
+        decision.slots.address ?? 'address not captured',
+        null,
+        `${baseUrl}/dashboard`,
+        decisionInput,
+      )
+    }
     return true
   }
 
@@ -893,6 +984,8 @@ async function handlePaintingTurn(args: {
   tenantId: string | null
   firstName: string | null
   followupPinActive: boolean
+  /** Grounded tenant facts for the LLM receptionist. Absent ⇒ it can't run. */
+  tenantFacts?: TenantFacts | null
 }): Promise<boolean> {
   const { conversationId, turns, toNumber, fromNumber, tenantId, firstName, followupPinActive } = args
   const prevState = (args.paintingStateRaw ?? null) as PaintingConversationState | null
@@ -907,7 +1000,27 @@ async function handlePaintingTurn(args: {
   // new painting enquiry may engage (spec 2026-07-05 Part A2).
   if (!shouldEngagePainting(prevState, latestInbound, followupPinActive)) return false
 
-  const decision = advancePainting(prevState, latestInbound)
+  // Same conversation layer as the roofing handler: flag OFF ⇒ the
+  // deterministic call this route has always made; flag ON ⇒ Sonnet 5 picks
+  // the tool and any failure falls back to that same call for this turn.
+  const useLlm = !!args.tenantFacts && llmReceptionistEnabled(tenantId)
+  const turn = useLlm
+    ? await paintingTurnViaLlm({
+        prev: prevState,
+        inbound: latestInbound,
+        history: turns,
+        facts: args.tenantFacts as TenantFacts,
+      })
+    : null
+  if (turn) {
+    console.log('[sms/inbound:painting] LLM receptionist turn', {
+      conversationId,
+      source: turn.source,
+      action: turn.decision.action,
+    })
+  }
+  const decision = turn ? turn.decision : advancePainting(prevState, latestInbound)
+  const carry: TurnCarry = turn?.carry ?? {}
 
   const replyFrom = toNumber
   const sendReply = async (text: string, mediaUrl?: string) => {
@@ -921,15 +1034,66 @@ async function handlePaintingTurn(args: {
   }
   const persist = async (state: PaintingConversationState, status: 'open' | 'done') => {
     try {
+      // Conversation-scoped memory survives every branch's explicit state
+      // write — see the roofing persist for why. Both fields are absent on
+      // the deterministic path, so the flag-OFF write is unchanged.
+      const merged: PaintingConversationState = {
+        ...(prevState?.declined_trades ? { declined_trades: prevState.declined_trades } : {}),
+        ...(prevState?.booking_reask != null ? { booking_reask: prevState.booking_reask } : {}),
+        ...state,
+        ...carry,
+      }
+      // booking_reask counts re-asks of ONE booking question. Carrying it
+      // past that question would let a later enquiry in the same thread
+      // auto-confirm on its FIRST unclear reply.
+      if (merged.last_step !== 'await_booking') delete merged.booking_reask
       await supabase
         .from('sms_conversations')
-        .update({ painting_state: state, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .update({ painting_state: merged, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', conversationId)
     } catch (e) {
       console.warn('[sms/inbound:painting] painting_state persist failed (migration 154?)', e)
     }
   }
   const baseUrl = ROOFING_APP_BASE_URL
+  // The deflect ("I'll check with <owner> and come back to you") is only
+  // honest if a human is actually told. The roofing handler has its own
+  // notifyTradie closure; painting had none, so the promise was made and
+  // nobody heard about it. The 'question_asked' alert carries no roofing
+  // wording, so it serves both trades.
+  const notifyUnansweredQuestion = async (question: string) => {
+    try {
+      const { data: t } = tenantId
+        ? await supabase
+            .from('tenants')
+            .select('owner_mobile, owner_first_name, twilio_sms_number')
+            .eq('id', tenantId)
+            .maybeSingle()
+        : { data: null }
+      const row = (t as {
+        owner_mobile?: string | null
+        owner_first_name?: string | null
+        twilio_sms_number?: string | null
+      } | null) ?? null
+      await notifyRoofingTradie({
+        kind: 'question_asked',
+        tenant: {
+          owner_mobile: row?.owner_mobile ?? null,
+          owner_first_name: row?.owner_first_name ?? null,
+          twilio_sms_number: row?.twilio_sms_number ?? null,
+        },
+        customerName: firstName,
+        customerPhone: fromNumber,
+        address: decision.slots.address ?? 'address not captured',
+        betterIncGst: null,
+        quoteUrl: `${baseUrl}/dashboard`,
+        question,
+        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
+      })
+    } catch (e) {
+      console.warn('[sms/inbound:painting] unanswered-question notify failed (non-fatal)', e)
+    }
+  }
 
   // ── Passthrough → hand the turn to the general LLM dialog (return false).
   // Warm 'quoted' thread: CLOSE (end the warm window). Mid-GATHER bail (a
@@ -937,7 +1101,10 @@ async function handlePaintingTurn(args: {
   // the gather state so the customer's next painting answer resumes where
   // they left off; closing would silently discard everything gathered.
   if (decision.action === 'passthrough') {
-    if (prevState?.last_step === 'quoted') {
+    // `close` — a genuine switch to another trade (LLM path). Mirrors the
+    // roofing handler: closing here is also what persists the refusal, so
+    // the declined trade is remembered instead of re-opening next message.
+    if (decision.close || prevState?.last_step === 'quoted') {
       await persist({ slots: {}, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'open')
     }
     return false
@@ -989,15 +1156,32 @@ async function handlePaintingTurn(args: {
     let askSlots = decision.slots
     let askStep = decision.step
     let askReply = decision.reply
-    // Same map check as the roofing confirm — see screenConfirmAddress.
-    if (decision.step === 'confirm_address') {
+    // Same map check as the roofing confirm — see screenConfirmAddress, and
+    // the same skip when this turn is a question rather than an address.
+    const addressTurn = !turn || turn.tool === 'verify_address'
+    if (decision.step === 'confirm_address' && addressTurn) {
       const screened = await screenConfirmAddress(decision.slots)
       askSlots = screened.slots
       if (screened.step) askStep = screened.step
       if (screened.reply) askReply = screened.reply
     }
-    await persist({ slots: askSlots, last_step: askStep }, 'open')
+    // Mirrors the roofing ask branch: a turn that HOLDS the customer where
+    // they were keeps the tokens that identify their job. LLM path only —
+    // the deterministic write below is left exactly as it was.
+    const holdsPending = !!turn && askStep === prevState?.last_step
+    await persist(
+      holdsPending
+        ? {
+            slots: askSlots,
+            last_step: askStep,
+            pending_form_token: prevState?.pending_form_token ?? null,
+            pending_quote_token: prevState?.pending_quote_token ?? null,
+          }
+        : { slots: askSlots, last_step: askStep },
+      'open',
+    )
     await sendReply(askReply)
+    if (turn?.notify === 'question_asked') await notifyUnansweredQuestion(latestInbound)
     return true
   }
 
@@ -1902,6 +2086,18 @@ export async function POST(req: Request) {
       // runs the same roofing receptionist the moment roofing is enabled on
       // its account — no deploy, no env change. The env flag survives only
       // for inbounds that map to NO tenant (dev shared number).
+      // Grounded facts the LLM receptionist may state. Built from the
+      // tenant row and NOTHING else — contact details and credentials are
+      // not copied, so they cannot be surfaced no matter what is asked.
+      const tenantFacts: TenantFacts | null = tenant
+        ? buildTenantFacts({
+            business_name: tenant.business_name,
+            owner_first_name: tenant.owner_first_name,
+            trades: tenant.trades,
+            state: tenant.state,
+          })
+        : null
+
       const roofingEnabled = tenant
         ? tenantHasRoofingTrade(tenant.trades)
         : SMS_ROOFING_ENABLED
@@ -1940,6 +2136,7 @@ export async function POST(req: Request) {
                   ? null
                   : initialConversationState.slots.suburb,
             },
+            tenantFacts,
           })
           if (handledRoofing) {
             console.log('[sms/inbound:after] handled by roofing receptionist', { conversationId })
@@ -1995,6 +2192,7 @@ export async function POST(req: Request) {
             // name from answers to our own gathering questions.
             firstName: initialConversationState.slots.first_name ?? customer?.first_name ?? null,
             followupPinActive,
+            tenantFacts,
           })
           if (handledPainting) {
             console.log('[sms/inbound:after] handled by painting receptionist', { conversationId })

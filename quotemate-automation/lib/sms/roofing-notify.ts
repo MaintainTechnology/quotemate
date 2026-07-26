@@ -10,7 +10,15 @@
 type DispatchResultLike = { ok: boolean }
 type DispatchFn = (opts: { to: string; text: string; from?: string }) => Promise<DispatchResultLike>
 
-export type RoofingNotifyKind = 'quote_sent' | 'inspection_booked'
+export type RoofingNotifyKind =
+  | 'quote_sent'
+  | 'inspection_booked'
+  // The LLM receptionist was asked something the grounded tenant facts do
+  // not cover ("how long have you been going?", "do you work Saturdays?").
+  // It deflects honestly rather than inventing an answer, which only works
+  // if a human actually follows up — so the deflect and this alert are a
+  // pair. See lib/sms/llm-receptionist.ts composeDeflect.
+  | 'question_asked'
 
 const fmtAud = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`
 
@@ -23,9 +31,19 @@ export function buildRoofingTradieNotification(args: {
   address: string
   betterIncGst: number | null
   quoteUrl: string
+  /** The customer's words, on a 'question_asked' alert. */
+  question?: string | null
 }): string {
   const hi = args.tradieFirstName ? `Hi ${args.tradieFirstName} - ` : ''
   const who = args.customerName ? `${args.customerName} (${args.customerPhone})` : args.customerPhone
+  if (args.kind === 'question_asked') {
+    return (
+      `${hi}a customer asked something the SMS receptionist could not answer.\n` +
+      `Customer: ${who}\n` +
+      `They asked: ${args.question?.trim() || '(see the thread)'}\n` +
+      `We told them you would come back to them.`
+    )
+  }
   if (args.kind === 'inspection_booked') {
     return (
       `${hi}new roofing INSPECTION booked via SMS.\n` +
@@ -61,6 +79,7 @@ export async function notifyRoofingTradie(args: {
   address: string
   betterIncGst: number | null
   quoteUrl: string
+  question?: string | null
   dispatch: DispatchFn
 }): Promise<{ notified: boolean }> {
   try {
@@ -77,6 +96,7 @@ export async function notifyRoofingTradie(args: {
       address: args.address,
       betterIncGst: args.betterIncGst,
       quoteUrl: args.quoteUrl,
+      question: args.question,
     })
     const r = await args.dispatch({
       to: notifyMobile,

@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v16 (2026-07-22).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v16 rationale.
+> **Current iteration: v17 (2026-07-26).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers; v17 makes the roofing + painting SMS receptionists **LLM-driven conversations** (flag-gated, default off) while keeping the money path deterministic, superseding v10's "zero LLM in the customer-facing flow". The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v17 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -1121,5 +1121,101 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   - A tradie reports a customer paying and then rejecting every window →
     record how often, and consider a "see times before paying" preview that
     does not hold a slot.
+
+- **v17** (2026-07-26): **the roofing and painting SMS receptionists become LLM-driven conversations (Sonnet 5), with deterministic code retained as the money path.** Supersedes the "zero LLM in the customer-facing flow" property of **v10**.
+
+  **What changed:**
+
+  The roofing and painting receptionists were pure regex state machines. Every
+  customer-facing string was a literal template selected by keyword, and the
+  machine assumed each inbound message answered the question it had just asked.
+  `lib/sms/model.ts` documented this explicitly and forbade an LLM step.
+
+  From this iteration, `claude-sonnet-5` decides every customer-facing turn on
+  those two trades — greetings, questions, refusals, trade switches, and asking
+  for missing job details in natural language. It does so behind
+  `SMS_LLM_RECEPTIONIST_ENABLED`, which defaults to **off**. The variable takes
+  `1` (every tenant) or a comma-separated tenant-id allow-list, so the rollout
+  is per-tenant and the kill switch is an env change, not a deploy.
+
+  **Why — four live defects that a keyword machine cannot fix:**
+
+  Reproduced against the deployed code on 2026-07-26 (QM Sparky, `+61468048422`,
+  a roofing flow parked at `await_booking`):
+
+  1. `"Hi there"` → `{action:'booking', confirmed:true}`. The booking arm read
+     `confirmed: !isNegative(inbound)`, so **a greeting booked an inspection**.
+  2. `"No i dont want a roofer"` → `looksLikeRoofingEnquiry` keyword-matched
+     "roofer" with no negation model, so **a refusal re-opened roofing**.
+  3. `"Not roofer i want electrical work"` → the roof-word veto inside
+     `namesOtherTrade` returned false, so **the trade switch was blocked** and
+     the address parser answered instead: *"Sorry, I didn't catch a property
+     address there."*
+  4. `"Hey!"` → the roofing address was asked a third time, because nothing
+     recorded that the customer had already refused.
+
+  Each is the same root cause wearing a different hat: the machine has no
+  concept of negation, consent, or a question. Every prior round answered one of
+  them with another regex, and each new regex created the next defect — the
+  roof-word veto in #3 was itself the fix for an earlier bug. Widening the
+  vocabulary again is not convergent.
+
+  **What did NOT change — the boundary that makes this safe:**
+
+  The LLM drives the CONVERSATION. Deterministic code still owns the MONEY. The
+  model returns a tool choice plus the slots the customer supplied; that choice
+  is mapped onto the existing `RoofingTurnDecision` / `PaintingTurnDecision`
+  unions, so `measureAndPriceRoofs`, `priceMultiRoof`, `lib/sms/roofing-compose`,
+  `verifyAuAddress` and `lib/painting/pricing` are **called, never modified**. No
+  price, area, structure count, measured address, quote link or booking
+  confirmation may originate in model text — enforced by a grounding validator,
+  not by prompt instruction alone. This mirrors the estimation discipline
+  already settled in **v5/v6** (tool-calling only plus a validator, with the
+  inspection route as the backstop).
+
+  This also supersedes the v10 line "Deterministic — no Opus on the money path →
+  no grounding validator needed for roofing". That remains true **of the money
+  path**: no model writes a price. But a separate *conversational* grounding
+  validator now gates every model-authored reply, and money is grounded only
+  against tool output — never against the customer's own text, or a customer
+  could authorise a figure by typing it. v10 stands as history.
+
+  **The properties that make regression structurally hard, not merely tested:**
+
+  - Flag-gated, default OFF. With the flag unset, behaviour is byte-identical
+    and no tokens are spent.
+  - Fail-open. Any throw, timeout, unusable shape or grounding violation
+    returns the deterministic decision for that turn. A model outage cannot
+    drop a lead or dead-end a customer. The model call carries a hard deadline,
+    because a provider that hangs rather than throwing is the failure mode that
+    would otherwise send nothing at all.
+  - The money modules are untouched, checkable with `git diff --name-only`.
+  - Opt-out (STOP) is decided deterministically **before** the model is called.
+    Compliance is not a judgement call.
+  - A greeting can never book, on either path. Where the deterministic fallback
+    would have read one as consent, the LLM path re-asks instead.
+
+  **The risk this accepts, and its bound:**
+
+  A conversational model can say something wrong. The bound is that the only
+  thing it can be wrong ABOUT is prose: the grounded fact block carries the
+  business name, owner first name, trades and service state and nothing else,
+  so licence numbers, ABNs, insurance and contact details cannot be stated at
+  all. Anything outside those facts is deflected with an honest "I'll check and
+  come back to you" plus a tradie alert, because a fabricated fact about a
+  tradie's business is worse than no answer.
+
+  **Trigger for the next iteration:**
+
+  - The grounding validator fires in production more than rarely → the prompt
+    is losing, and the tool surface (not the wording) needs to absorb whatever
+    the model keeps trying to say itself.
+  - A declined trade needs to be re-openable within one conversation → today a
+    refusal is final for that thread. That is deliberate (it is the fix for
+    defect #2) but it is the first thing to revisit if customers are observed
+    changing their minds mid-thread.
+  - Turn latency pushes the SMS reply past the webhook budget → move the
+    conversational turn behind the existing `after()` boundary rather than
+    trimming the model.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

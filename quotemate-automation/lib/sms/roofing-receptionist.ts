@@ -59,6 +59,19 @@ export type RoofingConversationState = {
   /** 1-based indices already sent to the customer (so "the others" can
    *  compute the complement on a warm 'quoted' thread). */
   last_served_structures?: number[] | null
+  /** Trades the customer has explicitly refused in THIS conversation. Set
+   *  by the LLM receptionist (lib/sms/llm-receptionist.ts). Once roofing is
+   *  here the roofing receptionist never engages again on this thread —
+   *  live 2026-07-25: "No i dont want a roofer" re-opened roofing because
+   *  looksLikeRoofingEnquiry keyword-matched "roofer" with no negation
+   *  model, and the roofing address was then asked three more times.
+   *  Additive and ignored by the deterministic path, so turning the LLM
+   *  flag off needs no migration and no cleanup. */
+  declined_trades?: string[] | null
+  /** How many times we have re-asked an unclear booking reply. Bounded at
+   *  one: a second unclear answer is still a live lead and is confirmed
+   *  rather than dropped (the 2026-07-23 lead-safety rule). */
+  booking_reask?: number | null
 }
 
 const ANSWERABLE_STEPS: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
@@ -889,6 +902,11 @@ export function expireIdleRoofingState(
     last_step: 'closed',
     pending_quote_token: null,
     pending_structure_count: null,
+    // A refusal outlives the gather it interrupted. Expiring the flow but
+    // FORGETTING the refusal put the original bug straight back: the same
+    // conversation (reusable for 4h) would keyword-match "roofer" in the
+    // customer's next complaint and re-ask the address they already declined.
+    ...(prev?.declined_trades ? { declined_trades: prev.declined_trades } : {}),
   }
 }
 
@@ -907,6 +925,9 @@ export function closeStaleRoofingState(
     last_step: 'closed',
     pending_quote_token: null,
     pending_structure_count: null,
+    // Same reasoning as expireIdleRoofingState — a refusal is not part of
+    // the gather being closed.
+    ...(prev?.declined_trades ? { declined_trades: prev.declined_trades } : {}),
   }
 }
 
@@ -938,6 +959,12 @@ export function shouldEngageRoofing(
    *  See the note below — for these tenants the keyword test is skipped. */
   roofingOnly = false,
 ): boolean {
+  // A trade the customer has already turned down is never asked about
+  // again in this conversation. Checked FIRST, ahead of every engage arm:
+  // the refusal itself carries the roofing keyword ("no i dont want a
+  // roofer"), so a later arm would otherwise re-open the very flow the
+  // customer just declined (live 2026-07-25, QM Sparky).
+  if ((prev?.declined_trades ?? []).includes('roofing')) return false
   const canResume = isActiveRoofingFlow(prev) && !followupPinActive
   if (canResume) return true
   if (looksLikeRoofingEnquiry(inbound)) return true

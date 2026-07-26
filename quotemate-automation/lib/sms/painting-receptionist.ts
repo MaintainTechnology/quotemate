@@ -50,6 +50,13 @@ export type PaintingConversationState = {
   pending_form_token?: string | null
   /** Token of the saved painting job awaiting / carrying the sent quote. */
   pending_quote_token?: string | null
+  /** Trades the customer has explicitly refused in THIS conversation —
+   *  mirrors RoofingConversationState.declined_trades. Set by the LLM
+   *  receptionist; once 'painting' is here this receptionist never engages
+   *  again on this thread. */
+  declined_trades?: string[] | null
+  /** Re-ask count for an unclear booking reply. Bounded at one. */
+  booking_reask?: number | null
 }
 
 /** The gather steps a customer reply is folded into. */
@@ -75,7 +82,10 @@ export type PaintingTurnDecision =
   | { action: 'inspection'; slots: PaintingSlots; reason: string }
   | { action: 'cancel'; slots: PaintingSlots }
   | { action: 'booking'; slots: PaintingSlots; confirmed: boolean }
-  | { action: 'passthrough'; slots: PaintingSlots }
+  // `close` mirrors the roofing decision: a genuine switch to another trade
+  // closes the painting gather so the next message stays with the general
+  // dialog. Absent/false leaves the gather resume-able.
+  | { action: 'passthrough'; slots: PaintingSlots; close?: boolean }
 
 const AWAIT_FORM_ACK =
   "Great — fill that in whenever you're ready and I'll text your quote straight over. Or just reply here anytime and I'll ask a few quick questions instead."
@@ -331,6 +341,8 @@ export function expireIdlePaintingState(
     last_step: 'closed',
     pending_form_token: null,
     pending_quote_token: null,
+    // A refusal outlives the gather it interrupted — see the roofing twin.
+    ...(prev?.declined_trades ? { declined_trades: prev.declined_trades } : {}),
   }
 }
 
@@ -346,6 +358,10 @@ export function shouldEngagePainting(
   inbound: string,
   followupPinActive: boolean,
 ): boolean {
+  // Same rule as shouldEngageRoofing: a trade the customer already turned
+  // down is never re-opened in this conversation, and the refusal itself
+  // usually carries the trade's own keyword.
+  if ((prev?.declined_trades ?? []).includes('painting')) return false
   const canResume = isActivePaintingFlow(prev) && !followupPinActive
   const isNewEnquiry = looksLikePaintingEnquiry(inbound)
   return canResume || isNewEnquiry
