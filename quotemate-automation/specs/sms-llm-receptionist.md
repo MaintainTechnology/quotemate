@@ -172,9 +172,12 @@ signature and reads Supabase state) and `.scratch-audit/repro-screenshot.mjs`
 
 ## Constraints
 
-- **S1 — flag-gated, default OFF.** `SMS_LLM_RECEPTIONIST_ENABLED` unset ⇒ zero
-  behaviour change and zero extra LLM calls. Disable takes effect on the next
-  inbound with no redeploy.
+- **S1 — one env switch. Shipped default OFF, flipped to default ON
+  (2026-07-26) once the live-model pass proved the behaviour.**
+  `SMS_LLM_RECEPTIONIST_ENABLED=0` reverts every tenant to the deterministic
+  machines on the next inbound, with no redeploy. A comma-separated tenant-id
+  list narrows back to a pilot. The OFF path must stay byte-identical to the
+  pre-change behaviour so the kill switch is a true revert.
 - **S2 — fail-open.** Model error, timeout, malformed output, refusal, or a
   grounding violation falls back to the deterministic machine **for that turn**.
   A model outage must never drop a lead, block a write, or dead-end a customer.
@@ -259,13 +262,21 @@ flag-OFF path changed*. Blockers and majors must be fixed; minors logged.
 
 ## Enable / disable procedure
 
-- **Enable for one tenant:** set `SMS_LLM_RECEPTIONIST_ENABLED=<tenant-uuid>`
-  (comma-separate for several) in the Vercel project env, redeploy or wait for
-  the next lambda cold start. Effective on the next inbound SMS.
-- **Enable everywhere:** `SMS_LLM_RECEPTIONIST_ENABLED=1`.
-- **Disable (seconds, no code change):** set the value to `0` or delete the
-  variable. The next inbound runs the deterministic machine. No migration, no
-  state cleanup — `declined_trades` is additive and ignored by the old path.
+Default is **ON** — nothing needs setting for every tenant's roofing and
+painting receptionist to run on Sonnet 5.
+
+- **Kill switch (seconds, no code change):** set
+  `SMS_LLM_RECEPTIONIST_ENABLED=0` in the Vercel project env. The next inbound
+  runs the deterministic machine for every tenant. No migration, no state
+  cleanup — `declined_trades` and `booking_reask` are additive and ignored by
+  the old path.
+- **Narrow back to a pilot:** `SMS_LLM_RECEPTIONIST_ENABLED=<tenant-uuid>`
+  (comma-separate for several). Only those tenants get the AI path.
+- **Re-enable everywhere:** delete the variable, or set it to `1`.
+
+Note the electrical/plumbing receptionist (`lib/sms/dialog.ts`) has run on the
+same model since before this work and is **not** gated by this flag — the kill
+switch reverts roofing and painting only.
 
 ## Examples
 

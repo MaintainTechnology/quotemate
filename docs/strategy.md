@@ -1133,10 +1133,21 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   From this iteration, `claude-sonnet-5` decides every customer-facing turn on
   those two trades — greetings, questions, refusals, trade switches, and asking
-  for missing job details in natural language. It does so behind
-  `SMS_LLM_RECEPTIONIST_ENABLED`, which defaults to **off**. The variable takes
-  `1` (every tenant) or a comma-separated tenant-id allow-list, so the rollout
-  is per-tenant and the kill switch is an env change, not a deploy.
+  for missing job details in natural language. With electrical and plumbing
+  already on the same model (`lib/sms/dialog.ts`), **every SMS receptionist the
+  platform runs is now AI driven**, not just some of them.
+
+  `SMS_LLM_RECEPTIONIST_ENABLED` **defaults to ON**. It shipped default-OFF for
+  one working session so the behaviour could be proved against the live model
+  before customers saw it; that pass found four defects no mocked test could
+  (see below) and, once fixed, the flag inverted to opt-out. `0` is the kill
+  switch for every tenant, effective on the next inbound with no redeploy; a
+  comma-separated tenant-id list narrows back to a pilot.
+
+  The deterministic state machines are deliberately NOT deleted. They are the
+  per-turn fallback — the thing that answers when the model times out or writes
+  a figure no tool produced. Removing them would mean a provider outage drops
+  leads, which is the failure this platform can least afford.
 
   **Why — four live defects that a keyword machine cannot fix:**
 
@@ -1182,8 +1193,10 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **The properties that make regression structurally hard, not merely tested:**
 
-  - Flag-gated, default OFF. With the flag unset, behaviour is byte-identical
-    and no tokens are spent.
+  - One env switch, default ON, revertible in seconds. `=0` puts every tenant
+    back on the deterministic machines at the next inbound, with no redeploy
+    and no state cleanup (the two fields this adds are additive and the old
+    path ignores them).
   - Fail-open. Any throw, timeout, unusable shape or grounding violation
     returns the deterministic decision for that turn. A model outage cannot
     drop a lead or dead-end a customer. The model call carries a hard deadline,

@@ -77,7 +77,7 @@ const MID_GATHER: RoofingConversationState = {
 
 // ── S1 · the flag ───────────────────────────────────────────────────
 
-describe('llmReceptionistEnabled (S1 — default OFF)', () => {
+describe('llmReceptionistEnabled (S1 — default ON, with a kill switch)', () => {
   const prev = process.env.SMS_LLM_RECEPTIONIST_ENABLED
   beforeEach(() => { delete process.env.SMS_LLM_RECEPTIONIST_ENABLED })
   afterEach(() => {
@@ -85,25 +85,31 @@ describe('llmReceptionistEnabled (S1 — default OFF)', () => {
     else process.env.SMS_LLM_RECEPTIONIST_ENABLED = prev
   })
 
-  it('is OFF when the variable is unset', () => {
-    expect(llmReceptionistEnabled('tenant-a')).toBe(false)
-    expect(llmReceptionistEnabled(null)).toBe(false)
+  it('is ON when the variable is unset — every trade is AI driven by default', () => {
+    expect(llmReceptionistEnabled('tenant-a')).toBe(true)
+    expect(llmReceptionistEnabled(null)).toBe(true)
   })
 
-  it('is OFF for "0" and for an empty value', () => {
-    process.env.SMS_LLM_RECEPTIONIST_ENABLED = '0'
-    expect(llmReceptionistEnabled('tenant-a')).toBe(false)
+  it('"0" / "false" / "off" is the kill switch', () => {
+    for (const v of ['0', 'false', 'off', 'no']) {
+      process.env.SMS_LLM_RECEPTIONIST_ENABLED = v
+      expect(llmReceptionistEnabled('tenant-a'), v).toBe(false)
+      expect(llmReceptionistEnabled(null), v).toBe(false)
+    }
+  })
+
+  it('a blank value is still ON — only an explicit off-word disables', () => {
     process.env.SMS_LLM_RECEPTIONIST_ENABLED = '   '
-    expect(llmReceptionistEnabled('tenant-a')).toBe(false)
+    expect(llmReceptionistEnabled('tenant-a')).toBe(true)
   })
 
-  it('"1" enables every tenant, including a tenant-less inbound', () => {
+  it('"1" enables every tenant explicitly', () => {
     process.env.SMS_LLM_RECEPTIONIST_ENABLED = '1'
     expect(llmReceptionistEnabled('tenant-a')).toBe(true)
     expect(llmReceptionistEnabled(null)).toBe(true)
   })
 
-  it('a list enables only the listed tenants, never a tenant-less inbound', () => {
+  it('a list narrows back to a pilot, and excludes a tenant-less inbound', () => {
     process.env.SMS_LLM_RECEPTIONIST_ENABLED = 'tenant-a, tenant-b'
     expect(llmReceptionistEnabled('tenant-a')).toBe(true)
     expect(llmReceptionistEnabled('tenant-b')).toBe(true)

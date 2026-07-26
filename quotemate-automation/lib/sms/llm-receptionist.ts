@@ -12,10 +12,14 @@
 //
 // Four properties make a regression structurally hard rather than merely
 // tested:
-//   S1  flag-gated, default OFF (llmReceptionistEnabled)
-//   S2  fail-open — any throw, schema miss or grounding violation returns
-//       the deterministic decision for that turn, so a model outage can
-//       never drop a lead
+//   S1  one env switch (llmReceptionistEnabled). DEFAULT ON since
+//       2026-07-26 — every trade's receptionist is AI driven; setting
+//       SMS_LLM_RECEPTIONIST_ENABLED=0 reverts every tenant to the
+//       deterministic machines on the next inbound, with no redeploy.
+//   S2  fail-open — any throw, timeout, schema miss or grounding violation
+//       returns the deterministic decision FOR THAT TURN. This is why the
+//       state machines still exist: they are the safety net under the
+//       model, so an outage can never drop a lead or dead-end a customer.
 //   S3  the money modules are CALLED, never edited
 //   S4  assertGroundedReply refuses to let a figure the model invented
 //       reach the customer
@@ -27,7 +31,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
-import { SMS_RECEPTIONIST_MODEL, SMS_RECEPTIONIST_MAX_TOKENS } from './model'
+import { SMS_RECEPTIONIST_MODEL } from './model'
 import { ROOF_MATERIALS } from '@/lib/roofing/types'
 import { confirmAddressQuestion } from './verify-address'
 import {
@@ -58,25 +62,31 @@ import {
 /**
  * Is the LLM receptionist enabled for this tenant?
  *
- * SMS_LLM_RECEPTIONIST_ENABLED — unset / '0' / blank → OFF (the default,
- * and the whole point: with it off not one extra token is spent and the
- * deterministic machines run byte-identically). '1' → every tenant.
- * Anything else is read as a comma-separated tenant-id allow-list.
+ * DEFAULT ON (changed 2026-07-26). Every trade's SMS receptionist is
+ * Sonnet 5 driven; the deterministic state machines are the fallback net,
+ * not the driver. This shipped default-OFF first so the behaviour could be
+ * proved against the live model before customers saw it — that pass is
+ * done, so the flag inverted from opt-in to opt-out.
  *
- * Note the route additionally requires a resolved tenant (the grounded fact
- * block is built from the tenant row), so an inbound that maps to NO tenant
- * — the dev shared number — always runs the deterministic path regardless.
+ * SMS_LLM_RECEPTIONIST_ENABLED —
+ *   unset (the default)            → ON for every tenant
+ *   '0' / 'false' / 'off' / 'no'   → OFF, the kill switch, effective on the
+ *                                    next inbound with no redeploy
+ *   '1' / 'true' / 'on' / 'all'    → ON for every tenant (explicit)
+ *   anything else                  → a comma-separated tenant-id allow-list,
+ *                                    for narrowing back to a pilot
  *
- * Read fresh on every call so flipping the variable takes effect on the
- * next inbound (next lambda), with no redeploy and no state cleanup.
+ * The route additionally requires a resolved tenant (the grounded fact block
+ * is built from the tenant row), so an inbound that maps to NO tenant — the
+ * dev shared number — always runs the deterministic path regardless.
+ *
+ * Read fresh on every call so flipping the variable takes effect on the next
+ * inbound (next lambda), with no redeploy and no state cleanup.
  */
 export function llmReceptionistEnabled(tenantId: string | null): boolean {
   const raw = (process.env.SMS_LLM_RECEPTIONIST_ENABLED ?? '').trim()
-  if (!raw || /^(0|false|off|no)$/i.test(raw)) return false
-  // 'true'/'on'/'yes' would otherwise be read as a one-entry tenant
-  // allow-list and silently mean OFF — a plausible operator mistake on the
-  // one switch that turns this feature on.
-  if (/^(1|true|on|yes|all)$/i.test(raw)) return true
+  if (/^(0|false|off|no)$/i.test(raw)) return false
+  if (!raw || /^(1|true|on|yes|all)$/i.test(raw)) return true
   if (!tenantId) return false
   return raw.split(',').map((s) => s.trim()).filter(Boolean).includes(tenantId)
 }
@@ -135,6 +145,24 @@ export function composeDeflect(ownerFirstName: string | null): string {
  *  fallback is a complete working state machine, and on a multi-trade tenant
  *  this runs once for roofing and once for painting. */
 export const LLM_TURN_TIMEOUT_MS = 15_000
+
+/**
+ * Output ceiling for the receptionist turn. Deliberately larger than the
+ * dialog's SMS_RECEPTIONIST_MAX_TOKENS.
+ *
+ * Measured against the live model 2026-07-26: with this module's full system
+ * prompt, "You do paint?" returned "No object generated" on EVERY attempt at
+ * 8192, while the same message against a one-line system prompt succeeded 8
+ * times in 9. Sonnet 5 runs adaptive thinking whenever the request omits a
+ * `thinking` field — and the pinned @ai-sdk/anthropic never sends one — so
+ * reasoning tokens are drawn from this same ceiling. A longer, rule-dense
+ * system prompt makes the model think harder, and at 8192 it can spend the
+ * budget before emitting the tool call.
+ *
+ * The reply itself is capped at 320 characters, so the extra headroom costs
+ * nothing on a successful turn: observed usage is ~160 output tokens.
+ */
+export const LLM_RECEPTIONIST_MAX_TOKENS = 32_000
 
 /** Deterministic re-ask when a booking reply was not a clear yes or no.
  *  Never model text: this is the turn that decides whether a tradie drives
@@ -448,27 +476,27 @@ const REFUSAL_TOOLS: ReadonlySet<LlmTool> = new Set<LlmTool>(['hand_to_other_tra
 
 // ── the prompt ──────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are the SMS receptionist for an Australian trade business. You are texting a customer on the tradie's own mobile number.
+export const SYSTEM_PROMPT = `You are the SMS receptionist for an Australian trade business. You are texting a customer on the tradie's own mobile number.
 
 HOW YOU WORK
-You choose exactly ONE tool per message. Deterministic code behind you owns every number. You own the conversation.
+Return a single JSON object describing the ONE action you are taking this turn. The names below are VALUES for that object's "tool" field — they are NOT functions, so never issue a tool call named after one of them; always return the object. Deterministic code behind you owns every number. You own the conversation.
 
-TOOLS
+VALUES FOR THE "tool" FIELD
 - ask_for_detail — you still need a job detail. Put your natural-language question in reply_to_send, and put anything the customer just told you in slots.
-- verify_address — the customer supplied a property address. Put it in slots.address. Code will map-check it and read it back; do NOT read it back yourself.
+- verify_address — the customer's message contains a property address. Put it in slots.address. Code map-checks it and reads it back, so do NOT read it back yourself. This value WINS over every other one: an address is never a question, never a deflect and never small talk, no matter what else the message contains.
 - measure_and_price_roof — every roofing detail is gathered (address confirmed, intent, material, pitch). Code measures and prices.
 - price_painting — every painting detail is gathered. Code prices it.
 - send_saved_quote — the customer confirmed which building(s) on an already-measured job. Put the picks in structure_choices, or "all".
 - book_inspection — the customer is replying to "shall we book the inspection?". Set booking_consent to yes, no, or unclear.
 - answer_business_question — the customer asked something the GROUNDED BUSINESS FACTS answer. Answer it in reply_to_send.
-- deflect_and_notify — the customer asked something the facts do NOT cover. Code sends an honest "I'll check and come back to you" and alerts the tradie.
+- deflect_and_notify — the customer ASKED A QUESTION that the grounded facts do not cover. Code sends an honest "I'll check and come back to you" and alerts the tradie. Only ever for a question — never for an answer the customer gave you, and never for an address.
 - hand_to_other_trade — the customer wants a different trade. Set declined_trade to the trade they are turning down.
 - end_conversation — the customer does not want this job. Set declined_trade.
 
 HARD RULES
 1. NEVER state a price, a dollar figure, a roof or wall area, a number of buildings, a measured address or a quote link. You do not know them. Tools produce them. If you write one, your whole turn is discarded.
 2. A greeting ("hi", "hey mate", "hello") is NEVER consent. At a booking question a greeting is booking_consent: "unclear".
-3. A question is a question. Answer it. Never treat it as an answer to what you asked, and never treat it as a new job.
+3. A question is a question. Answer it. Never treat it as an answer to what you asked, and never treat it as a new job. The reverse holds too: an ANSWER is not a question. If the customer supplied the detail you asked for, record it and move on — do not deflect it.
 4. Respect a refusal the first time. If the customer says they do not want this trade, use hand_to_other_trade or end_conversation and set declined_trade.
 5. A message can name the current trade AND another one ("not roofer, i want electrical") — that is a switch to the OTHER trade.
 6. Never invent a business fact, date, credential, availability, warranty or price. Deflect instead. A made-up fact about the tradie's business is worse than no answer.
@@ -523,13 +551,59 @@ function buildPrompt(args: {
  *  transient 529, explicit maxOutputTokens (the pinned provider does not
  *  know this model id), and an ephemeral cache breakpoint on the static
  *  system prompt with every dynamic byte after it. */
+/**
+ * Recover a decision the model wrote as TEXT instead of as a tool call.
+ *
+ * Measured against the live model 2026-07-26: for some messages ("You do
+ * paint?" reproduced every time) Sonnet 5 answers this prompt with the exact
+ * JSON the schema asks for, in the message body, and never calls the tool.
+ * generateObject then throws NoObjectGeneratedError and a perfectly good
+ * turn was thrown away — deterministically, for whole classes of message.
+ *
+ * The error carries the raw text, so parse it. Nothing is trusted by doing
+ * this: the result still goes through the same schema.safeParse and the same
+ * grounding validator as a tool call would.
+ */
+function recoverTextObject(err: unknown): unknown | null {
+  const e = (err ?? null) as { text?: unknown; response?: { body?: unknown } } | null
+  if (!e) return null
+
+  // Shape 1 — the decision arrived as message TEXT rather than a tool call.
+  const text = e.text
+  if (typeof text === 'string' && text.trim()) {
+    const body = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+    const start = body.indexOf('{')
+    const end = body.lastIndexOf('}')
+    if (start >= 0 && end > start) {
+      try { return JSON.parse(body.slice(start, end + 1)) } catch { /* fall through */ }
+    }
+  }
+
+  // Shape 2 — the model called a tool NAMED AFTER one of our decision values
+  // (e.g. `answer_business_question`) instead of the SDK's structured-output
+  // tool, so the SDK found no object. Reproduced live 2026-07-26 for every
+  // "You do paint?" turn. The arguments are the decision minus its `tool`
+  // field, which the tool name itself supplies.
+  const content = (e.response?.body as { content?: unknown } | undefined)?.content
+  if (Array.isArray(content)) {
+    for (const block of content as Array<{ type?: string; name?: string; input?: unknown }>) {
+      if (block?.type !== 'tool_use') continue
+      const name = typeof block.name === 'string' ? block.name : ''
+      if (!(LLM_TOOLS as readonly string[]).includes(name)) continue
+      const input = (block.input ?? {}) as Record<string, unknown>
+      return { ...input, tool: name }
+    }
+  }
+  return null
+}
+
 function sonnetDecider(schema: z.ZodTypeAny): LlmDecider {
   return async (ctx) => {
-    const { object } = await withRetry(
+    const run = await withRetry(
       () =>
         generateObject({
           model: anthropic(SMS_RECEPTIONIST_MODEL),
-          maxOutputTokens: SMS_RECEPTIONIST_MAX_TOKENS,
+          maxOutputTokens: LLM_RECEPTIONIST_MAX_TOKENS,
           schema,
           // A provider that HANGS rather than throwing is the failure mode
           // that would otherwise send the customer nothing at all: withRetry
@@ -547,18 +621,45 @@ function sonnetDecider(schema: z.ZodTypeAny): LlmDecider {
           messages: [{ role: 'user' as const, content: ctx.prompt }],
         }),
       {
-        // ONE attempt. Unlike the general dialog, this call has a complete
-        // working fallback, so a retry only buys a small chance of a nicer
-        // reply at the cost of doubling the customer's wait — and a
-        // multi-trade tenant can run this handler twice in one inbound.
-        maxAttempts: 1,
-        onAttemptFailed: (err) => {
+        // Measured against the live model 2026-07-26: roughly 1 call in 9
+        // returns "No object generated: the model did not return a response"
+        // — no thinking tokens, ~160 output tokens, at every budget from 8k
+        // to 32k. It is transient, not a schema or ceiling problem, and
+        // without a retry it silently dropped ~11% of turns back onto the
+        // deterministic machine.
+        //
+        // Retried ONCE, with almost no delay (a typical call is ~3s, so the
+        // second attempt rarely happens) and NEVER on a deadline — retrying
+        // a timeout would just double the customer's wait for a path that
+        // already has a complete working fallback.
+        maxAttempts: 2,
+        baseDelayMs: 250,
+        shouldRetry: (err) => {
+          const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+          // A deadline is never retried — that would just double the wait on
+          // a path that already has a complete working fallback. A turn the
+          // model wrote as text is not retried either: recoverTextObject
+          // already has the answer.
+          if (recoverTextObject(err)) return false
+          return !msg.includes('abort') && !msg.includes('timed out') && !msg.includes('timeout')
+        },
+        onAttemptFailed: (err, attempt, willRetry) => {
           const msg = err instanceof Error ? err.message : String(err)
-          console.warn('[sms/llm-receptionist] Sonnet call failed - falling back', msg.slice(0, 200))
+          console.warn(
+            `[sms/llm-receptionist] Sonnet attempt ${attempt}/2 failed - ${willRetry ? 'retrying' : 'falling back'}`,
+            msg.slice(0, 200),
+          )
         },
       },
-    )
-    return object
+    ).catch((err: unknown) => {
+      const recovered = recoverTextObject(err)
+      if (recovered) {
+        console.warn('[sms/llm-receptionist] model answered in text, not a tool call - recovered the JSON')
+        return { object: recovered }
+      }
+      throw err
+    })
+    return run.object
   }
 }
 
@@ -691,7 +792,12 @@ async function runTurn<D, S extends object>(args: {
   const declinedSlug = REFUSAL_TOOLS.has(d.tool) ? canonicalTrade(d.declined_trade) : null
   if (declinedSlug) refusalCarry = { declined_trades: [...new Set([...args.declined, declinedSlug])] }
 
-  if (!addressIsGrounded(patch, [...authoritative, ...conversational])) {
+  // prevSlots is included: an address ALREADY gathered was grounded (and
+  // map-verified) when it was first accepted, so the model re-stating it in
+  // a later patch is a no-op. Leaving it out rejected every turn on a thread
+  // whose address was confirmed several messages ago — measured against the
+  // live model 2026-07-26 on a complete brief.
+  if (!addressIsGrounded(patch, [...authoritative, ...conversational, JSON.stringify(args.prevSlots)])) {
     return bail('the model supplied an address nobody typed')
   }
 
