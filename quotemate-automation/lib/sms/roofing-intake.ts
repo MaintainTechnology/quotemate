@@ -452,7 +452,11 @@ export function extractStreetAddress(text: string): string | null {
   // street name. A trailing postcode alone can never match.
   const m = street ?? t.match(/\d[\d/\-a-zA-Z]*\s+[A-Za-z].*/)
   if (!m) return null
-  const addr = m[0].trim().replace(/\s+/g, ' ')
+  // G9 (live 2026-07-27) — an injection payload was stored as the address and
+  // echoed verbatim in a customer SMS, carrying it into the job sheet and the
+  // dashboard. No real AU address contains ; < or >, so stop there. Apostrophes
+  // (O'Connor), slashes (3/50), commas, dots and hyphens are all kept.
+  const addr = m[0].split(/[;<>]/)[0].trim().replace(/[\s,'"`]+$/, '').replace(/\s+/g, ' ')
   return addr.length >= 6 ? addr : null
 }
 

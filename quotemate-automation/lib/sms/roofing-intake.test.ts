@@ -70,6 +70,21 @@ describe('extractStreetAddress ignores a spurious leading number (G1)', () => {
     expect(extractStreetAddress('call me on 0412 345 678, its 12 Smith St Bondi NSW 2026'))
       .toContain('12 Smith St')
   })
+  // Live 2026-07-27 (G9): the raw payload was stored as the address and echoed
+  // verbatim in a customer SMS ("inspection of 670 London Rd'; DROP TABLE
+  // quotes;-- <script>alert(1)</script> Chandler QLD 4155"), which also carries
+  // it into the tradie job sheet and dashboard. No real AU address contains
+  // ; < or >, so the address stops there.
+  it('truncates at characters no AU address contains (injection payload)', () => {
+    const out = extractStreetAddress("670 London Rd'; DROP TABLE quotes;-- <script>alert(1)</script> Chandler QLD 4155")
+    expect(out).toBe('670 London Rd')
+    expect(out).not.toMatch(/[<>;]/)
+    expect(extractStreetAddress('12 Smith St <b>bold</b> Bondi')).toBe('12 Smith St')
+  })
+  it('keeps punctuation that real addresses use', () => {
+    expect(extractStreetAddress("5 O'Connor St, Bondi NSW 2026")).toBe("5 O'Connor St, Bondi NSW 2026")
+    expect(extractStreetAddress('3/50 Connor St, Kangaroo Point QLD 4169')).toBe('3/50 Connor St, Kangaroo Point QLD 4169')
+  })
   it('does not regress normal or unit addresses', () => {
     expect(extractStreetAddress('223 Archer St, Chandler')).toBe('223 Archer St, Chandler')
     expect(extractStreetAddress('3/50 Connor St Kangaroo Point QLD 4169')).toBe('3/50 Connor St Kangaroo Point QLD 4169')
