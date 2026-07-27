@@ -36,6 +36,7 @@ import { ROOF_MATERIALS } from '@/lib/roofing/types'
 import { confirmAddressQuestion } from './verify-address'
 import {
   advanceRoofing,
+  missBudget,
   type RoofingConversationState,
   type RoofingTurnDecision,
 } from './roofing-receptionist'
@@ -1000,12 +1001,17 @@ export async function roofingTurnViaLlm(args: {
     fallback: () => advanceRoofing(args.prev, args.inbound),
     reask: () => ({ action: 'ask', slots: prevSlots, step: 'await_booking', reply: BOOKING_REASK }),
     map: (d, slots) =>
-      breakConfirmLoop(
-        enforceRoofingReadiness(
-          mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
+      boundRepeatedAsk(
+        breakConfirmLoop(
+          enforceRoofingReadiness(
+            mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
+          ),
+          prevStep,
+          args.inbound,
         ),
+        d.tool,
         prevStep,
-        args.inbound,
+        prevSlots,
       ),
   })
 
@@ -1044,6 +1050,67 @@ function enforceRoofingReadiness(d: RoofingTurnDecision | null): RoofingTurnDeci
     return { action: 'inspection', slots: d.slots, reason: q.reason ?? 'on-site inspection required' }
   }
   return d
+}
+
+/** The slot each gather step is trying to fill, so "did this turn make
+ *  progress?" is answered on the step's OWN field. */
+const STEP_SLOT: Partial<Record<RoofingStep, keyof RoofingSlots>> = {
+  address: 'address',
+  intent: 'intent',
+  material: 'material',
+  pitch: 'pitch',
+}
+
+/**
+ * No gather question may be asked forever.
+ *
+ * The state machine escalates to an on-site inspection after 2-3
+ * unrecognised answers (missBudget). The LLM path had no such bound at all:
+ * it never touched `misses`, so a model that kept choosing to ask about the
+ * material would keep asking about the material, with a real customer on
+ * the other end and nothing to stop it. Only confirm_address and the
+ * booking re-ask were capped, and each of those took its own live incident
+ * to find.
+ *
+ * Counted only when the turn INTENDED to gather (ask_for_detail) and the
+ * step's own slot did not move. A customer asking questions holds the step
+ * deliberately and must never be escalated for it.
+ *
+ * At the budget this does exactly what the deterministic path does: set the
+ * `unknown` sentinel so readiness routes the job on site, or — for the
+ * address, where there is nothing to put on a job sheet — route it directly.
+ */
+function boundRepeatedAsk(
+  d: RoofingTurnDecision | null,
+  tool: LlmTool,
+  prevStep: RoofingStep | null,
+  prevSlots: RoofingSlots,
+): RoofingTurnDecision | null {
+  if (!d || d.action !== 'ask' || tool !== 'ask_for_detail') return d
+  if (!prevStep || d.step !== prevStep) return d
+  const key = STEP_SLOT[prevStep]
+  if (!key) return d
+  // Progress was made — the slot we asked about landed this turn.
+  if (prevSlots[key] == null ? d.slots[key] != null : d.slots[key] !== prevSlots[key]) return d
+
+  const misses = (prevSlots.misses ?? 0) + 1
+  if (misses < missBudget(prevStep)) {
+    return { ...d, slots: { ...d.slots, misses } }
+  }
+  const slots: RoofingSlots = { ...d.slots }
+  delete slots.misses
+  if (prevStep === 'address') {
+    return { action: 'inspection', slots, reason: "we couldn't confirm the property address" }
+  }
+  if (prevStep === 'material') slots.material = 'unknown'
+  else if (prevStep === 'pitch') slots.pitch = 'unknown'
+  else if (prevStep === 'intent') slots.intent = 'unknown'
+  const q = nextRoofingStep(slots)
+  if (q.step === 'ready') return { action: 'measure', slots }
+  if (q.step === 'inspection') {
+    return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
+  }
+  return { action: 'ask', slots, step: q.step, reply: q.question ?? d.reply }
 }
 
 /**

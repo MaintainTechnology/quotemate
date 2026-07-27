@@ -761,6 +761,68 @@ describe('roofingTurnViaLlm', () => {
     })
   })
 
+  // The deterministic machine escalates after 2-3 unrecognised answers.
+  // The LLM path had NO bound: it never touched `misses`, so the same
+  // gather question could be asked forever with a customer on the line.
+  describe('R5 no gather question can be asked forever', () => {
+    const AT_MATERIAL: RoofingConversationState = {
+      slots: { address: '670 London Rd, Chandler QLD 4155', postcode: '4155', state: 'QLD', address_confirmed: true, intent: 'full_reroof' },
+      last_step: 'material',
+    }
+
+    it('counts a repeat of the SAME question when the slot did not move', async () => {
+      const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What is the roof made of?' })
+      const r = await roofingTurnViaLlm({
+        prev: AT_MATERIAL, inbound: 'dunno really', history: history('dunno really'), facts: FACTS, decide,
+      })
+      expect(r.decision.slots.misses).toBe(1)
+    })
+
+    it('escalates at the budget instead of asking again', async () => {
+      const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What is the roof made of?' })
+      const r = await roofingTurnViaLlm({
+        prev: { ...AT_MATERIAL, slots: { ...AT_MATERIAL.slots, misses: 1 } },
+        inbound: 'still not sure', history: history('still not sure'), facts: FACTS, decide,
+      })
+      // material 'unknown' routes the job on site — the same safe fallback
+      // the state machine uses.
+      expect(r.decision.action).toBe('inspection')
+      expect(r.decision.slots.material).toBe('unknown')
+    })
+
+    it('does NOT count a turn that made progress', async () => {
+      const { decide } = scripted({
+        tool: 'ask_for_detail',
+        slots: { material: 'colorbond_corrugated' },
+        reply_to_send: 'How steep is it?',
+      })
+      const r = await roofingTurnViaLlm({
+        prev: AT_MATERIAL, inbound: 'colorbond corrugated', history: history('colorbond corrugated'), facts: FACTS, decide,
+      })
+      expect(r.decision.slots.misses ?? 0).toBe(0)
+    })
+
+    it('does NOT punish a customer for asking questions', async () => {
+      // answer_business_question deliberately holds the step. Escalating a
+      // curious customer to an on-site visit would be absurd.
+      const { decide } = scripted({ tool: 'answer_business_question', reply_to_send: 'Yeah, we do painting too.' })
+      const r = await roofingTurnViaLlm({
+        prev: { ...AT_MATERIAL, slots: { ...AT_MATERIAL.slots, misses: 1 } },
+        inbound: 'do you do painting?', history: history('do you do painting?'), facts: FACTS, decide,
+      })
+      expect(r.decision.action).toBe('ask')
+    })
+
+    it('an unanswerable ADDRESS routes to inspection, not a sentinel', async () => {
+      const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: "What's the address?" })
+      const r = await roofingTurnViaLlm({
+        prev: { slots: { misses: 2 }, last_step: 'address' },
+        inbound: 'somewhere over there', history: history('somewhere over there'), facts: FACTS, decide,
+      })
+      expect(r.decision.action).toBe('inspection')
+    })
+  })
+
   it('B5 a question on a MEASURED thread keeps the pending measurement alive', async () => {
     const { decide } = scripted({ tool: 'deflect_and_notify' })
     const r = await roofingTurnViaLlm({
@@ -809,11 +871,14 @@ describe('roofingTurnViaLlm', () => {
     expect(r.source).toBe('fallback')
   })
 
-  it('M8 the deterministic miss budget survives an LLM turn, so the fallback can still escalate', async () => {
+  it('M8 the miss budget survives an LLM turn, so the fallback can still escalate', async () => {
+    // applyPatch used to DELETE misses, which sabotaged the deterministic
+    // fallback's escape from a re-ask loop. A non-progress turn now counts
+    // one and carries it (below the budget — reaching it escalates, which
+    // the R5 block covers).
     const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What do you need done?' })
     const r = await roofingTurnViaLlm({
-      prev: { ...MID_GATHER, slots: { ...MID_GATHER.slots, misses: 1 } },
-      inbound: 'hi', history: history('hi'), facts: FACTS, decide,
+      prev: MID_GATHER, inbound: 'hi', history: history('hi'), facts: FACTS, decide,
     })
     expect(r.decision.slots.misses).toBe(1)
   })

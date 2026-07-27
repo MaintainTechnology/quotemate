@@ -242,7 +242,7 @@ export function parseStructureFollowup(
  *  route to the on-site inspection. Address gets one extra go: it's the
  *  one answer the customer can always fix by retyping, and the retry
  *  prompt spells out exactly what's needed. */
-function missBudget(step: RoofingStep): number {
+export function missBudget(step: RoofingStep): number {
   return step === 'address' ? 3 : 2
 }
 
