@@ -26,6 +26,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { parseAddressValidationResponse } from '@/lib/solar/address-validation'
+import { parseSuggestions } from '@/lib/roofing/providers/predictive'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -77,11 +78,23 @@ const SIGNIFICANT_COMPONENTS = new Set([
   'administrative_area_level_1',
 ])
 
-/** How many "can't find it" re-asks an address gets before we fall back
- *  to the plain read-back. New estates and very fresh subdivisions are
- *  real and not always on the map — the customer must always be able to
- *  push through by confirming, and a bad address still dead-ends safely
- *  at the measure step's inspection fallback. */
+/**
+ * How many "can't find it" re-asks an address gets before the lead is
+ * handed to the tradie.
+ *
+ * ⚠ Changed 2026-07-27. This used to switch VERIFICATION OFF: past the
+ * budget `screenConfirmAddress` returned the customer's raw text
+ * unverified, and the flow read it back and measured it. Live that day, a
+ * thread that had already burned the budget read back "670 London Rd,
+ * Corparoo 4155" — a suburb that does not exist — with no map check at all.
+ * An unverified address is exactly what the measurement provider needs to
+ * resolve a parcel, so silently trusting one can price a stranger's roof.
+ *
+ * The budget now bounds the CONVERSATION, not the checking. Every address
+ * is verified, every time. Past the budget the flow stops asking and hands
+ * the lead to the tradie, so a genuinely unmapped new estate is still a
+ * live lead and still never silently measured.
+ */
 export const MAX_ADDRESS_VERIFY_REJECTS = 2
 
 /**
@@ -233,6 +246,113 @@ async function lookupGeoscapeAddress(
   }
 }
 
+/**
+ * The address the customer most likely MEANT, when the one they typed
+ * cannot be found.
+ *
+ * "Sorry, I can't find that, check the spelling" puts the work back on a
+ * customer who already believes they typed it correctly — live 2026-07-27,
+ * "670 London Rd, Corparoo 4155" (Coorparoo/Chandler) got that reply and
+ * the thread stalled. Geoscape Predictive is the type-ahead surface over
+ * the same G-NAF register the measurement resolves against, so its top
+ * suggestion is both the best guess AND an address we know we can measure.
+ *
+ * Best-effort: no key, no match, or any error returns null and the caller
+ * falls back to asking again. Never throws.
+ */
+/** PURE — "670 London Rd, Corparoo 4155" → "670 London Rd".
+ *
+ *  Predictive is a PREFIX matcher, not a spell-corrector: measured
+ *  2026-07-27, the misspelt suburb made it return nothing at all, while the
+ *  street alone matched immediately. Its own error text says to broaden the
+ *  query, so we do — and then rank what comes back against the suburb,
+ *  state and postcode the customer actually typed.
+ *
+ *  Street types come from the STREET_TYPES map below (both the
+ *  abbreviations and the words they expand to), so there is one list. */
+export function streetOnlyQuery(raw: string): string | null {
+  const types = [...new Set([...Object.keys(STREET_TYPES), ...Object.values(STREET_TYPES)])].join('|')
+  const m = new RegExp(`^\\s*(\\d[^,]*?\\b(?:${types})\\b)`, 'i').exec(raw ?? '')
+  return m ? m[1].trim().replace(/\s+/g, ' ') : null
+}
+
+/** PURE — how well a register candidate matches what the customer typed.
+ *
+ *  Blind top-1 is unsafe: "31 Greens Rd" returns four real addresses across
+ *  VIC, QLD and NSW, and the first is a Victorian one for a customer who
+ *  said QLD. The typed postcode/state/suburb are the only evidence of which
+ *  they meant, so a candidate that agrees with none of them scores 0 and is
+ *  never offered. */
+export function scoreAddressSuggestion(raw: string, candidate: string): number {
+  const typed = (raw ?? '').toLowerCase()
+  const typedPostcode = (raw ?? '').match(/\b\d{4}\b/g)?.pop() ?? null
+  const typedState = parseFormattedState(raw ?? '')
+  let score = 0
+  if (typedPostcode && parseFormattedPostcode(candidate) === typedPostcode) score += 3
+  if (typedState && parseFormattedState(candidate) === typedState) score += 2
+  // Suburb sits between the first comma and the trailing "STATE 1234".
+  const suburb = candidate.split(',')[1]?.replace(/\s+[a-z]{2,3}\s+\d{4}\s*$/i, '').trim()
+  if (suburb && suburb.length > 2 && typed.includes(suburb.toLowerCase())) score += 2
+  return score
+}
+
+export async function suggestAuAddress(
+  raw: string,
+  opts: VerifyAddressOpts = {},
+): Promise<{ address: string; postcode: string | null; state: AuStateAbbr | null } | null> {
+  const key = opts.geoscapeApiKey ?? process.env.GEOSCAPE_API_KEY
+  const query = (raw ?? '').trim()
+  if (!key || query.length < 4) return null
+  const fetchImpl = opts.fetchImpl ?? ((u: RequestInfo | URL, init?: RequestInit) => fetch(u, init))
+  const base = opts.geoscapeBaseUrl ?? GEOSCAPE_BASE_URL
+
+  // Predictive takes `query` (partial text); the Addresses API takes
+  // `addressString`. Same host, same auth, different parameter name —
+  // see lib/roofing/providers/predictive.ts.
+  const ask = async (q: string): Promise<string[]> => {
+    try {
+      const res = await fetchImpl(
+        `${base}/predictive/address?query=${encodeURIComponent(q)}&perPage=5`,
+        { headers: { Authorization: key, Accept: 'application/json' } },
+      )
+      if (!res.ok) return []
+      // Reuse the dashboard autocomplete's parser: Predictive returns its
+      // list under `suggest`, NOT `data` like the Addresses API.
+      return parseSuggestions(await res.json()).map((s) => s.address).filter(Boolean)
+    } catch {
+      return []
+    }
+  }
+
+  // As typed first (an exact prefix hit needs no ranking), then broadened.
+  const street = streetOnlyQuery(query)
+  const asTyped = await ask(query)
+  const candidates = asTyped.length
+    ? asTyped
+    : street && street.toLowerCase() !== query.toLowerCase()
+      ? await ask(street)
+      : []
+  if (!candidates.length) return null
+
+  const typedNumber = firstStreetNumber(raw)
+  let best: { address: string; score: number } | null = null
+  for (const c of candidates) {
+    const formatted = titleCaseAu(c) // G-NAF is ALL CAPS; an all-caps SMS shouts.
+    // Same wrong-parcel guard as verifyAuAddress: a suggestion that moves
+    // the STREET NUMBER is a different house, not a spelling fix.
+    const found = firstStreetNumber(formatted)
+    if (typedNumber && found && typedNumber !== found) continue
+    const score = scoreAddressSuggestion(raw, formatted)
+    if (score > 0 && (!best || score > best.score)) best = { address: formatted, score }
+  }
+  if (!best) return null
+  return {
+    address: best.address,
+    postcode: parseFormattedPostcode(best.address),
+    state: parseFormattedState(best.address),
+  }
+}
+
 /** PURE — the STREET number in an address line, for like-with-like comparison
  *  in the wrong-parcel guard. AU unit format puts the unit BEFORE the street
  *  number ("3/50 Connor St" = unit 3, street 50; "unit 2 21 Vernon Tce" = unit
@@ -347,10 +467,42 @@ export function addressNotFoundReply(raw: string): string {
   return `Sorry, I can't find "${raw}" on the map. Could you double-check the spelling and send the full address again — street number, street, suburb and postcode?`
 }
 
-/** PURE — turn a verification result into what the confirm step should do. */
-export function planConfirmAddress(raw: string, v: AddressVerification): ConfirmAddressPlan {
+/** The read-back when the typed address was not found but the register has
+ *  a near match. Names BOTH so the customer can see the correction. */
+export function addressSuggestionQuestion(raw: string, suggestion: string): string {
+  return `I can't find "${raw}" on the map. Did you mean "${suggestion}"? Reply yes if that's the one, or send the correct address.`
+}
+
+/** The lead is handed over: every attempt failed the map check, and we will
+ *  not measure an address the register cannot confirm. */
+export function addressHandoffReply(raw: string): string {
+  return `Thanks for that. I still can't match "${raw}" on the map, so I'll get one of the team to confirm the property with you and sort your quote from there.`
+}
+
+/** PURE — turn a verification result into what the confirm step should do.
+ *  `suggestion` is the register's near match, when the caller found one. */
+export function planConfirmAddress(
+  raw: string,
+  v: AddressVerification,
+  suggestion?: { address: string; postcode: string | null; state: AuStateAbbr | null } | null,
+): ConfirmAddressPlan {
   if (v.outcome === 'unavailable') return { kind: 'keep' }
-  if (v.outcome === 'not_found') return { kind: 'reject', reply: addressNotFoundReply(raw) }
+  if (v.outcome === 'not_found') {
+    // Offer what they most likely meant instead of handing the problem
+    // back. Confirming a SUGGESTION is the same handshake as confirming a
+    // correction — the customer still has to say yes before anything is
+    // measured.
+    if (suggestion?.address) {
+      return {
+        kind: 'confirm',
+        address: suggestion.address,
+        postcode: suggestion.postcode,
+        state: suggestion.state,
+        reply: addressSuggestionQuestion(raw, suggestion.address),
+      }
+    }
+    return { kind: 'reject', reply: addressNotFoundReply(raw) }
+  }
   return {
     kind: 'confirm',
     address: v.formatted,
@@ -387,27 +539,38 @@ export type AddressSlotsLike = {
 export async function screenConfirmAddress<S extends AddressSlotsLike>(
   slots: S,
   opts: VerifyAddressOpts = {},
-): Promise<{ slots: S; step?: 'address'; reply?: string }> {
+): Promise<{ slots: S; step?: 'address'; reply?: string; handoff?: true }> {
   const raw = slots.address
   if (!raw) return { slots }
+  // Already verified THIS exact string — the check has run, so this is a
+  // cache hit, not a skip.
   if (slots.addr_verified === raw) return { slots }
-  if ((slots.addr_verify_misses ?? 0) >= MAX_ADDRESS_VERIFY_REJECTS) return { slots }
 
-  const plan = planConfirmAddress(raw, await verifyAuAddress(raw, opts))
+  // Every address is verified, every time. The reject budget below bounds
+  // how long we keep ASKING, never whether we check — see
+  // MAX_ADDRESS_VERIFY_REJECTS.
+  const verification = await verifyAuAddress(raw, opts)
+  const suggestion =
+    verification.outcome === 'not_found' ? await suggestAuAddress(raw, opts) : null
+  const plan = planConfirmAddress(raw, verification, suggestion)
   if (plan.kind === 'keep') return { slots }
   if (plan.kind === 'reject') {
-    return {
-      slots: {
-        ...slots,
-        address: null,
-        postcode: null,
-        state: null,
-        address_confirmed: false,
-        addr_verify_misses: (slots.addr_verify_misses ?? 0) + 1,
-      } as S,
-      step: 'address',
-      reply: plan.reply,
+    const misses = (slots.addr_verify_misses ?? 0) + 1
+    const cleared = {
+      ...slots,
+      address: null,
+      postcode: null,
+      state: null,
+      address_confirmed: false,
+      addr_verify_misses: misses,
+    } as S
+    // Budget spent and still nothing the register recognises. Hand the lead
+    // over rather than either looping forever or — as this did until
+    // 2026-07-27 — quietly accepting an address no map can find.
+    if (misses >= MAX_ADDRESS_VERIFY_REJECTS) {
+      return { slots: cleared, step: 'address', reply: addressHandoffReply(raw), handoff: true }
     }
+    return { slots: cleared, step: 'address', reply: plan.reply }
   }
   return {
     slots: {

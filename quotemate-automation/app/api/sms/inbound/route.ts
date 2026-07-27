@@ -668,6 +668,22 @@ async function handleRoofingTurn(args: {
       askSlots = screened.slots
       if (screened.step) askStep = screened.step
       if (screened.reply) askReply = screened.reply
+      // Every attempt failed the map check. We will not measure an address
+      // the register cannot confirm, so the lead goes to a human instead of
+      // looping — park it the same way a routed inspection parks, and tell
+      // the tradie there is someone waiting.
+      if (screened.handoff) {
+        await persist({ slots: askSlots, last_step: 'await_booking', pending_quote_token: null, pending_structure_count: null }, 'open')
+        await sendReply(askReply)
+        await notifyTradie(
+          'question_asked',
+          decision.slots.address ?? 'address not captured',
+          null,
+          `${baseUrl}/dashboard`,
+          `Could not match this address on the map: "${decision.slots.address ?? ''}"`,
+        )
+        return true
+      }
     }
     // Nulling the pending measurement is right when the ask MOVES the
     // customer (a new gather step means the old measurement is stale). It is
@@ -1162,12 +1178,20 @@ async function handlePaintingTurn(args: {
     let askReply = decision.reply
     // Same map check as the roofing confirm — see screenConfirmAddress, and
     // the same skip when this turn is a question rather than an address.
-    const addressTurn = !turn || turn.tool === 'verify_address'
-    if (decision.step === 'confirm_address' && addressTurn) {
+    const answeringTurn = turn?.tool === 'answer_business_question' || turn?.tool === 'deflect_and_notify'
+    if (decision.step === 'confirm_address' && !answeringTurn) {
       const screened = await screenConfirmAddress(decision.slots)
       askSlots = screened.slots
       if (screened.step) askStep = screened.step
       if (screened.reply) askReply = screened.reply
+      // Same as roofing: an address the register cannot confirm goes to a
+      // human rather than being measured or looped on.
+      if (screened.handoff) {
+        await persist({ slots: askSlots, last_step: 'await_booking', pending_form_token: null, pending_quote_token: null }, 'open')
+        await sendReply(askReply)
+        await notifyUnansweredQuestion(`Could not match this address on the map: "${decision.slots.address ?? ''}"`)
+        return true
+      }
     }
     // Mirrors the roofing ask branch: a turn that HOLDS the customer where
     // they were keeps the tokens that identify their job. LLM path only —

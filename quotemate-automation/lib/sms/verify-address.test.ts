@@ -10,6 +10,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  scoreAddressSuggestion,
+  streetOnlyQuery,
   type AddressSlotsLike,
   firstStreetNumber,
   gateUnverifiedProfileAddress,
@@ -311,15 +313,120 @@ describe('screenConfirmAddress', () => {
     expect(r.slots.addr_verify_misses).toBe(1)
   })
 
-  it('stops rejecting after the budget — an unmapped new estate can push through', async () => {
+  // ⚠ Contract changed 2026-07-27. The budget used to switch VERIFICATION
+  // off, so past it the customer's raw text was read back and measured with
+  // no map check at all — live that day, "670 London Rd, Corparoo 4155" (a
+  // suburb that does not exist). The budget now bounds how long we keep
+  // ASKING; the check itself always runs, and a spent budget hands the lead
+  // to the tradie rather than trusting an address no register can find.
+  it('still verifies past the budget — the check is never skipped', async () => {
     const fetchImpl = fetchReturning(200, googleBody({ formatted: 'Australia', nextAction: 'FIX' }))
-    const slots = {
-      address: '3 Brand New Estate Rd',
-      addr_verify_misses: MAX_ADDRESS_VERIFY_REJECTS,
-    }
-    const r = await screenConfirmAddress(slots, { apiKey: 'K', fetchImpl })
-    expect(fetchImpl).not.toHaveBeenCalled()
-    expect(r).toEqual({ slots })
+    const r = await screenConfirmAddress(
+      { address: '3 Brand New Estate Rd', addr_verify_misses: MAX_ADDRESS_VERIFY_REJECTS - 1 },
+      { apiKey: 'K', fetchImpl },
+    )
+    expect(fetchImpl).toHaveBeenCalled()
+    expect(r.handoff).toBe(true)
+    expect(r.step).toBe('address')
+    expect(r.slots.address).toBeNull()
+    expect(r.reply).toMatch(/one of the team/i)
+  })
+
+  it('never returns an unverified address as if it were confirmed', async () => {
+    const fetchImpl = fetchReturning(200, googleBody({ formatted: 'Australia', nextAction: 'FIX' }))
+    const r = await screenConfirmAddress(
+      { address: '670 London Rd, Corparoo 4155', addr_verify_misses: 5 } as AddressSlotsLike,
+      { apiKey: 'K', fetchImpl },
+    )
+    expect(r.slots.address).toBeNull()
+    expect(r.slots.address_confirmed).toBe(false)
+  })
+
+  // Predictive is a PREFIX matcher: measured live 2026-07-27, the misspelt
+  // suburb returned nothing at all while the street alone matched.
+  it('streetOnlyQuery broadens past the suburb the customer got wrong', () => {
+    expect(streetOnlyQuery('670 London Rd, Corparoo 4155')).toBe('670 London Rd')
+    expect(streetOnlyQuery('31 Greens Rd, Chandler QLD')).toBe('31 Greens Rd')
+    expect(streetOnlyQuery('3/50 Connor Street Kangaroo Point')).toBe('3/50 Connor Street')
+    expect(streetOnlyQuery('no street here')).toBeNull()
+  })
+
+  // "31 Greens Rd" returns four real addresses across VIC, QLD and NSW.
+  // Blind top-1 suggests a Victorian address to a Queensland customer.
+  it('scoreAddressSuggestion ranks on the postcode, state and suburb typed', () => {
+    const raw = '31 Greens Rd, Chandler QLD'
+    const qld = scoreAddressSuggestion(raw, '31 Greens Rd, Coorparoo QLD 4151')
+    const vic = scoreAddressSuggestion(raw, '31 Greens Rd, Campbells Creek VIC 3451')
+    const nsw = scoreAddressSuggestion(raw, '31 Greens Rd, Greenwell Point NSW 2540')
+    expect(qld).toBeGreaterThan(vic)
+    expect(qld).toBeGreaterThan(nsw)
+    expect(vic).toBe(0)
+  })
+
+  it('scoreAddressSuggestion trusts a matching postcode most', () => {
+    const raw = '670 London Rd, Corparoo 4155'
+    expect(scoreAddressSuggestion(raw, '670 London Rd, Chandler QLD 4155')).toBeGreaterThan(0)
+    expect(scoreAddressSuggestion(raw, '670 London Rd, Somewhere VIC 3000')).toBe(0)
+  })
+
+  // "Can't find it, check your spelling" puts the work back on a customer
+  // who believes they typed it right. Offer what they meant instead.
+  it('suggests the address the customer meant when the typed one is not found', async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url)
+      if (u.includes('predictive/address')) {
+        return new Response(
+          JSON.stringify({ data: [{ address: '670 LONDON RD, CHANDLER QLD 4155', addressId: 'X' }] }),
+          { status: 200 },
+        )
+      }
+      return new Response(JSON.stringify(googleBody({ formatted: 'Australia', nextAction: 'FIX' })), { status: 200 })
+    })
+    const r = await screenConfirmAddress(
+      { address: '670 London Rd, Corparoo 4155' } as AddressSlotsLike,
+      { apiKey: 'K', geoscapeApiKey: 'G', fetchImpl: fetchImpl as never },
+    )
+    expect(r.reply).toMatch(/did you mean/i)
+    expect(r.reply).toContain('670 London Rd, Chandler QLD 4155')
+    // It is a CONFIRM, not a reject: the customer still says yes first, and
+    // the slots carry the register's address, not the typo.
+    expect(r.step).toBeUndefined()
+    expect(r.slots.address).toBe('670 London Rd, Chandler QLD 4155')
+    expect(r.slots.postcode).toBe('4155')
+  })
+
+  it('a suggestion that moves the street number is refused — different house', async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url)
+      if (u.includes('predictive/address')) {
+        return new Response(
+          JSON.stringify({ data: [{ address: '33 ARCHER ST, GUMDALE QLD 4154', addressId: 'X' }] }),
+          { status: 200 },
+        )
+      }
+      return new Response(JSON.stringify(googleBody({ formatted: 'Australia', nextAction: 'FIX' })), { status: 200 })
+    })
+    const r = await screenConfirmAddress(
+      { address: '223 Archer St, Chandler 4155' },
+      { apiKey: 'K', geoscapeApiKey: 'G', fetchImpl: fetchImpl as never },
+    )
+    expect(r.reply).not.toMatch(/did you mean/i)
+    expect(r.slots.address).toBeNull()
+  })
+
+  it('falls back to the re-ask when the register has no suggestion', async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes('predictive/address')) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 })
+      }
+      return new Response(JSON.stringify(googleBody({ formatted: 'Australia', nextAction: 'FIX' })), { status: 200 })
+    })
+    const r = await screenConfirmAddress(
+      { address: 'asdfgh qwerty' },
+      { apiKey: 'K', geoscapeApiKey: 'G', fetchImpl: fetchImpl as never },
+    )
+    expect(r.reply).toMatch(/can't find/i)
+    expect(r.step).toBe('address')
   })
 
   it('keeps the plain read-back untouched when the API is down', async () => {
