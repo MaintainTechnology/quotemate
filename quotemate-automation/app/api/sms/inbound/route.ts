@@ -653,13 +653,17 @@ async function handleRoofingTurn(args: {
     // or not-found addresses revise the slots/step/reply; an unavailable
     // API keeps the plain read-back.
     //
-    // Skipped when the LLM turn is NOT an address turn. holdStep keeps a
-    // question parked on confirm_address, and screenConfirmAddress returns a
-    // reply for EVERY successful verification — so it overwrote the answer
-    // with the address read-back. The customer heard the address question
-    // again while the tradie was told "we said you would come back to them".
-    const addressTurn = !turn || turn.tool === 'verify_address'
-    if (decision.step === 'confirm_address' && addressTurn) {
+    // Skipped only when the turn is ANSWERING something rather than asking
+    // for the address. screenConfirmAddress returns a reply for every
+    // successful verification, so on a deflect/answer turn parked at
+    // confirm_address it would overwrite the answer with the read-back.
+    //
+    // Any turn that actually ASKS confirm_address must screen it, whichever
+    // value the model picked: skipping it left the address unverified and
+    // unstamped, which is what let the confirm question repeat forever
+    // (live 2026-07-27).
+    const answeringTurn = turn?.tool === 'answer_business_question' || turn?.tool === 'deflect_and_notify'
+    if (decision.step === 'confirm_address' && !answeringTurn) {
       const screened = await screenConfirmAddress(decision.slots)
       askSlots = screened.slots
       if (screened.step) askStep = screened.step

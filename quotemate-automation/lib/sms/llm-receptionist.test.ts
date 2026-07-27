@@ -705,6 +705,62 @@ describe('roofingTurnViaLlm', () => {
     expect(r.decision.slots.material).toBe('cement_sheet')
   })
 
+  // Live 2026-07-27: "yes" three times to "Just to confirm, the property
+  // is ... Reply yes or no." got the identical question back each time.
+  // The model may pick ANY value at the confirm step and can copy the
+  // wording verbatim out of the history, so the loop is closed at the
+  // outcome, not at one tool.
+  describe('R4 the address confirm step can never loop on an affirmative', () => {
+    const AT_CONFIRM: RoofingConversationState = {
+      slots: { address: '670 London Rd, Chandler QLD 4155', postcode: '4155', state: 'QLD', address_confirmed: false },
+      last_step: 'confirm_address',
+    }
+
+    // Whatever the model picks, and whatever it writes.
+    for (const tool of ['ask_for_detail', 'verify_address', 'answer_business_question'] as const) {
+      it(`does not re-ask after "yes" when the model picks ${tool}`, async () => {
+        const { decide } = scripted({
+          tool,
+          reply_to_send: 'Just to confirm, the property is "670 London Rd, Chandler QLD 4155". Is that right? Reply yes or no.',
+        })
+        const r = await roofingTurnViaLlm({
+          prev: AT_CONFIRM, inbound: 'yes', history: history('yes'), facts: FACTS, decide,
+        })
+        expect(r.decision.slots.address_confirmed).toBe(true)
+        if (r.decision.action === 'ask') expect(r.decision.step).not.toBe('confirm_address')
+      })
+    }
+
+    it('accepts a natural affirmative, not just "yes"', async () => {
+      const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'Just to confirm...' })
+      const r = await roofingTurnViaLlm({
+        prev: AT_CONFIRM, inbound: 'Yes it is', history: history('Yes it is'), facts: FACTS, decide,
+      })
+      expect(r.decision.action === 'ask' && r.decision.step).not.toBe('confirm_address')
+    })
+
+    it('still re-asks on a NO — only an affirmative breaks the loop', async () => {
+      const { decide } = scripted({ tool: 'verify_address' })
+      const r = await roofingTurnViaLlm({
+        prev: AT_CONFIRM, inbound: 'no thats wrong', history: history('no thats wrong'), facts: FACTS, decide,
+      })
+      expect(r.decision.slots.address_confirmed).not.toBe(true)
+    })
+
+    it('the confirm read-back is the composer wording, never the model text', async () => {
+      const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'Some made up address question?' })
+      const r = await roofingTurnViaLlm({
+        prev: { slots: { address: '12 Smith Street Bondi NSW 2026' }, last_step: 'address' },
+        inbound: '12 Smith Street Bondi NSW 2026',
+        history: history('12 Smith Street Bondi NSW 2026'), facts: FACTS, decide,
+      })
+      if (r.decision.action === 'ask' && r.decision.step === 'confirm_address') {
+        expect(r.decision.reply).toContain('Just to confirm')
+        expect(r.decision.reply).not.toContain('Some made up')
+      }
+    })
+  })
+
   it('B5 a question on a MEASURED thread keeps the pending measurement alive', async () => {
     const { decide } = scripted({ tool: 'deflect_and_notify' })
     const r = await roofingTurnViaLlm({

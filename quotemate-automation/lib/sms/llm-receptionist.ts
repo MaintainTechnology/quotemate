@@ -1000,8 +1000,12 @@ export async function roofingTurnViaLlm(args: {
     fallback: () => advanceRoofing(args.prev, args.inbound),
     reask: () => ({ action: 'ask', slots: prevSlots, step: 'await_booking', reply: BOOKING_REASK }),
     map: (d, slots) =>
-      enforceRoofingReadiness(
-        mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
+      breakConfirmLoop(
+        enforceRoofingReadiness(
+          mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
+        ),
+        prevStep,
+        args.inbound,
       ),
   })
 
@@ -1042,6 +1046,42 @@ function enforceRoofingReadiness(d: RoofingTurnDecision | null): RoofingTurnDeci
   return d
 }
 
+/**
+ * An affirmative at the confirm step can NEVER re-ask the confirm step.
+ *
+ * Live 2026-07-27: the bot asked "Just to confirm, the property is ... Is
+ * that right? Reply yes or no." and the customer answered "yes" three
+ * times, getting the identical question back each time.
+ *
+ * The mechanism is that the model may pick ANY value here, not just
+ * verify_address, and it can copy the confirm wording verbatim out of the
+ * conversation history. On a non-verify_address turn the route skips
+ * screenConfirmAddress, so the model's copy goes out untouched and nothing
+ * ever advances the step — an unbounded loop with a live customer in it.
+ *
+ * This closes it at the outcome rather than at the cause: whatever the
+ * model chose and whatever it wrote, if we asked the confirm question last
+ * turn and the customer said yes, the address is confirmed and the flow
+ * moves on. The wording of the next question comes from the deterministic
+ * step, not the model.
+ */
+function breakConfirmLoop(
+  d: RoofingTurnDecision | null,
+  prevStep: RoofingStep | null,
+  inbound: string,
+): RoofingTurnDecision | null {
+  if (!d || d.action !== 'ask' || d.step !== 'confirm_address') return d
+  if (prevStep !== 'confirm_address') return d
+  if (!isAffirmative(inbound) || isNegative(inbound)) return d
+  const slots: RoofingSlots = { ...d.slots, address_confirmed: true }
+  const q = nextRoofingStep(slots)
+  if (q.step === 'ready') return { action: 'measure', slots }
+  if (q.step === 'inspection') {
+    return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
+  }
+  return { action: 'ask', slots, step: q.step, reply: q.question ?? d.reply }
+}
+
 function mapRoofingTool(
   d: LlmTurnDecision,
   slots: RoofingSlots,
@@ -1076,6 +1116,18 @@ function mapRoofingTool(
       if (q.step === 'ready') return { action: 'measure', slots }
       if (q.step === 'inspection') {
         return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
+      }
+      // The confirm read-back is NEVER the model's to write. Its wording is
+      // the composer's, and the route only runs the map check (and only
+      // stamps addr_verified) on a verify_address turn — so a model-authored
+      // copy of it goes out with nothing behind it. Route it properly.
+      if (q.step === 'confirm_address') {
+        return {
+          action: 'ask',
+          slots,
+          step: 'confirm_address',
+          reply: confirmAddressQuestion(slots.address ?? '', false),
+        }
       }
       return { action: 'ask', slots, step: q.step, reply: d.reply_to_send }
     }
