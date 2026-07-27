@@ -580,7 +580,7 @@ async function handleRoofingTurn(args: {
         betterIncGst,
         quoteUrl,
         question,
-        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
+        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie', tenantId }),
       })
     } catch (e) {
       console.warn('[sms/inbound:roofing] tradie notify failed (non-fatal)', e)
@@ -1108,7 +1108,7 @@ async function handlePaintingTurn(args: {
         betterIncGst: null,
         quoteUrl: `${baseUrl}/dashboard`,
         question,
-        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
+        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie', tenantId }),
       })
     } catch (e) {
       console.warn('[sms/inbound:painting] unanswered-question notify failed (non-fatal)', e)

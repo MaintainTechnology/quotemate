@@ -20,6 +20,7 @@
 
 import { sendSms, sendWhatsApp, type TwilioSendResult } from './twilio'
 import { isRetryableSendError } from './send-reliability'
+import { recordTradieSend } from './tradie-log'
 
 export type DispatchOk = {
   ok: true
@@ -137,7 +138,31 @@ async function sendSmsWithRetry(opts: {
   return { result: last!, attempts }
 }
 
-export async function dispatchQuoteMessage(opts: {
+/**
+ * Send, then record it when the recipient is the tradie.
+ *
+ * A thin wrapper rather than a line at each of the four return points inside:
+ * one place means no send path can be added later that quietly skips the
+ * audit. Recording is best-effort and never changes the result — see
+ * lib/sms/tradie-log.ts.
+ */
+export async function dispatchQuoteMessage(
+  opts: Parameters<typeof sendQuoteMessage>[0],
+): Promise<DispatchResult> {
+  const result = await sendQuoteMessage(opts)
+  if (opts.audience === 'tradie') {
+    await recordTradieSend({
+      to: opts.to,
+      body: opts.text,
+      ok: result.ok,
+      sid: result.ok ? result.sid : null,
+      tenantId: opts.tenantId ?? null,
+    }).catch(() => {})
+  }
+  return result
+}
+
+async function sendQuoteMessage(opts: {
   to: string
   text: string
   /** Optional SMS sender override. Defaults to TWILIO_PHONE_NUMBER (voice
@@ -157,6 +182,9 @@ export async function dispatchQuoteMessage(opts: {
    *  losing that notification to an SMS reject is the exact failure
    *  b4ccea5f added the fallback to prevent. */
   audience?: 'customer' | 'tradie'
+  /** Stamped on the audit row for an audience:'tradie' send, so alerts can be
+   *  read back per tenant. Optional — the row is still written without it. */
+  tenantId?: string | null
 }): Promise<DispatchResult> {
   let mediaDropped = false
   let attempt = await sendSmsWithRetry({

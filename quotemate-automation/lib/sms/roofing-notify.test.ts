@@ -54,6 +54,109 @@ describe('buildRoofingTradieNotification', () => {
   })
 })
 
+// ── booking_confirmed — the customer picked a time ──────────────────
+//
+// Live 2026-07-27: token ff6f67ce… took a $69,652 quote, a paid deposit and a
+// Fri 31 Jul 12:00pm slot, and Jeph heard nothing. The quotes funnel has done
+// this since lib/quote/booking-notify.ts; the roofing/painting funnel was
+// built in parallel and this half was never ported.
+describe('buildRoofingTradieNotification — booking_confirmed', () => {
+  const BOOKED = {
+    kind: 'booking_confirmed' as const,
+    tradieFirstName: 'Jeph',
+    customerName: null,
+    customerPhone: '+61480808517',
+    address: '670 London Rd, Chandler QLD 4155',
+    betterIncGst: 69652,
+    quoteUrl: 'https://www.quotemax.com.au/q/roof/ff6f67ce',
+    scheduledAt: '2026-07-31T02:00:00.000Z',
+    timeZone: 'Australia/Brisbane',
+  }
+
+  it('AC1 renders the slot, the served price and the property', () => {
+    expect(buildRoofingTradieNotification(BOOKED)).toBe(
+      'Hi Jeph - roofing job BOOKED via SMS for Fri, 31 July, 12:00pm.\n' +
+        'Customer: +61480808517\n' +
+        'Property: 670 London Rd, Chandler QLD 4155\n' +
+        'Quoted: $69,652 inc GST (deposit paid)\n' +
+        'Details: https://www.quotemax.com.au/q/roof/ff6f67ce',
+    )
+  })
+
+  it('AC2 tradeLabel swaps the trade word so painting reuses the module', () => {
+    const text = buildRoofingTradieNotification({ ...BOOKED, tradeLabel: 'painting' })
+    expect(text).toContain('painting job BOOKED')
+    expect(text).not.toContain('roofing')
+  })
+
+  it('AC3 renders in the tenant timezone — Perth reads 10:00am, not 12:00pm', () => {
+    const text = buildRoofingTradieNotification({ ...BOOKED, timeZone: 'Australia/Perth' })
+    expect(text).toContain('Fri, 31 July, 10:00am')
+  })
+
+  it('AC1 a named customer shows name and number, like the other kinds', () => {
+    expect(buildRoofingTradieNotification({ ...BOOKED, customerName: 'Sam' })).toContain(
+      'Customer: Sam (+61480808517)',
+    )
+  })
+
+  it('AC1 an unpriced booking omits the Quoted line rather than saying $0', () => {
+    const text = buildRoofingTradieNotification({ ...BOOKED, betterIncGst: null })
+    expect(text).not.toContain('Quoted:')
+    expect(text).not.toContain('$')
+    expect(text).toContain('BOOKED via SMS for Fri, 31 July, 12:00pm')
+  })
+})
+
+// AC2 — the three shipped kinds must not shift by a byte while a fourth is
+// added beside them. These are the exact strings production sends today.
+describe('AC2 existing kinds are byte-identical', () => {
+  const BASE = {
+    tradieFirstName: 'Jeph',
+    customerName: null,
+    customerPhone: '+61480808517',
+    address: '670 London Rd, Chandler QLD 4155',
+    quoteUrl: 'https://www.quotemax.com.au/q/roof/ff6f67ce',
+  }
+
+  it('quote_sent', () => {
+    expect(buildRoofingTradieNotification({ ...BASE, kind: 'quote_sent', betterIncGst: 69652 })).toBe(
+      'Hi Jeph - roofing quote sent via SMS at $69,652 inc GST.\n' +
+        'Customer: +61480808517\n' +
+        'Property: 670 London Rd, Chandler QLD 4155\n' +
+        'Review: https://www.quotemax.com.au/q/roof/ff6f67ce',
+    )
+  })
+
+  it('inspection_booked', () => {
+    expect(
+      buildRoofingTradieNotification({ ...BASE, kind: 'inspection_booked', betterIncGst: null }),
+    ).toBe(
+      'Hi Jeph - new roofing INSPECTION booked via SMS.\n' +
+        'Customer: +61480808517\n' +
+        'Property: 670 London Rd, Chandler QLD 4155\n' +
+        'Details: https://www.quotemax.com.au/q/roof/ff6f67ce\n' +
+        'Reply to the customer to lock in a time.',
+    )
+  })
+
+  it('question_asked', () => {
+    expect(
+      buildRoofingTradieNotification({
+        ...BASE,
+        kind: 'question_asked',
+        betterIncGst: null,
+        question: 'do you blokes work Saturdays?',
+      }),
+    ).toBe(
+      'Hi Jeph - a customer asked something the SMS receptionist could not answer.\n' +
+        'Customer: +61480808517\n' +
+        'They asked: do you blokes work Saturdays?\n' +
+        'We told them you would come back to them.',
+    )
+  })
+})
+
 describe('notifyRoofingTradie', () => {
   const args = (over: Record<string, unknown> = {}) => ({
     kind: 'quote_sent' as const,
@@ -104,5 +207,55 @@ describe('notifyRoofingTradie', () => {
     })
     expect(r.notified).toBe(false)
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  // AC6 — the guard above is correct in production and made the whole feature
+  // untestable from the owner handset: Sparky's owner_mobile IS the number
+  // used to test, so every alert vanished with no log line. Escape hatch, off
+  // by default, plus a reason on both suppression paths.
+  it('AC6 TRADIE_NOTIFY_SELF_TEST=1 lets the tradie test from their own handset', async () => {
+    process.env.TRADIE_NOTIFY_SELF_TEST = '1'
+    const dispatch = vi.fn(async () => ({ ok: true }))
+    const r = await notifyRoofingTradie({
+      ...args({ customerPhone: TENANT.owner_mobile }),
+      dispatch,
+    })
+    expect(r.notified).toBe(true)
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ to: TENANT.owner_mobile }),
+    )
+  })
+
+  it('AC6 the escape is OFF unless explicitly set to 1', async () => {
+    for (const v of ['0', 'false', '', 'no']) {
+      process.env.TRADIE_NOTIFY_SELF_TEST = v
+      const dispatch = vi.fn(async () => ({ ok: true }))
+      const r = await notifyRoofingTradie({
+        ...args({ customerPhone: TENANT.owner_mobile }),
+        dispatch,
+      })
+      expect(r.notified, `TRADIE_NOTIFY_SELF_TEST=${JSON.stringify(v)}`).toBe(false)
+    }
+  })
+
+  it('AC6 a suppressed notify says WHY instead of returning silently', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    delete process.env.TRADIE_NOTIFY_SELF_TEST
+
+    await notifyRoofingTradie({
+      ...args({ customerPhone: TENANT.owner_mobile }),
+      dispatch: vi.fn(async () => ({ ok: true })),
+    })
+    expect(warn.mock.calls.flat().join(' ')).toMatch(/self-test|own handset|same number/i)
+
+    warn.mockClear()
+    delete process.env.TRADIE_NOTIFY_NUMBER
+    await notifyRoofingTradie({
+      ...args({ tenant: { ...TENANT, owner_mobile: null } }),
+      dispatch: vi.fn(async () => ({ ok: true })),
+    })
+    expect(warn.mock.calls.flat().join(' ')).toMatch(/no notify number|owner_mobile/i)
+
+    warn.mockRestore()
   })
 })

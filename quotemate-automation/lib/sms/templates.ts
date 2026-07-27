@@ -568,7 +568,10 @@ export function buildConversationFollowup2hSms(opts: {
 // Format an ISO timestamp as a short AU label, e.g. "Thu 7 May, 9:00am".
 // Renders in the tenant's timezone when given (slots are generated in it —
 // a Sydney-fixed echo shows a WA evening slot as the next day). ASCII for GSM-7.
-function fmtSlotShort(iso: string, timeZone = 'Australia/Sydney'): string {
+// Exported so the roofing/painting tradie booking alert formats the slot with
+// the SAME function as the customer confirmation — two formatters would let
+// the two SMSes name different days for one slot.
+export function fmtSlotShort(iso: string, timeZone = 'Australia/Sydney'): string {
   try {
     const d = new Date(iso)
     return d
