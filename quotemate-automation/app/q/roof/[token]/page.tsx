@@ -183,7 +183,7 @@ export default async function RoofingQuotePage({
   /** slots=0 — set by /r/roof when it REFUSED to charge because the roofer has
    *  published no bookable windows. Renders NoSlotsNotice so the refusal isn't
    *  silent (the customer would otherwise just tap Pay again). */
-  searchParams: Promise<{ s?: string | string[]; full?: string; slots?: string }>
+  searchParams: Promise<{ s?: string | string[]; full?: string; slots?: string; pick?: string }>
 }) {
   const { token } = await params
   if (!token || token.length < 8) notFound()
@@ -262,7 +262,18 @@ export default async function RoofingQuotePage({
   const allStructures: RoofStructurePrice[] = Array.isArray(fullQuote?.structures) ? fullQuote!.structures : []
 
   // Confirm gate — prices show only after the customer confirms over SMS.
-  const confirmed = row.confirmed_at != null
+  //
+  // `?pick=1` forces the pre-confirm view. That link is what the "See them
+  // here too" line in the confirm SMS points at, and its job is to show the
+  // measured buildings so the customer can choose one. Without it the SAME
+  // url flips to the narrowed priced page the moment they reply, so
+  // re-opening that message showed a single building and no picker — which
+  // is not what the message is offering (reported 2026-07-27).
+  //
+  // Read-only and additive: it changes nothing about the pricing, and
+  // included_indices stays the authoritative record of what was quoted.
+  const forcePicker = sp.pick === '1'
+  const confirmed = row.confirmed_at != null && !forcePicker
 
   // AI layout plan (spec quote-visual-parity R6e) — READ-ONLY here: the
   // customer page renders the cached plan and never triggers generation.

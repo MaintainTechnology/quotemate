@@ -216,13 +216,32 @@ export function shouldSendRoofInspectionMessage(quote: MultiRoofQuote): boolean 
  * one, with "none" handled by a NO reply. Always links the page so they
  * can see the roof(s).
  */
+/**
+ * The confirm SMS links to the PICKER view, not the plain quote url.
+ *
+ * Both are the same page. Without `?pick=1` it flips to the narrowed priced
+ * view the moment the customer replies, so re-opening this message showed
+ * one building and no way to choose — while the message itself is still
+ * offering "reply YES for all of them, or the number for just one"
+ * (reported 2026-07-27). The quote SMS keeps the plain url.
+ *
+ * Link only. Nothing here touches a price: included_indices remains the
+ * authoritative record of what was actually quoted.
+ */
+function pickerUrl(quoteUrl: string): string {
+  if (!quoteUrl) return quoteUrl
+  if (/[?&]pick=/.test(quoteUrl)) return quoteUrl
+  return `${quoteUrl}${quoteUrl.includes('?') ? '&' : '?'}pick=1`
+}
+
 export function composeConfirmMessage(ctx: RoofingReplyContext): string {
   const structures = ctx.quote.structures
+  const url = pickerUrl(ctx.quoteUrl)
   if (structures.length <= 1) {
     return [
       `${greeting(ctx.firstName)}is this your roof at ${ctx.address}?`,
       `I've sent you a photo to check. Reply YES and I'll send your quote, or NO if it's the wrong building.`,
-      `See it here too: ${ctx.quoteUrl}`,
+      `See it here too: ${url}`,
     ].join('\n')
   }
   const list = structures.map((s, i) => {
@@ -233,7 +252,7 @@ export function composeConfirmMessage(ctx: RoofingReplyContext): string {
     `${greeting(ctx.firstName)}I found ${structures.length} buildings at ${ctx.address} (I've sent photos to check):`,
     ...list,
     `Reply YES to quote all of them, the number for just one, or NO if none are right.`,
-    `See them here too: ${ctx.quoteUrl}`,
+    `See them here too: ${url}`,
   ].join('\n')
 }
 

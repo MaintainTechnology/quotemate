@@ -246,6 +246,33 @@ describe('composeConfirmMessage', () => {
     expect(msg).toMatch(/number for just one/i)
     expect(msg).not.toMatch(/\$\d/)
   })
+
+  // 2026-07-27 — the link in this message must land on the PICKER, not the
+  // narrowed priced page. Same page, same token: without ?pick=1 it flips
+  // to a single priced building the moment the customer replies, so
+  // re-opening the message showed one building while the message was still
+  // offering "YES for all of them, or the number for just one".
+  it('links to the picker view, not the plain quote url', () => {
+    for (const structures of [[house], [house, shed]]) {
+      const msg = composeConfirmMessage({ ...CTX, quote: priceMultiRoof({ structures }) })
+      expect(msg).toContain(`${CTX.quoteUrl}?pick=1`)
+    }
+  })
+
+  it('adds the picker param exactly once, and keeps an existing query string', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    const already = composeConfirmMessage({ ...CTX, quote, quoteUrl: `${CTX.quoteUrl}?pick=1` })
+    expect(already.match(/pick=1/g)).toHaveLength(1)
+    const withQuery = composeConfirmMessage({ ...CTX, quote, quoteUrl: `${CTX.quoteUrl}?s=2` })
+    expect(withQuery).toContain(`${CTX.quoteUrl}?s=2&pick=1`)
+  })
+
+  it('the PRICED send keeps the plain url — only the confirm step picks', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    const priced = buildRoofingReplyMessage({ ...CTX, quote })
+    expect(priced).toContain(CTX.quoteUrl)
+    expect(priced).not.toContain('pick=1')
+  })
 })
 
 describe('buildRoofPhotoMedia (best-effort MMS attachments)', () => {
