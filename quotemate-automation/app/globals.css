@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
 /* ════════════════════════════════════════════════════════════════════
-   Maintain Technology brand tokens.
-   Source of truth: .claude/skills/maintain-design-system/SKILL.md
-   When editing, update the SKILL doc too so future agents stay aligned.
+   QuoteMax brand tokens.
+   Source of truth: DESIGN.md at the repo root (+ .impeccable/design.json).
+   When editing, update DESIGN.md too so future agents stay aligned.
+
+   ⚠ The old pointer here was .claude/skills/maintain-design-system/SKILL.md.
+   That skill and its navy/orange "Maintain" identity are DEPRECATED — see
+   CLAUDE.md "Design Context". Do not reintroduce either.
    ════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -46,6 +50,20 @@
   --noise-opacity: 0.045;                     /* film-grain strength */
   --canvas-radial: #2B2422;                   /* dashboard app-canvas glow */
   --logo-mono-invert: 1;   /* dark canvas: flip black logo artwork to bone */
+  /* Brand mark two-tone. One set of paths serves both supplied colourways —
+     the files differ only in these two fills:
+       dark  = quote-max-logo-5.svg (white body, gold #E3C13C notch)
+       light = quote-max-logo-4.svg (charcoal #16120F body, same gold notch)
+     Gold is the source art's #E3C13C, not --accent (#FFC400), so the mark is
+     the asset rather than a recolour of it — which does leave it a shade
+     duller than the yellow CTAs beside it.
+     ⚠ logo-5's body path is not quite logo-4's: its M right stem runs to
+     y=212 instead of y=214, two units ABOVE the cropped viewBox in
+     BrandMark.tsx. The inlined geometry is logo-4's for that reason — adopting
+     logo-5's would clip that stem flat unless the viewBox grows to
+     "151 212 397 272". Two units of 699 is ~0.36px at nav size. */
+  --logo-body:  #FFFFFF;
+  --logo-notch: #E3C13C;
   /* Hero backdrop photo. Lower on charcoal — a bright photo LIFTS a
      near-black canvas fast, where on paper it has to darken to register.
      These are the PEAK values, reached across the right of the hero
@@ -97,6 +115,8 @@
     --noise-opacity: 0.03;
     --canvas-radial: rgba(255, 248, 235, 0.85);
     --logo-mono-invert: 0; /* paper canvas: black logo artwork stays black */
+    --logo-body: #16120F;          /* quote-max-logo-4: charcoal body … */
+    --logo-notch: #E3C13C;         /* … gold notch (source value, not --accent) */
     --hero-photo-opacity: 0.7;
   }
 }
@@ -126,6 +146,8 @@
   --noise-opacity: 0.03;
   --canvas-radial: rgba(255, 248, 235, 0.85);
   --logo-mono-invert: 0; /* paper canvas: black logo artwork stays black */
+  --logo-body: #16120F;          /* quote-max-logo-4: charcoal body … */
+  --logo-notch: #E3C13C;         /* … gold notch (source value, not --accent) */
   --hero-photo-opacity: 0.92;
 }
 
@@ -232,6 +254,14 @@ body {
 @keyframes boot-breathe {
   0%, 100% { opacity: 0.3; }
   50%      { opacity: 1; }
+}
+/* Indeterminate progress sweep under the lockup — the visual that carries the
+   "still working" signal now that the banner has no "Loading dashboard" label.
+   The bar is a third of its track, so -100%→300% enters and exits fully.
+   motion-safe only: with reduced motion it parks as a static accent rule. */
+@keyframes boot-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }
 
 /* Soft breathe — used on the live account-status indicator in the

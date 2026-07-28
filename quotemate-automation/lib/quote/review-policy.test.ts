@@ -277,6 +277,46 @@ describe('shouldHoldForReview — quote integrity flags', () => {
     expect(r.reason).toBe('inspection_route_bypasses_gate')
   })
 
+  // ── tradieDrafted (dashboard job quoter) ──────────────────────────
+  // A portal draft has no customer waiting on a reply, so nothing may go
+  // out until the tradie presses Send. This must beat EVERY other rule.
+  it('holds a tradie-drafted quote under auto_send policy', () => {
+    const r = shouldHoldForReview({ policy: 'auto_send', totalIncGst: 250, tradieDrafted: true })
+    expect(r.hold).toBe(true)
+    expect(r.reason).toBe('tradie_drafted_in_portal')
+  })
+
+  it('holds a tradie-drafted quote even when it routes to inspection', () => {
+    // Without this the $99 inspection bypass would text the customer a
+    // booking link the tradie never approved.
+    const r = shouldHoldForReview({
+      policy: 'auto_send',
+      totalIncGst: 99,
+      isInspection: true,
+      tradieDrafted: true,
+    })
+    expect(r.hold).toBe(true)
+    expect(r.reason).toBe('tradie_drafted_in_portal')
+  })
+
+  it('holds a tradie-drafted quote under review_over_threshold below the threshold', () => {
+    const r = shouldHoldForReview({
+      policy: 'review_over_threshold',
+      threshold: 5000,
+      totalIncGst: 200,
+      tradieDrafted: true,
+    })
+    expect(r.hold).toBe(true)
+    expect(r.reason).toBe('tradie_drafted_in_portal')
+  })
+
+  it('leaves inbound (non-portal) quotes untouched when the flag is absent or false', () => {
+    expect(shouldHoldForReview({ policy: 'auto_send', totalIncGst: 250 }).hold).toBe(false)
+    expect(
+      shouldHoldForReview({ policy: 'auto_send', totalIncGst: 250, tradieDrafted: false }).hold,
+    ).toBe(false)
+  })
+
   it('extracts multiple safety reasons deterministically', () => {
     expect(safetyReviewReasons([
       '[reconcile] good: headline quantity 4 != item_count 6 - confirm before sending',

@@ -132,7 +132,9 @@ export default async function PaintThanksPage(props: {
   const tz = tzForState(identity?.state ?? (row.state as string | null) ?? null)
   // Video + the script it speaks, resolved together so the captions always
   // belong to the film that is actually playing.
-  const thankyouVideo = trustVideoTrack(identity, 'thankyou')
+  // The trade argument is required for the dashboard-generated clip to resolve
+  // at all — see the note at app/q/roof/[token]/page.tsx.
+  const thankyouVideo = trustVideoTrack(identity, 'thankyou', 'painting')
   const placeLabel = [row.address, row.state].filter(Boolean).join(', ') || null
   // scheduledAt is non-null here — thanksPageTarget only returns 'render' with
   // both a payment and a slot.

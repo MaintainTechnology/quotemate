@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<title>QuoteMax — LinkedIn banner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --canvas:#16120F; --accent:#FFC400; --accent-ink:#1C1812;
+    --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A; --hairline:#3A322C;
+    --ridge:url("img/ridge.jpg");
+    --scrim:22,18,15;          /* the canvas, as rgb parts, for every scrim */
+    --ridge-filter:saturate(.94) contrast(1.06) brightness(1.14);
+    /* the mark is quote-max-logo-4.svg: charcoal glyph + gold flourish.
+       On charcoal that first path would vanish, so dark flips it to cream. */
+    --mark-1:#F6F1EA; --mark-2:#FFC400;
+  }
+  /* Warm paper. Yellow cannot carry as TEXT on cream, so the accent line flips to
+     dark ink on a yellow fill — the brand's one hard contrast rule, kept. */
+  [data-theme="light"]{
+    --canvas:#FAF8F4;
+    --text-pri:#241E1B; --text-sec:#4A423C; --text-dim:#6B6058; --hairline:#E2DBD1;
+    --ridge:url("img/ridge-light.jpg");
+    --scrim:250,248,244;
+    --ridge-filter:saturate(1.5) contrast(1.22) brightness(.97);
+    --mark-1:#16120F; --mark-2:#E3C13C;   /* exactly as supplied */
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;background:var(--canvas);overflow:hidden}
+
+  .frame{
+    position:relative;width:100vw;height:100vh;overflow:hidden;
+    background:var(--canvas);
+    /* Everything scales off frame height so one file serves every banner size.
+       The vw term is a width cap: the profile format is proportionally narrower
+       than the company cover, and without it the headline runs into the margin. */
+    --u:1vh;
+    --display:min(19.5vh, 4.4vw);   /* display line size */
+    --mono:min(5.6vh, 1.32vw);      /* mono label size */
+    --pad-x:4.2vw; --pad-y:9vh;
+  }
+
+  /* ── the ridge ─────────────────────────────────────────────── */
+  /* Squashed vertically on purpose: a banner is far wider than the source, and
+     compressing the terrain reads as a distant range rather than one lone spike. */
+  .ridge{
+    position:absolute;inset:0;
+    background-image:var(--ridge);
+    background-repeat:no-repeat;
+    background-size:100% 190%;
+    background-position:center 30%;
+    filter:var(--ridge-filter);
+  }
+  /* horizontal scrim: left column stays flat canvas (LinkedIn overlays the logo there) */
+  .scrim-x{position:absolute;inset:0;background:
+    linear-gradient(90deg,
+      var(--canvas) 0%,
+      rgba(var(--scrim),.88) 13%,
+      rgba(var(--scrim),.52) 28%,
+      rgba(var(--scrim),.24) 52%,
+      rgba(var(--scrim),.20) 80%,
+      rgba(var(--scrim),.42) 100%);}
+  /* vertical scrim: settles the top for the eyebrow and the foot for the meta line */
+  .scrim-y{position:absolute;inset:0;background:
+    linear-gradient(180deg,
+      rgba(var(--scrim),.74) 0%,
+      rgba(var(--scrim),.16) 44%,
+      rgba(var(--scrim),.22) 70%,
+      rgba(var(--scrim),.72) 100%);}
+  /* a soft plate behind the copy only, so the type holds AA over the mesh */
+  .plate{position:absolute;inset:0;background:
+    radial-gradient(58% 120% at 61% 48%, rgba(var(--scrim),.68) 0%, rgba(var(--scrim),.40) 55%, rgba(var(--scrim),0) 100%);}
+
+  /* The light source is pale gold on near-white, so the dark theme's scrim weights
+     erase it. Ink type also needs far less help than cream type does. */
+  [data-theme="light"] .scrim-x{background:
+    linear-gradient(90deg,
+      var(--canvas) 0%,
+      rgba(var(--scrim),.80) 10%,
+      rgba(var(--scrim),.38) 24%,
+      rgba(var(--scrim),.08) 48%,
+      rgba(var(--scrim),.04) 80%,
+      rgba(var(--scrim),.20) 100%);}
+  [data-theme="light"] .scrim-y{background:
+    linear-gradient(180deg,
+      rgba(var(--scrim),.52) 0%,
+      rgba(var(--scrim),.04) 44%,
+      rgba(var(--scrim),.06) 70%,
+      rgba(var(--scrim),.46) 100%);}
+  [data-theme="light"] .plate{background:
+    radial-gradient(58% 120% at 61% 48%, rgba(var(--scrim),.30) 0%, rgba(var(--scrim),.14) 55%, rgba(var(--scrim),0) 100%);}
+  /* one warm ember, top right — the brand's only glow */
+  .ember{position:absolute;inset:0;background:
+    radial-gradient(120% 180% at 78% -30%, rgba(255,196,0,.16) 0%, rgba(255,196,0,0) 62%);}
+  [data-theme="light"] .ember{background:
+    radial-gradient(120% 180% at 78% -30%, rgba(255,196,0,.20) 0%, rgba(255,196,0,0) 58%);}
+  .grain{position:absolute;inset:0;mix-blend-mode:soft-light;opacity:.30;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+  /* ── content ───────────────────────────────────────────────── */
+  .stage{
+    position:absolute;inset:0;display:grid;
+    /* left column is the LinkedIn logo / avatar safe zone; text centres in the right column */
+    grid-template-columns:22% 1fr;
+    align-items:center;
+  }
+  .block{
+    grid-column:2;text-align:center;
+    padding-right:var(--pad-x);
+    display:flex;flex-direction:column;align-items:center;
+    gap:calc(var(--u) * 5.5);
+  }
+
+  h1{
+    font-family:Manrope,sans-serif;font-weight:800;text-transform:uppercase;
+    font-size:var(--display);line-height:1.02;letter-spacing:-.035em;
+    color:var(--text-pri);text-wrap:balance;
+  }
+  h1 .hi{color:var(--accent)}
+  h1 .l2{display:block}
+  /* light: the accent becomes a FILL and the type sits on it in ink — never yellow on cream */
+  [data-theme="light"] h1{line-height:1.16}
+  [data-theme="light"] h1 .hi{
+    color:var(--accent-ink);background:var(--accent);
+    padding:0 .16em;box-decoration-break:clone;-webkit-box-decoration-break:clone;
+  }
+
+  /* bottom-right lockup */
+  .mark{
+    position:absolute;right:var(--pad-x);bottom:calc(var(--u) * 11);
+    display:flex;align-items:center;gap:calc(var(--u) * 3);
+    font-family:'JetBrains Mono',monospace;font-weight:500;
+    font-size:calc(var(--mono) * .92);letter-spacing:.15em;text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .mark svg{height:calc(var(--u) * 11);width:auto;display:block}
+  .mark .g1{fill:var(--mark-1)}
+  .mark .g2{fill:var(--mark-2)}
+  .mark span{padding-bottom:calc(var(--u) * .4)}
+
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="ridge"></div>
+  <div class="scrim-x"></div>
+  <div class="scrim-y"></div>
+  <div class="plate"></div>
+  <div class="ember"></div>
+  <div class="grain"></div>
+
+  <div class="stage">
+    <div class="block">
+      <h1 id="headline"></h1>
+    </div>
+  </div>
+
+  <div class="mark">
+    <svg viewBox="0 0 699 699" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path class="g1" d="M324 214C324 214 280.454 210.115 253 214C246.325 214.945 236 217 236 217C236 217 225.42 220.111 219 223C211.182 226.519 206.972 229.01 200 234C195.71 237.071 193.283 238.823 189.5 242.5C188.906 243.077 188.582 243.411 188 244C182.165 249.906 178.83 253.247 174 260C171.7 263.216 170.56 265.125 168.5 268.5L168.44 268.598C167.884 269.509 167.554 270.05 167 271C160.826 281.588 155 300 155 300C155 300 151.645 314.52 151 324C150.55 330.624 150.562 334.376 151 341C151.733 352.083 152.738 358.382 156 369C159.132 379.196 161.526 384.845 167 394C169.168 397.626 170.499 399.596 173 403C180.032 412.572 184.727 417.579 194 425C198.821 428.858 201.701 430.831 207 434C207 434 216.522 439.385 223 442C232.751 445.936 238.598 447.461 249 449C262.135 450.943 269.869 450.967 283 449C288.53 448.172 291.606 447.471 297 446C302.5 444.5 304 444 312 439L271 398C271 398 262.432 398.623 257 398C253.043 397.546 250.827 397.103 247 396C241.284 394.353 238.185 392.914 233 390C229.318 387.93 227.278 386.665 224 384C217.985 379.11 215.113 375.57 211 369C206.728 362.176 205.043 357.787 203 350C201.892 345.777 201.41 343.347 201 339C200.303 331.603 200.717 327.319 202 320C203.195 313.184 204.167 309.314 207 303C209.221 298.05 210.795 295.377 214 291C217.104 286.761 219.069 284.486 223 281C229.164 275.534 233.376 273.121 241 270C246.262 267.846 249.4 266.985 255 266C260.782 264.983 264.133 264.785 270 265C279.567 265.351 286.571 266.461 295 271C301.5 274.5 319 289.455 324 294C364.55 330.864 419 384 419 384L492 314H494V450H548V214H513L466.5 258.5L420 303H418L371 258.5L324 214Z"/>
+      <path class="g2" d="M373 362L329 319L329.269 325.462C329.753 337.065 328.211 348.664 324.714 359.738L324 362L300 338L282.5 355L264.5 372.5L376 484L411 450L359 398L361.406 393.723C365.782 385.943 369.097 377.611 371.262 368.951L373 362Z"/>
+    </svg>
+    <span>quotemax.com.au</span>
+  </div>
+
+</div>
+
+<script>
+  // Variants. `{curly}` renders in the accent. Selected with ?slide=N (0-based) so the
+  // bundled skill renderer (scripts/render.mjs) drives it unchanged.
+  const VARIANTS = [
+    { kind: 'banner',
+      l1: 'The quoting engine behind',
+      l2: '{Australia’s busiest trades}' },
+
+    { kind: 'banner',
+      l1: 'The AI receptionist behind',
+      l2: '{Australia’s fastest quotes}' },
+
+    { kind: 'banner',
+      l1: 'Quoted before',
+      l2: '{they hang up}' },
+
+    { kind: 'banner', theme: 'light',
+      l1: 'The quoting engine behind',
+      l2: '{Australia’s busiest trades}' },
+
+    { kind: 'banner', theme: 'light',
+      l1: 'The AI receptionist behind',
+      l2: '{Australia’s fastest quotes}' },
+
+    { kind: 'banner', theme: 'light',
+      l1: 'Quoted before',
+      l2: '{they hang up}' },
+  ]
+
+  const accent = (s) => s.replace(/\{([^}]+)\}/g, '<span class="hi">$1</span>')
+  const n = Number(new URLSearchParams(location.search).get('slide') || 0)
+  const v = VARIANTS[n] || VARIANTS[0]
+
+  if (v.theme) document.documentElement.dataset.theme = v.theme
+
+  document.getElementById('headline').innerHTML =
+    `${accent(v.l1)}<span class="l2">${accent(v.l2)}</span>`
+</script>
+</body>
+</html>

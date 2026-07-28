@@ -14,6 +14,13 @@
 // All three states share the same numbered card chrome so a returning
 // customer always sees "02 · Photos" — never the disorienting jump from
 // 01 to 03 that the old conditional-render had.
+//
+// `nested` (five-section layout): the block is a SUB-BLOCK of the numbered
+// "Overview" section rather than a numbered card of its own, so it drops the
+// hard-coded "02", the card border and the outer padding, and demotes its
+// heading to a sub-heading. The three states, the upload flow and the copy are
+// untouched — only the chrome around them differs, so there is one component
+// and one behaviour for both layouts.
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -27,9 +34,12 @@ type Phase = 'idle' | 'uploading' | 'generating' | 'error'
 export function CustomerPhotosBlock({
   urls,
   uploadToken,
+  nested = false,
 }: {
   urls: string[]
   uploadToken: string | null
+  /** Render as a sub-block of the numbered Overview section (no own "02"). */
+  nested?: boolean
 }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -83,6 +93,47 @@ export function CustomerPhotosBlock({
     }
   }
 
+  const heading = hasPhotos ? 'Photos you sent' : 'Photos for your quote'
+  const receivedBadge = hasPhotos ? (
+    <span className="inline-flex items-center gap-1.5 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-success">
+      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+      Received
+    </span>
+  ) : null
+  const blurb = hasPhotos
+    ? 'Your tradie reviewed these to draft the quote below. Tap any photo to view full-size.'
+    : 'No photos uploaded yet. Add one or two so your tradie can sense-check the job and your tier preview can render.'
+
+  const body = hasPhotos ? (
+    <PhotoGrid urls={urls} />
+  ) : (
+    <EmptyState
+      phase={phase}
+      errorMessage={errorMessage}
+      canUpload={canUpload}
+      uploadToken={uploadToken}
+      inputRef={inputRef}
+      onPickClick={() => inputRef.current?.click()}
+      onFiles={handleFiles}
+    />
+  )
+
+  // Five-section layout: a sub-block inside the numbered Overview card.
+  if (nested) {
+    return (
+      <div>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h3 className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] text-text-pri">
+            {heading}
+          </h3>
+          {receivedBadge}
+        </div>
+        <p className="mt-1.5 text-sm text-text-sec">{blurb}</p>
+        <div className="mt-4">{body}</div>
+      </div>
+    )
+  }
+
   return (
     <section className="border border-ink-line bg-ink-card p-6 sm:p-8">
       {/* Header — numbered card chrome, always visible */}
@@ -93,39 +144,16 @@ export function CustomerPhotosBlock({
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-text-pri font-extrabold uppercase tracking-tight text-base sm:text-lg">
-              {hasPhotos ? 'Photos you sent' : 'Photos for your quote'}
+              {heading}
             </h2>
-            {hasPhotos ? (
-              <span className="inline-flex items-center gap-1.5 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-                Received
-              </span>
-            ) : null}
+            {receivedBadge}
           </div>
-          <p className="mt-1.5 text-sm text-text-sec sm:text-base">
-            {hasPhotos
-              ? 'Your tradie reviewed these to draft the quote below. Tap any photo to view full-size.'
-              : 'No photos uploaded yet. Add one or two so your tradie can sense-check the job and your tier preview can render.'}
-          </p>
+          <p className="mt-1.5 text-sm text-text-sec sm:text-base">{blurb}</p>
         </div>
       </div>
 
       {/* Body */}
-      <div className="mt-5 sm:mt-6">
-        {hasPhotos ? (
-          <PhotoGrid urls={urls} />
-        ) : (
-          <EmptyState
-            phase={phase}
-            errorMessage={errorMessage}
-            canUpload={canUpload}
-            uploadToken={uploadToken}
-            inputRef={inputRef}
-            onPickClick={() => inputRef.current?.click()}
-            onFiles={handleFiles}
-          />
-        )}
-      </div>
+      <div className="mt-5 sm:mt-6">{body}</div>
     </section>
   )
 }

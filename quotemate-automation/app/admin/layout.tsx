@@ -119,7 +119,7 @@ function AdminNav({ onSignOut }: { onSignOut: () => void }) {
             href="/dashboard"
             className="flex min-w-0 items-center gap-2 sm:gap-3"
           >
-            <BrandMark className="h-10 w-10" />
+            <BrandMark className="h-10 w-auto" />
             <span className="hidden shrink-0 font-extrabold uppercase tracking-tight text-text-pri sm:inline">
               QuoteMax
             </span>

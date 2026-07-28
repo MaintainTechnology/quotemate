@@ -665,7 +665,15 @@ export default async function RoofingQuotePage({
       null
     // Video + the script it speaks, resolved together so the captions can
     // never belong to a different film than the one playing.
-    const welcomeVideo = trustVideoTrack(identity, 'welcome')
+    //
+    // The 'roofing' argument is load-bearing, not decoration. The dashboard
+    // Videos tab stores a generated clip at tenants.trade_videos[trade][slot]
+    // (mig 179) and DELIBERATELY skips the legacy tenants.intro_video_url stamp
+    // whenever a trade is in play (lib/videos/trust-video.ts finaliseSlot). With
+    // the trade omitted, trustVideoTrack's per-trade branch is unreachable, so
+    // every tenant with a trade — which is all of them — fell through to the
+    // stock QuoteMax clip while the dashboard reported "Your Video".
+    const welcomeVideo = trustVideoTrack(identity, 'welcome', 'roofing')
     const websiteUrl = safeWebsiteUrl(identity?.website_url)
     const tradieName = identity?.business_name ?? 'Your roofer'
     // Section 03 identity — the same resolver the quote PDF uses, so the photo

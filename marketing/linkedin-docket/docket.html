@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>QuoteMax LinkedIn, docket system</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   THE DOCKET SYSTEM
+   A second, independent visual system for QuoteMax social. Written from
+   scratch; it shares only the brand itself (DESIGN.md at the repo root and
+   .impeccable/design.json), not any prior generator.
+
+   The idea: a QuoteMax post should look like a QuoteMax DOCUMENT. The product
+   makes quotes, so the graphics borrow a quote's furniture, a header rail with
+   a reference code, ruled line items with values set right, a signed-off
+   footer. That gives the set a structure the photography sits inside rather
+   than a photo with type laid over the top.
+
+   RULES CARRIED FROM THE BRAND, not negotiable:
+     canvas #16120F warm charcoal, ONE accent #FFC400 Caterpillar yellow
+     text on a yellow fill is #1C1812, never white (white on yellow is 1.6:1)
+     Manrope 800 all-caps display, JetBrains Mono for labels and figures
+     square corners, hairline borders instead of shadows, film grain on top
+     Australian English, no exclamation marks, no em dashes, no emoji
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --canvas:#16120F; --surface:#1E1813; --card:#2B2422; --hair:#3A322C;
+  --accent:#FFC400; --accent-press:#E6AC00; --ink-on-accent:#1C1812;
+  --pri:#F6F1EA; --sec:#C3B8AC; --dim:#A2968A; --edge:#6E6354;
+  --M:88px;              /* side margin, tighter than a full-bleed layout wants */
+  --head:150px;          /* header rail */
+  --footer:96px;         /* yellow sign-off band */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0908;font-family:'Manrope',sans-serif;display:flex;flex-direction:column;align-items:center;gap:48px;padding:48px 0}
+body.one{padding:0;gap:0}
+
+.post{position:relative;width:1080px;height:1350px;overflow:hidden;background:var(--canvas);color:var(--pri);flex:0 0 auto;
+  /* One warm lift top-left, one yellow ember top-right. Flat dark reads cheap. */
+  background-image:
+    radial-gradient(52% 34% at 6% -6%, rgba(110,99,84,.20), transparent 62%),
+    radial-gradient(48% 32% at 96% -2%, rgba(255,196,0,.11), transparent 60%);}
+
+/* ── grain, the top-most layer ─────────────────────────────────────── */
+.grain{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:.05;mix-blend-mode:soft-light}
+
+/* ── header rail ──────────────────────────────────────────────────── */
+.rail{position:absolute;top:0;left:0;right:0;height:var(--head);z-index:5;
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M);}
+.rail::after{content:"";position:absolute;left:var(--M);right:var(--M);bottom:0;height:1px;background:var(--hair)}
+.rail img{height:52px;width:auto;display:block}
+.ref{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.ref b{color:var(--accent);font-weight:700}
+
+/* ── sign-off band. Dark ink on yellow, always. ───────────────────── */
+.signoff{position:absolute;left:0;right:0;bottom:0;height:var(--footer);z-index:5;background:var(--accent);
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M);
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-on-accent)}
+.signoff span:last-child{font-weight:500;opacity:.78}
+
+/* ── body zone ────────────────────────────────────────────────────── */
+.body{position:absolute;left:0;right:0;top:var(--head);bottom:var(--footer);z-index:4;
+  padding:0 var(--M);display:flex;flex-direction:column;justify-content:center}
+.body.flush{padding:0}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.20em;text-transform:uppercase;color:var(--accent)}
+.eyebrow i{color:var(--dim);font-style:normal;font-weight:500}
+.head{font-weight:800;text-transform:uppercase;letter-spacing:-.035em;line-height:.97;color:var(--pri)}
+.head em{color:var(--accent);font-style:normal}
+.copy{font-weight:500;line-height:1.34;color:var(--sec)}
+.copy em{color:var(--pri);font-weight:700;font-style:normal}
+
+/* ── photography ───────────────────────────────────────────────────
+   The tint is deliberately LIGHT. The first pass stacked grayscale .48,
+   brightness .82 and a 40% charcoal multiply, and those compound: the tradie
+   ended up a silhouette and the photograph stopped doing its job. A brand
+   tint should make a photo feel like it belongs, not hide it.
+
+   Held to a gentle desaturation plus the warm accent pass, so faces, hi-vis
+   and tools all read at a glance. Where type sits OVER a photo the contrast
+   is bought by that layout's own scrim (.wash .sc and .hero .sc), not by
+   crushing the image everywhere. */
+.ph{position:absolute;overflow:hidden}
+.ph img{width:100%;height:100%;object-fit:cover;
+  filter:grayscale(.14) saturate(.94) contrast(1.05) brightness(1.02) sepia(.10)}
+.ph::before{content:"";position:absolute;inset:0;background:var(--canvas);mix-blend-mode:multiply;opacity:.14}
+.ph::after{content:"";position:absolute;inset:0;background:var(--accent);mix-blend-mode:soft-light;opacity:.13}
+
+/* A held-back full-bleed backdrop for the layouts whose content is ruled type
+   rather than imagery. Without it eight of the fifteen posts carried no
+   photography at all, which is the wrong answer for a trade brand. At .22 it
+   reads as depth and texture, never as a picture competing with the table. */
+.wash{position:absolute;inset:0;z-index:0;opacity:.42}
+/* This scrim, not a dimmed image, is what buys the type its contrast. Heavier
+   than the backdrop opacity suggests, because raising the photo to where it is
+   actually legible also raised what the ruled labels have to sit on top of. */
+.wash .sc{position:absolute;inset:0;background:linear-gradient(180deg,rgba(22,18,15,.82) 0%,rgba(22,18,15,.62) 40%,rgba(22,18,15,.74) 70%,rgba(22,18,15,.88) 100%)}
+
+/* L1 figures ─ a ruled table of hard numbers, values set right */
+.fig{margin-top:52px;border-top:1px solid var(--hair)}
+.fig>div{display:flex;align-items:baseline;justify-content:space-between;gap:32px;padding:30px 0;border-bottom:1px solid var(--hair)}
+.fig .k{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:19px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);max-width:420px}
+/* word-spacing pulled in because JetBrains Mono's space is about twice
+   Manrope's: a value with one inside it ("<1 MIN") otherwise renders as though
+   it had been typed with a double space. */
+.fig .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:76px;line-height:.9;letter-spacing:-.05em;word-spacing:-.16em;color:var(--accent);white-space:nowrap}
+
+/* L2 contrast ─ the problem on charcoal, the fix on yellow */
+.vs{margin-top:44px;display:flex;flex-direction:column;gap:0}
+.vs>div{padding:34px 38px;border:1px solid var(--hair)}
+.vs .a{background:var(--card);box-shadow:inset 0 1px 0 0 rgba(255,255,255,.06)}
+.vs .b{background:var(--accent);border-color:var(--accent);color:var(--ink-on-accent);margin-top:-1px}
+.vs .lab{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.16em;text-transform:uppercase}
+.vs .a .lab{color:var(--dim)} .vs .b .lab{color:var(--ink-on-accent);opacity:.72}
+.vs ul{list-style:none;margin-top:16px;display:flex;flex-direction:column;gap:9px}
+.vs li{font-weight:700;font-size:29px;line-height:1.22}
+.vs .a li{color:var(--sec);text-decoration:line-through;text-decoration-color:rgba(195,184,172,.42)}
+.vs .b li{color:var(--ink-on-accent)}
+
+/* L3 sequence ─ numbers on a spine, photo band beneath */
+.seq{margin-top:40px;position:relative}
+.seq::before{content:"";position:absolute;left:39px;top:26px;bottom:26px;width:1px;background:var(--hair)}
+.seq>div{display:flex;gap:36px;align-items:flex-start;padding:22px 0}
+.seq .n{position:relative;z-index:1;flex:0 0 auto;width:78px;height:78px;display:grid;place-items:center;
+  background:var(--canvas);border:1px solid var(--accent);
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:29px;color:var(--accent)}
+.seq .t{font-weight:800;font-size:34px;letter-spacing:-.02em;text-transform:uppercase;line-height:1.05}
+.seq .d{margin-top:7px;font-weight:500;font-size:25px;line-height:1.3;color:var(--sec)}
+
+/* L4 statement ─ big type, thin photo strip at the foot */
+.strip{position:absolute;left:0;right:0;bottom:var(--footer);height:264px;z-index:3;border-top:1px solid var(--hair)}
+.attrib{margin-top:40px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:20px;letter-spacing:.1em;text-transform:uppercase;color:var(--sec)}
+.attrib i{color:var(--dim);font-style:normal}
+
+/* L5 ledger ─ line items, answer set right like a priced quote */
+.led{margin-top:46px;border-top:1px solid var(--hair)}
+.led>div{display:flex;gap:34px;align-items:baseline;padding:26px 0;border-bottom:1px solid var(--hair)}
+.led .m{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:22px;color:var(--accent);flex:0 0 auto;width:26px}
+.led .q{font-weight:800;font-size:27px;letter-spacing:-.01em;text-transform:uppercase;color:var(--pri);flex:1 1 auto;line-height:1.18}
+.led .a{font-weight:600;font-size:25px;line-height:1.24;color:var(--sec);flex:0 0 400px;text-align:right}
+
+/* L6 portrait ─ hard vertical split, type left, photo right */
+.split{position:absolute;inset:0;display:flex}
+.split .l{flex:0 0 556px;padding:0 40px 0 var(--M);display:flex;flex-direction:column;justify-content:center}
+.split .r{flex:1 1 auto;position:relative;border-left:1px solid var(--hair)}
+
+/* shared: yellow action block */
+.act{display:inline-flex;align-items:center;gap:14px;margin-top:40px;padding:24px 40px;
+  background:var(--accent);color:var(--ink-on-accent);font-weight:800;font-size:25px;text-transform:uppercase;letter-spacing:.01em}
+.terms{margin-top:30px;display:flex;flex-wrap:wrap;gap:10px 18px;
+  font-family:'JetBrains Mono',monospace;font-weight:500;font-size:16px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.terms b{color:var(--accent);font-weight:700}
+/* L7 offer ─ the close, over a full-bleed scrimmed photo */
+.hero{position:absolute;inset:0;z-index:0}
+.hero .sc{position:absolute;inset:0;background:linear-gradient(180deg,rgba(22,18,15,.93) 0%,rgba(22,18,15,.80) 34%,rgba(22,18,15,.58) 56%,rgba(22,18,15,.90) 84%,rgba(22,18,15,.96) 100%)}
+.inc{margin-top:38px;border:1px solid var(--hair);background:rgba(43,36,34,.74)}
+.inc>div{display:flex;justify-content:space-between;gap:24px;padding:20px 30px;border-bottom:1px solid var(--hair)}
+.inc>div:last-child{border-bottom:0}
+.inc .k{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:17px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.inc .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:19px;color:var(--pri)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO = 'logo/quote-max-logo-dark.svg';
+const GRAIN = `<svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.86" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
+// {curly} marks the one or two words that take the accent.
+const hl = (s) => String(s).replace(/\{([^}]+)\}/g, '<em>$1</em>');
+const eb = (parts) => `<div class="eyebrow">${parts.map((p,i)=>i?`<i>&nbsp;&middot;&nbsp;</i>${p}`:p).join('')}</div>`;
+const ph = (p, style) => `<div class="ph" style="${style}"><img src="${p.src}" style="object-position:${p.pos||'center'}"></div>`;
+// Backdrop for the type-led layouts. Every post carries tradie photography.
+const wash = (p) => `<div class="wash">${ph(p,'inset:0')}<div class="sc"></div></div>`;
+
+// Every post is wrapped in the same furniture: rail, body, sign-off, grain.
+function shell(P, inner, opts = {}) {
+  const ref = `QM-2607-${String(P.n).padStart(2,'0')}`;
+  return `<div class="post">
+    ${opts.behind || ''}
+    <div class="rail"><img src="${LOGO}" alt=""><div class="ref">${ref} <b>/</b> ${P.tag}</div></div>
+    <div class="body${opts.flush ? ' flush' : ''}">${inner}</div>
+    ${opts.front || ''}
+    <div class="signoff"><span>QUOTEMAX.COM.AU</span><span>${P.foot}</span></div>
+    ${GRAIN}
+  </div>`;
+}
+
+const LAYOUT = {
+  // L1 ─ hard numbers in a ruled table
+  figures: (P) => shell(P, `
+    ${eb(P.eyebrow)}
+    <div class="head" style="margin-top:22px;font-size:${P.hsize||68}px;max-width:880px">${hl(P.head)}</div>
+    <div class="fig">${P.rows.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
+    <div class="copy" style="margin-top:34px;font-size:26px;max-width:820px">${hl(P.note)}</div>`,
+    { behind: wash(P.photo) }),
+
+  // L2 ─ the usual, struck through, against the fix on a yellow fill
+  contrast: (P) => shell(P, `
+    ${eb(P.eyebrow)}
+    <div class="head" style="margin-top:22px;font-size:${P.hsize||64}px;max-width:880px">${hl(P.head)}</div>
+    <div class="vs">
+      <div class="a"><div class="lab">${P.aLabel}</div><ul>${P.a.map(t=>`<li>${t}</li>`).join('')}</ul></div>
+      <div class="b"><div class="lab">${P.bLabel}</div><ul>${P.b.map(t=>`<li>${t}</li>`).join('')}</ul></div>
+    </div>`,
+    { behind: wash(P.photo) }),
+
+  // L3 ─ a real sequence on a spine, with a photo band under it
+  sequence: (P) => shell(P, `
+    ${eb(P.eyebrow)}
+    <div class="head" style="margin-top:22px;font-size:${P.hsize||62}px;max-width:840px">${hl(P.head)}</div>
+    <div class="seq">${P.steps.map(([n,t,d])=>`<div><div class="n">${n}</div><div><div class="t">${t}</div><div class="d">${d}</div></div></div>`).join('')}</div>`,
+    { front: ph(P.photo, 'left:0;right:0;bottom:var(--footer);height:236px;z-index:3;border-top:1px solid var(--hair)') }),
+
+  // L4 ─ one line, said plainly, over flat charcoal
+  statement: (P) => shell(P, `
+    ${eb(P.eyebrow)}
+    <div class="head" style="margin-top:30px;font-size:${P.hsize||86}px;max-width:840px">${hl(P.head)}</div>
+    <div class="attrib">QUOTEMAX, <i>${P.on}</i></div>`,
+    { front: ph(P.photo, 'left:0;right:0;bottom:var(--footer);height:264px;z-index:3;border-top:1px solid var(--hair)') }),
+
+  // L5 ─ line items with the answer set right, like a priced quote
+  ledger: (P) => shell(P, `
+    ${eb(P.eyebrow)}
+    <div class="head" style="margin-top:22px;font-size:${P.hsize||62}px;max-width:860px">${hl(P.head)}</div>
+    <div class="led">${P.items.map(([q,a],i)=>`<div><span class="m">${String(i+1).padStart(2,'0')}</span><span class="q">${q}</span><span class="a">${a}</span></div>`).join('')}</div>
+    <div class="copy" style="margin-top:32px;font-size:26px;max-width:820px">${hl(P.note)}</div>`,
+    { behind: wash(P.photo) }),
+
+  // L6 ─ hard vertical split: the photo is a column, not a backdrop
+  portrait: (P) => shell(P, `
+    <div class="split">
+      <div class="l">
+        ${eb(P.eyebrow)}
+        <div class="head" style="margin-top:22px;font-size:${P.hsize||60}px">${hl(P.head)}</div>
+        <div class="copy" style="margin-top:26px;font-size:25px">${hl(P.copy)}</div>
+        <div><span class="act">${P.action}</span></div>
+        <div class="terms">${P.terms.map((t,i)=>`${i?'<b>&middot;</b>':''}<span>${t}</span>`).join('')}</div>
+      </div>
+      <div class="r">${ph(P.photo,'inset:0')}</div>
+    </div>`, { flush: true }),
+
+  // L7 ─ the close, the only full-bleed frame in the set
+  offer: (P) => shell(P, `
+    ${eb(P.eyebrow)}
+    <div class="head" style="margin-top:24px;font-size:${P.hsize||76}px;max-width:860px">${hl(P.head)}</div>
+    <div class="copy" style="margin-top:26px;font-size:27px;max-width:800px">${hl(P.copy)}</div>
+    <div class="inc">${P.incl.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
+    <div><span class="act">${P.action}</span></div>`,
+    { behind: `<div class="hero">${ph(P.photo,'inset:0')}<div class="sc"></div></div>` }),
+};
+
+/* ════════════════════════════════════════════════════════════════════
+   THE 15 POSTS
+   Briefs: AD pitches the product cold, PAIN names the quoting problem,
+   EDU shows the mechanism, LEAD asks for the enquiry or the trial.
+   Interleaved so two of the same job never land back to back.
+
+   Every figure is a real product fact. Nothing is invented, and there are no
+   testimonials because there are no consented ones to quote. The statement
+   posts are attributed to QuoteMax, a position the brand can hold, rather
+   than words put in a tradie's mouth.
+   ════════════════════════════════════════════════════════════════════ */
+const POSTS = [
+
+{ n:1, kind:'figures', tag:'AD', foot:'AI QUOTING FOR AU TRADIES',
+  photo:{src:'img/trade-solar.jpg', pos:'center 40%'},
+  eyebrow:['THE OFFER','PLAIN NUMBERS'],
+  head:'Your quote goes out {before they hang up}.',
+  rows:[['TIME TO DRAFT A QUOTE','<1 MIN'],['ENQUIRIES ANSWERED','24/7'],['OUR CUT OF YOUR JOBS','$0']],
+  note:'A customer texts your number. QuoteMax asks the right questions, prices the job against your book, and drafts it. You {review and send}.' },
+
+{ n:2, kind:'statement', tag:'PAIN', foot:'THE FIRST QUOTE USUALLY WINS',
+  eyebrow:['THE QUOTING PROBLEM'],
+  head:'You cannot win the job you {never quoted}.',
+  on:'ON WHY SPEED DECIDES IT',
+  photo:{src:'img/trade-roofing.jpg', pos:'center 42%'} },
+
+{ n:3, kind:'contrast', tag:'PAIN', foot:'SPEED IS THE JOB',
+  photo:{src:'img/home-roofing.jpg', pos:'center 34%'},
+  eyebrow:['SAME DAY OR NEVER'],
+  head:'The job goes to whoever {quotes first}.',
+  aLabel:'THE USUAL', a:['Quote sent two days later','They booked someone on Tuesday','You never find out why'],
+  bLabel:'WITH QUOTEMAX', b:['Quote drafted in under a minute','Answered while you are on the tools','You are first, by default'] },
+
+{ n:4, kind:'contrast', tag:'PAIN', foot:'YOUR EVENINGS BACK',
+  photo:{src:'img/workshop.jpg', pos:'center 38%'},
+  eyebrow:['THE REAL COST'],
+  head:'Quoting is a {second job} nobody pays you for.',
+  aLabel:'HOW THE DAY ENDS', a:['Quotes typed after dinner','Follow-ups chased on Sunday','Paperwork follows you home'],
+  bLabel:'HOW IT ENDS NOW', b:['Drafted while you pack the ute','Follow-up sent without you','The night is yours again'] },
+
+{ n:5, kind:'statement', tag:'PAIN', foot:'EVERY TEXT ANSWERED, EVERY TIME',
+  eyebrow:['MISSED CALLS'],
+  head:'It rang while you were {up a ladder}.',
+  on:'ON THE 24/7 PROBLEM',
+  photo:{src:'img/trade-painting.jpg', pos:'center 40%'} },
+
+{ n:6, kind:'sequence', tag:'EDU', foot:'YOUR PRICING BOOK, EVERY TIME',
+  eyebrow:['HOW IT WORKS'],
+  head:'Three steps. {Under a minute}.',
+  steps:[['01','THE CUSTOMER TEXTS YOUR NUMBER','QuoteMax asks the right questions for that job type.'],
+         ['02','IT DRAFTS THE QUOTE','Priced from your book, in Good, Better and Best.'],
+         ['03','YOU REVIEW AND SEND','Tweak it if you want. Send it. Get paid.']],
+  photo:{src:'img/home-on-the-tools.jpg', pos:'center 32%'} },
+
+{ n:7, kind:'ledger', tag:'EDU', foot:'NO GUESSED PRICES, EVER',
+  photo:{src:'img/trade-plumbing-2.jpg', pos:'center 36%'},
+  eyebrow:['WHERE THE AI STOPS'],
+  head:'It writes the words. {You own the numbers}.',
+  items:[['WHO SETS THE PRICES','Your rate book, every line'],
+         ['WHAT IF A PRICE IS MISSING','It does not go out'],
+         ['WHAT ABOUT THE HARD JOBS','A $99 site visit, not a guess'],
+         ['WHO PRESSES SEND','You do']],
+  note:'The model handles the conversation. It {never invents a figure}, and the $99 is credited back to the job.' },
+
+{ n:8, kind:'sequence', tag:'EDU', foot:'QUOTE, DEPOSIT, BOOKED',
+  eyebrow:['AFTER THE QUOTE'],
+  head:'From quote to {booked} without a phone call.',
+  steps:[['01','THE QUOTE LANDS BY TEXT','Good, Better and Best, priced from your book.'],
+         ['02','THEY PAY THE DEPOSIT','Card payment straight off the quote page.'],
+         ['03','THE JOB BOOKS ITSELF','They pick a window from your calendar.']],
+  photo:{src:'img/trade-plumbing.jpg', pos:'center 46%'} },
+
+{ n:9, kind:'ledger', tag:'EDU', foot:'EIGHT TRADES LIVE',
+  photo:{src:'img/home-painting.jpg', pos:'center 36%'},
+  eyebrow:['BUILT FOR YOUR TRADE'],
+  head:'One number. {Eight trades}. Each priced its own way.',
+  items:[['ELECTRICAL AND PLUMBING','Downlights to switchboards'],
+         ['ROOFING AND SOLAR','Measured from the address'],
+         ['PAINTING AND COMMERCIAL','Surfaces counted room by room'],
+         ['AIRCON AND SIGNAGE','Systems sized, sites assessed']],
+  note:'A roofer and a sparky do not quote the same way, so they do not share a rate card. Not on the list? {Tell us your trade}.' },
+
+{ n:10, kind:'figures', tag:'AD', foot:'LESS THAN ONE MISSED JOB',
+  photo:{src:'img/home-solar.jpg', pos:'center 40%'},
+  eyebrow:['WHAT IT COSTS'],
+  head:'No commission. {No bill shock}.',
+  rows:[['PLANS START AT','$49/MO'],['COMMISSION ON YOUR WORK','$0'],['SITE VISIT, CREDITED BACK','$99']],
+  note:'Starter Monthly includes a 14-day free trial. Cancel any time, no lock-in. We never take a cut of {your jobs}.' },
+
+{ n:11, kind:'ledger', tag:'LEAD', foot:'ASK THE AWKWARD ONES',
+  photo:{src:'img/trade-electrical.jpg', pos:'center 32%'},
+  eyebrow:['FAIR QUESTIONS'],
+  head:'The three things every tradie {asks first}.',
+  items:[['DO I LOSE CONTROL OF PRICING','No. It only uses your book'],
+         ['WHAT ABOUT THE TRICKY JOBS','They book a paid site visit'],
+         ['WHOSE NUMBER IS IT','Yours. A dedicated AU line']],
+  note:'Anything else, {ask us}. A person reads every message and answers it, usually within one business day.' },
+
+{ n:12, kind:'portrait', tag:'LEAD', foot:'QUOTING THE SAME DAY',
+  eyebrow:['START FREE'],
+  head:'Fourteen days free. {Set up in three}.',
+  copy:'Connect your number, load your pricing book, and quotes go out the same day. Starter Monthly comes with a 14-day free trial.',
+  action:'Start the free trial &nbsp;&rarr;',
+  terms:['ABOUT 3 MINUTES','$0 COMMISSION','CANCEL ANY TIME'],
+  photo:{src:'img/home-electrical.jpg', pos:'center 30%'} },
+
+{ n:13, kind:'portrait', tag:'LEAD', foot:'TELL US YOUR TRADE',
+  eyebrow:['YOUR TRADE NEXT'],
+  head:'Your trade is not on the list. {Yet}.',
+  copy:'Carpenters, cabinetmakers, HVAC, fencing, landscaping. Tell us what you do and we line you up for the next intake.',
+  action:'Request your trade &nbsp;&rarr;',
+  terms:['EIGHT TRADES LIVE','MORE ONBOARDING','AUSTRALIA WIDE'],
+  photo:{src:'img/trade-carpentry.jpg', pos:'center 28%'} },
+
+{ n:14, kind:'figures', tag:'LEAD', foot:'ONE LINE, EVERY ENQUIRY',
+  photo:{src:'img/home-plumbing.jpg', pos:'center 38%'},
+  eyebrow:['WHAT YOU GET'],
+  head:'A receptionist that already knows {your rates}.',
+  rows:[['DEDICATED AU NUMBERS','1'],['QUOTE TIERS DRAFTED','3'],['HOURS COVERED','24/7']],
+  note:'SMS and voice, GST handled, and your licence details on every quote that leaves the {dashboard}.' },
+
+{ n:15, kind:'offer', tag:'AD', foot:'DRAFTS YOUR QUOTE BEFORE THEY HANG UP',
+  eyebrow:['GET STARTED'],
+  head:'Get your own {QuoteMax} number.',
+  copy:'It answers every customer, asks the right questions, and drafts the quote from your pricing book. You review, send, get paid.',
+  incl:[['FREE TRIAL','14 DAYS'],['OUR CUT OF YOUR JOBS','$0'],['SITE VISIT, CREDITED BACK','$99']],
+  action:'Get my QuoteMax &nbsp;&rarr;',
+  photo:{src:'img/home-crew.jpg', pos:'center 52%'} },
+];
+
+const render = (P) => LAYOUT[P.kind](P);
+const q = new URLSearchParams(location.search).get('post');
+if (q !== null) {
+  document.body.classList.add('one');
+  document.getElementById('app').innerHTML = render(POSTS[+q]);
+  // The capture viewport can land a fraction off 1080 wide (device pixel
+  // ratio); scale to fill it since the aspect ratios match exactly.
+  const el = document.querySelector('.post');
+  el.style.position = 'fixed'; el.style.left = '0'; el.style.top = '0';
+  el.style.transformOrigin = 'top left';
+  el.style.transform = 'scale(' + (window.innerWidth / 1080) + ')';
+  document.documentElement.style.overflow = document.body.style.overflow = 'hidden';
+} else {
+  document.getElementById('app').innerHTML = POSTS.map(render).join('');
+}
+</script>
+</body>
+</html>

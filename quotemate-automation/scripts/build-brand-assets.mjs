@@ -19,7 +19,19 @@ const brandDir = join(root, 'public', 'brand')
 mkdirSync(brandDir, { recursive: true })
 
 // density high so small sizes still antialias crisply from the vector source.
+// The source has no background tile, so these inherit its transparency.
 const png = (size) => sharp(svg, { density: 512 }).resize(size, size).png().toBuffer()
+
+// apple-icon is the ONE raster that must stay opaque: iOS composites a
+// transparent home-screen icon onto black, which would swallow the source's
+// charcoal body. Flattened onto the app's warm paper — the light ground that
+// colourway is drawn for.
+const opaquePng = (size) =>
+  sharp(svg, { density: 512 })
+    .resize(size, size)
+    .flatten({ background: '#FAF8F4' })
+    .png()
+    .toBuffer()
 
 // ── favicon.ico: pack 16/32/48 PNG entries into one ICO container ───────
 function buildIco(sizes, buffers) {
@@ -50,7 +62,7 @@ function buildIco(sizes, buffers) {
 const icoSizes = [16, 32, 48]
 const icoPngs = await Promise.all(icoSizes.map(png))
 writeFileSync(join(root, 'app', 'favicon.ico'), buildIco(icoSizes, icoPngs))
-writeFileSync(join(root, 'app', 'apple-icon.png'), await png(180))
+writeFileSync(join(root, 'app', 'apple-icon.png'), await opaquePng(180))
 writeFileSync(join(brandDir, 'quotemax-icon-512.png'), await png(512))
 writeFileSync(join(brandDir, 'quotemax-icon-1024.png'), await png(1024))
 

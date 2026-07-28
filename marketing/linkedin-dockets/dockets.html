@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>QuoteMax LinkedIn dockets, 30</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   THE SPLIT DOCKET, 30 posts
+   Built to one layout, taken directly from the two reference posts:
+
+     ┌──────────────────────────────────────────┐
+     │  lockup                  QM-2607-NN/TAG  │  rail 150, hairline under
+     ├───────────────────────┬──────────────────┤
+     │  KICKER               │                  │
+     │  BIG ALL-CAPS HEAD    │   tradie, full   │  split at x=540
+     │  body copy            │   height, hard   │
+     │  [ YELLOW ACTION ]    │   to the edge    │
+     │  terms · terms        │                  │
+     ├───────────────────────┴──────────────────┤
+     │  QUOTEMAX.COM.AU              tagline    │  yellow sign-off 96
+     └──────────────────────────────────────────┘
+
+   Why this layout and not a photo with type over it: the tradie never has to
+   be dimmed to make the words legible. Each side owns its space, so the
+   photography stays bright and the copy stays high contrast. Nothing is
+   fighting anything.
+
+   The left column takes one of five content blocks (pitch, list, stat, steps,
+   quote) so 30 posts vary without the frame ever changing. Two in three put
+   the photo on the right, one in three flips it, which gives a feed some
+   rhythm without breaking the family.
+
+   BRAND, from DESIGN.md at the repo root: canvas #16120F, ONE accent #FFC400,
+   text on yellow is #1C1812 and never white, Manrope 800 all-caps display,
+   JetBrains Mono labels, square corners, hairlines instead of shadows,
+   Australian English, no emoji, no exclamation marks, no em dashes.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --canvas:#16120F; --card:#2B2422; --hair:#3A322C;
+  --accent:#FFC400; --on-accent:#1C1812;
+  --pri:#F6F1EA; --sec:#C3B8AC; --dim:#A2968A;
+  --M:88px;        /* outer margin */
+  --head:150px;    /* rail */
+  --foot:96px;     /* sign-off */
+  --split:540px;   /* where the photo column starts */
+  --gut:40px;      /* breathing room before the divider */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0908;font-family:'Manrope',sans-serif;display:flex;flex-direction:column;align-items:center;gap:46px;padding:46px 0}
+body.one{padding:0;gap:0}
+.d{position:relative;width:1080px;height:1350px;overflow:hidden;background:var(--canvas);color:var(--pri);flex:0 0 auto;
+  background-image:
+    radial-gradient(46% 30% at 4% -4%, rgba(110,99,84,.18), transparent 62%),
+    radial-gradient(40% 26% at 30% 102%, rgba(255,196,0,.07), transparent 60%);}
+.grain{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:.05;mix-blend-mode:soft-light}
+
+/* ── rail ─────────────────────────────────────────────────────────── */
+.rail{position:absolute;top:0;left:0;right:0;height:var(--head);z-index:6;
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M)}
+.rail::after{content:"";position:absolute;left:var(--M);right:var(--M);bottom:0;height:1px;background:var(--hair)}
+.rail img{height:52px;width:auto;display:block}
+.ref{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.ref b{color:var(--accent);font-weight:700}
+
+/* ── sign-off. Dark ink on yellow, always. ────────────────────────── */
+.foot{position:absolute;left:0;right:0;bottom:0;height:var(--foot);z-index:6;background:var(--accent);
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M);
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.14em;text-transform:uppercase;color:var(--on-accent)}
+.foot span:last-child{font-weight:500;opacity:.76}
+
+/* ── the split ────────────────────────────────────────────────────── */
+.split{position:absolute;left:0;right:0;top:var(--head);bottom:var(--foot);z-index:5;display:flex}
+.col{flex:0 0 var(--split);padding-left:var(--M);padding-right:var(--gut);
+  display:flex;flex-direction:column;justify-content:center;min-width:0}
+.pic{flex:1 1 auto;position:relative;overflow:hidden;border-left:1px solid var(--hair)}
+/* Flipped: photo first, type second. Border swaps sides with it. */
+.d.flip .split{flex-direction:row-reverse}
+.d.flip .pic{border-left:0;border-right:1px solid var(--hair)}
+.d.flip .col{padding-left:var(--gut);padding-right:var(--M)}
+
+/* Photography kept bright. A brand tint should say "this belongs", not hide
+   the person: a light desaturation and one warm accent pass, nothing more. */
+.pic img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  filter:grayscale(.10) saturate(.97) contrast(1.04) brightness(1.02) sepia(.07)}
+.pic::after{content:"";position:absolute;inset:0;background:var(--accent);mix-blend-mode:soft-light;opacity:.11;pointer-events:none}
+
+/* ── type ─────────────────────────────────────────────────────────── */
+.kick{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.20em;text-transform:uppercase;color:var(--accent)}
+.h{margin-top:22px;font-weight:800;font-size:54px;line-height:.97;letter-spacing:-.035em;text-transform:uppercase;color:var(--pri)}
+.h em{color:var(--accent);font-style:normal}
+.h.sm{font-size:46px}
+.p{margin-top:24px;font-weight:500;font-size:24px;line-height:1.4;color:var(--sec)}
+.p em{color:var(--pri);font-weight:700;font-style:normal}
+.p b{color:var(--accent);font-weight:800}
+.act{display:inline-flex;align-items:center;gap:12px;margin-top:36px;padding:22px 34px;background:var(--accent);
+  color:var(--on-accent);font-weight:800;font-size:23px;text-transform:uppercase;letter-spacing:.01em}
+.terms{margin-top:26px;display:flex;flex-wrap:wrap;gap:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.terms b{color:var(--accent);font-weight:700}
+
+/* list: hairline rows, answer set right, like a quote's line items */
+.rows{margin-top:32px;border-top:1px solid var(--hair)}
+.rows>div{display:flex;justify-content:space-between;align-items:baseline;gap:20px;padding:19px 0;border-bottom:1px solid var(--hair)}
+.rows .k{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);flex:1 1 auto}
+.rows .v{font-weight:700;font-size:22px;line-height:1.2;color:var(--pri);text-align:right;flex:0 0 auto;max-width:56%}
+
+/* stat: three figures stacked, label under each */
+.figs{margin-top:34px;display:flex;flex-direction:column;gap:22px}
+.figs>div{border-top:1px solid var(--hair);padding-top:16px}
+.figs .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:62px;line-height:.9;letter-spacing:-.05em;word-spacing:-.16em;color:var(--accent)}
+.figs .l{margin-top:8px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+
+/* steps: numeral in a bordered tile on a spine */
+.steps{margin-top:32px;position:relative}
+.steps::before{content:"";position:absolute;left:29px;top:20px;bottom:20px;width:1px;background:var(--hair)}
+.steps>div{display:flex;gap:26px;align-items:flex-start;padding:15px 0}
+.steps .n{position:relative;z-index:1;flex:0 0 auto;width:58px;height:58px;display:grid;place-items:center;background:var(--canvas);
+  border:1px solid var(--accent);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:22px;color:var(--accent)}
+.steps .t{font-weight:800;font-size:25px;letter-spacing:-.02em;text-transform:uppercase;line-height:1.08}
+.steps .b{margin-top:5px;font-weight:500;font-size:20px;line-height:1.3;color:var(--sec)}
+
+/* quote: one line, said plainly */
+.qm{font-weight:800;font-size:120px;line-height:.5;height:56px;color:var(--accent)}
+.q{margin-top:18px;font-weight:800;font-size:52px;line-height:1.02;letter-spacing:-.03em;text-transform:uppercase;color:var(--pri)}
+.q em{color:var(--accent);font-style:normal}
+.by{margin-top:30px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:17px;letter-spacing:.1em;text-transform:uppercase;color:var(--sec)}
+.by i{color:var(--dim);font-style:normal}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO='logo/quote-max-logo-dark.svg';
+const GRAIN=`<svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.86" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
+const hl=s=>String(s).replace(/\{([^}]+)\}/g,'<em>$1</em>');
+const terms=a=>`<div class="terms">${a.map((t,i)=>`${i?'<b>&middot;</b>':''}<span>${t}</span>`).join('')}</div>`;
+
+// Left-column content blocks. The frame never changes; only this does.
+const BLOCK={
+  pitch:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="p">${hl(D.copy)}</div>${D.act?`<div><span class="act">${D.act}</span></div>`:''}${D.terms?terms(D.terms):''}`,
+  list:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="rows">${D.rows.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
+    ${D.copy?`<div class="p">${hl(D.copy)}</div>`:''}`,
+  stat:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="figs">${D.figs.map(([n,l])=>`<div><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>
+    ${D.copy?`<div class="p">${hl(D.copy)}</div>`:''}`,
+  steps:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="steps">${D.steps.map(([n,t,b])=>`<div><div class="n">${n}</div><div><div class="t">${t}</div><div class="b">${b}</div></div></div>`).join('')}</div>`,
+  quote:D=>`<div class="kick">${D.kick}</div><div class="qm">&ldquo;</div><div class="q">${hl(D.head)}</div>
+    <div class="by">QUOTEMAX, <i>${D.by}</i></div>`,
+};
+
+function render(D){
+  return `<div class="d${D.flip?' flip':''}">
+    <div class="rail"><img src="${LOGO}" alt=""><div class="ref">QM-2607-${String(D.n).padStart(2,'0')} <b>/</b> ${D.tag}</div></div>
+    <div class="split">
+      <div class="col">${BLOCK[D.kind](D)}</div>
+      <div class="pic"><img src="img/${D.pic[0]}.jpg" style="object-position:${D.pic[1]}"></div>
+    </div>
+    <div class="foot"><span>quotemax.com.au</span><span>${D.foot}</span></div>
+    ${GRAIN}</div>`;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   30 DOCKETS. Four briefs, interleaved so no two of a kind land together:
+     AD    the offer, cold                6, 12, 18, 24, 30 and 1
+     PAIN  the quoting problem            2, 5, 8, 11, 14, 17, 20, 23
+     EDU   how it actually works          3, 7, 10, 13, 16, 19, 22, 26, 29
+     LEAD  ask for the enquiry or trial   4, 9, 15, 21, 25, 27, 28
+   Every figure is a real product fact: under a minute, 24/7, $0 commission,
+   $99 site visit credited back, from $49/mo, 14-day trial on Starter Monthly,
+   about three minutes to set up, eight live trades, SMS and voice, Good /
+   Better / Best. Nothing invented, and no testimonials, because there are no
+   consented ones to quote.
+   ════════════════════════════════════════════════════════════════════ */
+const D=[
+{n:1,tag:'AD',kind:'stat',pic:['sparky-portrait','center 26%'],
+ kick:'THE OFFER',head:'Your quote goes out {before they hang up}.',
+ figs:[['<1 MIN','TO DRAFT A QUOTE'],['24/7','ENQUIRIES ANSWERED'],['$0','OUR CUT OF YOUR JOBS']],
+ foot:'AI QUOTING FOR AU TRADIES'},
+
+{n:2,tag:'PAIN',kind:'quote',pic:['roofer-portrait','center 24%'],flip:true,
+ kick:'THE QUOTING PROBLEM',head:'You cannot win the job you {never quoted}.',
+ by:'ON WHY SPEED DECIDES IT',foot:'THE FIRST QUOTE USUALLY WINS'},
+
+{n:3,tag:'EDU',kind:'steps',pic:['plumber-manifold','center 34%'],
+ kick:'HOW IT WORKS',head:'Three steps. {Under a minute}.',
+ steps:[['01','THEY TEXT YOUR NUMBER','It asks the right questions for that job.'],['02','IT DRAFTS THE QUOTE','Your book. Good, Better, Best.'],['03','YOU REVIEW AND SEND','Tweak it. Send it. Get paid.']],
+ foot:'YOUR PRICING BOOK, EVERY TIME'},
+
+{n:4,tag:'LEAD',kind:'pitch',pic:['sparky-switchboard','center 30%'],
+ kick:'START FREE',head:'Fourteen days free. {Set up in three}.',
+ copy:'Connect your number, load your pricing book, and quotes go out the same day. Starter Monthly comes with a 14-day free trial.',
+ act:'Start the free trial &nbsp;&rarr;',terms:['ABOUT 3 MINUTES','$0 COMMISSION','CANCEL ANY TIME'],
+ foot:'QUOTING THE SAME DAY'},
+
+{n:5,tag:'PAIN',kind:'list',pic:['painter-brush','center 22%'],
+ kick:'SAME DAY OR NEVER',head:'The job goes to whoever {quotes first}.',
+ rows:[['SAME-DAY QUOTE','You are in the running'],['NEXT-DAY QUOTE','They booked someone'],['NO QUOTE','You never hear back']],
+ copy:'Same enquiry, three outcomes. The only variable is how long you took to reply.',
+ foot:'SPEED IS THE JOB'},
+
+{n:6,tag:'AD',kind:'stat',pic:['roofer-measuring','center 40%'],flip:true,
+ kick:'WHAT IT COSTS',head:'No commission. {No bill shock}.',
+ figs:[['$49','A MONTH, TO START'],['$0','COMMISSION ON YOUR WORK'],['$99','SITE VISIT, CREDITED BACK']],
+ copy:'Starter Monthly includes a 14-day free trial. Cancel any time, no lock-in.',
+ foot:'LESS THAN ONE MISSED JOB'},
+
+{n:7,tag:'EDU',kind:'list',pic:['carpenter-level','center 20%'],
+ kick:'WHERE THE AI STOPS',head:'It writes the words. {You own the numbers}.',
+ rows:[['WHO SETS THE PRICES','Your rate book'],['IF A PRICE IS MISSING','It does not go out'],['THE HARD JOBS','A paid site visit'],['WHO PRESSES SEND','You do']],
+ copy:'The model runs the conversation. It {never invents a figure}.',
+ foot:'NO GUESSED PRICES, EVER'},
+
+{n:8,tag:'PAIN',kind:'list',pic:['carpenter-deck','center 44%'],
+ kick:'THE REAL COST',head:'Quoting is a {second job} nobody pays for.',sm:true,
+ rows:[['ON THE TOOLS','Seven until four'],['THEN THE QUOTES','After dinner'],['THEN THE CHASING','Sunday, if at all']],
+ copy:'It was never a small job. It was an {unpaid} one.',
+ foot:'YOUR EVENINGS BACK'},
+
+{n:9,tag:'LEAD',kind:'pitch',pic:['fencer','center 22%'],flip:true,
+ kick:'YOUR TRADE NEXT',head:'Your trade is not on the list. {Yet}.',
+ copy:'Fencing, carpentry, cabinetmaking, HVAC, landscaping. Tell us what you do and we line you up for the next intake.',
+ act:'Request your trade &nbsp;&rarr;',terms:['EIGHT TRADES LIVE','MORE ONBOARDING','AUSTRALIA WIDE'],
+ foot:'TELL US YOUR TRADE'},
+
+{n:10,tag:'EDU',kind:'steps',pic:['plumber-repair','center 34%'],
+ kick:'AFTER THE QUOTE',head:'Quote to {booked} without a phone call.',
+ steps:[['01','THE QUOTE LANDS BY TEXT','Good, Better and Best, deposit link included.'],['02','THEY PAY THE DEPOSIT','Card payment off the quote page.'],['03','THE JOB BOOKS ITSELF','They pick a window from your calendar.']],
+ foot:'QUOTE, DEPOSIT, BOOKED'},
+
+{n:11,tag:'PAIN',kind:'quote',pic:['sparky-switchboard','center 24%'],
+ kick:'MISSED CALLS',head:'It rang while you were {up a ladder}.',
+ by:'ON THE 24/7 PROBLEM',foot:'EVERY TEXT ANSWERED, EVERY TIME'},
+
+{n:12,tag:'AD',kind:'list',pic:['solar-rooftop','center 22%'],flip:true,
+ kick:'BUILT FOR YOUR TRADE',head:'One number. {Eight trades}.',
+ rows:[['ELECTRICAL, PLUMBING','Downlights to hot water'],['ROOFING, SOLAR','Measured from the address'],['PAINTING, COMMERCIAL','Counted room by room'],['AIRCON, SIGNAGE','Sized and assessed']],
+ copy:'A roofer and a sparky do not quote alike, so they do not share a rate card.',
+ foot:'EIGHT TRADES LIVE'},
+
+{n:13,tag:'EDU',kind:'pitch',pic:['hvac','center 26%'],
+ kick:'THE INTAKE',head:'It asks what {you would ask}.',
+ copy:'Circuit count and switchboard age for a sparky. Fixtures and access for a plumber. Pitch and material for a roofer. Each trade gets its own questions, because each trade quotes its own way.',
+ terms:['PER-TRADE QUESTIONS','PHOTOS READ','NO GENERIC FORM'],
+ foot:'THE RIGHT QUESTIONS, EVERY JOB'},
+
+{n:14,tag:'PAIN',kind:'quote',pic:['landscaper-garden','center 22%'],
+ kick:'WHERE JOBS DIE',head:'{I will get back to you} is where the job ends.',sm:true,
+ by:'ON FOLLOW-UP',foot:'FOLLOW-UP THAT ACTUALLY HAPPENS'},
+
+{n:15,tag:'LEAD',kind:'list',pic:['plumber-bathroom','center 22%'],flip:true,
+ kick:'FAIR QUESTIONS',head:'The three things every tradie {asks first}.',
+ rows:[['LOSE CONTROL OF PRICING?','No, it uses your book'],['WHAT ABOUT TRICKY JOBS?','A paid site visit'],['WHOSE NUMBER IS IT?','Yours, a dedicated AU line']],
+ copy:'Anything else, {ask us}. A person reads every message.',
+ foot:'ASK THE AWKWARD ONES'},
+
+{n:16,tag:'EDU',kind:'list',pic:['painter-sprayer','center 28%'],
+ kick:'WHY THREE TIERS',head:'Good, Better, Best. {Every quote}.',
+ rows:[['GOOD','The job, done properly'],['BETTER','The one most people take'],['BEST','Everything, done once']],
+ copy:'Three prices beat one. The customer picks a tier instead of deciding whether to ring you back.',
+ foot:'THREE PRICES, ONE QUOTE'},
+
+{n:17,tag:'PAIN',kind:'stat',pic:['roofer-shingles','center 30%'],
+ kick:'THE QUIET COST',head:'The enquiry you never answered {still cost you}.',sm:true,
+ figs:[['1','LEAD, PAID FOR'],['0','QUOTES SENT'],['0','CHANCE OF WINNING']],
+ copy:'You paid to get that call. Not replying does not make it free.',
+ foot:'ANSWER EVERY ONE'},
+
+{n:18,tag:'AD',kind:'pitch',pic:['sparky-portrait','center 24%'],flip:true,
+ kick:'GET STARTED',head:'Get your own {QuoteMax} number.',
+ copy:'It answers every customer, asks the right questions, and drafts the quote from your pricing book. You review, send, get paid.',
+ act:'quotemax.com.au &nbsp;&rarr;',terms:['14-DAY FREE TRIAL','$0 COMMISSION','$99 SITE VISIT'],
+ foot:'DRAFTS YOUR QUOTE BEFORE THEY HANG UP'},
+
+{n:19,tag:'EDU',kind:'pitch',pic:['roofer-measuring','center 34%'],
+ kick:'WORKED EXAMPLE',head:'A roof quoted from {the address}.',
+ copy:'They send the address and a photo. QuoteMax reads the structure, measures the area per roof, applies your rate and your material, and drafts it. No first trip up the ladder.',
+ terms:['MEASURED PER STRUCTURE','YOUR RATE','YOUR MATERIAL'],
+ foot:'MEASURED BEFORE YOU DRIVE OUT'},
+
+{n:20,tag:'PAIN',kind:'list',pic:['trade-plumbing','center 26%'],
+ kick:'THE TYRE KICKERS',head:'Not every enquiry is {a job}.',
+ rows:[['THE PRICE SHOPPER','Wants a number, not a tradie'],['THE MAYBE','Will decide next winter'],['THE REAL ONE','Pays a deposit today']],
+ copy:'The $99 site visit sorts them out. Anyone who pays it is serious, and it comes off the job.',
+ foot:'SERIOUS ENQUIRIES ONLY'},
+
+{n:21,tag:'LEAD',kind:'steps',pic:['landscaper-paving','center 40%'],flip:true,
+ kick:'GETTING STARTED',head:'About three minutes. {Start to quoting}.',
+ steps:[['01','CONNECT YOUR NUMBER','We provision an Australian line.'],['02','LOAD YOUR PRICING BOOK','Your rates, your call-out minimum.'],['03','QUOTE THE SAME DAY','The next enquiry drafts itself.']],
+ foot:'QUOTING BY THIS AFTERNOON'},
+
+{n:22,tag:'EDU',kind:'list',pic:['carpenter-level','center 24%'],
+ kick:'BUILT HERE',head:'Australian rules, {baked in}.',
+ rows:[['GST','Handled on every line'],['YOUR LICENCE','Printed on every quote'],['CONVENTIONS','NSW, QLD and the rest'],['CURRENCY','AUD, inc GST']],
+ copy:'Not a US tool with a currency setting. Built for how AU tradies actually quote.',
+ foot:'BUILT IN AUSTRALIA'},
+
+{n:23,tag:'PAIN',kind:'quote',pic:['trade-roofing','center 30%'],
+ kick:'SIX PM',head:'Your best lead {went cold at dinner}.',
+ by:'ON WHY 24/7 MATTERS',foot:'NO ENQUIRY WAITS OVERNIGHT'},
+
+{n:24,tag:'AD',kind:'stat',pic:['solar-securing','center 34%'],flip:true,
+ kick:'WHAT YOU GET',head:'A receptionist that knows {your rates}.',sm:true,
+ figs:[['1','DEDICATED AU NUMBER'],['3','QUOTE TIERS DRAFTED'],['24/7','HOURS COVERED']],
+ copy:'SMS and voice, GST handled, your licence on every quote.',
+ foot:'ONE LINE, EVERY ENQUIRY'},
+
+{n:25,tag:'LEAD',kind:'pitch',pic:['plumber-manifold','center 30%'],
+ kick:'THE PRICING QUESTION',head:'You do not {lose control} of pricing.',
+ copy:'QuoteMax only ever uses the book you loaded. Your hourly rate, your call-out minimum, your assemblies. If a price is not in there, the quote does not go out.',
+ terms:['YOUR RATES ONLY','NO MARKET AVERAGES','YOU APPROVE'],
+ foot:'YOUR BOOK, YOUR PRICES'},
+
+{n:26,tag:'EDU',kind:'pitch',pic:['trade-electrical','center 22%'],
+ kick:'THE $99 SITE VISIT',head:'The hard jobs get {a look, not a guess}.',sm:true,
+ copy:'Anything too complex to price safely books a paid site visit instead of a made-up number. The $99 is credited straight back to the job when you win it.',
+ terms:['PAID UP FRONT','CREDITED BACK','NO GUESSED PRICES'],
+ foot:'A GUESS IS NOT A QUOTE'},
+
+{n:27,tag:'LEAD',kind:'list',pic:['hvac','center 30%'],flip:true,
+ kick:'NO LOCK-IN',head:'Leave whenever {you want}.',
+ rows:[['MINIMUM TERM','None'],['EXIT FEE','$0'],['NOTICE PERIOD','None'],['YOUR DATA','Yours to take']],
+ copy:'If it is not earning its keep, cancel. We would rather you stayed because it works.',
+ foot:'CANCEL ANY TIME'},
+
+{n:28,tag:'LEAD',kind:'pitch',pic:['painter-brush','center 24%'],
+ kick:'TALK TO A PERSON',head:'Ask us the {awkward questions}.',
+ copy:'How it prices your trade. What happens on a job it cannot read. Whether it suits a two-van outfit. A person reads every message and answers it, usually within one business day.',
+ act:'Ask us anything &nbsp;&rarr;',terms:['A REAL REPLY','ONE BUSINESS DAY','NO SALES SCRIPT'],
+ foot:'ASK THE AWKWARD ONES'},
+
+{n:29,tag:'EDU',kind:'steps',pic:['solar-rooftop','center 26%'],
+ kick:'THREE CHANNELS',head:'However they get in touch. {It answers}.',sm:true,
+ steps:[['01','SMS','They text your number, any hour.'],['02','VOICE','It picks up and asks the same questions.'],['03','WEB','A form on your own quote page.']],
+ foot:'SMS, VOICE AND WEB'},
+
+{n:30,tag:'AD',kind:'pitch',pic:['carpenter-deck','center 38%'],flip:true,
+ kick:'THE POINT OF IT',head:'Never quote again. {Just do the work}.',sm:true,
+ copy:'QuoteMax is live in Australia. Your number answers, asks, prices and drafts. You review, send, and get back on the tools.',
+ act:'Get my QuoteMax &nbsp;&rarr;',terms:['14-DAY FREE TRIAL','FROM $49/MO','$0 COMMISSION'],
+ foot:'YOU WILL NEVER QUOTE AGAIN'},
+];
+
+const q=new URLSearchParams(location.search).get('d');
+if(q!==null){
+  document.body.classList.add('one');
+  document.getElementById('app').innerHTML=render(D[+q]);
+  const el=document.querySelector('.d');
+  el.style.position='fixed';el.style.left='0';el.style.top='0';
+  el.style.transformOrigin='top left';
+  el.style.transform='scale('+(window.innerWidth/1080)+')';
+  document.documentElement.style.overflow=document.body.style.overflow='hidden';
+} else document.getElementById('app').innerHTML=D.map(render).join('');
+</script>
+</body>
+</html>

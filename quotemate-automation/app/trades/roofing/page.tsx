@@ -5,7 +5,7 @@ import { TRADES } from "../_data"
 const data = TRADES.roofing
 
 export const metadata: Metadata = {
-  title: "Roofing quoting — QuoteMax",
+  title: "Roofing quoting · QuoteMax",
   description: data.intro,
 }
 

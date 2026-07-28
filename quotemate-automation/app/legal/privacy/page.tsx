@@ -44,26 +44,26 @@ export default function PrivacyPolicyPage() {
         <p>We collect personal information that is reasonably necessary to provide the service, including:</p>
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong>Account &amp; business details</strong> — name, business name,
+            <strong>Account &amp; business details</strong>: name, business name,
             email, mobile number, ABN, trade type, licence details, service area
             and pricing preferences.
           </li>
           <li>
-            <strong>Customer enquiry details</strong> — when a tradie&rsquo;s
+            <strong>Customer enquiry details</strong>: when a tradie&rsquo;s
             customer requests a quote, we process the customer&rsquo;s name,
             contact number, job address, job description and any photos they send.
           </li>
           <li>
-            <strong>Communications</strong> — SMS, voice call recordings and
+            <strong>Communications</strong>: SMS, voice call recordings and
             transcripts, and messages exchanged through the service.
           </li>
           <li>
-            <strong>Payment information</strong> — deposit and inspection payments
+            <strong>Payment information</strong>: deposit and inspection payments
             are processed by Stripe; we receive transaction metadata but do not
             store full card numbers.
           </li>
           <li>
-            <strong>Technical data</strong> — device, browser and usage
+            <strong>Technical data</strong>: device, browser and usage
             information, and cookies/local storage described in our{' '}
             <a href="/legal/cookies">Cookie policy</a>.
           </li>
@@ -86,8 +86,8 @@ export default function PrivacyPolicyPage() {
         </ul>
         <p>
           We use AI models to structure enquiries and draft quotes. Pricing is
-          generated from a tradie&rsquo;s configured rates and assembly library —
-          not invented — and money-affecting outputs are validated against that
+          generated from a tradie&rsquo;s configured rates and assembly library,
+          not invented, and money-affecting outputs are validated against that
           configuration before a quote is produced.
         </p>
         <p>
@@ -103,13 +103,13 @@ export default function PrivacyPolicyPage() {
           obligations, including:
         </p>
         <ul className="list-disc space-y-1.5 pl-5">
-          <li><strong>Supabase</strong> — database, authentication and file storage;</li>
-          <li><strong>Twilio</strong> — SMS and messaging delivery;</li>
-          <li><strong>Vapi, Deepgram &amp; ElevenLabs</strong> — voice receptionist (speech-to-text and text-to-speech);</li>
-          <li><strong>Anthropic, Google &amp; Voyage AI</strong> — AI processing for quote drafting and image generation;</li>
-          <li><strong>Stripe</strong> — payment processing;</li>
-          <li><strong>Resend</strong> — transactional email; and</li>
-          <li><strong>Vercel</strong> — application hosting.</li>
+          <li><strong>Supabase</strong>: database, authentication and file storage;</li>
+          <li><strong>Twilio</strong>: SMS and messaging delivery;</li>
+          <li><strong>Vapi, Deepgram &amp; ElevenLabs</strong>: voice receptionist (speech-to-text and text-to-speech);</li>
+          <li><strong>Anthropic, Google &amp; Voyage AI</strong>: AI processing for quote drafting and image generation;</li>
+          <li><strong>Stripe</strong>: payment processing;</li>
+          <li><strong>Resend</strong>: transactional email; and</li>
+          <li><strong>Vercel</strong>: application hosting.</li>
         </ul>
         <p>
           A tradie&rsquo;s customer details are made available to that tradie so
@@ -121,8 +121,8 @@ export default function PrivacyPolicyPage() {
       <LegalSection id="storage" n={5} heading="Storage & security">
         <p>
           We take reasonable steps to protect personal information from misuse,
-          interference, loss, and unauthorised access, modification or disclosure
-          — including encryption in transit, access controls and tenant data
+          interference, loss, and unauthorised access, modification or disclosure,
+          including encryption in transit, access controls and tenant data
           isolation. No method of transmission or storage is completely secure,
           and we cannot guarantee absolute security.
         </p>

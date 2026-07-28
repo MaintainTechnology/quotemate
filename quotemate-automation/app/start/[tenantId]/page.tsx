@@ -49,7 +49,7 @@ export default async function StartPage({ params }: { params: Promise<{ tenantId
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-xl flex-col px-6 py-12">
         <div className="flex items-center gap-2.5">
-          <BrandMark className="h-10 w-10" />
+          <BrandMark className="h-10 w-auto" />
           <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
         </div>
 

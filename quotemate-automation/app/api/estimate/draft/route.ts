@@ -64,9 +64,14 @@ const supabase = createClient(
 )
 
 export async function POST(req: Request) {
-  const { intakeId } = await req.json()
+  // tradieDrafted — set by the dashboard job quoter (/api/tenant/job-quote).
+  // Forces the review gate on so a portal draft never texts the customer
+  // before the tradie presses Send. Fail-safe by construction: the only
+  // effect of the flag is to HOLD, so an untrusted caller setting it can't
+  // cause a send that wouldn't otherwise happen.
+  const { intakeId, tradieDrafted } = await req.json()
   const log = pipelineLog('estimate')
-  log.step('received', { intakeId })
+  log.step('received', { intakeId, tradieDrafted: !!tradieDrafted })
 
   try {
     log.step('loading intake, pricing_book, caller_number')
@@ -708,6 +713,7 @@ export async function POST(req: Request) {
       totalIncGst: total,
       isInspection,
       riskFlags,
+      tradieDrafted: !!tradieDrafted,
     })
     log.ok('review-policy decided', {
       hold: reviewDecision.hold,

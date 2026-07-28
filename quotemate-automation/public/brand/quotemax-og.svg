@@ -1,23 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="QuoteMax — AI receptionist for Australian tradies">
   <title>QuoteMax</title>
-  <rect width="1200" height="630" fill="#0E1622"/>
-  <!-- top accent bar (signature Maintain orange) -->
-  <rect x="0" y="0" width="1200" height="10" fill="#FF5A1F"/>
-  <!-- icon mark, centered near top -->
-  <g transform="translate(530,140)">
-    <rect width="140" height="140" fill="#FF5A1F"/>
-    <g transform="scale(2.1875)">
-      <circle cx="31" cy="28" r="17" fill="#FFFFFF"/>
-      <circle cx="31" cy="28" r="7.5" fill="#FF5A1F"/>
-      <path d="M21 39 L37 39 L21 52 Z" fill="#FFFFFF"/>
-    </g>
+  <!-- Canonical QuoteMax palette: warm-charcoal canvas, one Caterpillar-yellow accent.
+       (The retired navy #0E1622 / orange #FF5A1F Maintain palette is deprecated.) -->
+  <rect width="1200" height="630" fill="#16120F"/>
+  <!-- top accent bar -->
+  <rect x="0" y="0" width="1200" height="10" fill="#FFC400"/>
+  <!-- icon mark, centred near the top. Charcoal canvas, so this is the
+       quote-max-logo-3 colourway (yellow body, charcoal notch) — the same
+       treatment the app shows in dark mode. No tile: yellow on charcoal already
+       carries itself, and the tile would fight the flat canvas. -->
+  <g transform="translate(510,165) scale(0.4534) translate(-151,-214)">
+      <path fill="#FFC400" d="M324 214C324 214 280.454 210.115 253 214C246.325 214.945 236 217 236 217C236 217 225.42 220.111 219 223C211.182 226.519 206.972 229.01 200 234C195.71 237.071 193.283 238.823 189.5 242.5C188.906 243.077 188.582 243.411 188 244C182.165 249.906 178.83 253.247 174 260C171.7 263.216 170.56 265.125 168.5 268.5L168.44 268.598C167.884 269.509 167.554 270.05 167 271C160.826 281.588 155 300 155 300C155 300 151.645 314.52 151 324C150.55 330.624 150.562 334.376 151 341C151.733 352.083 152.738 358.382 156 369C159.132 379.196 161.526 384.845 167 394C169.168 397.626 170.499 399.596 173 403C180.032 412.572 184.727 417.579 194 425C198.821 428.858 201.701 430.831 207 434C207 434 216.522 439.385 223 442C232.751 445.936 238.598 447.461 249 449C262.135 450.943 269.869 450.967 283 449C288.53 448.172 291.606 447.471 297 446C302.5 444.5 304 444 312 439L271 398C271 398 262.432 398.623 257 398C253.043 397.546 250.827 397.103 247 396C241.284 394.353 238.185 392.914 233 390C229.318 387.93 227.278 386.665 224 384C217.985 379.11 215.113 375.57 211 369C206.728 362.176 205.043 357.787 203 350C201.892 345.777 201.41 343.347 201 339C200.303 331.603 200.717 327.319 202 320C203.195 313.184 204.167 309.314 207 303C209.221 298.05 210.795 295.377 214 291C217.104 286.761 219.069 284.486 223 281C229.164 275.534 233.376 273.121 241 270C246.262 267.846 249.4 266.985 255 266C260.782 264.983 264.133 264.785 270 265C279.567 265.351 286.571 266.461 295 271C301.5 274.5 319 289.455 324 294C364.55 330.864 419 384 419 384L492 314H494V450H548V214H513L466.5 258.5L420 303H418L371 258.5L324 214Z"/>
+      <path fill="#16120F" d="M373 362L329 319L329.269 325.462C329.753 337.065 328.211 348.664 324.714 359.738L324 362L300 338L282.5 355L264.5 372.5L376 484L411 450L359 398L361.406 393.723C365.782 385.943 369.097 377.611 371.262 368.951L373 362Z"/>
   </g>
   <!-- wordmark -->
-  <text x="600" y="410" text-anchor="middle" font-family="'Segoe UI', Arial, Manrope, sans-serif" font-size="104" font-weight="800" letter-spacing="-3">
-    <tspan fill="#F4F1EB">QUOTE</tspan><tspan fill="#FF5A1F">MAX</tspan>
+  <text x="600" y="410" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="104" font-weight="800" letter-spacing="-3">
+    <tspan fill="#F4F1EB">QUOTE</tspan><tspan fill="#FFC400">MAX</tspan>
   </text>
   <!-- tagline -->
-  <text x="600" y="468" text-anchor="middle" font-family="'Segoe UI', Arial, Manrope, sans-serif" font-size="30" font-weight="500" letter-spacing="0.5" fill="#9FB0C3">AI receptionist for Australian tradies</text>
+  <text x="600" y="468" text-anchor="middle" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-size="30" font-weight="500" letter-spacing="0.5" fill="#A89F92">AI receptionist for Australian tradies</text>
   <!-- footer caption -->
-  <text x="600" y="556" text-anchor="middle" font-family="'Consolas','Courier New',monospace" font-size="22" font-weight="600" letter-spacing="3" fill="#5E7186">ELECTRICAL NSW · PLUMBING QLD</text>
+  <text x="600" y="556" text-anchor="middle" font-family="'JetBrains Mono','Consolas','Courier New',monospace" font-size="22" font-weight="600" letter-spacing="3" fill="#6E655B">ELECTRICAL · PLUMBING · ROOFING · SOLAR · PAINTING</text>
 </svg>

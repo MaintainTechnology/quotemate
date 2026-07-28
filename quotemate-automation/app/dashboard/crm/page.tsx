@@ -223,7 +223,7 @@ export default function CrmPage() {
       <nav className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
           <div className="flex items-center gap-2.5">
-            <BrandMark className="h-10 w-10" />
+            <BrandMark className="h-10 w-auto" />
             <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
           </div>
           <Link

@@ -72,7 +72,7 @@ function Shell({ token, children }: { token: string; children: React.ReactNode }
       <header className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark className="h-10 w-10" />
+            <BrandMark className="h-10 w-auto" />
             <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
           </Link>
           <Link
@@ -156,7 +156,9 @@ export default async function ThanksPage(props: {
     quote.intake_id
       ? supabase
           .from('intakes')
-          .select('job_type, address, suburb')
+          // `trade` is here for the trust video: the dashboard stores a
+          // generated clip per trade, so resolving one needs the trade slug.
+          .select('job_type, address, suburb, trade')
           .eq('id', quote.intake_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -164,8 +166,15 @@ export default async function ThanksPage(props: {
 
   const tradieName = tenant?.business_name ?? null
   // Video + the script it speaks, resolved together so the captions always
-  // belong to the film that is actually playing.
-  const thankyouVideo = trustVideoTrack(tenant, 'thankyou')
+  // belong to the film that is actually playing. The trade argument is required
+  // for the dashboard-generated clip to resolve at all — see the note at
+  // app/q/roof/[token]/page.tsx. Legacy intakes with no trade column fall back
+  // to 'electrical', matching /q/[token] and the estimator.
+  const thankyouVideo = trustVideoTrack(
+    tenant,
+    'thankyou',
+    ((intake as { trade?: string | null } | null)?.trade ?? 'electrical'),
+  )
   const who = tradieName ?? 'Your tradie'
   const tz = tzForState(tenant?.state ?? null)
   const jobType = (intake?.job_type as string | null) ?? null

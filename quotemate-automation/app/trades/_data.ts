@@ -33,7 +33,7 @@ export const TRADES: Record<string, TradeData> = {
     eyebrow: "Electrical · NSW",
     headline: { lead: "Quote the job while you're still on ", accent: "the tools", tail: "." },
     intro:
-      "Downlights to switchboard upgrades — a customer texts the job and QuoteMax drafts a clean, itemised quote against your own rates before you've packed up the ute.",
+      "Downlights to switchboard upgrades. A customer texts the job and QuoteMax drafts a clean, itemised quote against your own rates before you've packed up the ute.",
     heroImage: "/trades/electrical.jpg",
     heroAlt: "Australian electrician working at a residential switchboard",
     // Interim: reuses the home-page downlight photo so every trade page has a
@@ -41,9 +41,9 @@ export const TRADES: Record<string, TradeData> = {
     // (scripts/gen-marketing-images.mjs --only=electrical-2).
     detailImage: "/marketing/home-electrical.jpg",
     detailAlt: "Electrician fitting an LED downlight into a plasterboard ceiling",
-    detailCaption: "Circuits, access and switchboard age — read from the photos.",
+    detailCaption: "Circuits, access and switchboard age, read from the photos.",
     scopeBody:
-      "Standard jobs quote on the spot. Anything that needs eyes on site books a $99 inspection instead — credited straight back to the work.",
+      "Standard jobs quote on the spot. Anything that needs eyes on site books a $99 inspection instead, credited straight back to the work.",
     scopeTags: [
       "Downlights",
       "Power points",
@@ -57,12 +57,12 @@ export const TRADES: Record<string, TradeData> = {
       {
         n: "01",
         title: "Capture the job",
-        body: "The customer texts or calls your number with photos. QuoteMax asks the right questions for the job type — circuit count, access, switchboard age.",
+        body: "The customer texts or calls your number with photos. QuoteMax asks the right questions for the job type: circuit count, access, switchboard age.",
       },
       {
         n: "02",
         title: "Apply your rates",
-        body: "Every line is priced against your pricing book — hourly rate, call-out minimum and your electrical assemblies. Never a made-up number.",
+        body: "Every line is priced against your pricing book: hourly rate, call-out minimum and your electrical assemblies. Never a made-up number.",
       },
       {
         n: "03",
@@ -84,14 +84,14 @@ export const TRADES: Record<string, TradeData> = {
     eyebrow: "Plumbing · QLD",
     headline: { lead: "Quote the call you couldn't ", accent: "answer", tail: "." },
     intro:
-      "Blocked drains, hot-water swaps, leak repairs — the customer texts the problem and QuoteMax drafts a priced quote against your rates while you're under a sink somewhere else.",
+      "Blocked drains, hot-water swaps, leak repairs. The customer texts the problem and QuoteMax drafts a priced quote against your rates while you're under a sink somewhere else.",
     heroImage: "/trades/plumbing.jpg",
     heroAlt: "Australian plumber working on residential pipework",
     // Interim: reuses the home-page hot-water photo. Swap to
     // /trades/plumbing-2.jpg once that render exists.
     detailImage: "/marketing/home-plumbing.jpg",
     detailAlt: "Plumber servicing an exterior hot water cylinder",
-    detailCaption: "Fixtures, access and the property — read from the photos.",
+    detailCaption: "Fixtures, access and the property, read from the photos.",
     scopeBody:
       "Clear jobs quote instantly. The messy ones book a $99 site visit with the deposit already paid, so you only drive out to work that's locked in.",
     scopeTags: [
@@ -106,7 +106,7 @@ export const TRADES: Record<string, TradeData> = {
       {
         n: "01",
         title: "Capture the job",
-        body: "The customer texts the symptoms and a photo. QuoteMax asks about fixtures, access and the property — the questions you'd ask on the phone.",
+        body: "The customer texts the symptoms and a photo. QuoteMax asks about fixtures, access and the property, the questions you'd ask on the phone.",
       },
       {
         n: "02",
@@ -133,14 +133,14 @@ export const TRADES: Record<string, TradeData> = {
     eyebrow: "Roofing",
     headline: { lead: "Quote the roof from the ", accent: "ground", tail: "." },
     intro:
-      "Re-roofs, repairs, gutters and Colorbond — QuoteMax reads the structure, measures the area and drafts a quote against your rates without a second trip up the ladder.",
+      "Re-roofs, repairs, gutters and Colorbond. QuoteMax reads the structure, measures the area and drafts a quote against your rates without a second trip up the ladder.",
     heroImage: "/trades/roofing.jpg",
     heroAlt: "Australian roofer working on a residential roof",
     detailImage: "/trades/roofing-2.jpg",
     detailAlt: "An Australian property with several separate roof structures",
     detailCaption: "Multi-structure jobs are measured per roof.",
     scopeBody:
-      "Every roofing quote lands in your dashboard for a quick check before it goes out — the numbers are yours to confirm.",
+      "Every roofing quote lands in your dashboard for a quick check before it goes out. The numbers are yours to confirm.",
     scopeTags: [
       "Metal re-roofs",
       "Tile repairs",
@@ -153,12 +153,12 @@ export const TRADES: Record<string, TradeData> = {
       {
         n: "01",
         title: "Read the roof",
-        body: "Photos and the address come in. QuoteMax reads the structure, pitch and access — and splits a job across multiple roofs where it needs to.",
+        body: "Photos and the address come in. QuoteMax reads the structure, pitch and access, and splits a job across multiple roofs where it needs to.",
       },
       {
         n: "02",
         title: "Measure and apply your rates",
-        body: "Area is measured per structure, then priced against your roofing rates and material — Corrugated or Spandek Colorbond.",
+        body: "Area is measured per structure, then priced against your roofing rates and material, Corrugated or Spandek Colorbond.",
       },
       {
         n: "03",
@@ -180,7 +180,7 @@ export const TRADES: Record<string, TradeData> = {
     eyebrow: "Solar",
     headline: { lead: "Quote a rooftop you've never ", accent: "seen", tail: "." },
     intro:
-      "QuoteMax reads the address, checks the roof and the sun, sizes the system and drafts a quote against your rates and panel preferences — before you've driven out.",
+      "QuoteMax reads the address, checks the roof and the sun, sizes the system and drafts a quote against your rates and panel preferences, before you've driven out.",
     heroImage: "/trades/solar.jpg",
     heroAlt: "Solar installer fitting panels on an Australian rooftop",
     detailImage: "/trades/solar-2.jpg",
@@ -199,12 +199,12 @@ export const TRADES: Record<string, TradeData> = {
       {
         n: "01",
         title: "Read the address",
-        body: "Roof, orientation and shading are read from aerial imagery and sun data — no first visit needed.",
+        body: "Roof, orientation and shading are read from aerial imagery and sun data. No first visit needed.",
       },
       {
         n: "02",
         title: "Size the system",
-        body: "QuoteMax sizes the array — kW, panel count and inverter — against your hardware preferences.",
+        body: "QuoteMax sizes the array (kW, panel count and inverter) against your hardware preferences.",
       },
       {
         n: "03",
@@ -226,14 +226,14 @@ export const TRADES: Record<string, TradeData> = {
     eyebrow: "Painting",
     headline: { lead: "Quote the repaint before you lift a ", accent: "brush", tail: "." },
     intro:
-      "Interior repaints, exterior weatherboard, fresh trim — a customer sends the rooms and QuoteMax measures the surfaces, counts the coats and drafts a quote against your rates before you've set up a single drop sheet.",
+      "Interior repaints, exterior weatherboard, fresh trim. A customer sends the rooms and QuoteMax measures the surfaces, counts the coats and drafts a quote against your rates before you've set up a single drop sheet.",
     heroImage: "/trades/painting.jpg",
     heroAlt: "Australian painter working on an interior repaint",
     detailImage: "/trades/painting-2.jpg",
     detailAlt: "A room mid-repaint, two walls finished and the trim masked",
-    detailCaption: "Walls, ceilings and trim — measured room by room.",
+    detailCaption: "Walls, ceilings and trim, measured room by room.",
     scopeBody:
-      "Every painting quote lands in your dashboard for a quick check before it goes out — the surfaces, coats and prep are yours to confirm.",
+      "Every painting quote lands in your dashboard for a quick check before it goes out. The surfaces, coats and prep are yours to confirm.",
     scopeTags: [
       "Interior repaints",
       "Ceilings",
@@ -247,12 +247,12 @@ export const TRADES: Record<string, TradeData> = {
       {
         n: "01",
         title: "Capture the rooms",
-        body: "The customer sends photos of the rooms or the facade. QuoteMax asks the right questions — surfaces, current condition, ceilings and trim, and how many coats.",
+        body: "The customer sends photos of the rooms or the facade. QuoteMax asks the right questions: surfaces, current condition, ceilings and trim, and how many coats.",
       },
       {
         n: "02",
         title: "Measure and apply your rates",
-        body: "Wall, ceiling and trim areas are measured surface by surface, then priced against your painting rate card — prep, undercoat and finish coats.",
+        body: "Wall, ceiling and trim areas are measured surface by surface, then priced against your painting rate card: prep, undercoat and finish coats.",
       },
       {
         n: "03",

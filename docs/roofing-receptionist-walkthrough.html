@@ -1,0 +1,1182 @@
+<!doctype html>
+<html lang="en-AU" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuoteMax · How the AI Roofing Receptionist Works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax design system. Warm-charcoal canvas, one Caterpillar-yellow
+   accent, Manrope + JetBrains Mono, square corners, hairline borders.
+   Tokens copied from redesign/DesignSystem/tokens/colors.css.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  color-scheme: dark;
+  --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+  --accent:#FFC400; --accent-press:#E6AC00; --accent-soft:#FFD23D; --accent-ink:#1C1812;
+  --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+  --edge-glow:#6E6354; --edge-deep:#4A4136;
+  --success:#15803D; --success-bright:#34D27B;
+  --warning:#B45309; --warning-bright:#F59E0B;
+  --danger:#B91C1C;  --danger-bright:#F0816B;
+  --surface-canvas:var(--ink-deep); --surface-sunken:var(--ink); --surface-card:var(--ink-card);
+  --border-hairline:var(--ink-line);
+  --text-heading:var(--text-pri); --text-body:var(--text-sec); --text-muted:var(--text-dim);
+  --glow-cool:rgba(43,36,34,.85); --glow-warm:rgba(255,196,0,.07);
+  --font-sans:'Manrope',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'Cascadia Mono','Consolas',monospace;
+  --gutter:1.5rem;
+}
+:root[data-theme="light"]{
+  color-scheme: light;
+  --ink-deep:#FAF8F4; --ink:#F3EEE7; --ink-card:#FFFFFF; --ink-line:#E9E3DC;
+  --accent-ink:#2B2422;
+  --text-pri:#241E1B; --text-sec:#5E544E; --text-dim:#837870;
+  --edge-glow:#C9BEAD; --edge-deep:#B7AB98;
+  --success-bright:#15803D; --warning-bright:#B45309; --danger-bright:#B91C1C;
+  --glow-cool:rgba(255,253,250,.9); --glow-warm:rgba(255,196,0,.05);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{
+  margin:0;background:var(--surface-canvas);color:var(--text-body);
+  font-family:var(--font-sans);font-size:16px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+  background-image:
+    radial-gradient(1180px 560px at 26% -12%, var(--glow-cool) 0%, transparent 60%),
+    radial-gradient(760px 420px at 88% -6%, var(--glow-warm) 0%, transparent 58%);
+  background-repeat:no-repeat;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 var(--gutter) 6rem}
+
+/* ─── type ─────────────────────────────────────────────────────────── */
+h1,h2,h3,h4{color:var(--text-heading);margin:0;font-weight:800;letter-spacing:-.01em;line-height:1.14}
+h1{font-size:clamp(2.1rem,5.4vw,3.6rem);text-transform:uppercase;letter-spacing:-.02em}
+h2{font-size:clamp(1.5rem,3.2vw,2.1rem);text-transform:uppercase}
+h3{font-size:1.12rem;font-weight:700;letter-spacing:0;text-transform:none}
+h4{font-size:.95rem;font-weight:700;letter-spacing:0;text-transform:none}
+p{margin:0 0 1rem}
+a{color:var(--accent);text-underline-offset:3px}
+strong{color:var(--text-heading);font-weight:700}
+.eyebrow{
+  font-family:var(--font-mono);font-size:.7rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.18em;color:var(--text-muted);margin:0 0 .75rem;display:block;
+}
+.lede{font-size:1.12rem;color:var(--text-body);max-width:64ch}
+.mono{font-family:var(--font-mono)}
+.hl{color:var(--accent)}
+.muted{color:var(--text-muted)}
+.small{font-size:.86rem;line-height:1.55}
+
+/* ─── header ───────────────────────────────────────────────────────── */
+header.hero{padding:4.5rem 0 2.5rem;border-bottom:1px solid var(--border-hairline)}
+.brandbar{display:flex;align-items:center;gap:.7rem;margin-bottom:2.5rem}
+.brandbar .dot{width:14px;height:14px;background:var(--accent);flex:none}
+.brandbar .name{font-family:var(--font-mono);font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;font-size:.78rem;color:var(--text-heading)}
+.brandbar .tag{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-muted);margin-left:auto}
+.factstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:1px;background:var(--border-hairline);border:1px solid var(--border-hairline);margin-top:2.5rem}
+.factstrip div{background:var(--surface-canvas);padding:1rem 1.15rem}
+.factstrip .k{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:.3rem}
+.factstrip .v{color:var(--text-heading);font-weight:700;font-size:.95rem}
+
+/* ─── sections ─────────────────────────────────────────────────────── */
+section{padding:3.5rem 0;border-bottom:1px solid var(--border-hairline)}
+.sechead{display:flex;gap:1.1rem;align-items:baseline;margin-bottom:1.5rem}
+.secnum{
+  font-family:var(--font-mono);font-size:.78rem;font-weight:700;color:var(--accent-ink);
+  background:var(--accent);padding:.28rem .55rem;flex:none;line-height:1;letter-spacing:.06em;
+}
+.card{background:var(--surface-card);border:1px solid var(--border-hairline);padding:1.4rem 1.5rem}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem}
+
+/* ─── diagrams ─────────────────────────────────────────────────────── */
+figure{margin:1.5rem 0;background:var(--surface-sunken);
+  border:1px solid var(--border-hairline);padding:1.4rem 1.2rem}
+figure .scroll{overflow-x:auto}
+figure svg{display:block;width:100%;height:auto;min-width:560px}
+figcaption{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-muted);margin-top:1rem;
+  padding-top:.8rem;border-top:1px solid var(--border-hairline)}
+svg text{font-family:var(--font-sans);fill:var(--text-heading)}
+svg .t{font-size:13px;font-weight:600}
+svg .ts{font-size:11px;font-weight:500;fill:var(--text-body)}
+svg .tm{font-family:var(--font-mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.1em;fill:var(--text-muted)}
+svg .tk{font-family:var(--font-mono);font-size:10px;font-weight:700;fill:var(--accent-ink)}
+svg .box{fill:var(--surface-card);stroke:var(--border-hairline);stroke-width:1}
+svg .boxs{fill:var(--surface-canvas);stroke:var(--border-hairline);stroke-width:1}
+svg .acc{fill:var(--accent);stroke:none}
+svg .accl{fill:none;stroke:var(--accent);stroke-width:1.5}
+svg .ok{fill:none;stroke:var(--success-bright);stroke-width:1.5}
+svg .warn{fill:none;stroke:var(--warning-bright);stroke-width:1.5}
+svg .bad{fill:none;stroke:var(--danger-bright);stroke-width:1.5}
+svg .ln{fill:none;stroke:var(--edge-glow);stroke-width:1.5}
+svg .dash{stroke-dasharray:4 4}
+svg .ink{fill:var(--accent-ink)}
+svg .tok{fill:var(--success-bright);font-size:10.5px;font-weight:700;font-family:var(--font-mono)}
+svg .tbad{fill:var(--danger-bright);font-size:10.5px;font-weight:700;font-family:var(--font-mono)}
+svg .twarn{fill:var(--warning-bright);font-size:10.5px;font-weight:700;font-family:var(--font-mono)}
+
+/* ─── SMS thread ───────────────────────────────────────────────────── */
+.thread{display:flex;flex-direction:column;gap:.55rem;margin:0}
+.msg{max-width:78%;padding:.7rem .9rem;font-size:.9rem;line-height:1.5;white-space:pre-line;
+  border:1px solid var(--border-hairline)}
+.msg.in{align-self:flex-start;background:var(--surface-card);color:var(--text-body)}
+.msg.out{align-self:flex-end;background:var(--accent);color:var(--accent-ink);
+  border-color:var(--accent);font-weight:500}
+.msg.mms{align-self:flex-end;background:var(--surface-sunken);color:var(--text-muted);
+  font-family:var(--font-mono);font-size:.74rem;letter-spacing:.06em;text-transform:uppercase}
+.msg .who{display:block;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.16em;
+  text-transform:uppercase;opacity:.62;margin-bottom:.3rem;font-weight:700}
+.msg.tradie{align-self:flex-start;background:var(--surface-sunken);
+  border-left:3px solid var(--success-bright)}
+
+/* step blocks in the walkthrough */
+.step{display:grid;grid-template-columns:auto 1fr;gap:1.2rem;
+  padding:1.6rem 0;border-top:1px solid var(--border-hairline)}
+.step:first-of-type{border-top:none}
+.stepnum{font-family:var(--font-mono);font-size:.72rem;font-weight:700;
+  color:var(--text-muted);border:1px solid var(--border-hairline);
+  width:2.1rem;height:2.1rem;display:flex;align-items:center;justify-content:center;flex:none}
+.step h3{margin-bottom:.4rem}
+.behind{margin-top:.9rem;border-top:2px solid var(--accent);
+  background:var(--surface-sunken);padding:.75rem .95rem;font-size:.85rem}
+.behind b{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);display:block;margin-bottom:.35rem;font-weight:700}
+.behind ul{margin:.35rem 0 0;padding-left:1.05rem}
+.behind li{margin-bottom:.25rem}
+
+/* ─── tables & lists ───────────────────────────────────────────────── */
+.tablewrap{overflow-x:auto;border:1px solid var(--border-hairline);margin:1.2rem 0}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:.87rem}
+th,td{text-align:left;padding:.7rem .9rem;border-bottom:1px solid var(--border-hairline);
+  vertical-align:top}
+th{font-family:var(--font-mono);font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--text-muted);background:var(--surface-sunken);font-weight:700}
+td:first-child{color:var(--text-heading);font-weight:600}
+tr:last-child td{border-bottom:none}
+.rule{display:grid;grid-template-columns:auto 1fr;gap:.8rem;padding:.85rem 0;
+  border-top:1px solid var(--border-hairline)}
+.rule:first-child{border-top:none}
+.tick{color:var(--accent);font-weight:800;line-height:1.5}
+.no{color:var(--danger-bright);font-weight:800;line-height:1.5}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:.62rem;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;padding:.2rem .45rem;
+  border:1px solid var(--border-hairline);color:var(--text-muted);margin-right:.3rem}
+.pill.y{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+footer{padding:3rem 0 1rem;color:var(--text-muted);font-size:.8rem}
+
+/* ─── print / PDF ──────────────────────────────────────────────────── */
+@media print{
+  html,body{background:var(--surface-canvas)!important;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:A4;margin:14mm}
+  .wrap{max-width:none;padding:0}
+  header.hero{padding-top:0}
+  section{padding:1.6rem 0;break-inside:auto}
+  .sechead,h1,h2,h3,figcaption{break-after:avoid}
+  figure,.card,.step,.tablewrap,.thread{break-inside:avoid}
+  figure svg{min-width:0}
+  figure .scroll,.tablewrap{overflow:visible}
+  table{min-width:0}
+  a{text-decoration:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<header class="hero">
+  <div class="brandbar">
+    <span class="dot"></span>
+    <span class="name">QuoteMax</span>
+    <span class="tag">Roofing · SMS</span>
+  </div>
+  <span class="eyebrow">A plain-English walkthrough</span>
+  <h1>The AI Roofing<br>Receptionist</h1>
+  <p class="lede" style="margin-top:1.4rem">
+    A customer texts the roofer's normal mobile number. Nobody picks it up. The receptionist does.
+    It asks the right questions, checks the address on the map, measures the roof from satellite,
+    sends a priced quote, and tells the roofer the moment there is a real job. This page walks
+    through exactly what it sends, why it sends it, and where it stops itself.
+  </p>
+  <div class="factstrip">
+    <div><span class="k">Channel</span><span class="v">SMS &amp; WhatsApp</span></div>
+    <div><span class="k">Words written by</span><span class="v">Claude Sonnet 5</span></div>
+    <div><span class="k">Numbers written by</span><span class="v">Code only</span></div>
+    <div><span class="k">Typical reply time</span><span class="v">Seconds</span></div>
+    <div><span class="k">Humans needed</span><span class="v">None to quote</span></div>
+  </div>
+</header>
+
+<!-- ══════════════════ 01 · THE ONE-MINUTE VERSION ═══════════════ -->
+<section id="overview">
+  <div class="sechead"><span class="secnum">01</span><h2>The one-minute version</h2></div>
+  <p class="lede">Five stages. The customer only ever sees a normal text conversation.</p>
+
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1000 250" role="img" aria-label="Five-stage flow: enquiry, gather, verify address, measure and price, book">
+      <!-- stage boxes -->
+      <g>
+        <rect class="box" x="8"   y="66" width="170" height="82"/>
+        <rect class="box" x="214" y="66" width="170" height="82"/>
+        <rect class="box" x="420" y="66" width="170" height="82"/>
+        <rect class="box" x="626" y="66" width="170" height="82"/>
+        <rect class="box" x="832" y="66" width="160" height="82"/>
+      </g>
+      <!-- yellow top rule on each -->
+      <g class="acc">
+        <rect x="8" y="66" width="170" height="3"/><rect x="214" y="66" width="170" height="3"/>
+        <rect x="420" y="66" width="170" height="3"/><rect x="626" y="66" width="170" height="3"/>
+        <rect x="832" y="66" width="160" height="3"/>
+      </g>
+      <!-- numbers -->
+      <g class="tm">
+        <text x="24" y="90">STAGE 1</text><text x="230" y="90">STAGE 2</text>
+        <text x="436" y="90">STAGE 3</text><text x="642" y="90">STAGE 4</text>
+        <text x="848" y="90">STAGE 5</text>
+      </g>
+      <g class="t">
+        <text x="24" y="112">Enquiry lands</text><text x="230" y="112">Ask what's needed</text>
+        <text x="436" y="112">Check the address</text><text x="642" y="112">Measure &amp; price</text>
+        <text x="848" y="112">Pay &amp; book</text>
+      </g>
+      <g class="ts">
+        <text x="24" y="132">"Need a new roof"</text>
+        <text x="230" y="132">Job, material, pitch</text>
+        <text x="436" y="132">Google + Geoscape</text>
+        <text x="642" y="132">Satellite → dollars</text>
+        <text x="848" y="132">Stripe → calendar</text>
+      </g>
+      <!-- arrows -->
+      <g class="accl">
+        <path d="M178 107 H206"/><path d="M384 107 H412"/>
+        <path d="M590 107 H618"/><path d="M796 107 H824"/>
+      </g>
+      <g class="acc">
+        <path d="M206 107 l-8 -4.5 v9 z"/><path d="M412 107 l-8 -4.5 v9 z"/>
+        <path d="M618 107 l-8 -4.5 v9 z"/><path d="M824 107 l-8 -4.5 v9 z"/>
+      </g>
+      <!-- customer / tradie lanes -->
+      <text class="tm" x="8" y="34">WHAT THE CUSTOMER GETS</text>
+      <g class="ts">
+        <text x="24" y="52">A reply in seconds</text>
+        <text x="230" y="52">One question at a time</text>
+        <text x="436" y="52">"Is that right?"</text>
+        <text x="642" y="52">Photos + a price</text>
+        <text x="848" y="52">A locked-in time</text>
+      </g>
+      <text class="tm" x="8" y="186">WHAT THE ROOFER GETS</text>
+      <g>
+        <rect class="boxs" x="626" y="196" width="170" height="40"/>
+        <rect class="boxs" x="832" y="196" width="160" height="40"/>
+        <text class="ts" x="642" y="214">"Quote sent, $69,652"</text>
+        <text class="ts" x="642" y="229">with a review link</text>
+        <text class="ts" x="848" y="214">"Job BOOKED for</text>
+        <text class="ts" x="848" y="229">Thu 7 May, 9:00am"</text>
+      </g>
+      <g class="ok"><path d="M711 148 V196"/><path d="M912 148 V196"/></g>
+    </svg>
+    </div>
+    <figcaption>Diagram 1 · the whole journey, and the two points where the roofer's phone buzzes</figcaption>
+  </figure>
+
+  <div class="grid3" style="margin-top:1.5rem">
+    <div class="card">
+      <h4>It talks like a person</h4>
+      <p class="small muted" style="margin:.5rem 0 0">Greetings, questions, corrections, "no worries mate": all handled in natural language, not a rigid menu.</p>
+    </div>
+    <div class="card">
+      <h4>It never invents a number</h4>
+      <p class="small muted" style="margin:.5rem 0 0">Every price, area, address and link is produced by code. If the AI writes one, the whole message is thrown away.</p>
+    </div>
+    <div class="card">
+      <h4>It never loses a lead</h4>
+      <p class="small muted" style="margin:.5rem 0 0">Anything it can't handle becomes an on-site inspection or an alert to the roofer. It never dead-ends.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ 02 · HOW ONE MESSAGE IS HANDLED ═══════════ -->
+<section id="turn">
+  <div class="sechead"><span class="secnum">02</span><h2>How it handles one message</h2></div>
+  <p class="lede">
+    Every incoming text runs through the same short loop. The AI decides <em>what to do</em>;
+    code decides <em>what the numbers are</em>.
+  </p>
+
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1000 430" role="img" aria-label="Per-message decision loop from inbound text to outbound reply">
+      <!-- 1 inbound -->
+      <rect class="box" x="8" y="24" width="150" height="54"/>
+      <text class="tm" x="22" y="44">INBOUND</text>
+      <text class="t"  x="22" y="63">Customer texts</text>
+
+      <!-- 2 stop check -->
+      <rect class="box" x="196" y="24" width="176" height="54"/>
+      <text class="tm" x="210" y="44">CHECK 1 · CODE</text>
+      <text class="t"  x="210" y="63">Did they say STOP?</text>
+
+      <!-- 3 engage -->
+      <rect class="box" x="410" y="24" width="196" height="54"/>
+      <text class="tm" x="424" y="44">CHECK 2 · CODE</text>
+      <text class="t"  x="424" y="63">Is this a roofing job?</text>
+
+      <!-- 4 AI -->
+      <rect class="box" x="644" y="14" width="348" height="74"/>
+      <rect class="acc" x="644" y="14" width="348" height="3"/>
+      <text class="tm" x="660" y="36">THE AI TURN · CLAUDE SONNET 5</text>
+      <text class="t"  x="660" y="56">Reads the thread. Picks ONE action.</text>
+      <text class="ts" x="660" y="75">Writes the words. Never the figures.</text>
+
+      <g class="accl"><path d="M158 51 H188"/><path d="M372 51 H402"/><path d="M606 51 H636"/></g>
+      <g class="acc">
+        <path d="M188 51 l-8 -4.5 v9 z"/><path d="M402 51 l-8 -4.5 v9 z"/><path d="M636 51 l-8 -4.5 v9 z"/>
+      </g>
+      <text class="tbad" x="248" y="100">YES → close politely, never text again</text>
+      <text class="twarn" x="424" y="100">NO → hand to the general receptionist</text>
+
+      <!-- actions row -->
+      <text class="tm" x="8" y="146">THE TEN ACTIONS IT CAN CHOOSE FROM</text>
+      <g>
+        <rect class="boxs" x="8"   y="158" width="186" height="30"/>
+        <rect class="boxs" x="204" y="158" width="186" height="30"/>
+        <rect class="boxs" x="400" y="158" width="186" height="30"/>
+        <rect class="boxs" x="596" y="158" width="186" height="30"/>
+        <rect class="boxs" x="792" y="158" width="200" height="30"/>
+        <rect class="boxs" x="8"   y="194" width="186" height="30"/>
+        <rect class="boxs" x="204" y="194" width="186" height="30"/>
+        <rect class="boxs" x="400" y="194" width="186" height="30"/>
+        <rect class="boxs" x="596" y="194" width="186" height="30"/>
+        <rect class="boxs" x="792" y="194" width="200" height="30"/>
+      </g>
+      <g class="ts">
+        <text x="20" y="178">Ask for a detail</text>
+        <text x="216" y="178">Check an address</text>
+        <text x="412" y="178">Measure &amp; price roof</text>
+        <text x="608" y="178">Send the saved quote</text>
+        <text x="804" y="178">Book the inspection</text>
+        <text x="20" y="214">Answer about the business</text>
+        <text x="216" y="214">Say "I'll check &amp; call back"</text>
+        <text x="412" y="214">Hand to another trade</text>
+        <text x="608" y="214">End the conversation</text>
+        <text x="804" y="214">(price painting, other trade)</text>
+      </g>
+      <g class="accl"><path d="M818 88 V148"/></g>
+
+      <!-- grounding gate -->
+      <rect class="box" x="8" y="256" width="470" height="86"/>
+      <rect class="acc" x="8" y="256" width="470" height="3"/>
+      <text class="tm" x="24" y="278">CHECK 3 · THE GROUNDING GUARD</text>
+      <text class="t"  x="24" y="298">Does the reply contain a figure nothing produced?</text>
+      <text class="ts" x="24" y="317">A price, an area, a building count, an address or a link</text>
+      <text class="ts" x="24" y="333">that no tool generated = the whole turn is binned.</text>
+
+      <!-- outcomes -->
+      <rect class="box" x="520" y="248" width="230" height="44"/>
+      <text class="tok" x="534" y="266">CLEAN</text>
+      <text class="ts"  x="534" y="283">Send it. Save the new state.</text>
+
+      <rect class="box" x="520" y="306" width="230" height="44"/>
+      <text class="tbad" x="534" y="324">NOT CLEAN / AI DOWN</text>
+      <text class="ts"   x="534" y="341">Fall back to the rule-based script</text>
+
+      <rect class="box" x="782" y="276" width="210" height="46"/>
+      <rect class="acc" x="782" y="276" width="210" height="3"/>
+      <text class="t"  x="796" y="296">Customer gets a reply</text>
+      <text class="ts" x="796" y="313">either way. Always.</text>
+
+      <g class="accl"><path d="M478 299 H512"/></g>
+      <g class="ok"><path d="M750 270 H768 V295 H778"/></g>
+      <g class="warn"><path d="M750 328 H768 V303 H778"/></g>
+      <g class="ln dash"><path d="M300 224 V256"/></g>
+
+      <text class="tm" x="8" y="380">THE FALLBACK IS NOT A DEAD END</text>
+      <text class="ts" x="8" y="400">The original rule-based roofing script is still there, fully tested, and runs for that one turn only.</text>
+      <text class="ts" x="8" y="418">Next message, the AI tries again. A model outage slows the conversation down; it never breaks it.</text>
+    </svg>
+    </div>
+    <figcaption>Diagram 2 · one inbound message, three checks, one outbound reply</figcaption>
+  </figure>
+
+  <div class="grid2" style="margin-top:1.5rem">
+    <div class="card">
+      <h4>What the AI is allowed to know</h4>
+      <p class="small" style="margin:.5rem 0 .6rem">A deliberately tiny fact sheet: business name, owner's first name,
+      the trades they offer, and the state they work in. That is all.</p>
+      <p class="small muted" style="margin:0">Anything else (years trading, weekend work, licence numbers,
+      insurance, warranty terms) is <strong>unknown by construction</strong>. It cannot leak what it was never given.</p>
+    </div>
+    <div class="card">
+      <h4>What happens when it doesn't know</h4>
+      <p class="small" style="margin:.5rem 0 .6rem">It says so honestly, and the roofer is texted straight away
+      so the promise is actually kept.</p>
+      <div class="msg out" style="max-width:100%;margin-top:.5rem"><span class="who">Receptionist</span>Good question, I'll check with Ricardo and come back to you. Anything else I can help with in the meantime?</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ 03 · THE SCENARIO ═════════════════════════ -->
+<section id="scenario">
+  <div class="sechead"><span class="secnum">03</span><h2>The scenario, step by step</h2></div>
+  <p class="lede">
+    Dave texts <strong>Ricardo's Roofing</strong> at 7:42pm on a Tuesday. Ricardo is at the pub.
+    Here is every message, in order, with what happened behind it.
+  </p>
+
+  <!-- step 1 -->
+  <div class="step">
+    <div class="stepnum">01</div>
+    <div>
+      <h3>The first message in</h3>
+      <p class="small">Dave's text arrives on Ricardo's own mobile number. The receptionist reads the whole message
+      first. If Dave already gave the address, the job type or the roof material, it takes them and skips those questions.</p>
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg in"><span class="who">Dave · 7:42pm</span>Hi mate, after a price on a new roof</div>
+        <div class="msg out"><span class="who">Receptionist · 7:42pm</span>Happy to sort a roofing quote for you. What's the property address, including suburb and postcode?</div>
+      </div>
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>"new roof" is a roofing enquiry, so the roofing receptionist takes the thread. For a roofing-only business it takes <em>every</em> thread, keyword or not.</li>
+          <li>If several texts land within a second or two, they are treated as one message so nothing is dropped.</li>
+          <li>Nothing was volunteered here, so it asks the first missing thing: the address.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 2 -->
+  <div class="step">
+    <div class="stepnum">02</div>
+    <div>
+      <h3>The address is checked on the map, twice</h3>
+      <p class="small">Dave's typing is never trusted on its own. Before the address is read back, it is checked against
+      two independent registers. Reading a customer's own typo back to them just gets a "yep".</p>
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg in"><span class="who">Dave</span>670 London Road Chandler 4155</div>
+        <div class="msg out"><span class="who">Receptionist</span>Just to confirm, the property is "670 London Rd, Chandler QLD 4155". Is that right? Reply yes or no.</div>
+        <div class="msg in"><span class="who">Dave</span>yep that's it</div>
+      </div>
+
+      <figure>
+        <div class="scroll">
+        <svg viewBox="0 0 1000 320" role="img" aria-label="Address verification: Google then Geoscape, with four outcomes">
+          <rect class="box" x="8" y="16" width="182" height="50"/>
+          <text class="tm" x="22" y="36">TYPED BY THE CUSTOMER</text>
+          <text class="ts" x="22" y="54">"670 London Road Chandler 4155"</text>
+
+          <rect class="box" x="230" y="8" width="200" height="66"/>
+          <text class="tm" x="244" y="28">CHECK A</text>
+          <text class="t"  x="244" y="47">Google Address</text>
+          <text class="t"  x="244" y="64">Validation</text>
+
+          <rect class="box" x="470" y="8" width="230" height="66"/>
+          <rect class="acc" x="470" y="8" width="230" height="3"/>
+          <text class="tm" x="484" y="30">CHECK B · THE DECIDER</text>
+          <text class="t"  x="484" y="49">Geoscape G-NAF register</text>
+          <text class="ts" x="484" y="66">the same one used to measure</text>
+
+          <g class="accl"><path d="M190 41 H222"/><path d="M430 41 H462"/></g>
+          <g class="acc"><path d="M222 41 l-8 -4.5 v9 z"/><path d="M462 41 l-8 -4.5 v9 z"/></g>
+
+          <!-- outcomes -->
+          <text class="tm" x="8" y="112">FOUR POSSIBLE OUTCOMES</text>
+
+          <rect class="box" x="8" y="126" width="240" height="76"/>
+          <rect class="acc" x="8" y="126" width="240" height="3"/>
+          <text class="tok" x="24" y="146">1 · EXACT MATCH</text>
+          <text class="ts"  x="24" y="166">Read it back plainly:</text>
+          <text class="ts"  x="24" y="183">"Just to confirm, the property</text>
+          <text class="ts"  x="24" y="197">is ... Is that right?"</text>
+
+          <rect class="box" x="264" y="126" width="240" height="76"/>
+          <rect class="acc" x="264" y="126" width="240" height="3"/>
+          <text class="twarn" x="280" y="146">2 · CORRECTED</text>
+          <text class="ts"    x="280" y="166">Read the corrected one back:</text>
+          <text class="ts"    x="280" y="183">"The closest address I can find</text>
+          <text class="ts"    x="280" y="197">is ... Is that the one?"</text>
+
+          <rect class="box" x="520" y="126" width="240" height="76"/>
+          <rect class="acc" x="520" y="126" width="240" height="3"/>
+          <text class="twarn" x="536" y="146">3 · NOT FOUND, BUT CLOSE</text>
+          <text class="ts"    x="536" y="166">Offer the near match:</text>
+          <text class="ts"    x="536" y="183">"Did you mean ...?"</text>
+          <text class="ts"    x="536" y="197">Never guesses silently.</text>
+
+          <rect class="box" x="776" y="126" width="216" height="76"/>
+          <rect class="acc" x="776" y="126" width="216" height="3"/>
+          <text class="tbad" x="792" y="146">4 · NOT ON THE MAP</text>
+          <text class="ts"   x="792" y="166">Ask again, twice at most,</text>
+          <text class="ts"   x="792" y="183">then hand the lead to a</text>
+          <text class="ts"   x="792" y="197">human. Never measured.</text>
+
+          <!-- guard -->
+          <rect class="boxs" x="8" y="222" width="984" height="80"/>
+          <rect class="acc"  x="8" y="222" width="984" height="3"/>
+          <text class="tm" x="24" y="246">THE HOUSE-NUMBER GUARD</text>
+          <text class="t"  x="24" y="266">If the register comes back with a different street number, that is a different house, so it is refused, not suggested.</text>
+          <text class="ts" x="24" y="286">Measuring and pricing the neighbour's roof would be worse than not quoting at all. Unit numbers are handled properly: "3/50 Connor St" compares against 50.</text>
+        </svg>
+        </div>
+        <figcaption>Diagram 3 · why the address is checked before it is read back</figcaption>
+      </figure>
+
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>A real case: a customer typed <span class="mono">"15 Schofield drive safety each"</span>, where "each" was meant to be "beach". The old read-back parroted it and they said yes. The map check catches that class of error.</li>
+          <li>Google alone is not enough: it quietly echoes a suburb it could not confirm. Geoscape is the register the measurement itself uses, so agreeing with Geoscape means <strong>the address confirmed is the address measured</strong>.</li>
+          <li>If both services are down, the plain read-back still goes out. Verification is a safety net, never a gate. An outage must not block a lead.</li>
+          <li>"yep that's it" is accepted as yes. So are "y", "yeah", "sure", "no worries", "👍".</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 3 -->
+  <div class="step">
+    <div class="stepnum">03</div>
+    <div>
+      <h3>Three job questions, asked like a person</h3>
+      <p class="small">It needs exactly three more things before it can price: what the job is, what the roof is made of,
+      and how steep it is. It asks one at a time, and it accepts answers in any order.</p>
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg out"><span class="who">Receptionist</span>What do you need done? A full re-roof, a repair or patch, a leak traced, or gutters and downpipes?</div>
+        <div class="msg in"><span class="who">Dave</span>full reroof. it's colorbond</div>
+        <div class="msg out"><span class="who">Receptionist</span>Righto - which Colorbond profile is it? Corrugated (the classic wavy sheets) or Trimdek (flat panels with square ribs)? If you're not sure, just say so and we'll check it on site.</div>
+        <div class="msg in"><span class="who">Dave</span>corrugated</div>
+        <div class="msg out"><span class="who">Receptionist</span>Roughly how steep is the roof? Flat, standard, or steep?</div>
+        <div class="msg in"><span class="who">Dave</span>standard i reckon</div>
+      </div>
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>Dave answered two questions in one message. The material was picked up out of order and the material question was never asked.</li>
+          <li>"Colorbond" alone doesn't price a job (the profile changes the sheet cost), so it asks <em>which</em> rather than guessing.</li>
+          <li>Some answers stop the quote early and route straight to an on-site visit: fibro or cement sheet (possible asbestos), an unknown material, a very steep or unknown pitch, an unclear job, or a commercial building.</li>
+          <li>If the same question is answered unclearly two or three times, it stops asking and routes to an inspection instead of looping. <strong>No question can be asked forever.</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 4 -->
+  <div class="step">
+    <div class="stepnum">04</div>
+    <div>
+      <h3>It measures the roof and shows Dave the photos</h3>
+      <p class="small">The brief is complete, so the measurement runs on satellite imagery and the property register, with no AI involved. Then it sends the roof photos and asks Dave to confirm the buildings <em>before</em> quoting.</p>
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg mms">📷 Photo sent · "Main dwelling"</div>
+        <div class="msg mms">📷 Photo sent · "Secondary structure 1"</div>
+        <div class="msg mms">📷 Photo sent · "Secondary structure 2"</div>
+        <div class="msg out"><span class="who">Receptionist</span>Hi Dave, I found 3 buildings at 670 London Rd, Chandler QLD 4155 (I've sent photos to check):
+1) Main dwelling (~248 m²)
+2) Secondary structure 1 (~64 m²)
+3) Secondary structure 2 (~31 m²)
+Reply YES to quote all of them, the number for just one, or NO if none are right.
+See them here too: quotemax.com.au/q/roof/ab12cd34?pick=1</div>
+      </div>
+
+      <figure>
+        <div class="scroll">
+        <svg viewBox="0 0 1000 260" role="img" aria-label="The measure and price pipeline, all deterministic">
+          <text class="tm" x="8" y="20">MEASURE &amp; PRICE · NO AI ANYWHERE ON THIS LINE</text>
+          <g>
+            <rect class="box" x="8"   y="34" width="150" height="66"/>
+            <rect class="box" x="182" y="34" width="150" height="66"/>
+            <rect class="box" x="356" y="34" width="150" height="66"/>
+            <rect class="box" x="530" y="34" width="150" height="66"/>
+            <rect class="box" x="704" y="34" width="150" height="66"/>
+            <rect class="box" x="878" y="34" width="114" height="66"/>
+          </g>
+          <g class="tm">
+            <text x="22" y="54">STEP 1</text><text x="196" y="54">STEP 2</text><text x="370" y="54">STEP 3</text>
+            <text x="544" y="54">STEP 4</text><text x="718" y="54">STEP 5</text><text x="892" y="54">STEP 6</text>
+          </g>
+          <g class="t">
+            <text x="22" y="74">Find the parcel</text><text x="196" y="74">Trace roof</text><text x="370" y="74">Apply the</text>
+            <text x="544" y="74">Price each</text><text x="718" y="74">Save the job</text><text x="892" y="74">Send</text>
+          </g>
+          <g class="ts">
+            <text x="22" y="92">Geoscape</text><text x="196" y="92">outlines + pitch</text><text x="370" y="92">roofer's rate card</text>
+            <text x="544" y="92">building</text><text x="718" y="92">+ mint 2 links</text><text x="892" y="92">photos</text>
+          </g>
+          <g class="accl">
+            <path d="M158 67 H174"/><path d="M332 67 H348"/><path d="M506 67 H522"/>
+            <path d="M680 67 H696"/><path d="M854 67 H870"/>
+          </g>
+          <g class="acc">
+            <path d="M174 67 l-7 -4 v8 z"/><path d="M348 67 l-7 -4 v8 z"/><path d="M522 67 l-7 -4 v8 z"/>
+            <path d="M696 67 l-7 -4 v8 z"/><path d="M870 67 l-7 -4 v8 z"/>
+          </g>
+
+          <rect class="boxs" x="8" y="126" width="484" height="112"/>
+          <rect class="acc"  x="8" y="126" width="484" height="3"/>
+          <text class="tm" x="26" y="150">THE TWO LINKS MINTED TOGETHER</text>
+          <text class="t"  x="26" y="172">Customer link · /q/roof/...</text>
+          <text class="ts" x="26" y="189">The roof photo, the map, the breakdown, the deposit button.</text>
+          <text class="t"  x="26" y="212">Roofer link · /m/...</text>
+          <text class="ts" x="26" y="229">Toggle buildings, correct the measurement, re-price, save as a quote.</text>
+
+          <rect class="boxs" x="516" y="126" width="476" height="112"/>
+          <rect class="acc"  x="516" y="126" width="476" height="3"/>
+          <text class="tm" x="534" y="150">IF THE MEASUREMENT FAILS</text>
+          <text class="t"  x="534" y="172">The lead is never dropped.</text>
+          <text class="ts" x="534" y="192">A job row is still written so it appears in the roofer's queue, and</text>
+          <text class="ts" x="534" y="209">the customer is offered an on-site inspection with an honest reason.</text>
+          <text class="ts" x="534" y="229">"I couldn't pull an automatic measurement for ... just now."</text>
+        </svg>
+        </div>
+        <figcaption>Diagram 4 · where the money comes from, and what happens when it can't</figcaption>
+      </figure>
+
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>Nothing is priced to the customer until they confirm which buildings are theirs. Sheds, garages and granny flats are all found separately.</li>
+          <li>Dave can reply <span class="mono">YES</span> (all), <span class="mono">2</span>, <span class="mono">2 and 3</span>, <span class="mono">the shed</span>, <span class="mono">just the big one</span>, <span class="mono">Main</span> or <span class="mono">NO</span>. All understood.</li>
+          <li><span class="mono">NO</span> means wrong building, so it clears the address and starts again: <em>"No worries. What's the correct property address, with suburb and postcode?"</em></li>
+          <li>The confirm link ends in <span class="mono">?pick=1</span> so re-opening it still shows the picker, not a narrowed view.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 5 -->
+  <div class="step">
+    <div class="stepnum">05</div>
+    <div>
+      <h3>Dave says yes, and the quote goes out</h3>
+      <p class="small">Every figure in this message came out of the pricing engine untouched. The AI did not write one character of it.</p>
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg in"><span class="who">Dave</span>yes all of them</div>
+        <div class="msg out"><span class="who">Receptionist</span>Hi Dave, here's your roofing estimate for 670 London Rd, Chandler QLD 4155 (3 structures, ~343 m² total):
+• Full roof replacement: $69,652
+Full breakdown + your roof image: quotemax.com.au/q/roof/ab12cd34
+PDF copy: quotemax.com.au/q/roof/ab12cd34/pdf
+Prices inc GST. A roofer reviews every quote before we book anything.</div>
+      </div>
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>The confirmed buildings are written to the job record, not just onto the link, so the SMS total and the web page can never disagree.</li>
+          <li>A PDF is generated and linked. Later picks ("actually just 2 and 3") regenerate it so the document always matches the text.</li>
+          <li>Some roofers show one price, others show three tiers. That is a per-roofer setting, and the SMS follows whatever the web page shows.</li>
+          <li>If solar panels were detected, the detach-and-reinstate allowance is already inside the replacement price.</li>
+          <li>The thread stays warm. Dave can text <em>"what about just the shed?"</em> hours later and get that priced from the same saved measurement.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 6 -->
+  <div class="step">
+    <div class="stepnum">06</div>
+    <div>
+      <h3>Ricardo's phone buzzes</h3>
+      <p class="small">The moment the quote lands with Dave, Ricardo is told on his own mobile, from his own business number.</p>
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg tradie"><span class="who">To Ricardo · the roofer</span>Hi Ricardo - roofing quote sent via SMS at $69,652 inc GST.
+Customer: Dave (+61 412 345 678)
+Property: 670 London Rd, Chandler QLD 4155
+Review: quotemax.com.au/q/roof/ab12cd34</div>
+      </div>
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>Before this existed, leads sat in the database and nobody was told until someone opened the dashboard.</li>
+          <li>The alert can never break the customer's message. It runs after, and a failure to send it is logged, not thrown.</li>
+          <li>If the "customer" is Ricardo's own handset (he's testing), the alert is suppressed and the reason is logged, so it doesn't look broken.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 7 -->
+  <div class="step">
+    <div class="stepnum">07</div>
+    <div>
+      <h3>Dave goes quiet, and gets exactly one check-in</h3>
+      <p class="small">Dave reads the quote and puts his phone down. Two hours later, one nudge goes out. Exactly one.</p>
+
+      <figure>
+        <div class="scroll">
+        <svg viewBox="0 0 1000 230" role="img" aria-label="Follow-up timing: fires between 2 and 24 hours, once only">
+          <line x1="40" y1="86" x2="960" y2="86" class="ln"/>
+          <g class="acc">
+            <rect x="38" y="78" width="4" height="16"/>
+            <rect x="238" y="78" width="4" height="16"/>
+            <rect x="758" y="78" width="4" height="16"/>
+            <rect x="956" y="78" width="4" height="16"/>
+          </g>
+          <rect class="acc" x="242" y="82" width="516" height="8" opacity="0.28"/>
+          <g class="tm">
+            <text x="34" y="70">LAST MESSAGE</text>
+            <text x="234" y="70">+2 HOURS</text>
+            <text x="754" y="70">+24 HOURS</text>
+            <text x="880" y="70">LATER</text>
+          </g>
+          <g class="ts">
+            <text x="34" y="112">Receptionist</text><text x="34" y="128">spoke last</text>
+            <text x="300" y="112">THE ONLY WINDOW A CHECK-IN CAN FIRE</text>
+            <text x="754" y="112">Thread rolls</text><text x="754" y="128">off, marked</text><text x="754" y="144">abandoned</text>
+            <text x="880" y="112">Silence.</text><text x="880" y="128">Never nagged.</text>
+          </g>
+
+          <text class="tm" x="40" y="180">IT DOES NOT FIRE IF:</text>
+          <g class="ts">
+            <text x="40" y="200">the customer replied last</text>
+            <text x="240" y="200">· one was already sent</text>
+            <text x="430" y="200">· the thread is closed or cancelled</text>
+            <text x="700" y="200">· a quote follow-up already covers it</text>
+            <text x="40" y="218">· the roofer switched check-ins off</text>
+          </g>
+        </svg>
+        </div>
+        <figcaption>Diagram 5 · the follow-up window, and the five reasons it stays silent</figcaption>
+      </figure>
+
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg out"><span class="who">Receptionist · 2 hours later</span>Hi Dave, just checking in on the quote we sent through - did we answer everything, or anything else we can help with? - Ricardos Roofing</div>
+      </div>
+      <p class="small muted" style="margin-top:.7rem">If Dave had gone quiet <strong>mid-conversation</strong>, before any quote existed, he'd get the other wording instead:</p>
+      <div class="thread">
+        <div class="msg out"><span class="who">Receptionist · mid-intake version</span>Hi Dave, just checking in - still keen to get that job sorted? Reply here and we'll pick up where we left off. - Ricardos Roofing</div>
+      </div>
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>Two separate sweeps, and they never double-text: one covers <strong>quotes already sent</strong>, the other covers <strong>conversations that stalled before a quote</strong>.</li>
+          <li>One check-in per conversation, ever. Stamped on the record, so a re-run of the sweep cannot send a second.</li>
+          <li>Both are opt-in per roofer, and default to off.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 8 -->
+  <div class="step">
+    <div class="stepnum">08</div>
+    <div>
+      <h3>Dave pays, picks a time, and Ricardo is booked</h3>
+      <p class="small">Payment comes before the calendar, always. A time can only be picked once the deposit is in.</p>
+
+      <figure>
+        <div class="scroll">
+        <svg viewBox="0 0 1000 220" role="img" aria-label="Pay-first booking funnel and the two confirmation texts">
+          <g>
+            <rect class="box" x="8"   y="30" width="176" height="62"/>
+            <rect class="box" x="208" y="30" width="176" height="62"/>
+            <rect class="box" x="408" y="30" width="176" height="62"/>
+            <rect class="box" x="608" y="30" width="176" height="62"/>
+            <rect class="box" x="808" y="30" width="184" height="62"/>
+          </g>
+          <g class="acc">
+            <rect x="8" y="30" width="176" height="3"/><rect x="208" y="30" width="176" height="3"/>
+            <rect x="408" y="30" width="176" height="3"/><rect x="608" y="30" width="176" height="3"/>
+            <rect x="808" y="30" width="184" height="3"/>
+          </g>
+          <g class="tm">
+            <text x="22" y="52">QUOTE PAGE</text><text x="222" y="52">STRIPE</text><text x="422" y="52">CALENDAR</text>
+            <text x="622" y="52">CONFIRMED</text><text x="822" y="52">THE ROOFER</text>
+          </g>
+          <g class="t">
+            <text x="22" y="72">Dave picks a tier</text><text x="222" y="72">Deposit paid</text><text x="422" y="72">Picks a slot</text>
+            <text x="622" y="72">Locked in</text><text x="822" y="72">Told immediately</text>
+          </g>
+          <g class="ts">
+            <text x="22" y="88">early-bird discount applied here</text>
+            <text x="222" y="88">money goes to the roofer</text>
+            <text x="422" y="88">only real free slots shown</text>
+            <text x="622" y="88">customer texted</text>
+            <text x="822" y="88">day, time, price, link</text>
+          </g>
+          <g class="accl">
+            <path d="M184 61 H200"/><path d="M384 61 H400"/><path d="M584 61 H600"/><path d="M784 61 H800"/>
+          </g>
+          <g class="acc">
+            <path d="M200 61 l-7 -4 v8 z"/><path d="M400 61 l-7 -4 v8 z"/>
+            <path d="M600 61 l-7 -4 v8 z"/><path d="M800 61 l-7 -4 v8 z"/>
+          </g>
+
+          <rect class="boxs" x="8" y="122" width="484" height="82"/>
+          <rect class="acc"  x="8" y="122" width="484" height="3"/>
+          <text class="tm" x="26" y="146">TWO RULES THAT CANNOT BE BROKEN</text>
+          <text class="ts" x="26" y="168">1 · The discount is applied at the payment screen, not later.</text>
+          <text class="ts" x="26" y="188">2 · No payment can be taken from a roofer with no free slots.</text>
+
+          <rect class="boxs" x="516" y="122" width="476" height="82"/>
+          <rect class="acc"  x="516" y="122" width="476" height="3"/>
+          <text class="tm" x="534" y="146">IF DAVE PAYS BUT DOESN'T PICK A TIME</text>
+          <text class="ts" x="534" y="168">"Hi Dave, deposit received - thanks! Pick a time that suits</text>
+          <text class="ts" x="534" y="188">and we'll lock it in: ..."</text>
+        </svg>
+        </div>
+        <figcaption>Diagram 6 · pay first, then book. Both parties confirmed.</figcaption>
+      </figure>
+
+      <div class="thread" style="margin-top:.9rem">
+        <div class="msg out"><span class="who">To Dave</span>Hi Dave, you're locked in for Thu 7 May, 9:00am. The tradie will text the day before to confirm.
+
+View booking: quotemax.com.au/q/roof/ab12cd34
+
+- QuoteMax</div>
+        <div class="msg tradie"><span class="who">To Ricardo · the roofer</span>Hi Ricardo - roofing job BOOKED via SMS for Thu 7 May, 9:00am.
+Customer: Dave (+61 412 345 678)
+Property: 670 London Rd, Chandler QLD 4155
+Quoted: $69,652 inc GST (deposit paid)
+Details: quotemax.com.au/q/roof/ab12cd34</div>
+      </div>
+      <div class="behind">
+        <b>Behind the scenes</b>
+        <ul class="small">
+          <li>Both texts use the <strong>same clock and the same formatter</strong>, in the roofer's own state timezone, so they can never name different days for the same slot.</li>
+          <li>The two messages are sent independently. If Dave's confirmation fails, Ricardo's still goes out, and vice versa. The booking itself is already committed either way.</li>
+          <li>Until recently a paid, booked roofing job reached nobody. That gap is closed.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ 04 · WHEN IT GOES WRONG ═══════════════════ -->
+<section id="branches">
+  <div class="sechead"><span class="secnum">04</span><h2>When the conversation goes sideways</h2></div>
+  <p class="lede">The happy path is the easy part. These are the branches that keep a bad turn from costing a lead.</p>
+
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1000 340" role="img" aria-label="Escalation map: every failure route ends with a human or an inspection">
+      <rect class="box" x="380" y="12" width="240" height="46"/>
+      <rect class="acc" x="380" y="12" width="240" height="3"/>
+      <text class="t" x="396" y="34">Something is unclear</text>
+      <text class="ts" x="396" y="50">or the customer is stuck</text>
+
+      <g class="ln"><path d="M500 58 V84"/></g>
+      <line x1="120" y1="84" x2="880" y2="84" class="ln"/>
+      <g class="ln">
+        <path d="M120 84 V112"/><path d="M310 84 V112"/><path d="M500 84 V112"/>
+        <path d="M690 84 V112"/><path d="M880 84 V112"/>
+      </g>
+
+      <g>
+        <rect class="box" x="28" y="112" width="184" height="88"/>
+        <rect class="box" x="222" y="112" width="176" height="88"/>
+        <rect class="box" x="412" y="112" width="176" height="88"/>
+        <rect class="box" x="602" y="112" width="176" height="88"/>
+        <rect class="box" x="792" y="112" width="180" height="88"/>
+      </g>
+      <g class="tm">
+        <text x="42" y="134">ADDRESS NOT FOUND</text>
+        <text x="236" y="134">SAME ANSWER 2-3×</text>
+        <text x="426" y="134">ASBESTOS RISK</text>
+        <text x="616" y="134">MEASURE FAILS</text>
+        <text x="806" y="134">ODD QUESTION</text>
+      </g>
+      <g class="ts">
+        <text x="42" y="156">Suggest a near match,</text>
+        <text x="42" y="172">ask twice at most,</text>
+        <text x="42" y="188">then hand to a human.</text>
+
+        <text x="236" y="156">Stop asking. Route</text>
+        <text x="236" y="172">to an on-site visit</text>
+        <text x="236" y="188">with the real reason.</text>
+
+        <text x="426" y="156">Fibro, cement sheet,</text>
+        <text x="426" y="172">unknown material or</text>
+        <text x="426" y="188">very steep → on site.</text>
+
+        <text x="616" y="156">Say so honestly, still</text>
+        <text x="616" y="172">write the job so it</text>
+        <text x="616" y="188">lands in the queue.</text>
+
+        <text x="806" y="156">"I'll check and come</text>
+        <text x="806" y="172">back to you", and</text>
+        <text x="806" y="188">the roofer is texted.</text>
+      </g>
+
+      <g class="ln"><path d="M120 200 V232"/><path d="M310 200 V232"/><path d="M500 200 V232"/><path d="M690 200 V232"/><path d="M880 200 V232"/></g>
+      <line x1="120" y1="232" x2="880" y2="232" class="ln"/>
+      <g class="ln"><path d="M500 232 V254"/></g>
+
+      <rect class="box" x="230" y="254" width="540" height="66"/>
+      <rect class="acc" x="230" y="254" width="540" height="3"/>
+      <text class="t"  x="250" y="280">Every route ends the same way: a real human hears about it,</text>
+      <text class="t"  x="250" y="300">or the customer is offered an inspection. Never a dead end.</text>
+    </svg>
+    </div>
+    <figcaption>Diagram 7 · five ways it can go wrong, one destination</figcaption>
+  </figure>
+
+  <div class="grid2" style="margin-top:1.6rem">
+    <div class="card">
+      <h4>Branch A · the address isn't real</h4>
+      <p class="small muted" style="margin:.4rem 0 .8rem">Dave types a suburb that doesn't exist.</p>
+      <div class="thread">
+        <div class="msg in"><span class="who">Dave</span>670 London Rd, Corparoo 4155</div>
+        <div class="msg out"><span class="who">Receptionist</span>I can't find "670 London Rd, Corparoo 4155" on the map. Did you mean "670 London Rd, Coorparoo QLD 4151"? Reply yes if that's the one, or send the correct address.</div>
+        <div class="msg in"><span class="who">Dave</span>no it's chandler</div>
+        <div class="msg out"><span class="who">Receptionist</span>Just to confirm, the property is "670 London Rd, Chandler QLD 4155". Is that right? Reply yes or no.</div>
+      </div>
+      <p class="small" style="margin-top:.8rem">And if it still can't be matched after two goes, it stops asking and hands over. It will <strong>never</strong> measure an address the register can't confirm:</p>
+      <div class="thread">
+        <div class="msg out"><span class="who">Receptionist</span>Thanks for that. I still can't match "..." on the map, so I'll get one of the team to confirm the property with you and sort your quote from there.</div>
+        <div class="msg tradie"><span class="who">To Ricardo</span>Hi Ricardo - a customer asked something the SMS receptionist could not answer.
+Customer: Dave (+61 412 345 678)
+They asked: Could not match this address on the map: "..."
+We told them you would come back to them.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>Branch B · the roof can't be quoted from the sky</h4>
+      <p class="small muted" style="margin:.4rem 0 .8rem">Dave says the roof is fibro. It may contain asbestos, so it is never auto-priced.</p>
+      <div class="thread">
+        <div class="msg in"><span class="who">Dave</span>it's the old fibro stuff</div>
+        <div class="msg out"><span class="who">Receptionist</span>Thanks Dave. Because cement sheet or fibro roofs may contain asbestos, we'll arrange a quick on-site inspection of 670 London Rd, Chandler QLD 4155 to quote it accurately.
+Reply YES and we'll book a time that suits you.</div>
+        <div class="msg in"><span class="who">Dave</span>yeah go on then</div>
+        <div class="msg out"><span class="who">Receptionist</span>Great Dave. A roofer will be in touch shortly to lock in a time for the inspection.</div>
+        <div class="msg tradie"><span class="who">To Ricardo</span>Hi Ricardo - new roofing INSPECTION booked via SMS.
+Customer: Dave (+61 412 345 678)
+Property: 670 London Rd, Chandler QLD 4155
+Details: quotemax.com.au/q/roof/ab12cd34
+Reply to the customer to lock in a time.</div>
+      </div>
+      <p class="small muted" style="margin-top:.8rem">Where the roof <em>can</em> be measured but still needs a look, the customer sees a real indicative range clearly labelled "confirmed on site". Never a blank or a $0.</p>
+    </div>
+
+    <div class="card">
+      <h4>Branch C · a vague answer at the booking question</h4>
+      <p class="small muted" style="margin:.4rem 0 .8rem">"Shall we book?" gets a reply that is neither yes nor no.</p>
+      <div class="thread">
+        <div class="msg in"><span class="who">Dave</span>hey mate</div>
+        <div class="msg out"><span class="who">Receptionist</span>Just so I've got it right - would you like us to book the on-site inspection? Reply YES to book, or NO if you'd rather not.</div>
+        <div class="msg in"><span class="who">Dave</span>what's it gonna cost me</div>
+        <div class="msg out"><span class="who">Receptionist</span>Great Dave. A roofer will be in touch shortly to lock in a time for the inspection.</div>
+      </div>
+      <p class="small" style="margin-top:.8rem"><strong>A greeting is never consent</strong>, so that gets a re-ask. But it only re-asks once. A second unclear reply is still a live customer, so it books and alerts the roofer rather than dropping them. Only an explicit <em>no</em> closes it.</p>
+    </div>
+
+    <div class="card">
+      <h4>Branch D · the customer wants out</h4>
+      <p class="small muted" style="margin:.4rem 0 .8rem">STOP is decided by code before the AI is even called, so it costs nothing and can never be second-guessed.</p>
+      <div class="thread">
+        <div class="msg in"><span class="who">Dave</span>nah forget it, not interested</div>
+        <div class="msg out"><span class="who">Receptionist</span>No problem Dave. I've stopped there. Just text me anytime if you'd like a roofing quote.</div>
+      </div>
+      <p class="small" style="margin-top:.8rem">And a refusal of the <em>trade</em> is remembered for the whole conversation. If Dave says <em>"no I don't want a roofer"</em>, roofing is never raised again on that thread, even though the word "roofer" is right there in his message.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ 05 · EVERY BEHAVIOUR ══════════════════════ -->
+<section id="behaviours">
+  <div class="sechead"><span class="secnum">05</span><h2>Every behaviour now applied</h2></div>
+  <p class="lede">The complete list of what the roofing receptionist does today, grouped by what it protects.</p>
+
+  <h3 style="margin:2rem 0 .4rem">Understanding what people actually type</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:30%">Behaviour</th><th>What it means in practice</th></tr></thead>
+      <tbody>
+        <tr><td>Natural conversation</td><td>Claude Sonnet 5 writes every question, answer and acknowledgement. No decision trees the customer can feel.</td></tr>
+        <tr><td>Australian yes and no</td><td>"y", "ya", "yep", "👍", "no worries", "go on then" all read correctly. "Nah" and "not interested" read as no.</td></tr>
+        <tr><td>Answers in any order</td><td>One message can answer three questions. Each one is filed and never asked again.</td></tr>
+        <tr><td>Opening message harvested</td><td>An address, job type, material or pitch given up front is taken straight away, not re-asked.</td></tr>
+        <tr><td>Rapid-fire messages</td><td>Several texts sent in a burst are treated as one message, so nothing is dropped or answered out of order.</td></tr>
+        <tr><td>Mid-flow corrections</td><td>"Actually make it 12 Smith Street" changes the property, clears the old postcode and state, and re-confirms.</td></tr>
+        <tr><td>Interruptions</td><td>"Hold on" or "one sec" pauses without losing anything gathered so far.</td></tr>
+        <tr><td>Questions stay questions</td><td>A question is answered, never mistaken for an answer to what was asked, and never treated as a new job.</td></tr>
+        <tr><td>Multi-building picks</td><td>"2 and 3", "the others", "the rest", "both", "just the big one", "the shed", "Main". All parsed.</td></tr>
+        <tr><td>Warm threads</td><td>After a quote, "what about the shed?" re-prices from the saved measurement instead of starting over.</td></tr>
+        <tr><td>Unrelated follow-ups pass through</td><td>An electrical question on a quoted roofing thread goes to the general receptionist, not into the roofing flow.</td></tr>
+        <tr><td>Refusals remembered</td><td>A trade the customer turns down is never raised again on that conversation.</td></tr>
+        <tr><td>Stale threads expire</td><td>A half-finished roofing chat older than an hour starts fresh, so a new "Hi mate" never replays last week's buildings.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin:2rem 0 .4rem">Protecting the money</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:30%">Behaviour</th><th>What it means in practice</th></tr></thead>
+      <tbody>
+        <tr><td>No AI-written figures</td><td>Prices, areas, building counts, addresses and links are refused outright in AI text. One slip discards the whole turn.</td></tr>
+        <tr><td>Customers can't authorise a price</td><td>"Will you do it for $2,000?" does not make $2,000 a quotable number. Money is never grounded, by anyone.</td></tr>
+        <tr><td>Category-locked figures</td><td>A postcode of 4155 can never become "your roof is 4155 m²". Areas ground areas, counts ground counts.</td></tr>
+        <tr><td>Confirmed buildings recorded</td><td>What the customer said yes to is written to the job, so the text total and the web page always match.</td></tr>
+        <tr><td>Every address map-verified</td><td>Checked against Google and the national address register, every time, with a house-number guard.</td></tr>
+        <tr><td>Never measure an unverified address</td><td>Two failed attempts hands the lead to a human. It does not fall back to trusting the typing.</td></tr>
+        <tr><td>Payment before calendar</td><td>The deposit is taken first; the early-bird discount is applied at that screen; no payment if there are no free slots.</td></tr>
+        <tr><td>Never a $0 quote</td><td>An unpriceable roof shows an inspection message, not a zero. A partly priced job shows an indicative range labelled "confirmed on site".</td></tr>
+        <tr><td>PDF matches the text</td><td>Re-picking buildings regenerates the PDF so the attachment can't show the previous selection.</td></tr>
+        <tr><td>Roofer signs off</td><td>Every quote says so: "A roofer reviews every quote before we book anything."</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin:2rem 0 .4rem">Never losing a lead</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:30%">Behaviour</th><th>What it means in practice</th></tr></thead>
+      <tbody>
+        <tr><td>No question loops forever</td><td>Two or three unclear answers to the same question ends the asking and routes to an on-site visit.</td></tr>
+        <tr><td>"Yes" always advances</td><td>An affirmative at the address read-back confirms it and moves on, whatever the AI chose to say.</td></tr>
+        <tr><td>Honest inspection reasons</td><td>"Because cement sheet or fibro roofs may contain asbestos...", the real reason, not a generic apology.</td></tr>
+        <tr><td>Measurement outage handled</td><td>The job is still written to the roofer's queue and the customer is offered an inspection.</td></tr>
+        <tr><td>AI outage handled</td><td>The original rule-based script runs that turn. The customer always gets a reply.</td></tr>
+        <tr><td>Unanswerable questions escalate</td><td>An honest "I'll check and come back to you" is always paired with a text to the roofer.</td></tr>
+        <tr><td>One check-in when quiet</td><td>Between 2 and 24 hours, once per conversation, only when the receptionist spoke last.</td></tr>
+        <tr><td>Unclear booking replies still book</td><td>Only an explicit no closes an inspection lead. Silence and vagueness are treated as live.</td></tr>
+        <tr><td>Roofer told four times</td><td>Quote sent · inspection booked · question asked · job booked and paid.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin:2rem 0 .4rem">Staying safe and honest</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:30%">Behaviour</th><th>What it means in practice</th></tr></thead>
+      <tbody>
+        <tr><td>STOP decided by code</td><td>Opt-out is checked before the AI is called. Compliance is never a judgement call.</td></tr>
+        <tr><td>Tiny fact sheet</td><td>Business name, owner's first name, trades, state. Licence numbers, ABN, insurance and contact details are not given to the model at all.</td></tr>
+        <tr><td>No invented facts</td><td>Trading history, weekend availability, warranties, who owns QuoteMax: all deflected, never guessed.</td></tr>
+        <tr><td>Customer text is data, not orders</td><td>Line breaks in an inbound message are flattened so nobody can fake a receptionist message inside their own text.</td></tr>
+        <tr><td>Addresses must be real quotes</td><td>An address the AI produces must appear in something the customer actually typed.</td></tr>
+        <tr><td>Australian house style</td><td>Plain AU English, no em dashes, no smart quotes, no emoji, under 320 characters, so nothing renders as mojibake on an old handset.</td></tr>
+        <tr><td>Right number, right roofer</td><td>Replies always go out from the number the customer texted, never a shared office line.</td></tr>
+        <tr><td>Self-test guard</td><td>When the roofer tests from their own phone, they don't get alerts about their own messages, and the reason is logged.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════ 06 · THE ROOFER'S SIDE ════════════════════ -->
+<section id="tradie">
+  <div class="sechead"><span class="secnum">06</span><h2>Everything the roofer receives</h2></div>
+  <p class="lede">Four alerts, four triggers. All to their own mobile, all from their own business number, none of them able to break a customer message.</p>
+
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1000 250" role="img" aria-label="Four tradie alert triggers and their messages">
+      <text class="tm" x="8" y="20">TRIGGER</text>
+      <g>
+        <rect class="box" x="8"   y="30" width="230" height="46"/>
+        <rect class="box" x="262" y="30" width="230" height="46"/>
+        <rect class="box" x="516" y="30" width="230" height="46"/>
+        <rect class="box" x="770" y="30" width="222" height="46"/>
+      </g>
+      <g class="t">
+        <text x="24" y="50">Quote texted to customer</text>
+        <text x="278" y="50">Customer says "book it"</text>
+        <text x="532" y="50">Question it can't answer</text>
+        <text x="786" y="50">Deposit paid + slot picked</text>
+      </g>
+      <g class="ts">
+        <text x="24" y="67">a priced job, ready to review</text>
+        <text x="278" y="67">an on-site inspection lead</text>
+        <text x="532" y="67">a promise that needs keeping</text>
+        <text x="786" y="67">money in, date locked</text>
+      </g>
+
+      <g class="ok">
+        <path d="M123 76 V104"/><path d="M377 76 V104"/><path d="M631 76 V104"/><path d="M881 76 V104"/>
+      </g>
+
+      <text class="tm" x="8" y="124">THE TEXT THEY GET</text>
+      <g>
+        <rect class="boxs" x="8"   y="134" width="230" height="88"/>
+        <rect class="boxs" x="262" y="134" width="230" height="88"/>
+        <rect class="boxs" x="516" y="134" width="230" height="88"/>
+        <rect class="boxs" x="770" y="134" width="222" height="88"/>
+      </g>
+      <g class="acc">
+        <rect x="8" y="134" width="230" height="3"/><rect x="262" y="134" width="230" height="3"/>
+        <rect x="516" y="134" width="230" height="3"/><rect x="770" y="134" width="222" height="3"/>
+      </g>
+      <g class="ts">
+        <text x="26" y="156">"roofing quote sent via</text>
+        <text x="26" y="172">SMS at $69,652 inc GST"</text>
+        <text x="26" y="194">+ customer, property,</text>
+        <text x="26" y="210">review link</text>
+
+        <text x="280" y="156">"new roofing INSPECTION</text>
+        <text x="280" y="172">booked via SMS"</text>
+        <text x="280" y="194">+ customer, property,</text>
+        <text x="280" y="210">"reply to lock in a time"</text>
+
+        <text x="534" y="156">"a customer asked</text>
+        <text x="534" y="172">something the SMS</text>
+        <text x="534" y="188">receptionist could not</text>
+        <text x="534" y="210">answer" + their words</text>
+
+        <text x="788" y="156">"roofing job BOOKED</text>
+        <text x="788" y="172">for Thu 7 May, 9:00am"</text>
+        <text x="788" y="194">+ price, deposit paid,</text>
+        <text x="788" y="210">property, details link</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Diagram 8 · the four moments the roofer's phone buzzes</figcaption>
+  </figure>
+
+  <div class="card" style="margin-top:1.5rem">
+    <h3>And a page of their own</h3>
+    <p class="small" style="margin:.5rem 0 0">Every measured job also mints a private roofer link. On it they can switch buildings on and off,
+    correct anything the satellite got wrong, re-price instantly, and save the result as a formal quote.
+    The customer's link and the roofer's link are created as a pair. A job can never exist with only one of them.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ 07 · LIMITS ═══════════════════════════════ -->
+<section id="limits" style="border-bottom:none">
+  <div class="sechead"><span class="secnum">07</span><h2>What it will never do</h2></div>
+  <p class="lede">Worth saying plainly, because these are design decisions, not gaps.</p>
+  <div class="grid2" style="margin-top:1.4rem">
+    <div class="card">
+      <div class="rule"><span class="no">×</span><div><strong>Make up a price.</strong> <span class="small muted">Not even a ballpark. Every figure is produced by the pricing engine or it is not sent.</span></div></div>
+      <div class="rule"><span class="no">×</span><div><strong>Quote an address it can't find.</strong> <span class="small muted">The lead goes to a human instead.</span></div></div>
+      <div class="rule"><span class="no">×</span><div><strong>Price a possible-asbestos roof from the sky.</strong> <span class="small muted">Fibro and cement sheet always go on site.</span></div></div>
+      <div class="rule"><span class="no">×</span><div><strong>Auto-quote a commercial building.</strong> <span class="small muted">Residential rates don't apply, so it books a visit.</span></div></div>
+    </div>
+    <div class="card">
+      <div class="rule"><span class="no">×</span><div><strong>Claim a booking that didn't happen.</strong> <span class="small muted">Confirmations only come from real records.</span></div></div>
+      <div class="rule"><span class="no">×</span><div><strong>Answer a question about the business it wasn't told.</strong> <span class="small muted">It deflects and escalates.</span></div></div>
+      <div class="rule"><span class="no">×</span><div><strong>Keep texting after STOP.</strong> <span class="small muted">Decided by code, before the AI runs.</span></div></div>
+      <div class="rule"><span class="no">×</span><div><strong>Send a second check-in.</strong> <span class="small muted">One per conversation, ever.</span></div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1.4rem;border-top:3px solid var(--accent)">
+    <span class="eyebrow" style="margin-bottom:.5rem">The one line to remember</span>
+    <p style="font-size:1.18rem;color:var(--text-heading);font-weight:700;margin:0;line-height:1.45">
+      The AI owns the conversation. Code owns the money. Neither can do the other's job, and that is checked
+      on every single message, not trusted.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <p class="small muted" style="margin:0">
+    QuoteMax · AI Roofing Receptionist · walkthrough current as at 27 July 2026.<br>
+    Message wording on this page is taken from the live templates. Names, addresses and figures are illustrative.
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

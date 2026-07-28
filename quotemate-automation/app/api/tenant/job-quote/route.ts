@@ -1,0 +1,237 @@
+// ════════════════════════════════════════════════════════════════════
+// POST /api/tenant/job-quote — the dashboard job quoter's entrypoint.
+//
+// Electrical + plumbing were only ever reachable through the SMS
+// receptionist. This route drives the SAME pipeline from a tradie-typed
+// form: labelled answers → prose transcript → structureIntake() → intakes
+// row → /api/estimate/draft → quote.
+//
+// It is deliberately a thin wrapper. The precedent is the web-lead path in
+// app/api/t/[slug]/lead/route.ts, which already proved that a form can enter
+// the intake pipeline without an SMS conversation; the only additions here
+// are the tenant auth gate and the tradieDrafted hold.
+//
+// NEVER AUTO-SENDS. tradieDrafted:true forces shouldHoldForReview() to hold
+// regardless of the tenant's review policy, so the customer is not texted
+// until the tradie presses Send on /dashboard/quote/[share_token]. The
+// customer's mobile IS stamped on intake.caller so that Send is one click
+// (it is source #1 of the recipient chain in lib/quote/send-customer.ts).
+// ════════════════════════════════════════════════════════════════════
+
+import { z } from 'zod'
+import { createClient } from '@supabase/supabase-js'
+import { requireFeature } from '@/lib/features/guard'
+import { structureIntake } from '@/lib/intake/structure'
+import { embedIntake } from '@/lib/intake/embed'
+import { deriveTradeFromJobType, IntakeSchema } from '@/lib/intake/schema'
+import { fieldsForJobType } from '@/lib/quote/job-fields'
+
+// structureIntake (Opus) then runEstimation (Opus) run inline so the response
+// can carry the share_token the form navigates to. Worst case is ~2 minutes.
+// MUST be a static literal — a computed value is silently ignored by Next.
+export const maxDuration = 300
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
+
+const BodySchema = z.object({
+  // Reuse the canonical enum rather than re-declaring it — a job type added
+  // to lib/intake/schema.ts is accepted here automatically.
+  job_type: IntakeSchema.shape.job_type,
+  address: z.string().trim().min(1, 'address is required'),
+  suburb: z.string().trim().min(1, 'suburb is required'),
+  /** code → answer, keyed by JOB_FIELDS[job_type].fields[].code. */
+  answers: z.record(z.string(), z.string()).default({}),
+  notes: z.string().trim().max(4000).default(''),
+  customer_name: z.string().trim().max(200).default(''),
+  customer_mobile: z.string().trim().max(40).default(''),
+  customer_email: z.string().trim().max(200).default(''),
+  /** Optional tenant_material_catalogue product the tradie pinned. */
+  product_name: z.string().trim().max(300).optional(),
+})
+
+export async function POST(req: Request) {
+  let body: z.infer<typeof BodySchema>
+  try {
+    body = BodySchema.parse(await req.json())
+  } catch (e: unknown) {
+    const issues = e instanceof z.ZodError ? e.issues.map((i) => i.message) : ['invalid body']
+    return Response.json({ ok: false, error: 'invalid_body', issues }, { status: 400 })
+  }
+
+  // The tradie picked the job type, so the trade follows from it — gate on
+  // that trade, not on whatever they happen to have selected in the UI.
+  const trade = deriveTradeFromJobType(body.job_type)
+  const gate = await requireFeature(req, trade)
+  if (!gate.ok) return Response.json(gate.body, { status: gate.status })
+  const tenant = gate.tenant
+
+  try {
+    const transcript = buildTranscript(body, trade)
+    const intake = await structureIntake(transcript, [], trade)
+
+    // The tradie explicitly chose the job type. Opus classifies it again from
+    // the transcript and can disagree (e.g. reading "replacing a leaking
+    // mixer" as tap_repair when the tradie said tap_replace). The tradie is
+    // standing in front of the job — their pick wins, and job_type drives
+    // assembly scoping in the validator, so a silent override would price
+    // the wrong thing.
+    intake.job_type = body.job_type
+    intake.trade = trade
+
+    // Stamp contact details verbatim rather than trusting the model to lift
+    // them out of the transcript — same reasoning as app/api/t/[slug]/lead.
+    intake.caller = {
+      ...(intake.caller ?? {}),
+      name: (intake.caller?.name || body.customer_name) ?? '',
+      phone: body.customer_mobile || null,
+      ...(body.customer_email ? { email: body.customer_email } : {}),
+    } as typeof intake.caller
+
+    const embedding = await embedIntake(intake)
+
+    const { data: intakeRow, error: insErr } = await supabase
+      .from('intakes')
+      .insert({
+        tenant_id: tenant.id,
+        trade: intake.trade,
+        job_type: intake.job_type,
+        address: intake.address || body.address,
+        suburb: intake.suburb || body.suburb,
+        scope: intake.scope,
+        access: intake.access,
+        property: intake.property,
+        risks: intake.risks,
+        inspection_required: intake.inspection_required,
+        caller: intake.caller,
+        timing: intake.timing,
+        confidence: intake.confidence,
+        confidence_reason: intake.confidence_reason,
+        embedding,
+      })
+      .select('id')
+      .single()
+
+    if (insErr || !intakeRow) {
+      console.error('[job-quote] intake insert failed', insErr?.message)
+      return Response.json({ ok: false, error: 'intake_insert_failed' }, { status: 500 })
+    }
+
+    // Same self-call the web-lead path uses. APP_URL in prod, request origin
+    // in dev/preview where it isn't set (otherwise the URL becomes
+    // "undefined/api/estimate/draft" and no quote drafts).
+    const appUrl =
+      process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin
+    const draftRes = await fetch(`${appUrl}/api/estimate/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intakeId: intakeRow.id, tradieDrafted: true }),
+    })
+
+    if (!draftRes.ok) {
+      const detail = (await draftRes.text()).slice(0, 300)
+      console.error('[job-quote] estimate/draft returned', draftRes.status, detail)
+      return Response.json(
+        { ok: false, error: 'draft_failed', intakeId: intakeRow.id, detail },
+        { status: 502 },
+      )
+    }
+
+    // draft answers HTTP 200 with {ok:false, skipped:'not_entitled'} when the
+    // tenant's billing entitlement blocks the quote — a 200 here is NOT
+    // success, so read the envelope rather than the status.
+    const draft = (await draftRes.json()) as {
+      ok?: boolean
+      quoteId?: string
+      skipped?: string
+      reason?: string
+      error?: string
+    }
+    if (!draft.ok || !draft.quoteId) {
+      return Response.json(
+        {
+          ok: false,
+          error: draft.skipped ?? draft.error ?? 'draft_incomplete',
+          reason: draft.reason ?? null,
+          intakeId: intakeRow.id,
+        },
+        { status: 502 },
+      )
+    }
+
+    // draft mints the share_token internally and returns only the quote id.
+    const { data: quote } = await supabase
+      .from('quotes')
+      .select('share_token, needs_inspection')
+      .eq('id', draft.quoteId)
+      .single()
+
+    return Response.json({
+      ok: true,
+      intakeId: intakeRow.id,
+      quoteId: draft.quoteId,
+      shareToken: (quote as { share_token?: string } | null)?.share_token ?? null,
+      needsInspection: !!(quote as { needs_inspection?: boolean } | null)?.needs_inspection,
+    })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[job-quote] pipeline failed', message)
+    return Response.json({ ok: false, error: 'pipeline_failed', detail: message }, { status: 500 })
+  }
+}
+
+/**
+ * Render the form answers as the prose an intake structurer expects. The
+ * pipeline's only input is a transcript, so the form's real job is to
+ * produce good prose — which is why JOB_FIELDS carries human-readable option
+ * strings rather than canonical enum values.
+ */
+function buildTranscript(body: z.infer<typeof BodySchema>, trade: string): string {
+  const spec = fieldsForJobType(body.job_type)
+  const lines: string[] = [
+    `Job typed directly by the ${trade} tradie in the QuoteMax dashboard — this is the tradie describing a job they have already scoped, not a customer enquiry.`,
+    ``,
+    `Trade: ${trade}`,
+    `Job type: ${body.job_type.replace(/_/g, ' ')}`,
+    `Address: ${body.address}`,
+    `Suburb: ${body.suburb}`,
+  ]
+
+  if (body.customer_name) lines.push(`Customer name: ${body.customer_name}`)
+  if (body.customer_mobile) lines.push(`Contact mobile: ${body.customer_mobile}`)
+  if (body.customer_email) lines.push(`Contact email: ${body.customer_email}`)
+
+  // Answered fields only, in the registry's order, using each field's own
+  // question so the model sees the same Q&A shape the SMS receptionist emits.
+  const answered = spec.fields
+    .map((f) => [f, (body.answers[f.code] ?? '').trim()] as const)
+    .filter(([, v]) => v.length > 0)
+
+  if (answered.length > 0) {
+    lines.push(``, `Job details:`)
+    for (const [f, v] of answered) lines.push(`- ${f.label} ${v}`)
+  }
+
+  // Any answer whose code isn't in this job type's spec — keeps a stale
+  // client from silently dropping detail the tradie actually typed.
+  const known = new Set(spec.fields.map((f) => f.code))
+  const extras = Object.entries(body.answers).filter(
+    ([k, v]) => !known.has(k) && (v ?? '').trim().length > 0,
+  )
+  if (extras.length > 0) {
+    lines.push(...extras.map(([k, v]) => `- ${k.replace(/_/g, ' ')}: ${v.trim()}`))
+  }
+
+  if (body.product_name) {
+    lines.push(
+      ``,
+      `The tradie has specified this exact product from their own catalogue: ${body.product_name}. Quote THIS product and price it from the operator catalogue.`,
+    )
+  }
+
+  if (body.notes) lines.push(``, `Additional notes from the tradie: ${body.notes}`)
+
+  return lines.join('\n')
+}

@@ -5,7 +5,7 @@ import { COMPANY } from '../_components/company'
 export const metadata: Metadata = {
   title: 'Cookie policy',
   description:
-    'How QuoteMax uses cookies and local storage — essential session, payment and preference data only.',
+    'How QuoteMax uses cookies and local storage. Essential session, payment and preference data only.',
 }
 
 const TOC: TocItem[] = [
@@ -22,7 +22,7 @@ export default function CookiePolicyPage() {
     <LegalShell
       title="Cookie policy"
       activeHref="/legal/cookies"
-      intro={`This policy explains how ${COMPANY.product} uses cookies and similar technologies such as browser local storage. We keep this deliberately minimal — we use only what's needed to keep you signed in, process payments, and remember your preferences. We do not use advertising or cross-site tracking cookies.`}
+      intro={`This policy explains how ${COMPANY.product} uses cookies and similar technologies such as browser local storage. We keep this deliberately minimal and use only what's needed to keep you signed in, process payments, and remember your preferences. We do not use advertising or cross-site tracking cookies.`}
       toc={TOC}
     >
       <LegalSection id="what-are-cookies" n={1} heading="What cookies and local storage are">
@@ -36,7 +36,7 @@ export default function CookiePolicyPage() {
 
       <LegalSection id="how-we-use" n={2} heading="How we use them">
         <p>
-          We use these technologies strictly to operate the service — not to build
+          We use these technologies strictly to operate the service, not to build
           advertising profiles or track you across other websites. Because the
           cookies and storage we use are essential to providing a service you have
           requested, they do not require a consent banner under Australian law.
@@ -46,21 +46,21 @@ export default function CookiePolicyPage() {
       <LegalSection id="types" n={3} heading="What we store">
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong>Authentication (essential)</strong> — your Supabase login
+            <strong>Authentication (essential)</strong>: your Supabase login
             session is stored in browser local storage so you stay signed in to
             your dashboard. Clearing it signs you out.
           </li>
           <li>
-            <strong>Preferences (functional)</strong> — your light/dark theme
+            <strong>Preferences (functional)</strong>: your light/dark theme
             choice is stored locally so the site remembers it on your next visit.
           </li>
           <li>
-            <strong>Payments (essential)</strong> — when you pay a deposit or
+            <strong>Payments (essential)</strong>: when you pay a deposit or
             inspection fee, Stripe may set cookies needed to process the payment
             securely and prevent fraud.
           </li>
           <li>
-            <strong>Security &amp; delivery</strong> — our host (Vercel) may set
+            <strong>Security &amp; delivery</strong>: our host (Vercel) may set
             cookies necessary for load balancing, security and reliable delivery of
             the application.
           </li>
@@ -85,7 +85,7 @@ export default function CookiePolicyPage() {
           You can control or delete cookies and local storage through your browser
           settings, and clear site data at any time. Please note that blocking
           essential cookies or clearing local storage will sign you out and may
-          stop parts of the service — such as your dashboard or the payment flow —
+          stop parts of the service, such as your dashboard or the payment flow,
           from working.
         </p>
       </LegalSection>

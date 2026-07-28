@@ -60,6 +60,17 @@ export interface ShouldHoldInput {
   /** Persisted quote risk flags. Only quote-integrity flags force review;
    *  ordinary pricing notes (for example long-run cable risk) do not. */
   riskFlags?: unknown;
+  /**
+   * The quote was drafted BY THE TRADIE in the dashboard job quoter
+   * (/dashboard/job/[trade]), not from an inbound customer conversation.
+   *
+   * There is no customer waiting on a reply — the tradie is looking at the
+   * screen and is navigated straight to the quote — so nothing may go out
+   * until they press Send. Checked BEFORE every other rule, including the
+   * inspection bypass: a portal draft that routes to the $99 inspection must
+   * not text the customer a booking link either.
+   */
+  tradieDrafted?: boolean;
 }
 
 /**
@@ -80,6 +91,12 @@ export function shouldHoldForReview(
   input: ShouldHoldInput,
 ): { hold: boolean; reason: string } {
   const policy = asReviewPolicy(input.policy);
+
+  // Tradie-drafted portal quotes ALWAYS wait for an explicit Send — see
+  // ShouldHoldInput docs. Deliberately above the inspection bypass.
+  if (input.tradieDrafted === true) {
+    return { hold: true, reason: 'tradie_drafted_in_portal' };
+  }
 
   // Inspection quotes bypass the gate — see ShouldHoldInput docs.
   if (input.isInspection === true) {

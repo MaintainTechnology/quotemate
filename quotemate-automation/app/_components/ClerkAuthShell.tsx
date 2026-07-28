@@ -56,7 +56,7 @@ export function ClerkAuthShell({
       {/* ── LEFT · editorial panel ─────────────────────────────────── */}
       <aside className="relative hidden flex-col justify-between bg-ink-deep px-10 py-12 md:flex lg:px-16">
         <Link href="/" className="flex w-fit items-center gap-2.5">
-          <BrandMark className="h-9 w-9" />
+          <BrandMark className="h-9 w-auto" />
           <span className="font-extrabold uppercase tracking-tight text-text-pri">
             QuoteMax
           </span>
@@ -106,7 +106,7 @@ export function ClerkAuthShell({
         {/* Top bar: brand on mobile (left panel owns it on md+), theme toggle. */}
         <div className="flex items-center">
           <Link href="/" className="flex items-center gap-2.5 md:hidden">
-            <BrandMark className="h-9 w-9" />
+            <BrandMark className="h-9 w-auto" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
               QuoteMax
             </span>

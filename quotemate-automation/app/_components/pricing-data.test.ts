@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasFreeTrial, PLANS } from './pricing-data'
+import { aud, COMPARISON, hasFreeTrial, PLANS, PRICING_FAQ } from './pricing-data'
 
 describe('hasFreeTrial — Starter Monthly only', () => {
   it('is true ONLY for starter + month', () => {
@@ -30,5 +30,31 @@ describe('hasFreeTrial — Starter Monthly only', () => {
 
   it('covers all three live plan ids', () => {
     expect(PLANS.map((p) => p.id).sort()).toEqual(['crew', 'pro', 'starter'])
+  })
+})
+
+// A bare "$" reads as US dollars to anyone who isn't already sure the site is
+// Australian. Every money figure the pricing surfaces render must carry the
+// A$ prefix — the helper for plan prices, and the hand-written strings for
+// the overage rates and the site-visit fee.
+describe('AUD is explicit — never a bare $', () => {
+  it('prefixes plan prices with A$', () => {
+    expect(aud(49)).toBe('A$49')
+    expect(aud(1290)).toBe('A$1,290')
+  })
+
+  const bareDollar = /(^|[^A])\$\d/
+
+  it('has no bare $ figure in the comparison table', () => {
+    for (const row of COMPARISON) {
+      for (const v of row.values) expect(v).not.toMatch(bareDollar)
+    }
+  })
+
+  it('has no bare $ figure in the pricing FAQ', () => {
+    for (const item of PRICING_FAQ) {
+      expect(item.q).not.toMatch(bareDollar)
+      expect(item.a).not.toMatch(bareDollar)
+    }
   })
 })

@@ -24,8 +24,9 @@ import { QuoteChrome, type StickyBar } from '../_chrome/QuoteChrome'
 import { tradeIcon } from '../_chrome/icons'
 import {
   QuoteSheet, Letterhead, HeroPhoto, QuoteHero, StatGrid, Scope,
-  SheetSection, TierCards, GoodToKnow, CredentialFooter, TrustVideo, TradiePhoto,
-  type QuoteTier, type Stat, type FooterRow, type ScopeItem,
+  SheetSection, GoodToKnow, CredentialFooter, TrustVideo, TradiePhoto,
+  MetricGrid,
+  type Stat, type FooterRow, type ScopeItem,
 } from '../_chrome/parts'
 import { tradieProfile } from '@/lib/quote/tradie-profile'
 import { jobDetailsSentence } from '@/lib/quote/scope-short'
@@ -41,6 +42,15 @@ import {
 } from '@/lib/quote/money'
 import { safeWebsiteUrl, trustVideoTrack } from '@/lib/quote/tenant-identity'
 import type { TrustVideoState } from '@/lib/videos/trust-video'
+import type { TradeVideoMap } from '@/lib/videos/trade-videos'
+import { allocateIncGst, priceStack } from '@/lib/quote/line-allocation'
+import { jobMethod, METHOD_DISCLAIMER } from '@/lib/quote/job-method'
+import { loadQuoteMaterials, labourHours, type QuoteMaterial } from '@/lib/quote/quote-materials'
+import { formatVisitSlot } from '@/lib/quote/trade-booking'
+import { buildCalendarLinks } from '@/lib/quote/calendar-links'
+import { resolveEventWindow } from '@/lib/quote/calendar'
+import { tzForState } from '@/lib/quote/availability'
+import { AddToCalendar } from '../_chrome/parts'
 import {
   roofScopeStats,
   commercialPaintScope,
@@ -101,6 +111,10 @@ type TenantIdentity = {
   owner_last_name: string | null
   owner_mobile: string | null
   owner_email: string | null
+  /** AU state code — drives tzForState so a booked visit echoes back in the
+   *  timezone its slot was generated in (a WA slot formatted in Sydney reads
+   *  as the wrong day). Base column, same age as the owner_* fields. */
+  state: string | null
   website_url: string | null
   business_address: string | null
   logo_url: string | null
@@ -112,6 +126,11 @@ type TenantIdentity = {
   /** Mig 178 — includes the script each film was generated FROM, which is
    *  what its captions say (trustVideoTrack + lib/videos/captions). */
   trust_video_state: TrustVideoState | null
+  /** Mig 179 — the PER-TRADE video map the dashboard Videos tab actually
+   *  writes to. This page was reading only the mig-175 scalar pair above,
+   *  which the per-trade generation path deliberately never stamps, so a
+   *  tradie's own clip could not be found. */
+  trade_videos: TradeVideoMap | null
 }
 
 const JOB_TYPE_LABEL: Record<string, string> = {
@@ -317,7 +336,7 @@ export default async function PublicQuotePage(props: {
   if (quoteTenantId) {
     const { data: base } = await supabase
       .from('tenants')
-      .select('business_name, owner_first_name, owner_last_name, owner_mobile, owner_email')
+      .select('business_name, owner_first_name, owner_last_name, owner_mobile, owner_email, state')
       .eq('id', quoteTenantId)
       .maybeSingle()
     if (base) {
@@ -335,11 +354,12 @@ export default async function PublicQuotePage(props: {
         .select('photo_url')
         .eq('id', quoteTenantId)
         .maybeSingle()
-      // Same pattern again (mig 178): the trust-video script — what the
-      // welcome video actually says — is what its captions are built from.
+      // Same pattern again (mig 178/179): the trust-video script — what the
+      // welcome video actually says — is what its captions are built from, and
+      // trade_videos is where the dashboard Videos tab stores the clip itself.
       const { data: tvs } = await supabase
         .from('tenants')
-        .select('trust_video_state')
+        .select('trust_video_state, trade_videos')
         .eq('id', quoteTenantId)
         .maybeSingle()
       tenantIdentity = {
@@ -348,6 +368,7 @@ export default async function PublicQuotePage(props: {
         owner_last_name: b.owner_last_name ?? null,
         owner_mobile: b.owner_mobile ?? null,
         owner_email: b.owner_email ?? null,
+        state: b.state ?? null,
         contact_name: e.contact_name ?? null,
         website_url: e.website_url ?? null,
         business_address: e.business_address ?? null,
@@ -357,6 +378,8 @@ export default async function PublicQuotePage(props: {
         thankyou_video_url: e.thankyou_video_url ?? null,
         trust_video_state:
           ((tvs ?? {}) as { trust_video_state?: TrustVideoState | null }).trust_video_state ?? null,
+        trade_videos:
+          ((tvs ?? {}) as { trade_videos?: TradeVideoMap | null }).trade_videos ?? null,
       }
     }
   }
@@ -718,121 +741,13 @@ export default async function PublicQuotePage(props: {
     depositLabel: acceptDep ? `${depositPct ?? 30}% deposit ($${fmt(acceptDep)})` : null,
   })
 
-  // Map the visible generic (electrical/plumbing) tiers → kit TierCards.
-  const genericTiers: QuoteTier[] = tradeFormat.usesGenericCard
-    ? (['good', 'better', 'best'] as const)
-        .filter((k) => visibleTierSet.has(k) && !!quote[k])
-        .map((k) => {
-          const t = quote[k] as NonNullable<Tier>
-          const discounted = ebApp > 0
-          const priceInc = tierIncGst(t)
-          const dep = tierDeposit(t)
-          const recommended = showRecommendedBadge && quote.selected_tier === k
-          const paidThis = isPaid && quote.paid_tier === k
-          const disabledOther = isPaid && quote.paid_tier !== k
-          // /r/<token>/<tier> mints a fresh Stripe Session per click from the
-          // good/better/best jsonb, so the deposit CTA works without a
-          // pre-stored stripe_links[tier]. Gate only on the price hold.
-          const hasLink = !priceExpired
-          const lineItems = Array.isArray(t?.line_items) ? t!.line_items! : []
-          // Compact bullets: up to 4 line-item descriptions.
-          const bullets: string[] = lineItems.slice(0, 4).map((li) => {
-            const you = (li as unknown as { supplied_by?: string }).supplied_by === 'customer'
-            return you ? `${li.description} (you supply · install only)` : li.description
-          })
-          // Full breakdown preserved in a collapsible <details> so no data is
-          // lost when the tenant is in itemised mode and there are >4 lines.
-          const showBreakdown =
-            quoteDisplayMode === 'itemised' && lineItems.length > 0
-          const items: React.ReactNode[] = [...bullets]
-          if (showBreakdown) {
-            items.push(
-              <details key="__breakdown" style={{ marginTop: 2 }}>
-                <summary
-                  style={{
-                    cursor: 'pointer',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.14em',
-                    color: 'var(--text-dim)',
-                  }}
-                >
-                  Full breakdown
-                </summary>
-                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                  {lineItems.map((li, i) => {
-                    const you = (li as unknown as { supplied_by?: string }).supplied_by === 'customer'
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          gap: 12,
-                          fontSize: 12,
-                          lineHeight: 1.4,
-                          color: 'var(--text-sec)',
-                        }}
-                      >
-                        <span style={{ minWidth: 0 }}>
-                          {li.description}
-                          <span
-                            style={{
-                              display: 'block',
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 10.5,
-                              color: 'var(--text-dim)',
-                            }}
-                          >
-                            {li.quantity} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
-                            {you ? ' · install only' : ''}
-                          </span>
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: 'var(--font-mono)',
-                            flexShrink: 0,
-                            color: 'var(--text-sec)',
-                          }}
-                        >
-                          ${fmt(asNumber(li.total_ex_gst))}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </details>,
-            )
-          }
-          // CTA mirrors the old TierCard gating precisely.
-          let ctaLabel: string
-          let ctaHref: string | null
-          if (paidThis) {
-            ctaLabel = 'Deposit paid'
-            ctaHref = null
-          } else if (disabledOther) {
-            ctaLabel = 'Another option confirmed'
-            ctaHref = null
-          } else if (hasLink) {
-            ctaLabel = dep ? `Pay $${fmt(dep)} deposit` : 'Pay deposit'
-            ctaHref = `/r/${token}/${k}`
-          } else {
-            ctaLabel = 'Reply to SMS to confirm'
-            ctaHref = null
-          }
-          return {
-            name: cleanTierLabel(t.label) || k.toUpperCase(),
-            badge: recommended ? 'Most popular' : null,
-            recommended,
-            priceText: `$${fmt(priceInc)}`,
-            priceNote: discounted ? `inc GST · ${ebApp}% off` : 'inc GST',
-            items,
-            ctaLabel,
-            ctaHref,
-          }
-        })
-    : []
+  // NOTE: the electrical/plumbing tier cards used to be built here for the
+  // long-scroll layout below. Those trades now return the five-section view
+  // above, so that mapping was unreachable — and it built React elements per
+  // line item on every request to throw them away. Removed rather than left
+  // to look live: the five-section "Your price" section (which honours the
+  // same tier visibility, discount, deposit and price-hold gating) is the one
+  // place electrical/plumbing prices are rendered.
 
   // Stat grid — up to 4 truthful cells from data that actually exists.
   const statItems: Stat[] = []
@@ -957,8 +872,10 @@ export default async function PublicQuotePage(props: {
     }
 
     // Video + the script it speaks, resolved together so the captions can
-    // never belong to a different film than the one playing.
-    const welcomeVideo = trustVideoTrack(tenantIdentity, 'welcome')
+    // never belong to a different film than the one playing. intakeTrade is
+    // required for the dashboard-generated clip to resolve at all — see the
+    // note at app/q/roof/[token]/page.tsx.
+    const welcomeVideo = trustVideoTrack(tenantIdentity, 'welcome', intakeTrade)
 
     const roofSections: ScopeItem[] = [
       {
@@ -1130,6 +1047,825 @@ export default async function PublicQuotePage(props: {
             rows={footerRows}
             tagline="Book the visit · We confirm on site · Licensed & insured"
           />
+        </QuoteSheet>
+      </QuoteChrome>
+    )
+  }
+
+  // ═══ Five-section electrical / plumbing customer view ════════════════
+  //
+  // Brings the generic-card trades onto the SAME numbered five-section format
+  // roofing already uses, so the customer view reads the same on every trade:
+  //
+  //   01 Overview       the job in a sentence, then the three visual blocks
+  //                     that used to be numbered cards 02/03/04 of their own
+  //                     (Photos for your quote · AI preview · your room ·
+  //                     Expected sample images) as SUB-blocks
+  //   02 Job details    what's being done, the materials quoted from the
+  //                     catalogue, the tools, the step-by-step process, plus
+  //                     the risk flags and assumptions that used to sit in
+  //                     their own sections near the page footer
+  //   03 Your tradie    the dashboard-selected trust video + the tradie
+  //   04 Your price     every visible tier, each with a breakdown whose rows
+  //                     SUM to its inc-GST total (lib/quote/line-allocation)
+  //   05 Your site visit  booked slot + calendar, or the pay-and-book CTA
+  //
+  // Nothing about pricing, gating, Stripe links, the sticky bar, the tradie
+  // editor or the acceptance record changes — this is presentation. The
+  // non-generic trades (aircon, signage, commercial painting) keep the
+  // long-scroll layout below because their evidence blocks differ.
+  if (tradeFormat.usesGenericCard) {
+    // Booked-visit state. SEPARATE best-effort select, matching the early-bird /
+    // acceptance / scope_short blocks above: these columns post-date the
+    // original page, and a pre-migration read must degrade to "not booked"
+    // rather than 404 a live public quote.
+    let scheduledAt: string | null = null
+    let scheduledWindow: string | null = null
+    {
+      const { data: sch } = await supabase
+        .from('quotes')
+        .select('scheduled_at, scheduled_window')
+        .eq('id', quote.id)
+        .maybeSingle()
+      if (sch) {
+        scheduledAt = (sch.scheduled_at as string | null) ?? null
+        scheduledWindow = (sch.scheduled_window as string | null) ?? null
+      }
+    }
+
+    const featuredTier = featuredKey ? (quote[featuredKey] as Tier) : null
+    const featuredLines = Array.isArray(featuredTier?.line_items) ? featuredTier!.line_items! : []
+
+    // The materials behind the quote. Every field comes off the persisted line
+    // items (which already carry the estimator's typed row refs + the WP4
+    // catalogue link) enriched against the catalogue — no price is recomputed
+    // here, and an un-enrichable line still renders from the line itself.
+    const materials: QuoteMaterial[] = await loadQuoteMaterials(supabase, {
+      lines: featuredLines,
+      tenantId: quoteTenantId,
+      trade: intakeTrade,
+    })
+    const hours = labourHours(featuredLines)
+    const method = jobMethod(intakeTrade, intake?.job_type as string | null)
+
+    const websiteUrl = safeWebsiteUrl(tenantIdentity?.website_url)
+    const tradieName = tenantIdentity?.business_name ?? 'Your tradie'
+    const tradie = tradieProfile({
+      businessName: tradieName,
+      photoUrl: tenantIdentity?.photo_url,
+      trade: intakeTrade,
+    })
+    // The dashboard Videos tab stores its clip per trade — passing intakeTrade
+    // is what makes the tradie's own film resolve instead of the stock default.
+    const welcomeVideo = trustVideoTrack(tenantIdentity, 'welcome', intakeTrade)
+
+    const tz = tzForState(tenantIdentity?.state ?? null)
+    const slotLabel = scheduledAt ? formatVisitSlot(scheduledAt, scheduledWindow, tz) : ''
+    const placeLabel =
+      [intake?.address, intake?.suburb].filter(Boolean).join(', ').trim() || null
+    const calLinks =
+      isPaid && scheduledAt
+        ? (() => {
+            const { start, end } = resolveEventWindow(scheduledAt, scheduledWindow)
+            return buildCalendarLinks({
+              title: `${jobLabel} — ${tradieName}`,
+              startIso: start.toISOString(),
+              endIso: end.toISOString(),
+              details: `Your ${jobLabel} visit with ${tradieName}.`,
+              location: placeLabel ?? undefined,
+              timeZone: tz,
+            })
+          })()
+        : null
+
+    const microNote: React.CSSProperties = {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 9.5,
+      textTransform: 'uppercase',
+      letterSpacing: '0.12em',
+      color: 'var(--text-dim)',
+    }
+    const subHeading: React.CSSProperties = {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 11,
+      fontWeight: 700,
+      textTransform: 'uppercase',
+      letterSpacing: '0.14em',
+      color: 'var(--text-pri)',
+      margin: 0,
+    }
+    const ctaStyle: React.CSSProperties = {
+      display: 'block',
+      textAlign: 'center',
+      border: '1px solid transparent',
+      background: 'var(--accent)',
+      color: 'var(--accent-ink)',
+      padding: '13px 16px',
+      fontFamily: 'var(--font-sans)',
+      fontWeight: 700,
+      fontSize: 13,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      textDecoration: 'none',
+    }
+    // Scope's body cell sets white-space: pre-line for plain-text bodies. These
+    // bodies are structured JSX, where pre-line turns every source-code newline
+    // into rendered whitespace.
+    const blockBody: React.CSSProperties = {
+      display: 'grid',
+      gap: 20,
+      maxWidth: 560,
+      whiteSpace: 'normal',
+    }
+
+    const sections: ScopeItem[] = [
+      {
+        title: 'Overview',
+        // Overview ORIENTS; Job details carries the detail. Deliberately NOT
+        // scope_of_works here: section 02 opens with that same paragraph, and
+        // printing it in both put its first sentence on the page twice.
+        body: (
+          <div style={blockBody}>
+            <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              G&apos;day {firstName}, here&apos;s your {jobLabel} quote
+              {placeLabel ? ` for ${placeLabel}` : ''}
+              {issuedDate ? `, issued ${issuedDate}` : ''}. {heroGreeting}
+            </p>
+
+            {/* The three blocks that were numbered sections 02/03/04. Each is
+                the SAME component in `nested` mode — the upload flow and the
+                preview polling are untouched, only their chrome differs. */}
+            <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} nested />
+            <PreviewSection
+              shareToken={token}
+              initialPreviewStatus={previewStatus}
+              initialPreviewImageUrls={previewImageUrls}
+              initialSamplesStatus={samplesStatus}
+              initialSampleImageUrls={sampleImageUrls}
+              nested
+            />
+          </div>
+        ),
+      },
+      {
+        title: 'Job details',
+        body: (
+          <div style={blockBody}>
+            {/* The FULL scope paragraph lives here, not in Overview — this is
+                the comprehensive section. jobDetailsSentence (the shared
+                one-liner the PDF prints) is the fallback for a quote with no
+                scope paragraph at all. */}
+            <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              {(quote.scope_of_works as string | null)?.trim() ||
+                jobDetailsSentence(scopeShort, quote.scope_of_works as string | null) ||
+                'Scope confirmed with you before any work is booked.'}
+            </p>
+
+            <MetricGrid
+              cols={2}
+              items={[
+                ...(itemCount && itemCount > 0
+                  ? [{ k: 'The job', v: String(itemCount), sub: jobLabel }]
+                  : []),
+                ...(quote.estimated_timeframe
+                  ? [{ k: 'Timeframe', v: quote.estimated_timeframe as string }]
+                  : []),
+                ...(hours > 0
+                  ? [{ k: 'On-site labour', v: `${hours}`, sub: hours === 1 ? 'hour' : 'hours' }]
+                  : []),
+                ...(materials.length > 0
+                  ? [
+                      {
+                        k: 'Items supplied',
+                        v: String(materials.length),
+                        sub: materials.length === 1 ? 'line' : 'lines',
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+
+            {/* Materials quoted from the catalogue — product name, the
+                operator's own blurb and photo, specs, and the rate the quote
+                used. Prices are ex-GST rate-card values passed through
+                verbatim; the reconciling totals live in section 04. */}
+            {materials.length > 0 ? (
+              <div>
+                <h4 style={subHeading}>Materials &amp; items quoted</h4>
+                <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                  Exactly what your quote prices in, resolved from your tradie&apos;s catalogue.
+                </p>
+                <div style={{ marginTop: 12, display: 'grid', gap: 1, border: '1px solid var(--ink-line)', background: 'var(--ink-line)' }}>
+                  {materials.map((m, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        alignItems: 'flex-start',
+                        padding: '12px 14px',
+                        background: 'var(--ink-card)',
+                      }}
+                    >
+                      {m.imageSrc ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={m.imageSrc}
+                          alt={m.name}
+                          loading="lazy"
+                          style={{
+                            width: 56,
+                            height: 56,
+                            flexShrink: 0,
+                            objectFit: 'cover',
+                            display: 'block',
+                            border: '1px solid var(--ink-line)',
+                            background: 'var(--ink-deep)',
+                          }}
+                        />
+                      ) : null}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 8 }}>
+                          <span style={{ fontSize: 13.5, lineHeight: 1.35, color: 'var(--text-pri)', fontWeight: 600 }}>
+                            {m.name}
+                          </span>
+                          {m.customerSupplied ? (
+                            <span
+                              style={{
+                                ...microNote,
+                                fontSize: 8.5,
+                                color: 'var(--accent)',
+                                border: '1px solid color-mix(in srgb, var(--accent) 55%, transparent)',
+                                padding: '1px 5px',
+                              }}
+                              title="You're supplying this item — we install only."
+                            >
+                              You supply
+                            </span>
+                          ) : null}
+                        </div>
+                        {m.brand || m.range || m.supplier ? (
+                          <div style={{ marginTop: 3, ...microNote, fontSize: 9 }}>
+                            {[m.brand, m.range, m.supplier].filter(Boolean).join(' · ')}
+                          </div>
+                        ) : null}
+                        {m.blurb ? (
+                          <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                            {m.blurb}
+                          </p>
+                        ) : null}
+                        {m.specs.length ? (
+                          <div style={{ marginTop: 7, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {m.specs.map(([label, value]) => (
+                              <span
+                                key={label}
+                                style={{
+                                  fontFamily: 'var(--font-mono)',
+                                  fontSize: 10.5,
+                                  border: '1px solid var(--ink-line)',
+                                  background: 'var(--ink-deep)',
+                                  padding: '3px 7px',
+                                  color: 'var(--text-sec)',
+                                }}
+                              >
+                                <span style={{ color: 'var(--text-dim)' }}>{label}: </span>
+                                {value}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {m.safetyNote ? (
+                          <p style={{ margin: '6px 0 0', fontSize: 12, lineHeight: 1.45, color: 'var(--text-dim)' }}>
+                            {m.safetyNote}
+                          </p>
+                        ) : null}
+                        {/* An assembly is priced per HOUR by this estimator, so
+                            "2 × hr" would read as nonsense. Say "2 hr" and name
+                            it supply & install — its dollars are not all
+                            product, and the row must not imply they are. */}
+                        <div style={{ marginTop: 7, ...microNote, fontSize: 9 }}>
+                          {m.unit.toLowerCase() === 'hr'
+                            ? `${m.quantity} hr`
+                            : `${m.quantity} × ${m.unit}`}
+                          {m.unitPriceExGst > 0 ? ` @ $${fmt(m.unitPriceExGst)} ex GST` : ''}
+                          {m.kind === 'assembly' ? ' · supply & install' : ''}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* How the job runs + what the tradie brings. Authored per trade and
+                job type (lib/quote/job-method) — deterministic, never generated
+                at render time, and carried under METHOD_DISCLAIMER so it reads
+                as standard practice rather than a bespoke promise. */}
+            {method ? (
+              <>
+                <div>
+                  <h4 style={subHeading}>How the job runs</h4>
+                  <ol style={{ margin: '12px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 10 }}>
+                    {method.steps.map((s, i) => (
+                      <li key={i} style={{ display: 'flex', gap: 11, fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            flexShrink: 0,
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            color: 'var(--accent)',
+                            paddingTop: 2,
+                          }}
+                        >
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div>
+                  <h4 style={subHeading}>Tools &amp; equipment we bring</h4>
+                  <div style={{ marginTop: 11, display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {method.tools.map((t) => (
+                      <span
+                        key={t}
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          border: '1px solid var(--ink-line)',
+                          background: 'var(--ink-deep)',
+                          padding: '5px 9px',
+                          color: 'var(--text-sec)',
+                        }}
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <p style={{ margin: '11px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                    {METHOD_DISCLAIMER}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 style={subHeading}>Compliance</h4>
+                  <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                    {method.compliance.map((c) => (
+                      <div key={c} style={{ display: 'flex', gap: 10, fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                        <span aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>✓</span>
+                        <span>{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {/* Risk flags + assumptions moved in here from their own sections
+                near the old page footer. They are safety and consumer-law
+                content — folding them into Job details keeps the five-section
+                shape without dropping anything the customer needs. */}
+            {Array.isArray(quote.risk_flags) && quote.risk_flags.length > 0 ? (
+              <div>
+                <h4 style={{ ...subHeading, color: 'var(--warning-bright)' }}>Things to be aware of</h4>
+                <div style={{ marginTop: 11, display: 'grid', gap: 10 }}>
+                  {(quote.risk_flags as Array<string | { description?: string }>).map((r, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                      <span aria-hidden="true" style={{ color: 'var(--warning-bright)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>!</span>
+                      <span>{typeof r === 'string' ? r : (r?.description ?? JSON.stringify(r))}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {(Array.isArray(quote.assumptions) && quote.assumptions.length > 0) || quote.gst_note ? (
+              <div>
+                <h4 style={subHeading}>Good to know</h4>
+                <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
+                  {(Array.isArray(quote.assumptions) ? (quote.assumptions as string[]) : []).map((a, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                      <span aria-hidden="true" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>○</span>
+                      <span>{a}</span>
+                    </div>
+                  ))}
+                </div>
+                {quote.gst_note ? (
+                  <p style={{ margin: '11px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                    {quote.gst_note as string}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        title: 'Your tradie',
+        body: (
+          <div style={{ ...blockBody, gap: 12 }}>
+            <div className="qm-print-hide">
+              <TrustVideo
+                src={welcomeVideo.url}
+                script={welcomeVideo.script}
+                title={tradieName}
+                caption="A short introduction from your tradie"
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <TradiePhoto src={tradie.photoSrc} alt={tradie.name} />
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+                {tradie.blurb}
+                {letterheadCredential ? ` Licence ${letterheadCredential}.` : ''}
+                {websiteUrl ? (
+                  <>
+                    {' '}
+                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                      Visit their website
+                    </a>
+                    .
+                  </>
+                ) : null}
+              </p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        title: 'Your price',
+        body: (
+          <div style={blockBody}>
+            {/* Urgency + discount banners, moved in beside the price they
+                actually qualify. */}
+            {showHoldBanner ? <PriceHoldBanner hold={hold} depositPct={depositPct ?? 30} /> : null}
+            {showEarlyBirdOffer ? (
+              <EarlyBirdBanner
+                discountPct={ebStatus.discountPct}
+                remaining={fmtEarlyBirdRemaining(ebStatus)}
+                deadline={fmtEarlyBirdDeadlineAU(ebStatus.expiresAt)}
+              />
+            ) : null}
+            {ebApplied && !isInspection ? <EarlyBirdAppliedBanner discountPct={ebAppliedPct} /> : null}
+
+            {isInspection ? (
+              <div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 800,
+                    fontSize: 24,
+                    lineHeight: 1,
+                    color: 'var(--text-pri)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  ${INSPECTION_FEE_AUD}
+                </div>
+                <div style={{ marginTop: 6, ...microNote }}>Site visit · refundable</div>
+                <p style={{ margin: '10px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)', maxWidth: '52ch' }}>
+                  {quote.inspection_reason
+                    ? `Why a visit: ${quote.inspection_reason as string}`
+                    : 'Every site is different, so this job is priced in person rather than sight-unseen.'}{' '}
+                  The visit fee is credited toward your final quote.
+                </p>
+              </div>
+            ) : (
+              // One breakdown per VISIBLE tier. Each table's rows sum EXACTLY to
+              // that tier's inc-GST total: the total is computed once through
+              // lib/quote/money, then apportioned by each line's share of the
+              // summed ex-GST with largest-remainder rounding. Grossing each row
+              // up independently would drift a dollar or more from the headline.
+              <div style={{ display: 'grid', gap: 16 }}>
+                {(['good', 'better', 'best'] as const)
+                  .filter((k) => visibleTierSet.has(k) && !!quote[k])
+                  .map((k) => {
+                    const t = quote[k] as NonNullable<Tier>
+                    const lines = Array.isArray(t.line_items) ? t.line_items : []
+                    const stack = priceStack(t.subtotal_ex_gst ?? 0, {
+                      discountPct: ebApp,
+                      gstRegistered,
+                    })
+                    const rowTotals = allocateIncGst(lines, stack.totalDollars)
+                    const dep = tierDeposit(t)
+                    const recommended = showRecommendedBadge && quote.selected_tier === k
+                    const paidThis = isPaid && quote.paid_tier === k
+                    const otherPaid = isPaid && quote.paid_tier !== k
+                    return (
+                      <div
+                        key={k}
+                        style={{
+                          border: recommended ? '1px solid var(--accent)' : '1px solid var(--ink-line)',
+                          background: recommended
+                            ? 'color-mix(in srgb, var(--accent) 6%, var(--ink-card))'
+                            : 'var(--ink-card)',
+                          padding: '16px 16px 18px',
+                          opacity: otherPaid ? 0.55 : 1,
+                        }}
+                      >
+                        {/* The eyebrow must say WHICH OPTION this is, and the
+                            stored label is not reliable for that: cleanTierLabel
+                            strips the "(good)" suffix, so a tier labelled
+                            "Brilliant Halo 90 9W LED downlight (good)" collapsed
+                            to a bare product name and the option heading read as
+                            a light fitting. Name the tier ourselves, then carry
+                            the stored label underneath as the description —
+                            which is where the product detail belongs. Following
+                            the same rule as TierCards: one visible option IS the
+                            offer, so it is never labelled "good". */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                          <span
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.14em',
+                              color: 'var(--accent)',
+                            }}
+                          >
+                            {tierCount === 1 ? 'Your quote' : k}
+                            {recommended ? ' · most popular' : ''}
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 800,
+                              fontSize: 22,
+                              lineHeight: 1,
+                              color: 'var(--text-pri)',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            ${fmt(stack.totalDollars)}
+                          </span>
+                        </div>
+                        <div style={{ marginTop: 5, ...microNote, textAlign: 'right' }}>
+                          inc GST{stack.discountPct > 0 ? ` · ${stack.discountPct}% off applied` : ''}
+                        </div>
+                        {cleanTierLabel(t.label) ? (
+                          <p style={{ margin: '9px 0 0', fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                            {cleanTierLabel(t.label)}
+                          </p>
+                        ) : null}
+
+                        {lines.length ? (
+                          // The breakdown is ALWAYS available, but whether it
+                          // starts open honours the tenant's quote_display
+                          // preference: a tradie on 'summary' wants the lump sum
+                          // read first and the rate card behind an opt-in, which
+                          // is the whole point of that setting. 'itemised' opens
+                          // the featured tier; the others stay collapsed either
+                          // way so the section does not become a wall of tables.
+                          <details
+                            open={quoteDisplayMode === 'itemised' && k === featuredKey}
+                            style={{ marginTop: 14 }}
+                          >
+                            <summary
+                              style={{
+                                cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 10,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.14em',
+                                color: 'var(--text-dim)',
+                              }}
+                            >
+                              Full cost breakdown
+                            </summary>
+
+                            <div style={{ marginTop: 12, display: 'grid', gap: 1, background: 'var(--ink-line)', border: '1px solid var(--ink-line)' }}>
+                              {lines.map((li, i) => {
+                                const youSupply =
+                                  (li as unknown as { supplied_by?: string }).supplied_by === 'customer'
+                                return (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      gap: 12,
+                                      padding: '10px 12px',
+                                      background: 'var(--ink-deep)',
+                                    }}
+                                  >
+                                    <span style={{ minWidth: 0, fontSize: 12.5, lineHeight: 1.4, color: 'var(--text-sec)' }}>
+                                      {li.description}
+                                      {youSupply ? ' (you supply · install only)' : ''}
+                                      <span style={{ display: 'block', marginTop: 2, ...microNote, fontSize: 9 }}>
+                                        {asNumber(li.quantity)} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
+                                      </span>
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: 12.5,
+                                        flexShrink: 0,
+                                        color: 'var(--text-pri)',
+                                        fontVariantNumeric: 'tabular-nums',
+                                      }}
+                                    >
+                                      ${fmt(rowTotals[i] ?? 0)}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            {/* The stack. GST is the residual of the total, so
+                                subtotal + GST always equals the headline. */}
+                            <div style={{ marginTop: 12, display: 'grid', gap: 7 }}>
+                              <StackRow label="Subtotal (ex GST)" value={`$${fmt(stack.baseExDollars)}`} />
+                              {stack.discountDollars > 0 ? (
+                                <StackRow
+                                  label={`Early-booking discount (${stack.discountPct}%)`}
+                                  value={`−$${fmt(stack.discountDollars)}`}
+                                  accent
+                                />
+                              ) : null}
+                              {stack.discountDollars > 0 ? (
+                                <StackRow label="Discounted subtotal (ex GST)" value={`$${fmt(stack.netExDollars)}`} />
+                              ) : null}
+                              {stack.gstApplies ? (
+                                <StackRow label="GST (10%)" value={`$${fmt(stack.gstDollars)}`} />
+                              ) : (
+                                <StackRow label="GST" value="Not registered" />
+                              )}
+                              <StackRow label="Total (inc GST)" value={`$${fmt(stack.totalDollars)}`} strong />
+                              {dep ? (
+                                <StackRow
+                                  label={`Deposit to book (${depositPct}%)`}
+                                  value={`$${fmt(dep)}`}
+                                  accent
+                                />
+                              ) : null}
+                            </div>
+
+                            <p style={{ margin: '11px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                              Line amounts are shown inc GST and add up to the total above. The
+                              per-unit rates beneath each line are your tradie&apos;s ex-GST rate card.
+                            </p>
+                          </details>
+                        ) : null}
+
+                        {paidThis ? (
+                          <div
+                            style={{
+                              marginTop: 14,
+                              border: '1px solid color-mix(in srgb, var(--success-bright) 40%, transparent)',
+                              padding: '11px 14px',
+                              textAlign: 'center',
+                              ...microNote,
+                              color: 'var(--success-bright)',
+                            }}
+                          >
+                            Deposit paid
+                          </div>
+                        ) : otherPaid ? (
+                          <div style={{ marginTop: 14, ...microNote, textAlign: 'center' }}>
+                            Another option confirmed
+                          </div>
+                        ) : priceExpired ? (
+                          <div style={{ marginTop: 14, ...microNote, textAlign: 'center' }}>
+                            Reply to your tradie for a refreshed price
+                          </div>
+                        ) : (
+                          <a href={`/r/${token}/${k}`} className="qm-cta" style={{ ...ctaStyle, marginTop: 14 }}>
+                            {dep ? `Pay $${fmt(dep)} deposit` : 'Pay deposit'}
+                          </a>
+                        )}
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
+          </div>
+        ),
+      },
+      {
+        title: 'Your site visit',
+        body: (
+          <div style={{ ...blockBody, gap: 14, maxWidth: 460 }}>
+            {isPaid && scheduledAt ? (
+              <>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Your visit is booked for{' '}
+                  <strong style={{ color: 'var(--text-pri)' }}>{slotLabel}</strong>.{' '}
+                  {tradieName} will be in touch to confirm the exact time.
+                </p>
+                {calLinks ? (
+                  <AddToCalendar
+                    google={calLinks.google}
+                    outlook={calLinks.outlook}
+                    outlookOffice={calLinks.outlookOffice}
+                    icsHref={`/api/q/${token}/ics`}
+                  />
+                ) : null}
+                <a
+                  href={`/q/${token}/thanks`}
+                  className="qm-ghost"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    justifySelf: 'start',
+                    border: '1px solid var(--ink-line)',
+                    background: 'transparent',
+                    color: 'var(--text-sec)',
+                    padding: '11px 16px',
+                    borderRadius: 'var(--qm-r-ctl)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    textDecoration: 'none',
+                  }}
+                >
+                  View your booking →
+                </a>
+              </>
+            ) : isPaid ? (
+              <>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Payment received. Pick a time that suits and your visit is locked in.
+                </p>
+                <a href={`/q/${token}/book`} className="qm-cta" style={ctaStyle}>
+                  Pick your visit time →
+                </a>
+              </>
+            ) : priceExpired ? (
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                This price has lapsed, so there is nothing to book just yet. Reply to your
+                tradie&apos;s text and they&apos;ll send a refreshed quote.
+              </p>
+            ) : isInspection ? (
+              // No CTA here on purpose. The AcceptBlock below is the ONE action
+              // band on this page (it records customer_accepted_at before
+              // routing to Stripe); repeating its $99 button here gave the
+              // customer two buttons for one decision.
+              <>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Your tradie prices this one in person. Book the ${INSPECTION_FEE_AUD} site
+                  visit below and you pick your time straight after paying — the fee is
+                  refundable and credited toward your final quote.
+                </p>
+                <span style={microNote}>Takes about 30 minutes on site</span>
+              </>
+            ) : (
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Accept your option below and pay the {depositPct ?? 30}% deposit — you pick
+                your visit time straight after, and the deposit comes off the final invoice.
+              </p>
+            )}
+          </div>
+        ),
+      },
+    ]
+
+    return (
+      <QuoteChrome
+        trade={{ label: tradeFormat.label, icon: tradeIcon(intakeTrade) }}
+        sticky={stickyBar}
+      >
+        {/* Tradie-owner edit overlay — renders nothing for customers. */}
+        <TradieEditor
+          quoteId={quote.id as string}
+          gstRegistered={gstRegistered}
+          initialTiers={{
+            good: (quote.good as Parameters<typeof TradieEditor>[0]['initialTiers']['good']) ?? null,
+            better: (quote.better as Parameters<typeof TradieEditor>[0]['initialTiers']['better']) ?? null,
+            best: (quote.best as Parameters<typeof TradieEditor>[0]['initialTiers']['best']) ?? null,
+          }}
+        />
+        <QuoteSheet label={`Quote ${quoteRef}`}>
+          {tenantIdentity?.business_name ? (
+            <Letterhead
+              name={tenantIdentity.business_name}
+              credential={letterheadCredential}
+              phoneHref={letterheadPhoneHref}
+              logoUrl={tenantIdentity.logo_url}
+              contactName={letterheadContactName}
+              phone={ownerPhone || null}
+              email={letterheadEmail}
+            />
+          ) : null}
+          <Scope eyebrow={`Quote ${quoteRef}`} items={sections} />
+          {/* Acceptance record (customer_accepted_at) — the legal record that
+              this exact price and scope was accepted. Kept OUT of section 05 on
+              purpose: it renders its own full-bleed action band with the
+              #accept anchor the sticky bar targets.
+              Rendered ONLY for the two ACTIONABLE modes. In 'paid' mode section
+              05 already confirms the booking and in 'expired' mode both section
+              04's banner and section 05 already say so — rendering it anyway
+              put the same message on the page three times. */}
+          {acceptView.mode === 'deposit' || acceptView.mode === 'inspection' ? (
+            <AcceptBlock token={token} view={acceptView} alreadyAccepted={!!customerAcceptedAt} />
+          ) : null}
+          <CredentialFooter rows={footerRows} />
         </QuoteSheet>
       </QuoteChrome>
     )
@@ -1375,17 +2111,10 @@ export default async function PublicQuotePage(props: {
                     })}
             />
           </SheetSection>
-        ) : (
-          <TierCards
-            heading={tierCount === 1 ? 'Your option' : 'Good · Better · Best'}
-            intro={
-              !isInspection && depositPct
-                ? `All prices include GST. The ${depositPct}% deposit locks your booking and comes off the final invoice.`
-                : 'All prices include GST.'
-            }
-            tiers={genericTiers}
-          />
-        )}
+        ) : null}
+        {/* The third arm of this ternary was the electrical/plumbing TierCards.
+            Those trades return the five-section view above, so it could never
+            render — `!tradeFormat.usesGenericCard` is necessarily true here. */}
 
         {/* ─── Explicit "Accept & confirm" — the primary accept action on a
             priced quote (records acceptance, then deposit). Inspection/held
@@ -1433,6 +2162,60 @@ export default async function PublicQuotePage(props: {
 /* ═══════════════════════════════════════════════════════════════
    Components
    ═══════════════════════════════════════════════════════════════ */
+
+/** One line of the Subtotal / Discount / GST / Total stack in section 04.
+ *  Tabular numerals so the column reads as an addable sum, which is the whole
+ *  point of the section. */
+function StackRow({
+  label,
+  value,
+  strong = false,
+  accent = false,
+}: {
+  label: string
+  value: string
+  strong?: boolean
+  accent?: boolean
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        gap: 12,
+        ...(strong
+          ? { borderTop: '1px solid var(--ink-line)', paddingTop: 8, marginTop: 1 }
+          : null),
+      }}
+    >
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: strong ? 10.5 : 10,
+          textTransform: 'uppercase',
+          letterSpacing: '0.12em',
+          color: strong ? 'var(--text-pri)' : 'var(--text-dim)',
+          fontWeight: strong ? 700 : 400,
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: strong ? 15 : 12.5,
+          fontWeight: strong ? 800 : 400,
+          color: accent ? 'var(--accent)' : strong ? 'var(--text-pri)' : 'var(--text-sec)',
+          fontVariantNumeric: 'tabular-nums',
+          flexShrink: 0,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
 
 function PriceHoldBanner({
   hold,

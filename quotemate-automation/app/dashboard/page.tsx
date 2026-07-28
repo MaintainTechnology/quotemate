@@ -1323,7 +1323,7 @@ function Shell({
           }`}
         >
           <Link href="/dashboard" className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <BrandMark className="h-10 w-10" />
+            <BrandMark className="h-10 w-auto" />
             {/* Reference lockup — mark + wordmark only. The tradie's
                 business name lives in the profile chip (top-right), not
                 here, matching the QuoteMax dashboard reference. */}
@@ -16262,10 +16262,10 @@ const HUB_SECTION_ICONS: Record<HubSection, NavIcon> = {
   quotes: FileText,
 }
 
-/** Trades that ship an interactive tool panel (the old tool tabs).
- *  Plumbing has no standalone tool yet, so its hub starts on Pricing. */
+/** Trades that ship an interactive tool panel (the old tool tabs). */
 const HUB_TOOL_TRADES: readonly TradeHubSlug[] = [
   'electrical',
+  'plumbing',
   'roofing',
   'signage',
   'painting',
@@ -16273,6 +16273,34 @@ const HUB_TOOL_TRADES: readonly TradeHubSlug[] = [
   'aircon',
   'solar',
 ]
+
+/** Tools-tab entry into the tradie-typed job quoter (/dashboard/job/[trade]).
+ *  Electrical and plumbing had no portal quoting surface — both trades were
+ *  reachable only through the SMS receptionist. */
+function JobQuoterCard({ trade }: { trade: 'electrical' | 'plumbing' }) {
+  return (
+    <Link
+      href={`/dashboard/job/${trade}`}
+      className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+    >
+      <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+        {trade === 'electrical' ? 'EL' : 'PL'}
+      </span>
+      <div className="flex-1">
+        <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+          Quote {trade === 'electrical' ? 'an' : 'a'} {trade} job
+        </h3>
+        <p className="mt-4 text-base leading-relaxed text-text-sec">
+          Pick the job type &mdash; downlights, smoke alarms, blocked drain and the rest &mdash; fill
+          in the details, and get a drafted quote. Nothing reaches the customer until you send it.
+        </p>
+        <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
+          Open job quoter <span aria-hidden="true">&rarr;</span>
+        </span>
+      </div>
+    </Link>
+  )
+}
 
 function TradeHub({
   trade,
@@ -16407,7 +16435,15 @@ function TradeHub({
         className="px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8 xl:px-10"
       >
         {section === 'tools' && trade === 'electrical' && (
-          <EstimatorBetaTab accessToken={accessToken} />
+          <div className="space-y-7">
+            <JobQuoterCard trade="electrical" />
+            <EstimatorBetaTab accessToken={accessToken} />
+          </div>
+        )}
+        {section === 'tools' && trade === 'plumbing' && (
+          <div className="space-y-7">
+            <JobQuoterCard trade="plumbing" />
+          </div>
         )}
         {section === 'tools' && trade === 'roofing' && (
           <RoofingHubTab accessToken={accessToken} />

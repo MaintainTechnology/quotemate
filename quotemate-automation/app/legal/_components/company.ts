@@ -11,7 +11,7 @@ export const COMPANY = {
   /** Customer-facing product/brand name. */
   product: 'QuoteMax',
   /** Australian Business Number. */
-  abn: '[ABN — e.g. 00 000 000 000]',
+  abn: '[ABN, e.g. 00 000 000 000]',
   /** Registered business address. */
   address: '[REGISTERED BUSINESS ADDRESS, Australia]',
   /** Where privacy enquiries and access/correction requests go. */

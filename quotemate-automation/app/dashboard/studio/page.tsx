@@ -112,7 +112,7 @@ export default function StudioPage() {
       {/* top-11: sticks below the layout's h-11 dashboard bar. */}
       <header className="sticky top-11 z-10 flex items-center justify-between gap-4 border-b border-ink-line bg-ink-deep/90 px-5 py-4 backdrop-blur">
         <div className="flex items-center gap-4">
-          <BrandMark className="h-8 w-8" />
+          <BrandMark className="h-8 w-auto" />
           <div className="flex flex-col">
             <span className={LABEL}>Brand Studio · {FORMATS[format].label}</span>
             <span className="font-semibold tracking-[-0.01em]">Make an on-brand post</span>

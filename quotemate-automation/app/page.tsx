@@ -24,6 +24,8 @@ import {
 } from "./_components/site"
 import { PricingTiers } from "./_components/PricingTiers"
 import { DuotoneImage } from "./_components/DuotoneImage"
+import { Testimonials } from "./_components/Testimonials"
+import { ContactSection } from "./_components/ContactSection"
 import CookieConsent from "./_components/CookieConsent"
 import { TradeCarousel } from "./_components/TradeCarousel"
 import { TRADES, TRADE_ORDER } from "./trades/_data"
@@ -62,10 +64,15 @@ export default function Home() {
       <Shift />
       <CoveredTrades />
       <Numbers />
+      {/* Proof sits between the numbers and the price: the reader has just
+          been told what it does, and is about to be told what it costs. */}
+      <Testimonials />
       <Pricing />
       <BuiltForAustralia />
       <AppDownload />
       <Faq />
+      {/* Directly after the FAQ, which is where the unanswered questions are. */}
+      <ContactSection />
       <ClosingCta />
       <Footer />
       <MarqueeBar />
@@ -627,10 +634,10 @@ function Numbers() {
           <Stat value="24/7" label="Line always answered" />
         </Reveal>
         <Reveal delay={180}>
-          <Stat value="$0" label="Cut of your jobs" />
+          <Stat value="A$0" label="Cut of your jobs" />
         </Reveal>
         <Reveal delay={270}>
-          <Stat value="$99" label="Locked site-visit price" />
+          <Stat value="A$99" label="Locked site-visit price" />
         </Reveal>
       </div>
     </section>
@@ -652,7 +659,7 @@ function Pricing() {
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
             Pick a plan and QuoteMax is quoting the same day.
             Starter Monthly comes with a 14-day free trial. We never take a cut
-            of your jobs. The only fixed price is the $99 site visit, credited
+            of your jobs. The only fixed price is the A$99 site visit, credited
             straight back to the job.
           </p>
         </Reveal>
@@ -677,7 +684,7 @@ function Faq() {
     },
     {
       q: "What about complex jobs?",
-      a: "Anything non-standard books a $99 site visit instead of auto-quoting. You quote those the way you always have, with the deposit already paid.",
+      a: "Anything non-standard books an A$99 site visit instead of auto-quoting. You quote those the way you always have, with the deposit already paid.",
     },
     {
       q: "Whose number is it?",
@@ -685,7 +692,7 @@ function Faq() {
     },
     {
       q: "What does it cost?",
-      a: "Plans start at $49/mo, and the Starter Monthly plan comes with a 14-day free trial. See the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the $99 site visit, credited back to the job.",
+      a: "Plans start at A$49/mo, and the Starter Monthly plan comes with a 14-day free trial. See the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the A$99 site visit, credited back to the job.",
     },
     {
       q: "Which trades are live?",

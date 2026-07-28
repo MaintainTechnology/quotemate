@@ -10,6 +10,8 @@ colors:
   accent-press: "#E6AC00"
   accent-soft: "#FFD23D"
   accent-ink: "#1C1812"
+  logo-body: "#FFFFFF"
+  logo-notch: "#E3C13C"
   text-pri: "#F6F1EA"
   text-sec: "#C3B8AC"
   text-dim: "#A2968A"
@@ -28,6 +30,8 @@ colors:
   paper-ink: "#241E1B"
   paper-ink-sec: "#5E544E"
   paper-ink-dim: "#6E645C"
+  paper-accent-ink: "#2B2422"
+  paper-logo-body: "#16120F"
 typography:
   display:
     fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif"
@@ -154,8 +158,21 @@ A monochrome warm-charcoal system lit by a single hi-vis yellow — the accent i
 ### State (functional, used sparingly — a rule or a small chip, never a large fill)
 - **Success** (`#15803D`, text on dark `#34D27B`), **Warning** (`#B45309`, text on dark `#F59E0B`), **Danger** (`#B91C1C`, text on dark `#F0816B`).
 
+### Brand mark (the one sanctioned exception to the One Signal Rule)
+The QuoteMax "M" mark is two-tone and carries its own gold, **Mark Gold** (`#E3C13C`) — the literal value in the supplied source art, *not* `--accent`. It is therefore a shade duller than the yellow CTAs beside it. That is deliberate: the mark is the asset, not a recolour of it. Do not "correct" it to `#FFC400`.
+
+The body colour flips with the theme: **`--logo-body`** is pure white (`#FFFFFF`) on the dark canvas and charcoal (`#16120F`) on paper. Pure white, not `--text-pri` — the warm bone read visibly dim next to a white mark. **`--logo-notch`** is `#E3C13C` in both themes.
+
+`--logo-mono-invert` (`1` dark / `0` light) flips single-colour partner logos supplied as black artwork so they read as bone on the dark canvas.
+
 ### Light theme — "warm paper" (device preference / manual `[data-theme="light"]` pin)
 - Cream canvas **Paper** (`#FAF8F4`) on white cards (`#FFFFFF`), warm hairline (`#CFC2B0` — darkened from the design system's `#E9E3DC`, which was only ~1.25:1 and washed out), ink text (`#241E1B` / `#5E544E` / `#6E645C`). The accent stays yellow for fills; as on-surface *text* it falls back to charcoal (cream cannot carry yellow text), so highlighted words carry a yellow highlighter **underline** (a self-scaling `text-decoration` in the accent — yellow stays a fill) in light mode, since weight alone can't distinguish an already-bold display headline.
+- Two tokens shift value rather than just surface: `accent-ink` lifts from `#1C1812` to **`#2B2422`**, and `logo-body` flips white to **`#16120F`**.
+
+### Token names in code
+The friendly names above map to CSS custom properties in `quotemate-automation/app/globals.css`. Two carry legacy names that no longer describe their value — rename only with a full sweep, since they are referenced widely:
+- `--teal-glow` / `--teal-deep` are **Ridge Glow** / **Ridge Deep**. The values are warm greys (`#6E6354` / `#4A4136`); nothing teal survives.
+- Radii ship as `--radius-card` (`14px`) and `--radius-ctl` (`9px`), which the frontmatter lists as `rounded.card-product` / `rounded.control-product`.
 
 ### Named Rules
 **The One Signal Rule.** Yellow is the only accent — no blues, no violets, no teal, no second colour. On any given screen it marks the single thing that matters next: the CTA, the price, the one highlighted word. Its scarcity is the point; keep it to ≤ ~10% of the surface.
@@ -169,6 +186,8 @@ A monochrome warm-charcoal system lit by a single hi-vis yellow — the accent i
 **Display Font:** Manrope (with ui-sans-serif, system-ui, Segoe UI, Roboto fallback)
 **Body Font:** Manrope (same stack)
 **Label/Mono Font:** JetBrains Mono (with ui-monospace, SF Mono, Menlo, Consolas fallback)
+
+Both load via `next/font/google` in `app/layout.tsx`, latin subset, and are exposed as `--font-sans` / `--font-mono`. **Only these weights ship:** Manrope 400, 500, 600, 700, 800; JetBrains Mono 400, 500, 600, 700. Anything outside that set is synthesised by the browser and will look wrong — add the weight to the loader rather than reaching for it in CSS.
 
 **Character:** One heavy geometric-humanist sans doing display and body across its weight range, paired against a precise monospace for anything instrumented — labels, prices, timestamps, refs. The contrast is sans-vs-mono, not two similar sans; it reads engineered and legible, never decorative.
 
@@ -186,7 +205,10 @@ A monochrome warm-charcoal system lit by a single hi-vis yellow — the accent i
 
 ## 4. Elevation
 
-This system is flat by intent: there are **no drop shadows on resting surfaces**. Depth is built from four materials instead — a 1px warm hairline border, a lit panel edge (an inset top highlight, not a cast shadow), a ~4.5% film-grain overlay that kills banding, and a slow topographic ridge field behind hero surfaces. Cast shadows exist only for true overlays (dialogs, menus, toasts) and are warm-charcoal tinted, never neutral black.
+This system is flat by intent: there are **no drop shadows on resting surfaces**. Depth is built from five materials instead — a 1px warm hairline border, a lit panel edge (an inset top highlight, not a cast shadow), a ~4.5% film-grain overlay that kills banding (`--noise-opacity`, `0.045` dark / `0.03` light), a slow topographic ridge field behind hero surfaces, and a blurred backdrop photo on the hero. Cast shadows exist only for true overlays (dialogs, menus, toasts) and are warm-charcoal tinted, never neutral black.
+
+### Hero backdrop photo
+A blurred trade photo sits behind the hero at `--hero-photo-opacity` (`0.85` dark / `0.7` light), held back to roughly 15% of that over the copy column by a horizontal mask. **These are measured ceilings, not preferences.** They moved once already when the blur was sharpened from 30px to 12px: at 30px the image was smooth enough that its average tone predicted contrast, but at 12px individual dark patches land under the text and the worst 5% of them set the limit. Re-measure worst-case contrast, not mean, before raising either value — and note the mask steepness matters more than the peak, since a steeper falloff lowers the alpha under the copy even as the peak climbs.
 
 ### Shadow Vocabulary
 - **Lit edge / lift** (`box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.06)`): the default "lifted plate" treatment on dark cards — an inner highlight, applied in place of a drop shadow. On the light theme it softens to a whisper cast (`0 1px 2px rgba(43,36,34,0.06)`).
@@ -223,6 +245,14 @@ This system is flat by intent: there are **no drop shadows on resting surfaces**
 ### Navigation
 - Sticky, blurred bar (`background: rgba(22,18,15,0.85)` + backdrop-blur) with a 1px hairline bottom border. Links are body-weight; active/hover draws a left-to-right underline or shifts to accent. Mobile collapses to a sheet; the wordmark (mark + "QUOTEMAX", Manrope 800, one colour) anchors the left.
 
+### Brand Mark & Lockup (signature)
+`app/_components/BrandMark.tsx`, server-safe, no hooks.
+
+- **`<BrandMark />`** is the two-tone "M" as inline SVG (never an `<img>`): a referenced image can neither swap colour on theme nor inherit `currentColor`. Two paths only — body filled `var(--logo-body)`, notch filled `var(--logo-notch)`.
+- **Aspect is 1.47:1 landscape**, `viewBox="151 214 397 270"`, cropped tight to the glyph. **Size it `h-10 w-auto`, never `h-10 w-10`** — a square box letterboxes it and throws the extra size away.
+- **`<BrandLockup />`** is the mark plus "QUOTE" over "MAX", stacked, Manrope 800 uppercase at `0.82` leading so the two-line wordmark stays *shorter* than the mark beside it. A header swapping a one-line wordmark for this one grows by the mark's size change only, never by the second line.
+- The wordmark inherits `var(--logo-body)`, not `--text-pri`, so the lockup is always one colour and the type cannot drift from the mark when either is recoloured.
+
 ### Numbered Card (signature)
 A large JetBrains Mono number (`01`, `02`) in accent sitting beside an uppercase Manrope-800 title, over warm-grey body copy — the brand's default way to sequence a "how it works" or a scope of works.
 
@@ -242,6 +272,7 @@ The live intake demo: dark bubbles with a 3-dot typing bounce and pop-in arrival
 - **Do** use JetBrains Mono (uppercase, wide-tracked) for eyebrows, prices, refs and metadata, with `tabular-nums` on figures.
 - **Do** write in Australian English, present tense, tradie voice; let big honest numbers carry the value prop.
 - **Do** run photography through the duotone pass so trade photos read as native to the palette.
+- **Do** ship the brand mark as inline SVG sized `h-* w-auto`, and let both its tones come from `--logo-body` / `--logo-notch` so it flips with the theme.
 
 ### Don't:
 - **Don't** reintroduce the retired navy (`#0E1622`) + orange (`#FF5A1F`) "Maintain" identity. Yellow + warm charcoal is canonical.
@@ -249,6 +280,8 @@ The live intake demo: dark bubbles with a 3-dot typing bounce and pop-in arrival
 - **Don't** go consumer-cutesy or playful: no illustrated/toy-like treatments or oversized bubbly radii, and zero emoji, ever.
 - **Don't** look like a cheap template: no Wix/Squarespace/Framer stock blocks; bespoke structure and honest proof only.
 - **Don't** put white text on a yellow fill (fails WCAG ~1.4:1) — dark charcoal only.
-- **Don't** add a second accent colour, a gradient button, or any neon.
+- **Don't** add a second accent colour, a gradient button, or any neon. The mark's `#E3C13C` gold is the one exception, and it is not to be "corrected" to `#FFC400`.
+- **Don't** put the brand mark in a square box, hard-code its fills, or swap the inline SVG for an `<img>` — it would stop flipping with the theme.
+- **Don't** raise `--hero-photo-opacity` without re-measuring worst-case text contrast; the current values are a measured ceiling, not a taste call.
 - **Don't** use exclamation marks or em-dashes in customer-visible copy; use a full stop, a comma, or a middot (`·`).
 - **Don't** center display headlines, and never use a cool-grey or blue-black canvas.

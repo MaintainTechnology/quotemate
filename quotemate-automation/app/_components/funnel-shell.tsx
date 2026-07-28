@@ -57,7 +57,7 @@ export function FunnelShell({
       <nav className="border-b border-ink-line">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark className="h-9 w-9" />
+            <BrandMark className="h-9 w-auto" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">QuoteMax</span>
           </Link>
           <span className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">

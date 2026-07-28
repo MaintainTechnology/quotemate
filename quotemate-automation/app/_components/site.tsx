@@ -8,7 +8,7 @@
 import Link from "next/link"
 import AuthNav from "../AuthNav"
 import ThemeToggle from "./ThemeToggle"
-import { BrandMark } from "./BrandMark"
+import { BrandLockup } from "./BrandMark"
 import { TradesMenu } from "./TradesMenu"
 import { MobileNav } from "./MobileNav"
 
@@ -19,11 +19,8 @@ export function Nav() {
   return (
     <nav className="sticky top-0 z-50 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-[88rem] items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Logo />
-          <span className="font-extrabold uppercase tracking-tight text-text-pri">
-            QuoteMax
-          </span>
+        <Link href="/" className="flex items-center">
+          <BrandLockup />
         </Link>
         <div className="hidden gap-8 text-sm font-medium text-text-sec md:flex">
           <Link
@@ -44,6 +41,12 @@ export function Nav() {
             className="link-underline pb-0.5 hover:text-text-pri"
           >
             FAQ
+          </Link>
+          <Link
+            href="/#contact"
+            className="link-underline pb-0.5 hover:text-text-pri"
+          >
+            Contact
           </Link>
         </div>
         <div className="hidden items-center gap-2 md:flex md:gap-3">
@@ -66,11 +69,8 @@ export function Footer() {
     <footer>
       <div className="mx-auto grid max-w-[88rem] gap-10 px-6 py-16 md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
         <div>
-          <Link href="/" className="flex items-center gap-2.5">
-            <Logo />
-            <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMax
-            </span>
+          <Link href="/" className="flex items-center">
+            <BrandLockup />
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-text-dim">
             QuoteMax drafts clean quotes for Australian electricians and
@@ -83,6 +83,7 @@ export function Footer() {
             { label: "How it works", href: "/#how" },
             { label: "Pricing", href: "/pricing" },
             { label: "FAQ", href: "/#faq" },
+            { label: "Contact us", href: "/#contact" },
           ]}
         />
         <FooterCol
@@ -189,10 +190,6 @@ export function MarqueeBar() {
 }
 
 /* ─── Primitives ──────────────────────────────────────────────── */
-
-function Logo() {
-  return <BrandMark />
-}
 
 export function Eyebrow({ children }: { children: React.ReactNode }) {
   return (

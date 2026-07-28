@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>QuoteMax lead posts, 61 to 65</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   THE SPLIT DOCKET, SET B, posts 31 to 60
+   Built to one layout, taken directly from the two reference posts:
+
+     ┌──────────────────────────────────────────┐
+     │  lockup                  QM-2607-NN/TAG  │  rail 150, hairline under
+     ├───────────────────────┬──────────────────┤
+     │  KICKER               │                  │
+     │  BIG ALL-CAPS HEAD    │   tradie, full   │  split at x=540
+     │  body copy            │   height, hard   │
+     │  [ YELLOW ACTION ]    │   to the edge    │
+     │  terms · terms        │                  │
+     ├───────────────────────┴──────────────────┤
+     │  QUOTEMAX.COM.AU              tagline    │  yellow sign-off 96
+     └──────────────────────────────────────────┘
+
+   Why this layout and not a photo with type over it: the tradie never has to
+   be dimmed to make the words legible. Each side owns its space, so the
+   photography stays bright and the copy stays high contrast. Nothing is
+   fighting anything.
+
+   The left column takes one of five content blocks (pitch, list, stat, steps,
+   quote) so 30 posts vary without the frame ever changing. Two in three put
+   the photo on the right, one in three flips it, which gives a feed some
+   rhythm without breaking the family.
+
+   BRAND, from DESIGN.md at the repo root: canvas #16120F, ONE accent #FFC400,
+   text on yellow is #1C1812 and never white, Manrope 800 all-caps display,
+   JetBrains Mono labels, square corners, hairlines instead of shadows,
+   Australian English, no emoji, no exclamation marks, no em dashes.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --canvas:#16120F; --card:#2B2422; --hair:#3A322C;
+  --accent:#FFC400; --on-accent:#1C1812;
+  --pri:#F6F1EA; --sec:#C3B8AC; --dim:#A2968A;
+  --M:88px;        /* outer margin */
+  --head:150px;    /* rail */
+  --foot:96px;     /* sign-off */
+  --split:540px;   /* where the photo column starts */
+  --gut:40px;      /* breathing room before the divider */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0908;font-family:'Manrope',sans-serif;display:flex;flex-direction:column;align-items:center;gap:46px;padding:46px 0}
+body.one{padding:0;gap:0}
+.d{position:relative;width:1080px;height:1350px;overflow:hidden;background:var(--canvas);color:var(--pri);flex:0 0 auto;
+  background-image:
+    radial-gradient(46% 30% at 4% -4%, rgba(110,99,84,.18), transparent 62%),
+    radial-gradient(40% 26% at 30% 102%, rgba(255,196,0,.07), transparent 60%);}
+.grain{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:.05;mix-blend-mode:soft-light}
+
+/* ── rail ─────────────────────────────────────────────────────────── */
+.rail{position:absolute;top:0;left:0;right:0;height:var(--head);z-index:6;
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M)}
+.rail::after{content:"";position:absolute;left:var(--M);right:var(--M);bottom:0;height:1px;background:var(--hair)}
+.rail img{height:52px;width:auto;display:block}
+.ref{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.ref b{color:var(--accent);font-weight:700}
+
+/* ── sign-off. Dark ink on yellow, always. ────────────────────────── */
+.foot{position:absolute;left:0;right:0;bottom:0;height:var(--foot);z-index:6;background:var(--accent);
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M);
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.14em;text-transform:uppercase;color:var(--on-accent)}
+.foot span:last-child{font-weight:500;opacity:.76}
+
+/* ── the split ────────────────────────────────────────────────────── */
+.split{position:absolute;left:0;right:0;top:var(--head);bottom:var(--foot);z-index:5;display:flex}
+.col{flex:0 0 var(--split);padding-left:var(--M);padding-right:var(--gut);
+  display:flex;flex-direction:column;justify-content:center;min-width:0}
+.pic{flex:1 1 auto;position:relative;overflow:hidden;border-left:1px solid var(--hair)}
+/* Flipped: photo first, type second. Border swaps sides with it. */
+.d.flip .split{flex-direction:row-reverse}
+.d.flip .pic{border-left:0;border-right:1px solid var(--hair)}
+.d.flip .col{padding-left:var(--gut);padding-right:var(--M)}
+
+/* Photography kept bright. A brand tint should say "this belongs", not hide
+   the person: a light desaturation and one warm accent pass, nothing more. */
+.pic img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  filter:grayscale(.10) saturate(.97) contrast(1.04) brightness(1.02) sepia(.07)}
+.pic::after{content:"";position:absolute;inset:0;background:var(--accent);mix-blend-mode:soft-light;opacity:.11;pointer-events:none}
+
+/* ── type ─────────────────────────────────────────────────────────── */
+.kick{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.20em;text-transform:uppercase;color:var(--accent)}
+.h{margin-top:22px;font-weight:800;font-size:54px;line-height:.97;letter-spacing:-.035em;text-transform:uppercase;color:var(--pri)}
+.h em{color:var(--accent);font-style:normal}
+.h.sm{font-size:46px}
+.p{margin-top:24px;font-weight:500;font-size:24px;line-height:1.4;color:var(--sec)}
+.p em{color:var(--pri);font-weight:700;font-style:normal}
+.p b{color:var(--accent);font-weight:800}
+.act{display:inline-flex;align-items:center;gap:12px;margin-top:36px;padding:22px 34px;background:var(--accent);
+  color:var(--on-accent);font-weight:800;font-size:23px;text-transform:uppercase;letter-spacing:.01em}
+.terms{margin-top:26px;display:flex;flex-wrap:wrap;gap:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.terms b{color:var(--accent);font-weight:700}
+
+/* list: hairline rows, answer set right, like a quote's line items */
+.rows{margin-top:32px;border-top:1px solid var(--hair)}
+.rows>div{display:flex;justify-content:space-between;align-items:baseline;gap:20px;padding:19px 0;border-bottom:1px solid var(--hair)}
+.rows .k{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);flex:1 1 auto}
+.rows .v{font-weight:700;font-size:22px;line-height:1.2;color:var(--pri);text-align:right;flex:0 0 auto;max-width:56%}
+
+/* stat: three figures stacked, label under each */
+.figs{margin-top:34px;display:flex;flex-direction:column;gap:22px}
+.figs>div{border-top:1px solid var(--hair);padding-top:16px}
+.figs .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:62px;line-height:.9;letter-spacing:-.05em;word-spacing:-.16em;color:var(--accent)}
+.figs .l{margin-top:8px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+
+/* steps: numeral in a bordered tile on a spine */
+.steps{margin-top:32px;position:relative}
+.steps::before{content:"";position:absolute;left:29px;top:20px;bottom:20px;width:1px;background:var(--hair)}
+.steps>div{display:flex;gap:26px;align-items:flex-start;padding:15px 0}
+.steps .n{position:relative;z-index:1;flex:0 0 auto;width:58px;height:58px;display:grid;place-items:center;background:var(--canvas);
+  border:1px solid var(--accent);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:22px;color:var(--accent)}
+.steps .t{font-weight:800;font-size:25px;letter-spacing:-.02em;text-transform:uppercase;line-height:1.08}
+.steps .b{margin-top:5px;font-weight:500;font-size:20px;line-height:1.3;color:var(--sec)}
+
+/* quote: one line, said plainly */
+.qm{font-weight:800;font-size:120px;line-height:.5;height:56px;color:var(--accent)}
+.q{margin-top:18px;font-weight:800;font-size:52px;line-height:1.02;letter-spacing:-.03em;text-transform:uppercase;color:var(--pri)}
+.q em{color:var(--accent);font-style:normal}
+.by{margin-top:30px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:17px;letter-spacing:.1em;text-transform:uppercase;color:var(--sec)}
+.by i{color:var(--dim);font-style:normal}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO='logo/quote-max-logo-dark.svg';
+const GRAIN=`<svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.86" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
+const hl=s=>String(s).replace(/\{([^}]+)\}/g,'<em>$1</em>');
+const terms=a=>`<div class="terms">${a.map((t,i)=>`${i?'<b>&middot;</b>':''}<span>${t}</span>`).join('')}</div>`;
+
+// Left-column content blocks. The frame never changes; only this does.
+const BLOCK={
+  pitch:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="p">${hl(D.copy)}</div>${D.act?`<div><span class="act">${D.act}</span></div>`:''}${D.terms?terms(D.terms):''}`,
+  list:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="rows">${D.rows.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
+    ${D.copy?`<div class="p">${hl(D.copy)}</div>`:''}`,
+  stat:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="figs">${D.figs.map(([n,l])=>`<div><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>
+    ${D.copy?`<div class="p">${hl(D.copy)}</div>`:''}`,
+  steps:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="steps">${D.steps.map(([n,t,b])=>`<div><div class="n">${n}</div><div><div class="t">${t}</div><div class="b">${b}</div></div></div>`).join('')}</div>`,
+  quote:D=>`<div class="kick">${D.kick}</div><div class="qm">&ldquo;</div><div class="q">${hl(D.head)}</div>
+    <div class="by">QUOTEMAX, <i>${D.by}</i></div>`,
+};
+
+function render(D){
+  return `<div class="d${D.flip?' flip':''}">
+    <div class="rail"><img src="${LOGO}" alt=""><div class="ref">QM-2607-${String(D.n).padStart(2,'0')} <b>/</b> ${D.tag}</div></div>
+    <div class="split">
+      <div class="col">${BLOCK[D.kind](D)}</div>
+      <div class="pic"><img src="img/${D.pic[0]}.jpg" style="object-position:${D.pic[1]}"></div>
+    </div>
+    <div class="foot"><span>quotemax.com.au</span><span>${D.foot}</span></div>
+    ${GRAIN}</div>`;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   30 DOCKETS. Four briefs, interleaved so no two of a kind land together:
+     AD    the offer, cold                6, 12, 18, 24, 30 and 1
+     PAIN  the quoting problem            2, 5, 8, 11, 14, 17, 20, 23
+     EDU   how it actually works          3, 7, 10, 13, 16, 19, 22, 26, 29
+     LEAD  ask for the enquiry or trial   4, 9, 15, 21, 25, 27, 28
+   Every figure is a real product fact: under a minute, 24/7, $0 commission,
+   $99 site visit credited back, from $49/mo, 14-day trial on Starter Monthly,
+   about three minutes to set up, eight live trades, SMS and voice, Good /
+   Better / Best. Nothing invented, and no testimonials, because there are no
+   consented ones to quote.
+   ════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════
+   DOCKET SET B, posts 31 to 60. Reference codes continue the series so a
+   graphic from either batch is unambiguous.
+
+   Batch A covered the fundamentals: the offer, the speed argument, the
+   three-step loop, pricing, the trade list, the standard objections. None of
+   that is repeated here. Batch B goes into territory A never touched:
+
+     PER TRADE     what auto-quotes and what books a visit, trade by trade
+     THE BUSINESS  the owner's problems, not the tradesman's
+     THE GUARDRAILS how the model is actually constrained
+     THE HARD NOS  the objections that get said out loud
+     THE STANCE    what we will not do, and who shaped it
+
+   Photography leads with the five frames batch A never used, then redistributes
+   the rest against different posts and crops so the two batches do not read as
+   the same set twice.
+
+   Every figure is a real product fact. Nothing invented, no testimonials.
+   ════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════
+   LEAD POSTS, 61 to 65. Single-page, in the split-docket layout.
+
+   Written to one brief: the observational hook, in the style of "most leads
+   come in when you are up a ladder". Each headline is a thing a tradie has
+   lived, stated flatly, that happens to be an argument for the product. No
+   feature leads. The feature earns its place underneath the observation.
+
+   Checked against all sixty existing dockets so none of these repeat an
+   angle. The nearest neighbours were deliberately avoided: set A 11 already
+   owns "it rang while you were up a ladder", A 05 owns the speed ladder, and
+   B 17 owns the unanswered enquiry. These five sit in the gaps.
+   ════════════════════════════════════════════════════════════════════ */
+const D=[
+
+{n:61,tag:'LEAD',kind:'list',pic:['plumber-bathroom','center 24%'],
+ kick:'THE SHORTLIST',head:'Nobody rings one tradie. {They ring three}.',sm:true,
+ rows:[['REPLIES FIRST','Sets the price'],['REPLIES SECOND','Compared to it'],['REPLIES THIRD','Rarely called back']],
+ copy:'You were never competing on price. You were competing on {who answered}.',
+ foot:'FIRST QUOTE SETS THE BAR'},
+
+{n:62,tag:'PAIN',kind:'quote',pic:['workshop','center 34%'],flip:true,
+ kick:'THE REFRAME',head:'Most tradies do not have a lead problem. {They have a reply problem}.',sm:true,
+ by:'ON WHERE THE WORK ACTUALLY GOES',foot:'ANSWER EVERY ONE'},
+
+{n:63,tag:'LEAD',kind:'pitch',pic:['carpenter-level','center 22%'],
+ kick:'NINE PM',head:'The quote you write at 9pm {reads like it}.',
+ copy:'Short, rushed, no line items, sent from your phone in the dark. It is not that you cannot write a good quote. It is that nobody writes a good one after a ten hour day.',
+ act:'See what it drafts  →',terms:['ITEMISED, EVERY TIME','GOOD, BETTER, BEST','GST HANDLED'],
+ foot:'A QUOTE THEY TRUST'},
+
+{n:64,tag:'LEAD',kind:'pitch',pic:['painter-brush','center 22%'],flip:true,
+ kick:'THE BALLPARK',head:'{&ldquo;Just ballpark it&rdquo;} is a test.',
+ copy:'They are not asking for a number. They are finding out whether you are organised. Give a real quote in the time it takes someone else to say they will get back to them.',
+ act:'Get my QuoteMax  →',terms:['UNDER A MINUTE','FROM YOUR RATE BOOK','$0 COMMISSION'],
+ foot:'GIVE THEM A REAL ANSWER'},
+
+{n:65,tag:'LEAD',kind:'pitch',pic:['landscaper-garden','center 26%'],
+ kick:'THE REAL REASON',head:'You do not lose jobs on price. {You lose them on the wait}.',sm:true,
+ copy:'Five per cent high is survivable. Four days late is not. The tradie who won it was rarely cheaper, and almost always first.',
+ act:'quotemax.com.au  →',terms:['14-DAY FREE TRIAL','ABOUT 3 MINUTES','CANCEL ANY TIME'],
+ foot:'FIRST BEATS CHEAPEST'},
+];
+
+const q=new URLSearchParams(location.search).get('d');
+if(q!==null){
+  document.body.classList.add('one');
+  document.getElementById('app').innerHTML=render(D[+q]);
+  const el=document.querySelector('.d');
+  el.style.position='fixed';el.style.left='0';el.style.top='0';
+  el.style.transformOrigin='top left';
+  el.style.transform='scale('+(window.innerWidth/1080)+')';
+  document.documentElement.style.overflow=document.body.style.overflow='hidden';
+} else document.getElementById('app').innerHTML=D.map(render).join('');
+</script>
+</body>
+</html>

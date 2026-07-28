@@ -19,11 +19,11 @@ import { PricingTiers } from "../_components/PricingTiers"
 import { COMPARISON, PLANS, PRICING_FAQ } from "../_components/pricing-data"
 
 export const metadata = {
-  title: "Pricing — QuoteMax",
+  title: "Pricing · QuoteMax",
   description:
-    "Simple plans for Australian tradies. Starter $49, Pro $129, Crew $299 a month (save ~17% annually). Starter Monthly includes a 14-day free trial, no cut of your jobs, $99 site visit credited to the job.",
+    "Simple plans for Australian tradies. Starter A$49, Pro A$129, Crew A$299 a month (save ~17% annually). Starter Monthly includes a 14-day free trial, no cut of your jobs, A$99 site visit credited to the job.",
   openGraph: {
-    title: "QuoteMax pricing — costs less than one missed job",
+    title: "QuoteMax pricing: costs less than one missed job",
     description:
       "Three plans for AU tradies. SMS + voice quoting, clean quotes, deposits collected. Starter Monthly includes a 14-day free trial.",
     type: "website",
@@ -161,10 +161,10 @@ function Cell({ value, featured }: { value: string; featured?: boolean }) {
       </span>
     )
   }
-  if (value === "—") {
+  if (value === "–") {
     return (
       <span className="text-text-dim" aria-label="Not included">
-        —
+        &ndash;
       </span>
     )
   }
@@ -185,7 +185,7 @@ function FairUse() {
             <span className="text-accent">No cut-offs mid-job.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Texts and quotes are generous fair-use — quote as much as you like.
+            Texts and quotes are generous fair-use. Quote as much as you like.
             The only thing we meter is voice minutes, because answering calls is
             the one part with a real per-minute cost. Go over and it keeps
             working; we just bill the extra and nudge you before you get there.
@@ -202,9 +202,9 @@ function FairUse() {
           </Reveal>
           <Reveal delay={110}>
             <FactCard
-              value="$0.50"
+              value="A$0.50"
               unit="per extra voice minute"
-              note="Only on Pro, only past your 300 included minutes ($0.40 on Crew). Top up or bump a plan anytime."
+              note="Only on Pro, only past your 300 included minutes (A$0.40 on Crew). Top up or bump a plan anytime."
               accent
             />
           </Reveal>
@@ -264,17 +264,17 @@ function SiteVisit() {
     {
       num: "01",
       title: "Complex job comes in",
-      body: "Anything that can’t be safely auto-quoted — a switchboard upgrade, a burst pipe — routes to a paid site visit instead of a guessed price.",
+      body: "Anything that can’t be safely auto-quoted, such as a switchboard upgrade or a burst pipe, routes to a paid site visit instead of a guessed price.",
     },
     {
       num: "02",
-      title: "Customer pays $99 to lock a slot",
+      title: "Customer pays A$99 to lock a slot",
       body: "A real deposit filters tyre-kickers and confirms intent. It’s collected on the quote page before you drive out.",
     },
     {
       num: "03",
       title: "It’s credited to the job",
-      body: "When the job goes ahead, the $99 comes off the final invoice. You keep it. QuoteMax never takes a cut of your work.",
+      body: "When the job goes ahead, the A$99 comes off the final invoice. You keep it. QuoteMax never takes a cut of your work.",
     },
   ]
   return (
@@ -283,7 +283,7 @@ function SiteVisit() {
         <Reveal className="max-w-3xl">
           <Eyebrow>The only fixed price</Eyebrow>
           <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            How the <span className="text-accent">$99 site visit</span> works.
+            How the <span className="text-accent">A$99 site visit</span> works.
           </h2>
         </Reveal>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
@@ -320,9 +320,9 @@ function RoiBand() {
             <span className="text-accent">One won job covers months.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-text-sec">
-            Most jobs a tradie wins carry $300–$2,000+ in margin. Pro is $129 a
+            Most jobs a tradie wins carry A$300–A$2,000+ in margin. Pro is A$129 a
             month. If QuoteMax catches one lead you&rsquo;d otherwise have
-            missed up a ladder, it&rsquo;s already paid for itself — usually many
+            missed up a ladder, it&rsquo;s already paid for itself, usually many
             times over.
           </p>
         </Reveal>
@@ -334,7 +334,7 @@ function RoiBand() {
             <Stat value="24/7" label="Line always answered" />
           </Reveal>
           <Reveal delay={180}>
-            <Stat value="$129" label="Pro, billed monthly" />
+            <Stat value="A$129" label="Pro, billed monthly" />
           </Reveal>
           <Reveal delay={270}>
             <Stat value="1 job" label="Pays for the year" />

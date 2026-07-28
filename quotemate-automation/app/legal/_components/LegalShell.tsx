@@ -50,7 +50,7 @@ export function LegalShell({
         {/* Template disclaimer — this is the honest "not legal advice" flag. */}
         <div className="mt-8 border border-warning-bright/40 bg-warning-bright/5 px-4 py-3">
           <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-warning-bright font-bold">
-            Template — review before launch
+            Template: review before launch
           </div>
           <p className="mt-1 text-sm text-text-sec leading-relaxed">
             This document is a starting template, not legal advice. Replace every

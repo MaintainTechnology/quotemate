@@ -23,6 +23,7 @@ const SECTION_LINKS = [
   { href: "/#how", label: "How it works" },
   { href: "/pricing", label: "Pricing" },
   { href: "/#faq", label: "FAQ" },
+  { href: "/#contact", label: "Contact us" },
 ]
 
 const TRADE_LINKS = [

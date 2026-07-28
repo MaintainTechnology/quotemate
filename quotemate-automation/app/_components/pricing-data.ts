@@ -79,9 +79,14 @@ export function annualSaving(plan: Plan): number {
   return plan.monthly * 12 - plan.annual
 }
 
-/** AUD formatting with thousands separators, no decimals. */
+/**
+ * AUD formatting with thousands separators, no decimals. Prefixed `A$`, not
+ * a bare `$` — the plan prices are the first number an overseas-hosted
+ * visitor sees and a bare dollar sign reads as US dollars. Every plan figure
+ * on the site routes through here (PricingTiers + the dashboard BillingTab).
+ */
 export function aud(n: number): string {
-  return `$${n.toLocaleString("en-AU")}`
+  return `A$${n.toLocaleString("en-AU")}`
 }
 
 /** Length of the free trial, in days. */
@@ -116,14 +121,14 @@ export const COMPARISON: CompRow[] = [
   { label: "Deposit collection", values: ["✓", "✓", "✓"] },
   {
     label: "Specialised estimators (solar / roof / paint)",
-    values: ["—", "1 module", "All"],
+    values: ["–", "1 module", "All"],
   },
   {
     label: "Quote-page branding",
     values: ["Logo", "Full brand", "Full + custom domain"],
   },
   { label: "Support", values: ["Email", "Priority", "Priority + onboarding call"] },
-  { label: "Extra voice minutes", values: ["—", "$0.50 / min", "$0.40 / min"] },
+  { label: "Extra voice minutes", values: ["–", "A$0.50 / min", "A$0.40 / min"] },
 ]
 
 export type PricingFaqItem = { q: string; a: string }
@@ -131,18 +136,18 @@ export type PricingFaqItem = { q: string; a: string }
 export const PRICING_FAQ: PricingFaqItem[] = [
   {
     q: "What counts as a “quote”?",
-    a: "Every quote QuoteMax sends a customer is one quote. Texted quotes are generous fair-use — quote as much as you like; we only ever flag genuine abuse, never normal busy weeks.",
+    a: "Every quote QuoteMax sends a customer is one quote. Texted quotes are generous fair-use. Quote as much as you like; we only ever flag genuine abuse, never normal busy weeks.",
   },
   {
     q: "What if I go over my voice minutes?",
-    a: "Nothing breaks mid-job. Extra minutes are billed at $0.50/min on Pro (or $0.40 on Crew), and we warn you well before you hit the limit so there are no surprises.",
+    a: "Nothing breaks mid-job. Extra minutes are billed at A$0.50/min on Pro (or A$0.40 on Crew), and we warn you well before you hit the limit so there are no surprises.",
   },
   {
     q: "Do you take a cut of my jobs?",
-    a: "No. You keep 100% of every job you win. The only fixed price is the $99 site visit, and that’s credited straight back to the customer’s job.",
+    a: "No. You keep 100% of every job you win. The only fixed price is the A$99 site visit, and that’s credited straight back to the customer’s job.",
   },
   {
-    q: "Is the $99 site visit an extra charge?",
+    q: "Is the A$99 site visit an extra charge?",
     a: "It only applies to complex jobs that can’t be auto-quoted. The customer pays it to lock a slot, and it’s credited to their final invoice. It’s the safety net that keeps the auto-quotes honest.",
   },
   {
@@ -154,7 +159,7 @@ export const PRICING_FAQ: PricingFaqItem[] = [
     a: "Yes. Each tradie gets a dedicated Australian number. If you ever leave, your quote history and customer data are yours to export.",
   },
   {
-    q: "I’m on the free test plan — what changes?",
+    q: "I’m on the free test plan. What changes?",
     a: "Nothing sudden. Pilot tradies get a Founding-Tradie deal: a locked discount and your number kept, with plenty of notice before anything is billed.",
   },
   {

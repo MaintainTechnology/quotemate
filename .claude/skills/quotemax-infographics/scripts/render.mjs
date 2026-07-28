@@ -26,6 +26,8 @@ const FORMATS = {
   'ig-story': [1080, 1920],
   'flyer-a4': [1240, 1754],
   'deck-16x9': [1920, 1080],
+  'li-banner-company': [1128, 191],
+  'li-banner-profile': [1584, 396],
 }
 
 const arg = (name, def) => {

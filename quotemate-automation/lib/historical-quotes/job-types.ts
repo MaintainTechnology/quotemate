@@ -54,10 +54,28 @@ export function tradeForJobType(jobType: string | null | undefined): Trade | nul
   return null
 }
 
-/** Render a snake_case job_type as a human label ("blocked_drain" → "Blocked drain"). */
+/** Trade acronyms that must not be sentence-cased — without these,
+ *  'ev_charger' renders as "Ev charger" in every job-type dropdown. */
+const ACRONYMS: Record<string, string> = {
+  ev: 'EV',
+  cctv: 'CCTV',
+  prv: 'PRV',
+  gpo: 'GPO',
+  rcd: 'RCD',
+}
+
+/** Render a snake_case job_type as a human label ("blocked_drain" → "Blocked drain",
+ *  "ev_charger" → "EV charger"). */
 export function formatJobType(jobType: string | null | undefined): string {
   if (!jobType) return 'Unclassified'
-  return jobType.charAt(0).toUpperCase() + jobType.slice(1).replace(/_/g, ' ')
+  return jobType
+    .split('_')
+    .map((word, i) => {
+      const acronym = ACRONYMS[word.toLowerCase()]
+      if (acronym) return acronym
+      return i === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word
+    })
+    .join(' ')
 }
 
 /** job_type → a recognisable tenant_custom_assemblies.name for calibration.
