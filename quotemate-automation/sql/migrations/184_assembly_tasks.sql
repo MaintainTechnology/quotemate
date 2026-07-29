@@ -92,4 +92,25 @@ create trigger tenant_assembly_tasks_set_updated_at
   for each row
   execute function tenant_assembly_tasks_set_updated_at();
 
+-- ── RLS, matching the pair these tables mirror ──────────────────────────
+-- shared_assembly_bom and tenant_assembly_bom are both RLS-on, and every
+-- table-creating migration since 144 enables it in the same file (144, 150,
+-- 152, 158, 172). Without this the two new tables would be the only
+-- tenant-scoped feature tables in `public` with RLS off — the documented
+-- exemption list is backup/staging tables only.
+--
+-- No positive policies: routes read and write with the service-role key,
+-- which bypasses RLS, so anon/authenticated see zero rows. Tenant-scoped
+-- positive policies are RLS Phase 2 and deferred repo-wide.
+--
+-- Idempotent — `enable row level security` is a no-op when already on, so
+-- this file stays safe to re-run over an already-applied 184.
+alter table public.shared_assembly_tasks enable row level security;
+alter table public.tenant_assembly_tasks enable row level security;
+
+comment on table public.shared_assembly_tasks is
+  'Shared baseline step checklist per job. Read-only to tradies; forked into tenant_assembly_tasks to edit.';
+comment on table public.tenant_assembly_tasks is
+  'Tenant-owned step checklist per job. Scope-of-works only — carries no price and no hours.';
+
 notify pgrst, 'reload schema';

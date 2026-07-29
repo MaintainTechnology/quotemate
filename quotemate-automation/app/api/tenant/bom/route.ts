@@ -10,6 +10,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { TenantBomLineSchema } from '@/lib/tenant/update-schema'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { recipeTradesFor } from '@/lib/tenant/recipe-trades'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,16 +46,25 @@ export async function GET(req: Request) {
   const tenant = await tenantFromBearer(req)
   if (!tenant) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
-  const trades = allowedTradesOf(tenant)
+  // Same narrowing as /api/tenant/tasks, and for the same reason: this picker
+  // used to offer every job in the tenant's trades while TenantBomLineSchema
+  // accepts only TRADE_ENUM, so on a multi-trade tenant the tab opened on an
+  // aircon job and "Add part" 400s on every submit. Those jobs have no shared
+  // baseline and no existing tenant rows, so nothing functional is hidden.
+  // An empty result means "no jobs" — never "no filter".
+  const trades = recipeTradesFor(allowedTradesOf(tenant))
 
-  let aq = supabase
-    .from('shared_assemblies')
-    .select('id, name, trade')
-    .order('trade', { ascending: true })
-    .order('name', { ascending: true })
-  if (trades.length > 0) aq = aq.in('trade', trades)
-  const { data: assemblies, error: aErr } = await aq
-  if (aErr) return Response.json({ error: aErr.message }, { status: 500 })
+  let assemblies: Array<{ id: string; name: string; trade: string }> = []
+  if (trades.length > 0) {
+    const { data, error: aErr } = await supabase
+      .from('shared_assemblies')
+      .select('id, name, trade')
+      .in('trade', trades)
+      .order('trade', { ascending: true })
+      .order('name', { ascending: true })
+    if (aErr) return Response.json({ error: aErr.message }, { status: 500 })
+    assemblies = (data ?? []) as Array<{ id: string; name: string; trade: string }>
+  }
 
   const { data: lines, error: lErr } = await supabase
     .from('tenant_assembly_bom')
@@ -69,7 +79,7 @@ export async function GET(req: Request) {
   // tradie hasn't customised yet ("Customise this recipe" forks the
   // baseline into tenant_assembly_bom). Resilient: missing table / error
   // ⇒ baselines={} so the UI just falls back to the legacy empty form.
-  const assemblyIds = (assemblies ?? []).map((a) => a.id as string)
+  const assemblyIds = assemblies.map((a) => a.id)
   let baselinesByAssembly: Record<string, BaselineLine[]> = {}
   if (assemblyIds.length > 0) {
     const { data: baselineRows } = await supabase
@@ -117,7 +127,7 @@ export async function GET(req: Request) {
 
   return Response.json({
     ok: true,
-    assemblies: assemblies ?? [],
+    assemblies,
     lines: lines ?? [],
     baselines: baselinesByAssembly,
     catalogue_categories: catalogueCategories,

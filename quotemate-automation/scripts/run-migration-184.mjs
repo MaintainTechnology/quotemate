@@ -62,6 +62,22 @@ try {
       process.exit(1);
     }
     console.log(`OK — ${found.join(", ")} created.`);
+
+    // RLS is the easiest thing to leave off and the hardest to notice: the
+    // routes use the service-role key, so a missing `enable row level
+    // security` changes nothing observable while quietly making these the
+    // only tenant-scoped tables in `public` without it. Assert, don't assume.
+    const { rows: rls } = await client.query(
+      `select relname, relrowsecurity from pg_class
+        where relname = any($1::text[]) and relkind = 'r'`,
+      [TABLES],
+    );
+    const off = rls.filter((r) => !r.relrowsecurity).map((r) => r.relname);
+    if (off.length > 0) {
+      console.error(`FAIL — RLS is OFF on: ${off.join(", ")}`);
+      process.exit(1);
+    }
+    console.log(`OK — RLS enabled on ${rls.map((r) => r.relname).sort().join(", ")}.`);
   }
 } catch (err) {
   console.error("Migration failed:", err.message ?? err);

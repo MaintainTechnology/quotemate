@@ -13,6 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { TenantTaskLineSchema } from '@/lib/tenant/update-schema'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { recipeTradesFor } from '@/lib/tenant/recipe-trades'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,16 +56,23 @@ export async function GET(req: Request) {
   const tenant = await tenantFromBearer(req)
   if (!tenant) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
-  const trades = allowedTradesOf(tenant)
+  // Only offer jobs a step can actually be stored against. Without this the
+  // tab opens on an aircon job on a multi-trade tenant and every submit 400s
+  // (TRADE_ENUM + the table CHECK are both electrical/plumbing). An empty
+  // result means "no jobs" — never "no filter".
+  const trades = recipeTradesFor(allowedTradesOf(tenant))
 
-  let aq = supabase
-    .from('shared_assemblies')
-    .select('id, name, trade')
-    .order('trade', { ascending: true })
-    .order('name', { ascending: true })
-  if (trades.length > 0) aq = aq.in('trade', trades)
-  const { data: assemblies, error: aErr } = await aq
-  if (aErr) return Response.json({ error: aErr.message }, { status: 500 })
+  let assemblies: Array<{ id: string; name: string; trade: string }> = []
+  if (trades.length > 0) {
+    const { data, error: aErr } = await supabase
+      .from('shared_assemblies')
+      .select('id, name, trade')
+      .in('trade', trades)
+      .order('trade', { ascending: true })
+      .order('name', { ascending: true })
+    if (aErr) return Response.json({ error: aErr.message }, { status: 500 })
+    assemblies = (data ?? []) as Array<{ id: string; name: string; trade: string }>
+  }
 
   const { data: lines, error: lErr } = await supabase
     .from('tenant_assembly_tasks')
@@ -78,7 +86,7 @@ export async function GET(req: Request) {
   // starting point for jobs the tradie hasn't customised yet ("Customise
   // these steps" forks them). Resilient: a missing table or error yields
   // baselines={} so the panel simply shows the empty add form.
-  const assemblyIds = (assemblies ?? []).map((a) => a.id as string)
+  const assemblyIds = assemblies.map((a) => a.id)
   let baselinesByAssembly: Record<string, BaselineTask[]> = {}
   if (assemblyIds.length > 0) {
     const { data: baselineRows } = await supabase
@@ -104,7 +112,7 @@ export async function GET(req: Request) {
 
   return Response.json({
     ok: true,
-    assemblies: assemblies ?? [],
+    assemblies,
     lines: lines ?? [],
     baselines: baselinesByAssembly,
   })

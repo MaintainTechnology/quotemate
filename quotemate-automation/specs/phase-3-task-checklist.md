@@ -74,6 +74,31 @@ insert. Drop the rest rather than porting dead code.
   header (`page.tsx:12445-12449`) and the parts list, reusing the existing `selectedAsm` state, job
   picker and trade filter. Add, edit, reorder and remove tasks; one-click fork of the shared
   baseline.
+- **R7** *(added 2026-07-30 — a review gap, not a build gap.)* Both tables enable RLS in migration
+  184 itself. R1 said "mirror the BOM pair's DDL" and the BOM pair is RLS-on, but neither 028 nor 031
+  enables it in-file — it was turned on later by a bulk migration — so mirroring their DDL literally
+  produces RLS-off tables. Every table-creating migration since 144 (144, 150, 152, 158, 172) enables
+  it in the same file; follow those, not 028/031. No positive policies: routes use the service-role
+  key, and tenant-scoped policies are RLS Phase 2, deferred repo-wide. The runner asserts
+  `pg_class.relrowsecurity` after apply, because a missing RLS grant changes nothing observable
+  through the service-role key and would otherwise ship unnoticed.
+
+## Scope addendum — the picker narrowing also lands on `/api/tenant/bom`
+
+*(Added 2026-07-30 after browser verification. Recorded here rather than left as undocumented scope
+creep.)*
+
+Verification found the Recipes tab opening on **"Ducted system — supply & install (per kW)" (aircon)**
+on an 8-trade tenant, with every add-step submit returning 400. Cause: both Recipes `GET`s offered
+every job in the *tenant's* trades, while both writers accept only `TRADE_ENUM`
+(electrical/plumbing). `lib/tenant/recipe-trades.ts` narrows the picker to trades a recipe can
+actually be stored against.
+
+The identical bug already existed on `/api/tenant/bom` — 16 jobs (2 aircon, 14 roofing) with zero
+shared baselines, zero existing tenant rows, and a `POST` that rejects them. The guard is applied to
+**both** GETs rather than only the new one: the two panels live in the same card, and fixing the
+steps picker while leaving the parts picker offering dead jobs would make one card behave two ways.
+Nothing functional is hidden — every removed option was unwritable.
 
 ## Constraints
 

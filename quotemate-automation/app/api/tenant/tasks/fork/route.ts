@@ -19,6 +19,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { RECIPE_TRADES } from '@/lib/tenant/recipe-trades'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,6 +72,15 @@ export async function POST(req: Request) {
   const allowed = allowedTradesOf(tenant)
   if (!allowed.includes(asm.trade as string)) {
     return Response.json({ error: 'assembly_trade_mismatch', allowed }, { status: 400 })
+  }
+  // Unlike POST, nothing here validates `trade` through TRADE_ENUM — the fork
+  // reads asm.trade and inserts it raw. Without this a roofing assembly that
+  // had a baseline would reach the table CHECK and 500. Fail as a clean 400.
+  if (!RECIPE_TRADES.includes(asm.trade as string)) {
+    return Response.json(
+      { error: 'assembly_trade_mismatch', allowed: RECIPE_TRADES },
+      { status: 400 },
+    )
   }
 
   // Refuse to fork when the tenant already has steps for this assembly.

@@ -45,14 +45,35 @@ describe('Phase 3 — migration 184 creates both task tables', () => {
   })
 
   it('carries NO per-task hours column — the settled decision', () => {
-    // Strip `--` comments first: the header legitimately explains WHY hours
-    // live on shared_assemblies.default_labour_hours, and that prose must not
-    // trip an assertion about the schema.
+    // The assertion is about SCHEMA, so strip documentation first — both `--`
+    // comments (the header explains why hours stay on
+    // shared_assemblies.default_labour_hours) and `comment on … is '…'`
+    // statements (the table comment says the table carries no hours). Prose
+    // that says "no hours" must not fail a test that means "no hours column".
     const schemaOnly = readFileSync(upPath, 'utf8')
       .split('\n')
       .filter((l) => !l.trimStart().startsWith('--'))
       .join('\n')
+      .replace(/comment on\s+\w+\s+[\w.]+\s+is\s+'(?:[^']|'')*'\s*;/gi, '')
     expect(schemaOnly).not.toMatch(/hours/i)
+  })
+
+  it('the stripping is not a loophole — a real hours column would still fail', () => {
+    // Guards the test above: prove the comment-stripping cannot hide an actual
+    // column. Without this, weakening the filter would silently pass a build
+    // that added per-task hours.
+    const withHours = `
+      create table if not exists tenant_assembly_tasks (
+        labour_hours numeric(6,2) not null default 0
+      );
+      comment on table public.tenant_assembly_tasks is 'carries no hours';
+    `
+    const stripped = withHours
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('--'))
+      .join('\n')
+      .replace(/comment on\s+\w+\s+[\w.]+\s+is\s+'(?:[^']|'')*'\s*;/gi, '')
+    expect(stripped).toMatch(/hours/i)
   })
 
   it('copies the two-trade CHECK from the BOM tables verbatim', () => {
@@ -87,6 +108,22 @@ describe('Phase 3 — migration 184 creates both task tables', () => {
     expect(sql).toMatch(/create or replace function tenant_assembly_tasks_set_updated_at/i)
     expect(sql).toMatch(/create trigger tenant_assembly_tasks_set_updated_at/i)
     expect(sql).not.toMatch(/shared_assembly_tasks_set_updated_at/i)
+  })
+
+  it('enables RLS on BOTH tables, like the BOM pair it mirrors', () => {
+    // R7. Mirroring 028/031's DDL literally produces RLS-OFF tables — those two
+    // never enable it in-file; a later bulk migration did. Migrations since 144
+    // enable it in the same file, and that is the convention to follow. Missing
+    // RLS is invisible through the service-role key, so it needs a test.
+    const sql = readFileSync(upPath, 'utf8')
+    expect(sql).toMatch(/alter table public\.shared_assembly_tasks enable row level security/i)
+    expect(sql).toMatch(/alter table public\.tenant_assembly_tasks enable row level security/i)
+  })
+
+  it('the runner asserts RLS after apply, not just table existence', () => {
+    const js = readFileSync(runnerPath, 'utf8')
+    expect(js).toMatch(/relrowsecurity/)
+    expect(js).toMatch(/RLS is OFF/)
   })
 
   it('kicks the PostgREST schema cache, as 028 and 031 do', () => {
