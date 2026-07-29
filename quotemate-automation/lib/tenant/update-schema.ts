@@ -299,5 +299,25 @@ export const TenantBomLinePatchSchema = TenantBomLineSchema.partial()
 export type TenantBomLinePatchInput = z.input<typeof TenantBomLinePatchSchema>
 export type TenantBomLinePatchOutput = z.output<typeof TenantBomLinePatchSchema>
 
+// Tenant-owned task checklist line (migration 184, Phase 3). One row = "this
+// job involves this step". Deliberately NO hours field: default_labour_hours on
+// shared_assemblies stays the single source of labour, so a task list can never
+// disagree with the priced labour line. Mirrors TenantBomLineSchema's bounds so
+// the two editors behave identically.
+export const TenantTaskLineSchema = z.object({
+  assembly_id: z.string().uuid(),
+  trade: TRADE_ENUM,
+  title: z.string().trim().min(1).max(120),
+  notes: z.string().trim().max(500).optional().or(z.literal('')),
+  required: z.boolean().optional(),
+  sort: z.coerce.number().int().min(0).max(999).optional(),
+})
+export type TenantTaskLineInput = z.input<typeof TenantTaskLineSchema>
+export type TenantTaskLineOutput = z.output<typeof TenantTaskLineSchema>
+
+export const TenantTaskLinePatchSchema = TenantTaskLineSchema.partial()
+export type TenantTaskLinePatchInput = z.input<typeof TenantTaskLinePatchSchema>
+export type TenantTaskLinePatchOutput = z.output<typeof TenantTaskLinePatchSchema>
+
 export type UpdateSchemaInput = z.input<typeof UpdateSchema>
 export type UpdateSchemaOutput = z.output<typeof UpdateSchema>
