@@ -39,6 +39,20 @@ describe('Phase 1 — BOM reads stay narrowed to one assembly', () => {
     expect(SRC).not.toMatch(/\.ilike\(\s*'name'\s*,\s*`%\$\{term\}%`\s*\)/)
   })
 
+  it('records an unresolved job_type to pipeline_traces, not just the console', () => {
+    // pipelineLog is console-only — it does NOT write pipeline_traces — so a
+    // log line alone leaves a resolution miss invisible to an operator. Once
+    // DETERMINISTIC_BOM is enabled a silent miss is the difference between a
+    // recipe-built quote and an AI-drafted one that nobody notices.
+    expect(SRC).toMatch(/substep:\s*'bom_hint_unresolved'/)
+    // Must be a warn, not an ok — it is a degradation, not normal operation.
+    const block = SRC.slice(
+      Math.max(0, SRC.indexOf("substep: 'bom_hint_unresolved'") - 300),
+      SRC.indexOf("substep: 'bom_hint_unresolved'"),
+    )
+    expect(block).toMatch(/trace\(\s*'estimate'\s*,\s*'warn'/)
+  })
+
   it('routes both lookup sites through ONE shared resolver', () => {
     // Both call sites resolve via resolveJobAssembly...
     const callSites = SRC.match(/await\s+resolveJobAssembly\(/g) ?? []

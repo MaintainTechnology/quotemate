@@ -52,7 +52,7 @@ import { runKbEstimateVerification } from './kb-verify'
 import { searchTenantStore } from '@/lib/filestore/tenant-store'
 import type { KbSearchResult } from '@/lib/admin-loader/mt-filestore-kb'
 import { pipelineLog } from '@/lib/log/pipeline'
-import { createTracer, stopwatch } from '@/lib/log/trace'
+import { createTracer, stopwatch, type Tracer } from '@/lib/log/trace'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -178,7 +178,7 @@ export async function runEstimation(
     (intake?.trade as string | null) ?? null,
     cacheLog,
   )
-  const bomBlock = await buildBomHint(intake, (intake?.trade as string | null) ?? null, cacheLog)
+  const bomBlock = await buildBomHint(intake, (intake?.trade as string | null) ?? null, cacheLog, trace)
 
   // WP2 historical-pricing (safe slice). SOFT advisory only — appended
   // to the user prompt exactly like the catalogue/BOM hints, NEVER fed
@@ -1660,6 +1660,7 @@ async function buildBomHint(
   intake: any,
   trade: string | null,
   log: ReturnType<typeof pipelineLog>,
+  trace: Tracer,
 ): Promise<string | null> {
   const jobType = (intake?.job_type as string | null) ?? null
   if (!jobType) return null
@@ -1671,6 +1672,15 @@ async function buildBomHint(
     const { assembly: chosen, reason: resolveReason } = await resolveJobAssembly(jobType, trade)
     if (!chosen) {
       log.err('BOM hint — unresolved job_type, falling back to Opus', resolveReason ?? 'unknown')
+      // pipelineLog is console-only, so a log line alone leaves this invisible
+      // to an operator. Trace it: once DETERMINISTIC_BOM is on, a silent miss
+      // is the difference between a recipe-built quote and an AI-drafted one
+      // that nobody notices.
+      trace('estimate', 'warn', {
+        substep: 'bom_hint_unresolved',
+        message: 'job_type did not resolve to an assembly; Opus drafts without a parts hint',
+        decisions: { job_type: jobType, trade: trade ?? null, reason: resolveReason ?? null },
+      })
       return null
     }
     const ids = [chosen.id]
