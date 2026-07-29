@@ -25,6 +25,7 @@ import { structureIntake } from '@/lib/intake/structure'
 import { embedIntake } from '@/lib/intake/embed'
 import { deriveTradeFromJobType, IntakeSchema } from '@/lib/intake/schema'
 import { fieldsForJobType } from '@/lib/quote/job-fields'
+import { recipeSlotsFrom } from '@/lib/quote/recipe-slots'
 
 // structureIntake (Opus) then runEstimation (Opus) run inline so the response
 // can carry the share_token the form navigates to. Worst case is ~2 minutes.
@@ -80,6 +81,16 @@ export async function POST(req: Request) {
     // the wrong thing.
     intake.job_type = body.job_type
     intake.trade = trade
+
+    // ── Price-recipe slots ──────────────────────────────────────────
+    // buildRecipeSlots (lib/estimate/merge-recipes.ts:394) reads intake.scope.*
+    // scalars as its SECOND pass; its third pass is conversation_state.slots,
+    // which a portal draft never has (no sms_conversations row). So scope is the
+    // only channel these can travel down. Without them applyPriceBands falls
+    // back to default_when_unanswered — 2 metres and 10A, the cheapest band of
+    // each — so a 10 m run on a dedicated 20A circuit would quote as a 2 m 10A
+    // job, and the 20A/three-phase assembly swap would never fire.
+    intake.scope = { ...intake.scope, ...recipeSlotsFrom(body.answers) } as typeof intake.scope
 
     // Stamp contact details verbatim rather than trusting the model to lift
     // them out of the transcript — same reasoning as app/api/t/[slug]/lead.

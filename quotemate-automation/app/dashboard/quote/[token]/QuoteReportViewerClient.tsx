@@ -69,6 +69,13 @@ export default function QuoteReportViewerClient(props: {
   /** Customer contact on file (resolved server-side) for the send panel. */
   customerPhone?: string | null
   customerEmail?: string | null
+  /** quotes.risk_flags — the assumptions the pricing engine made on its own
+   *  (cable-run length, switchboard spare way, pricing-book fallbacks). Written
+   *  on every quote since migration 074 and, until now, rendered nowhere: the
+   *  tradie could not see what had been assumed on their behalf. TRADIE-ONLY —
+   *  deliberately not merged into quotes.assumptions, which is customer-facing
+   *  (lib/quote/report-html.ts). */
+  riskFlags?: string[] | null
 }) {
   const {
     quoteId,
@@ -89,6 +96,7 @@ export default function QuoteReportViewerClient(props: {
     htmlUrl,
     capabilities,
     tiers,
+    riskFlags,
   } = props
 
   const [api, setApi] = useState<EditorApi | null>(null)
@@ -218,6 +226,30 @@ export default function QuoteReportViewerClient(props: {
           </div>
         )}
       </div>
+
+      {/* ─── What the engine assumed (tradie-only) ─── */}
+      {(riskFlags?.length ?? 0) > 0 && (
+        <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+          <section
+            aria-labelledby="risk-flags-heading"
+            className="border border-ink-line bg-ink-card px-5 py-4"
+          >
+            <h2
+              id="risk-flags-heading"
+              className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim"
+            >
+              Assumed while pricing · only you see this
+            </h2>
+            <ul className="mt-3 space-y-2">
+              {riskFlags!.map((flag, i) => (
+                <li key={i} className="text-sm leading-relaxed text-text-sec">
+                  {flag}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
 
       {/* ─── Report body ─── */}
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">

@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getAuthToken } from '@/lib/auth/client-token'
+import { AddressAutocomplete } from '@/app/dashboard/roofing/_components/AddressAutocomplete'
 import { IntakeSchema, deriveTradeFromJobType } from '@/lib/intake/schema'
 import { formatJobType } from '@/lib/historical-quotes/job-types'
 import { fieldsForJobType } from '@/lib/quote/job-fields'
@@ -26,7 +27,28 @@ const JOB_TYPES = IntakeSchema.shape.job_type.options as readonly string[]
  *  spell the article out rather than guessing from the first letter. */
 const ARTICLE: Record<string, string> = { electrical: 'an', plumbing: 'a' }
 
-type CatalogueRow = { id: string; name: string; category: string | null; trade: string | null }
+// Keep the fields the picker actually shows. /api/tenant/catalogue does a
+// select('*'), so price/image/brand are already on the wire — the first cut of
+// this form threw them away and left the tradie choosing blind between a $36
+// and a $287 GPO by name alone.
+type CatalogueRow = {
+  id: string
+  name: string
+  category: string | null
+  trade: string | null
+  brand: string | null
+  range_series: string | null
+  unit_price_ex_gst: number | string | null
+  image_path: string | null
+  tier_hint: string | null
+  active: boolean | null
+}
+
+/** Ex-GST, whole dollars — matches how the SMS picker presents a product. */
+function priceLabel(v: number | string | null): string | null {
+  const n = typeof v === 'string' ? parseFloat(v) : v
+  return n != null && Number.isFinite(n) ? `$${Math.round(n)}` : null
+}
 
 export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbing' }) {
   const router = useRouter()
@@ -52,6 +74,9 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   const [catalogue, setCatalogue] = useState<CatalogueRow[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Held only for AddressAutocomplete, which takes a token as a prop. Every
+  // actual submit still mints a fresh one — a captured token expires.
+  const [token, setToken] = useState<string | null>(null)
 
   const spec = useMemo(() => fieldsForJobType(jobType), [jobType])
 
@@ -67,11 +92,12 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const token = await getAuthToken()
-      if (!token) return
+      const t = await getAuthToken()
+      if (!t) return
+      if (!cancelled) setToken(t)
       try {
         const res = await fetch('/api/tenant/catalogue', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${t}` },
           cache: 'no-store',
         })
         const json = (await res.json()) as { ok?: boolean; catalogue?: CatalogueRow[] }
@@ -85,11 +111,27 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
     }
   }, [])
 
-  // Only worth showing when there's an actual choice to make.
+  // Cheapest first, so the list reads like the SMS offer. `active` is filtered
+  // here because the API returns every row regardless — an archived product
+  // must not be offerable. Shown from ONE match, not two: the SMS picker offers
+  // a single product as a "we use X" confirmation, and gating at two hid the
+  // picker entirely for every tenant holding one product per category.
   const products = useMemo(() => {
     if (!spec.catalogueCategory) return []
-    return catalogue.filter((c) => c.category === spec.catalogueCategory)
+    return catalogue
+      .filter((c) => c.category === spec.catalogueCategory && c.active !== false)
+      .sort((a, b) => {
+        const pa = typeof a.unit_price_ex_gst === 'string' ? parseFloat(a.unit_price_ex_gst) : a.unit_price_ex_gst
+        const pb = typeof b.unit_price_ex_gst === 'string' ? parseFloat(b.unit_price_ex_gst) : b.unit_price_ex_gst
+        return (Number.isFinite(pa as number) ? (pa as number) : Infinity) -
+          (Number.isFinite(pb as number) ? (pb as number) : Infinity)
+      })
   }, [catalogue, spec.catalogueCategory])
+
+  const chosenProduct = useMemo(
+    () => products.find((p) => p.name === productName) ?? null,
+    [products, productName],
+  )
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,6 +139,20 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
     if (!address.trim() || !suburb.trim()) {
       setError('Address and suburb are required — the estimator prices by location.')
       return
+    }
+    // The count drives every line-item quantity. Left blank it collapses to 1
+    // (lib/estimate/electrical-prompt.ts:37), so a 12-downlight job quotes ONE
+    // downlight and looks entirely normal. The SMS path is protected by
+    // evaluateIntakeQuality, which only runs inside /api/intake/structure — a
+    // route this form deliberately bypasses — so this check is the replacement.
+    const countField = spec.fields.find((f) => f.code === 'count')
+    if (countField) {
+      const raw = (answers.count ?? '').trim()
+      const n = Number(raw)
+      if (!raw || !Number.isFinite(n) || n <= 0) {
+        setError('Enter how many — without a count the quote prices a single item.')
+        return
+      }
     }
     setBusy(true)
     try {
@@ -221,7 +277,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
               </div>
             ))}
 
-            {products.length >= 2 && (
+            {products.length >= 1 && (
               <div>
                 <label htmlFor="product" className={LABEL}>
                   Product from your catalogue (optional)
@@ -233,12 +289,44 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                   className={`${INPUT} mt-2`}
                 >
                   <option value="">Let the estimator choose</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
+                  {products.map((p) => {
+                    const price = priceLabel(p.unit_price_ex_gst)
+                    return (
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                        {price ? ` — ${price} ex GST` : ''}
+                        {p.tier_hint ? ` (${p.tier_hint})` : ''}
+                      </option>
+                    )
+                  })}
                 </select>
+                {chosenProduct && (
+                  <div className="mt-3 flex items-start gap-4 border border-ink-line bg-ink-deep p-3">
+                    {chosenProduct.image_path ? (
+                      // catalogue-images is a public bucket — image_path is a
+                      // ready-to-use URL, same as the dashboard Catalogue tab.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={chosenProduct.image_path}
+                        alt=""
+                        className="h-16 w-16 flex-shrink-0 border border-ink-line object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center border border-ink-line font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                        No photo
+                      </span>
+                    )}
+                    <span className="min-w-0 text-sm leading-relaxed text-text-sec">
+                      {[chosenProduct.brand, chosenProduct.range_series].filter(Boolean).join(' ') ||
+                        chosenProduct.name}
+                      {priceLabel(chosenProduct.unit_price_ex_gst) && (
+                        <span className="mt-1 block font-mono text-text-pri">
+                          {priceLabel(chosenProduct.unit_price_ex_gst)} ex GST
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -247,12 +335,19 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                 <label htmlFor="address" className={LABEL}>
                   Address
                 </label>
-                <input
+                {/* Same Geoscape type-ahead the roofing, painting, aircon and
+                    signage tools use. Degrades to a plain input if the provider
+                    fails, so a typed address always still submits. */}
+                <AddressAutocomplete
                   id="address"
+                  accessToken={token}
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className={`${INPUT} mt-2`}
+                  onChange={setAddress}
+                  onSelect={(s) => setAddress(s.address)}
                   placeholder="12 Smith St"
+                  // Spacing only — the component styles its own input, so
+                  // passing INPUT here would draw a second bordered box.
+                  className="mt-2"
                 />
               </div>
               <div>

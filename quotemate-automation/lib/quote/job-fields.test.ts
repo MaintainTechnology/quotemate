@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { JOB_FIELDS, fieldsForJobType } from './job-fields'
 import { IntakeSchema } from '@/lib/intake/schema'
+import { normaliseSystemType } from '@/lib/intake/structure'
 
 const JOB_TYPES = IntakeSchema.shape.job_type.options as readonly string[]
 
@@ -51,6 +52,30 @@ describe('JOB_FIELDS', () => {
         } else {
           expect(f.options, `${jobType}.${f.code} is ${f.type} but carries options`).toBeUndefined()
         }
+      }
+    }
+  })
+
+  // The hot-water form option strings are read by normaliseSystemType, which
+  // maps ONLY electric/gas/heat_pump. Anything it can't map makes the E8
+  // backstop force an inspection (lib/intake/structure.ts:153). So the option
+  // labels are load-bearing: an option that fails to map must SAY it routes to
+  // an inspection, and an option that maps must map to the right fuel.
+  it('hot_water options map to the fuel their label promises', () => {
+    const opts = fieldsForJobType('hot_water').fields.find((f) => f.code === 'energy_source')?.options
+    expect(opts).toBeDefined()
+    const mapped = Object.fromEntries((opts ?? []).map((o) => [o, normaliseSystemType(o)]))
+
+    expect(mapped['electric']).toBe('electric')
+    expect(mapped['gas']).toBe('gas')
+    expect(mapped['heat pump']).toBe('heat_pump')
+
+    // Every option that does NOT map must warn the tradie in its own label,
+    // otherwise it is a silent $99 inspection dressed up as a normal choice.
+    for (const [option, fuel] of Object.entries(mapped)) {
+      if (fuel === undefined) {
+        expect(option.toLowerCase(), `"${option}" routes to inspection but does not say so`)
+          .toContain('inspection')
       }
     }
   })
