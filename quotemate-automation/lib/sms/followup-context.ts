@@ -106,7 +106,7 @@ export function formatFollowupContext(
     'HOW TO USE THIS:',
     '  - This tells you WHICH quote a vague reference points to. If the customer says "resend the quote", "how much again", "what was the price", "is that still good", "send it through", or refers to "the quote"/"that quote" WITHOUT describing a new job, they mean THIS quote.',
     link
-      ? '  - Reply with the quote link above (and the figure if they ask). Do NOT start a fresh intake or re-quote from scratch.'
+      ? '  - Reply with the quote link above and NOTHING ELSE about the money — never restate the figure, even if they ask; the link shows it. Do NOT start a fresh intake or re-quote from scratch.'
       : '  - Acknowledge their existing quote and offer to have the tradie resend it. Do NOT start a fresh intake or re-quote from scratch.',
     '  - If they want to proceed / book / pay, point them to that quote.',
     '  - Never invent or change the price. The figure above is the already-sent quote; the link is the authoritative copy.',
