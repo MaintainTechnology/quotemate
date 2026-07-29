@@ -25,7 +25,7 @@ import { structureIntake } from '@/lib/intake/structure'
 import { embedIntake } from '@/lib/intake/embed'
 import { deriveTradeFromJobType, IntakeSchema } from '@/lib/intake/schema'
 import { fieldsForJobType } from '@/lib/quote/job-fields'
-import { recipeSlotsFrom } from '@/lib/quote/recipe-slots'
+import { RECIPE_SLOT_CODES, recipeSlotsFrom } from '@/lib/quote/recipe-slots'
 
 // structureIntake (Opus) then runEstimation (Opus) run inline so the response
 // can carry the share_token the form navigates to. Worst case is ~2 minutes.
@@ -216,7 +216,17 @@ function buildTranscript(body: z.infer<typeof BodySchema>, trade: string): strin
 
   // Answered fields only, in the registry's order, using each field's own
   // question so the model sees the same Q&A shape the SMS receptionist emits.
+  // Recipe answers are deliberately WITHHELD from the prose. They reach the
+  // price-bands engine through intake.scope, and the recipe adds the cable /
+  // labour lines deterministically. Spelling "6 metres from the nearest
+  // existing power point" out in the transcript pulls the estimator into
+  // pricing cable itself — which violates prompt Rule 18 ("NO RECIPE LINES",
+  // lib/estimate/electrical-prompt.ts:166) and then collides with the recipe's
+  // own line on the same catalogue row. The D-1 dedup rule rejects the
+  // duplicate and the grounding validator dumps the WHOLE quote to the $99
+  // inspection route. Observed end-to-end 2026-07-29 on a 6 m / 2-GPO job.
   const answered = spec.fields
+    .filter((f) => !(RECIPE_SLOT_CODES as readonly string[]).includes(f.code))
     .map((f) => [f, (body.answers[f.code] ?? '').trim()] as const)
     .filter(([, v]) => v.length > 0)
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recipeSlotsFrom } from './recipe-slots'
+import { RECIPE_SLOT_CODES, recipeSlotsFrom } from './recipe-slots'
 import { JOB_FIELDS } from './job-fields'
 
 describe('recipeSlotsFrom', () => {
@@ -74,5 +74,34 @@ describe('power_points recipe field wiring', () => {
 
   it('asks the distance as a number', () => {
     expect(fields.find((f) => f.code === 'distance_to_existing_power')?.type).toBe('number')
+  })
+})
+
+describe('RECIPE_SLOT_CODES', () => {
+  // The job-quote route filters these codes OUT of the prose transcript: they
+  // reach the recipe engine via intake.scope, and spelling the distance out in
+  // prose pulls the estimator into pricing cable itself, against prompt Rule 18
+  // ("NO RECIPE LINES"). Its line then collides with the recipe's own line on
+  // the same catalogue row and the D-1 dedup rule dumps the whole quote to the
+  // $99 inspection. Observed end-to-end 2026-07-29.
+  //
+  // That filter matches by code. A typo here would make it silently no-op and
+  // the collision would come straight back, so every code must resolve to a
+  // real field.
+  it('every code is a real field code somewhere in JOB_FIELDS', () => {
+    const allCodes = new Set(
+      Object.values(JOB_FIELDS).flatMap((spec) => spec.fields.map((f) => f.code)),
+    )
+    const orphans = RECIPE_SLOT_CODES.filter((c) => !allCodes.has(c))
+    expect(orphans).toEqual([])
+  })
+
+  it('covers every code recipeSlotsFrom actually reads', () => {
+    // If a slot is added to recipeSlotsFrom but not to RECIPE_SLOT_CODES, it
+    // would be stamped into scope AND left in the prose — the exact bug above.
+    const produced = Object.keys(
+      recipeSlotsFrom({ distance_to_existing_power: '5', circuit_required: '20A' }),
+    )
+    expect(produced.sort()).toEqual([...RECIPE_SLOT_CODES].sort())
   })
 })
