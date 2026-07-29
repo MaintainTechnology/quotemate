@@ -9810,6 +9810,9 @@ type CatalogueRow = {
   image_path: string | null
   is_preferred: boolean
   active: boolean
+  // Phase 2b — product attributes. Holds keys this form does not own
+  // (e.g. `amperage` from a GPO backfill), so it is merged server-side.
+  properties: Record<string, unknown> | null
 }
 
 // v7 Phase 2b — supplier_catalogue row shape returned by
@@ -11106,6 +11109,10 @@ function CatalogueTab({
     image_path: '',
     tier_hint: '',
     is_preferred: '',
+    // Phase 2b — string-encoded like is_preferred, because `set` takes a string.
+    smart: '',
+    dimmable: '',
+    integrated_driver: '',
     unit: 'each',
   }
   const [form, setForm] = useState({ ...blankForm })
@@ -11264,6 +11271,11 @@ function CatalogueTab({
           image_path: form.image_path.trim() || undefined,
           tier_hint: form.tier_hint || undefined,
           is_preferred: form.is_preferred === 'yes',
+          properties: {
+            smart: form.smart === 'yes',
+            dimmable: form.dimmable === 'yes',
+            integrated_driver: form.integrated_driver === 'yes',
+          },
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
@@ -11308,6 +11320,11 @@ function CatalogueTab({
       image_path: row.image_path ?? '',
       tier_hint: row.tier_hint ?? '',
       is_preferred: row.is_preferred ? 'yes' : '',
+      // Phase 2b — prefill from the stored jsonb, else editing a tagged product
+      // would silently clear its attributes on save.
+      smart: row.properties?.smart === true ? 'yes' : '',
+      dimmable: row.properties?.dimmable === true ? 'yes' : '',
+      integrated_driver: row.properties?.integrated_driver === true ? 'yes' : '',
       unit: row.unit || 'each',
     })
     setEditingId(row.id)
@@ -11347,6 +11364,11 @@ function CatalogueTab({
           image_path: form.image_path.trim(),
           tier_hint: form.tier_hint,
           is_preferred: form.is_preferred === 'yes',
+          properties: {
+            smart: form.smart === 'yes',
+            dimmable: form.dimmable === 'yes',
+            integrated_driver: form.integrated_driver === 'yes',
+          },
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
@@ -11794,6 +11816,39 @@ function CatalogueTab({
             />
             This is my go-to product for its category (preferred)
           </label>
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+              What this product is
+            </span>
+            <label className="flex items-center gap-2 text-sm text-text-sec">
+              <input
+                type="checkbox"
+                checked={form.smart === 'yes'}
+                onChange={(e) => set('smart', e.target.checked ? 'yes' : '')}
+              />
+              Smart / app-controlled
+            </label>
+            <label className="flex items-center gap-2 text-sm text-text-sec">
+              <input
+                type="checkbox"
+                checked={form.dimmable === 'yes'}
+                onChange={(e) => set('dimmable', e.target.checked ? 'yes' : '')}
+              />
+              Dimmable
+            </label>
+            <label className="flex items-center gap-2 text-sm text-text-sec">
+              <input
+                type="checkbox"
+                checked={form.integrated_driver === 'yes'}
+                onChange={(e) => set('integrated_driver', e.target.checked ? 'yes' : '')}
+              />
+              Driver built in (no separate driver needed)
+            </label>
+            <span className="text-[0.65rem] text-text-dim leading-snug">
+              The AI uses these to pick the right product and to work out which other parts the
+              job needs.
+            </span>
+          </div>
           <div className="flex flex-col gap-1 sm:col-span-2">
             <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
               Product photo (optional)

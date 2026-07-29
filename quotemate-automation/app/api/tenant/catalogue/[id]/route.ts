@@ -4,6 +4,7 @@
 // silently affects zero rows and returns 404 — a tradie can never touch
 // another tradie's catalogue. Mirrors /api/tenant/services/[id].
 
+import { mergeProductProperties } from '@/lib/tenant/catalogue-properties'
 import { createClient } from '@supabase/supabase-js'
 import { MaterialCataloguePatchSchema } from '@/lib/tenant/update-schema'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
@@ -107,6 +108,27 @@ export async function PATCH(
     fields.is_preferred = parsed.data.is_preferred
   }
   if (parsed.data.active !== undefined) fields.active = parsed.data.active
+  if (parsed.data.properties !== undefined) {
+    // Phase 2b — read-modify-write, NOT a bare assignment. `.update()` replaces
+    // a jsonb column outright, which would destroy keys this feature does not
+    // own — notably `amperage`, written by a GPO backfill to feed the spec
+    // guard. mergeProductProperties keeps everything else and copies only known
+    // attribute keys.
+    //
+    // ponytail: read-then-write, not atomic. Fine for a tradie editing their own
+    // product in a form; if concurrent writers ever touch this column, move the
+    // merge into SQL with the `||` operator via an RPC.
+    const { data: current } = await supabase
+      .from('tenant_material_catalogue')
+      .select('properties')
+      .eq('id', id)
+      .eq('tenant_id', tenant.id)
+      .maybeSingle()
+    fields.properties = mergeProductProperties(
+      (current?.properties as Record<string, unknown> | null) ?? null,
+      parsed.data.properties,
+    )
+  }
 
   if (Object.keys(fields).length === 0) {
     return Response.json({ error: 'empty_update' }, { status: 400 })

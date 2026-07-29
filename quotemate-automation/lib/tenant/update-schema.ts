@@ -257,6 +257,19 @@ export const MaterialCatalogueSchema = z.object({
   description: z.string().trim().max(500).optional().or(z.literal('')),
   is_preferred: z.boolean().optional(),
   active: z.boolean().optional(),
+  // Phase 2b — the tradie-settable product attributes. A CLOSED set, not an
+  // open record: applyPropertyFilters reads specific keys, so a typo like
+  // `smrt` would sit in the jsonb forever matching nothing. Booleans only,
+  // because the reader compares `properties->>smart` to the string 'true'.
+  // Merged, never assigned — see mergeProductProperties.
+  properties: z
+    .object({
+      smart: z.boolean().optional(),
+      dimmable: z.boolean().optional(),
+      integrated_driver: z.boolean().optional(),
+    })
+    .strict()
+    .optional(),
 })
 export type MaterialCatalogueInput = z.input<typeof MaterialCatalogueSchema>
 export type MaterialCatalogueOutput = z.output<typeof MaterialCatalogueSchema>
