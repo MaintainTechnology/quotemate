@@ -38,13 +38,9 @@ export function BootBanner() {
           } as React.CSSProperties
         }
       >
-        <div
-          aria-hidden
-          className="absolute -inset-12 bg-[radial-gradient(closest-side,rgba(255,196,0,0.45),transparent_72%)] motion-safe:animate-[boot-glow_1.6s_ease-in-out_infinite]"
-        />
         {/* h-20 w-AUTO: the mark is a 1.47:1 landscape glyph, and a square box
             letterboxes it (see BrandMark's SIZING note). */}
-        <BrandMark className="relative h-20 w-auto" />
+        <BrandMark className="h-20 w-auto" />
       </div>
       <span className="font-sans text-[26px] font-extrabold uppercase leading-none tracking-[-0.02em] text-[#241E1B] motion-safe:animate-[boot-breathe_1.6s_ease-in-out_infinite]">
         QuoteMax
