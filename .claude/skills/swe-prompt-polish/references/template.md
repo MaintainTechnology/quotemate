@@ -12,10 +12,10 @@ than only suggesting. Make independent tool calls in parallel and dependent ones
 never pass a guessed parameter — read the file or run the check first.
 
 ## Context
-This is a Wispr Flow snippet. Everything here is fixed instruction except the RAW REQUEST block at
-the end, which is what I dictate by voice and the only part that changes. Treat my dictation as a
-rushed but real brief: it carries my intent but omits scope and success criteria, and you follow
-instructions literally, so fill the gaps explicitly instead of inferring silently.
+This is a reusable prompt template. Everything here is fixed instruction except the RAW REQUEST
+block at the end, which is the only part that changes. Treat the RAW REQUEST as a rushed but real
+brief: it carries my intent but omits scope and success criteria, and you follow instructions
+literally, so fill the gaps explicitly instead of inferring silently.
 
 Skills own the workflow — prefer them over ad-hoc steps, and use them in this order:
 - State the single measurable outcome as the Goal line of the engineered spec (there is no /goal
@@ -54,7 +54,8 @@ when the change touches UI.
    give the report described in Output Format.
 
 ## Constraints
-- Completion bar (the only thing that ends the loop): npm test passes, npm run check passes,
+- Completion bar (the only thing that ends the loop): the repo's test and type-check gates pass
+  (resolve their real script names from package.json — do not assume a name),
   /verify (and /playwright-cli for UI changes) confirms the behaviour end-to-end, and both /review
   and /code-review report no blocker- or major-severity findings. At the finding stage, surface
   everything including low-confidence items, each tagged with confidence and severity; fix blockers
@@ -89,7 +90,7 @@ gate (npm test, npm run check, e2e/playwright), and the residual minor findings 
 
 ## Examples
 <example>
-RAW REQUEST (dictated): "the protocols documents endpoint, toggling is-active on and off fast
+RAW REQUEST: "the protocols documents endpoint, toggling is-active on and off fast
 sometimes lands on the wrong state, probably a race, make the patch handler safe and add a test"
 
 Engineered spec (abridged, saved to specs/protocols-is-active-race.md):
