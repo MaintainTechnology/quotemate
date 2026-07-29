@@ -97,3 +97,47 @@ export function buildAssemblyOrFilter(query: string): string {
   if (terms.length === 0) return 'name.ilike.%%'
   return terms.map((t) => `name.ilike.%${t}%`).join(',')
 }
+
+// ─── Phase 1 — job_type → the ONE assembly that owns it ─────────────────
+//
+// An explicit map, deliberately not an inferred score. Verified against all 26
+// seeded electrical rows: name and category cannot pick correctly here.
+//   · `downlights` matches `Install LED downlight` (no BOM) AND
+//     `Install LED downlight (new install, single-storey)` (has the BOM), so a
+//     "prefer the plain base row" rule loses the recipe on the headline job.
+//   · `smoke_alarms` has that asymmetry REVERSED — base row holds the BOM.
+//   · `power_points` has two BOM-bearing `gpo` rows with equal token overlap.
+//   · Only 5 of 10 job types have a categoryForJobType mapping at all.
+// Guessing produces a confidently wrong recipe, which is worse than today's
+// no-recipe fallback. Each entry is chosen to land on a seeded recipe where one
+// exists, and a wrong entry is a one-line fix.
+//
+// Unmapped on purpose: `switchboard`, `renovation`, `other` have no assembly in
+// the catalogue at all and belong on the inspection route.
+export const JOB_TYPE_ASSEMBLY: Record<string, string> = {
+  downlights: 'Install LED downlight (new install, single-storey)',
+  power_points: 'Replace double GPO',
+  ceiling_fans: 'Supply + install AC ceiling fan',
+  smoke_alarms: 'Hardwire 240V smoke alarm',
+  outdoor_lighting: 'Install outdoor IP-rated LED light',
+  oven_cooktop: 'Install oven (existing wiring)',
+  ev_charger: 'Install EV charger',
+  fault_finding: 'Diagnostic call-out (fault finding)',
+}
+
+/**
+ * Pick the single assembly that owns this job type from a candidate pool.
+ *
+ * Pure, order-independent, and fails CLOSED: an unmapped job type or a mapped
+ * name missing from the pool both return null so the caller falls back to the
+ * Opus draft rather than pricing a near-miss.
+ */
+export function pickBestAssembly<T extends { name: string }>(
+  jobType: string | null | undefined,
+  rows: readonly T[],
+): T | null {
+  const wanted = JOB_TYPE_ASSEMBLY[(jobType ?? '').trim()]
+  if (!wanted) return null
+  const target = wanted.trim().toLowerCase()
+  return rows.find((r) => (r.name ?? '').trim().toLowerCase() === target) ?? null
+}

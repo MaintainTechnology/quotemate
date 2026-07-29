@@ -40,6 +40,13 @@ import {
   type PastQuoteTiers,
 } from './price-history'
 import { buildDeterministicTiers, type DeterministicTierInput } from './deterministic-bom'
+import { buildAssemblyOrFilter, pickBestAssembly } from './assembly-search'
+
+// Phase 1 — a wider candidate pool than the old `.limit(5)`, which became a
+// truncation bug once the OR filter widened: with no ORDER BY, Postgres could
+// return any 5 of the matches and drop the right row before JS ever saw it.
+// Mirrors FETCH_LIMIT in ./tools so both lookup paths read the same way.
+const ASSEMBLY_FETCH_LIMIT = 12
 import { fetchSimilarPastQuotesContext } from './rag'
 import { runKbEstimateVerification } from './kb-verify'
 import { searchTenantStore } from '@/lib/filestore/tenant-store'
@@ -1609,6 +1616,46 @@ async function buildCatalogueHint(
  * baseline parts so the same job quotes the same parts every time.
  * Resilient: no matching assembly / unseeded BOM / error -> null.
  */
+type ResolvedAssembly = {
+  id: string
+  name: string
+  trade: string | null
+  default_labour_hours: number | string
+}
+
+/**
+ * Phase 1 — the ONE place a job_type becomes an assembly row.
+ *
+ * Both lookup paths (the always-on BOM prompt hint and the deterministic tier
+ * loader) used to duplicate this query, and the second one's comment said
+ * "match the job the same way buildBomHint does" — the coupling this removes.
+ *
+ * Fails closed: an unmapped job_type or a mapped name absent from the pool both
+ * return `{assembly: null}` with a reason, so the caller falls back to the Opus
+ * draft rather than pricing a near-miss.
+ */
+async function resolveJobAssembly(
+  jobType: string,
+  trade: string | null,
+): Promise<{ assembly: ResolvedAssembly | null; reason: string | null }> {
+  let aq = supabase
+    .from('shared_assemblies')
+    .select('id, name, trade, default_labour_hours')
+    .or(buildAssemblyOrFilter(jobType.replace(/_/g, ' ')))
+  if (trade) aq = aq.eq('trade', trade)
+  const { data: asm, error: aerr } = await aq.limit(ASSEMBLY_FETCH_LIMIT)
+  if (aerr) return { assembly: null, reason: `assembly query failed: ${aerr.message}` }
+  if (!asm || asm.length === 0) return { assembly: null, reason: 'no assembly candidates' }
+  const chosen = pickBestAssembly(jobType, asm as ResolvedAssembly[])
+  if (!chosen) {
+    return {
+      assembly: null,
+      reason: `no assembly mapping for job_type=${jobType} (${asm.length} candidates)`,
+    }
+  }
+  return { assembly: chosen, reason: null }
+}
+
 async function buildBomHint(
   intake: any,
   trade: string | null,
@@ -1617,12 +1664,16 @@ async function buildBomHint(
   const jobType = (intake?.job_type as string | null) ?? null
   if (!jobType) return null
   try {
-    const term = jobType.replace(/_/g, ' ')
-    let aq = supabase.from('shared_assemblies').select('id, name, trade').ilike('name', `%${term}%`)
-    if (trade) aq = aq.eq('trade', trade)
-    const { data: asm, error: aerr } = await aq.limit(5)
-    if (aerr || !asm || asm.length === 0) return null
-    const ids = asm.map((a: any) => a.id)
+    // Phase 1 — one shared resolution. Narrowing to a single assembly is
+    // load-bearing: the BOM reads below used to fan out over every match with
+    // `.in('assembly_id', ids)`, which would concatenate recipe lines from
+    // several unrelated assemblies once the candidate filter widened.
+    const { assembly: chosen, reason: resolveReason } = await resolveJobAssembly(jobType, trade)
+    if (!chosen) {
+      log.err('BOM hint — unresolved job_type, falling back to Opus', resolveReason ?? 'unknown')
+      return null
+    }
+    const ids = [chosen.id]
     const tenantId = (intake?.tenant_id as string | null) ?? null
 
     // Prefer this tradie's OWN recipe (tenant_assembly_bom, migration
@@ -1877,24 +1928,14 @@ async function loadDeterministicInputs(
   if (!jobType) return { input: null, reason: 'no job_type' }
   if (!tenantId) return { input: null, reason: 'no tenant_id' }
 
-  // Match the job the same way buildBomHint does (name ilike job term,
-  // trade-scoped). default_labour_hours grounds the labour line.
-  const term = jobType.replace(/_/g, ' ')
-  let aq = supabase
-    .from('shared_assemblies')
-    .select('id, name, trade, default_labour_hours')
-    .ilike('name', `%${term}%`)
-  if (trade) aq = aq.eq('trade', trade)
-  const { data: asm, error: aerr } = await aq.limit(5)
-  if (aerr || !asm || asm.length === 0) {
-    return { input: null, reason: 'no matching assembly' }
+  // Phase 1 — the SAME resolver buildBomHint uses. `primary` used to be
+  // `asm[0]` off an unordered `.limit(5)`, so default_labour_hours — which
+  // grounds the labour line — came from whichever row Postgres returned first.
+  const { assembly: primary, reason: resolveReason } = await resolveJobAssembly(jobType, trade)
+  if (!primary) {
+    return { input: null, reason: resolveReason ?? 'unresolved job_type' }
   }
-  const ids = asm.map((a: any) => a.id)
-  const primary = asm[0] as {
-    id: string
-    name: string
-    default_labour_hours: number | string
-  }
+  const ids = [primary.id]
 
   // The tradie's OWN recipe for this job wins; when they haven't authored
   // one, fall back to the shared baseline recipe (shared_assembly_bom) —
