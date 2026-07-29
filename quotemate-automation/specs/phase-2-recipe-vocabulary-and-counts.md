@@ -69,8 +69,9 @@ the hint path must scale too, or this phase is invisible.
 - **R1** Add a material-vocabulary source of truth. Create an exported list of the real
   `shared_materials.category` values per trade (electrical's seven above) — separate from
   `CATEGORIES`, which stays untouched for its three legitimate consumers.
-- **R2** Feed the Recipes category select from R1, scoped to the hub's trade, so the 23
-  unpriceable options and all 12 plumbing options disappear from the electrical hub.
+- **R2** Feed **both** category selects from R1, scoped to the hub's trade — the Recipes one
+  (`page.tsx:12645`) **and** the Catalogue product one (`page.tsx:11674`). Fixing only Recipes is a
+  regression; see the audit below.
 - **R3** Reject an unmatched `material_category` at write time. Tighten `TenantBomLineSchema` to
   the R1 vocabulary and add the same validation to `scripts/import-bom-catalogue.mjs`. A DB CHECK
   is optional; the Zod + script gate is the requirement.
@@ -86,6 +87,29 @@ the hint path must scale too, or this phase is invisible.
   `sundries ×1`.
 - **R7** Fix the misleading helper text under both selects. The Recipes one says *"Pick the same
   category you use in Catalogue"*, which is the instruction that created the problem.
+
+## Production audit, 2026-07-28 — this is not hypothetical
+
+Read-only counts against the live database:
+
+**`tenant_assembly_bom`, electrical — 5 rows, 3 of them already unpriceable:**
+`downlight` ✓, `gpo` ✓, `oven_cooktop` ✗, `rcbo` ✗, `security_camera` ✗
+
+**`tenant_material_catalogue`, electrical — 24 rows, 6 mis-categorised:**
+`gpo` ×7 ✓, `downlight` ×5 ✓, `smoke_alarm` ×3 ✓, `outdoor_light` ×3 ✓, **`fan` ×3 ✗**,
+**`rcbo` ×3 ✗**
+
+⚠ **THE TRAP: fixing only the Recipes select is a regression.** Both selects currently offer `fan`,
+so a recipe line saying `fan` and a product stamped `fan` *agree* — the tenant-catalogue leg of
+`chooseMaterial` resolves and those three fans price correctly today, by accident. Change Recipes
+alone to offer `ceiling_fan` and the line stops matching the product. Six working products would
+break. Hence R2 covers both selects.
+
+- **R8** Provide a data-fix script for the existing rows, dry-run by default with `--apply`,
+  mapping `fan` → `ceiling_fan` and `rcbo` → `safety_switch` across both
+  `tenant_material_catalogue.category` and `tenant_assembly_bom.material_category`. Report
+  `oven_cooktop` and `security_camera` as unmappable — no `shared_materials` row exists for them —
+  rather than guessing. Do not run it silently as part of the build.
 
 ## Constraints
 
