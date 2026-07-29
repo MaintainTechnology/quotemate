@@ -20,12 +20,17 @@ import {
   type BomLine,
   type CatalogueProductRef,
 } from './catalogue'
-import { applyMinLabourFloor } from './min-labour'
+import { applyMinLabourFloor, resolveMinLabourHours } from './min-labour'
 import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount, reconcileInflatedLabour } from './reconcile'
 import { specGuardMode, evaluateSpecGuard, evaluateDraftSpecGuard } from './spec-guard'
 import { resolveInspectionReason } from './inspection-reason'
 import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
-import { checkSanityBounds, boundForJob, type JobTypeBound } from './sanity-bounds'
+import {
+  checkSanityBounds,
+  boundForJob,
+  recipeLabourFromLines,
+  type JobTypeBound,
+} from './sanity-bounds'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
@@ -1074,7 +1079,7 @@ export async function runEstimation(
     // corrected; an out-of-band total signals a misread scope). Opt-in: only
     // job types with a job_type_bounds row are checked; table-missing / no row
     // → no-op, so this is inert where bounds aren't seeded.
-    const sanity = await checkDraftSanityBounds(draft, intake)
+    const sanity = await checkDraftSanityBounds(draft, intake, pricingBook)
     if (!sanity.ok) {
       cacheLog.err('sanity-bounds out of band — routing to inspection (R9)', null, { failures: sanity.failures })
       const downgraded = forceInspectionTiers({ ...draft }) as typeof draft
@@ -1411,6 +1416,7 @@ export async function loadCandidatePrices(
 async function checkDraftSanityBounds(
   draft: any,
   intake: any,
+  pricingBook: { min_labour_hours?: number | string | null } | null,
 ): Promise<{ ok: true } | { ok: false; failures: string[] }> {
   const trade = intake?.trade
   const jobType = intake?.job_type
@@ -1438,8 +1444,28 @@ async function checkDraftSanityBounds(
     const totalExGst =
       Number(t.subtotal_ex_gst) ||
       t.line_items.reduce((s: number, l: any) => s + (Number(l.total_ex_gst) || 0), 0)
+    // One-off labour the price-bands recipe appended (a single cable run shared
+    // by every unit). Read off the DRAFT's markers, NOT off TierMergeOutcome:
+    // the draft is post-R7-dedup and post-R9-per-tier-revert, the outcome object
+    // is not, so reading the outcome would over-count and inflate the cap.
+    // The summation (and its recipe_swap exclusion) is unit-tested in
+    // sanity-bounds.test.ts.
+    const recipeLabourHours = recipeLabourFromLines(t.line_items)
     const v = checkSanityBounds(
-      { jobType, trade, quantity: qty, totalLabourHours, totalExGst },
+      {
+        jobType,
+        trade,
+        quantity: qty,
+        totalLabourHours,
+        totalExGst,
+        // The tenant's minimum charge is a floor applied by applyMinLabourFloor
+        // upstream; without it here, every single-item quote on a tenant with a
+        // 2h floor fails the per-unit check unconditionally. Resolved through the
+        // SAME helper the floor uses, so a NULL column cannot mean 2.0h there and
+        // 0h here.
+        minLabourHours: resolveMinLabourHours(pricingBook),
+        recipeLabourHours,
+      },
       bound,
     )
     if (!v.ok) return v

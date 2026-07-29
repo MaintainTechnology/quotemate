@@ -2,6 +2,10 @@
 // Pure functions over plain data — no supabase/twilio/next mocks needed.
 
 import { describe, expect, it } from 'vitest'
+// The caller derives otherTradeActive from these two, so the guard's contract is
+// only meaningful alongside them — see the 'closed' cases below.
+import { isActiveRoofingFlow } from './roofing-receptionist'
+import { isActivePaintingFlow } from './painting-receptionist'
 import {
   arrivalTimestampsFromTurns,
   hasUnrepliedInbound,
@@ -78,6 +82,7 @@ describe('sideEffectsAllowed', () => {
     hasExistingIntake: false,
     wp9HoldingForChoice: false,
     inflightContinuation: false,
+    otherTradeActive: false,
   }
   it('allows side effects only on a clean finish', () => {
     expect(sideEffectsAllowed(base)).toBe(true)
@@ -93,6 +98,52 @@ describe('sideEffectsAllowed', () => {
   })
   it('blocks during an in-flight continuation', () => {
     expect(sideEffectsAllowed({ ...base, inflightContinuation: true })).toBe(false)
+  })
+
+  // The intake handoff mints an intake whose trade can only be 'electrical' or
+  // 'plumbing' (IntakeSchema.trade), and deriveTradeFromJobType maps 'other' →
+  // 'electrical'. So an unguarded handoff on a roofing or painting thread
+  // creates a junk ELECTRICAL intake and a real $99 electrical inspection quote.
+  // Verified in prod: quote 8d02aa98 was PAID and d1d3cc6c ACCEPTED against
+  // re-roof enquiries, and 530bd60b sat at $0.00 in tradie_review.
+  it('blocks when another trade owns the thread', () => {
+    expect(sideEffectsAllowed({ ...base, otherTradeActive: true })).toBe(false)
+  })
+
+  it('still allows a normal electrical finish with no other trade active', () => {
+    // Wrong-direction regression guard: an over-broad trade signal would stop
+    // ALL SMS quoting, which is worse than the bug it fixes.
+    expect(sideEffectsAllowed({ ...base, otherTradeActive: false })).toBe(true)
+  })
+
+  // A CLOSED roofing/painting thread must NOT block. 'closed' is a VALUE of
+  // last_step, written on the sanctioned trade-switch path (route.ts:632
+  // persists last_step:'closed' then hands the turn to the general dialog), so
+  // step 10 is reached mostly AFTER roofing declined. Treating 'closed' as
+  // active would suppress exactly the handoffs the guard exists to permit — the
+  // customer switching from re-roof to downlights gets "I'll get that quote
+  // over" and then no quote, permanently. The caller derives this via
+  // isActiveRoofingFlow / isActivePaintingFlow, both `step !== null && step !== 'closed'`.
+  it('is NOT blocked by a closed roofing thread (the trade-switch path)', () => {
+    expect(isActiveRoofingFlow({ slots: {}, last_step: 'closed' } as never)).toBe(false)
+    expect(sideEffectsAllowed({ ...base, otherTradeActive: false })).toBe(true)
+  })
+
+  it('IS blocked by a mid-flow roofing thread', () => {
+    expect(isActiveRoofingFlow({ slots: {}, last_step: 'address' } as never)).toBe(true)
+    expect(isActivePaintingFlow({ slots: {}, last_step: 'closed' } as never)).toBe(false)
+  })
+
+  it('blocks on a roofing thread even when every other signal is clean', () => {
+    expect(
+      sideEffectsAllowed({
+        decisionIsFinish: true,
+        hasExistingIntake: false,
+        wp9HoldingForChoice: false,
+        inflightContinuation: false,
+        otherTradeActive: true,
+      }),
+    ).toBe(false)
   })
 })
 

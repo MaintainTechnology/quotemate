@@ -208,7 +208,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin
       const draftRes = await fetch(`${appUrl}/api/estimate/draft`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Internal self-call — /api/estimate/draft and /api/intake/structure are
+          // guarded by isCronAuthorised, which is fail-closed in production.
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
+        },
         body: JSON.stringify({ intakeId: intakeRow.id }),
       })
       if (!draftRes.ok) {

@@ -148,9 +148,18 @@ export function selectProductOptions(
   })
 
   const good = sorted[0]
-  const better = sorted[sorted.length - 1]
+  // The "Better" slot is the NEXT price up, not the dearest row. The dearest
+  // is an outlier magnet: a $36 GPO beside a $287 wifi GPO offered an 8x jump
+  // and hid the $42 the tradie actually meant as the upsell. Taking the first
+  // strictly-dearer row keeps a believable ladder and (on real catalogues)
+  // lands on the tradie's is_preferred, photographed product.
+  // ponytail: ordinal, not median — no live category has >3 products. If long
+  // ladders appear, switch to the median index here and nowhere else.
+  const goodPrice = num(good.unit_price_ex_gst)
+  const better =
+    sorted.find((r) => num(r.unit_price_ex_gst) > goodPrice) ?? sorted[1]
   // Only one distinct product → offer it as the single option.
-  if (good === better) return [toOpt(good, 'good')]
+  if (!better || better === good) return [toOpt(good, 'good')]
   return [toOpt(good, 'good'), toOpt(better, 'better')]
 }
 

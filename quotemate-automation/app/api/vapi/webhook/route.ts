@@ -199,7 +199,12 @@ export async function POST(req: Request) {
         async () => {
           const res = await fetch(`${process.env.APP_URL}/api/intake/structure`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              // Internal self-call — /api/estimate/draft and /api/intake/structure are
+              // guarded by isCronAuthorised, which is fail-closed in production.
+              Authorization: `Bearer ${process.env.CRON_SECRET}`,
+            },
             body: JSON.stringify({ callId: callRow.id }),
           })
           if (!res.ok) {

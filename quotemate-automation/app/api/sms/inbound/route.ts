@@ -27,6 +27,7 @@ import {
   closeStaleRoofingState,
   expireIdleRoofingState,
   roofingTurnInput,
+  isActiveRoofingFlow,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
 import {
@@ -71,6 +72,7 @@ import {
   advancePainting,
   shouldEngagePainting,
   expireIdlePaintingState,
+  isActivePaintingFlow,
   type PaintingConversationState,
 } from '@/lib/sms/painting-receptionist'
 import {
@@ -3113,11 +3115,26 @@ export async function POST(req: Request) {
       // Either signal is sufficient. Both must be true for normal flow.
       const { data: convoState } = await supabase
         .from('sms_conversations')
-        .select('intake_id')
+        .select('intake_id, roofing_state, painting_state')
         .eq('id', conversationId)
         .maybeSingle()
       const freshIntakeId = (convoState?.intake_id as string | null) ?? null
       const hasExistingIntake = !!freshIntakeId || quoteAlreadyDrafted
+      // Third duplicate/misroute signal: is this thread owned by another trade?
+      // Read off the SAME fresh row rather than a second round trip.
+      //
+      // Use the EXISTING tested predicates, not a hand-rolled `last_step != null`.
+      // `'closed'` is a VALUE of last_step, not its absence, and it is written on
+      // the sanctioned trade-switch path — roofing persists `last_step:'closed'`
+      // then returns false to hand the turn to the general dialog (route.ts:632).
+      // Step 10 is therefore reached almost exclusively AFTER roofing declined,
+      // so treating 'closed' as active would suppress the very handoffs this
+      // block exists to make: a customer switching from re-roof to downlights
+      // mid-thread would get the dialog's "I'll get that quote over" and then no
+      // quote, permanently, for the life of the conversation row.
+      const otherTradeActive =
+        isActiveRoofingFlow(convoState?.roofing_state as RoofingConversationState | null) ||
+        isActivePaintingFlow(convoState?.painting_state as PaintingConversationState | null)
       if (hasExistingIntake) {
         console.log(
           '[sms/inbound:after] quote already drafted on this conversation — suppressing photo + handoff',
@@ -3127,6 +3144,19 @@ export async function POST(req: Request) {
             priorIntakeId,
             priorStatusBeforeReopen: prior?.status,
             quoteAlreadyDrafted,
+          },
+        )
+      }
+      // Log the trade suppression too. Without this the handoff can be skipped
+      // with no trace at all, which is indistinguishable from a crash when you
+      // are staring at a customer who never got their quote.
+      if (otherTradeActive) {
+        console.log(
+          '[sms/inbound:after] another trade owns this thread — suppressing electrical/plumbing handoff',
+          {
+            conversationId,
+            roofingStep: (convoState?.roofing_state as RoofingConversationState | null)?.last_step ?? null,
+            paintingStep: (convoState?.painting_state as PaintingConversationState | null)?.last_step ?? null,
           },
         )
       }
@@ -3726,6 +3756,7 @@ export async function POST(req: Request) {
           hasExistingIntake,
           wp9HoldingForChoice,
           inflightContinuation,
+          otherTradeActive,
         })
       ) {
         console.log('[sms/inbound:after] step 10 — firing intake/structure handoff', { conversationId })
@@ -3734,7 +3765,12 @@ export async function POST(req: Request) {
             async () => {
               const res = await fetch(`${process.env.APP_URL}/api/intake/structure`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  // Internal self-call — /api/estimate/draft and /api/intake/structure are
+                  // guarded by isCronAuthorised, which is fail-closed in production.
+                  Authorization: `Bearer ${process.env.CRON_SECRET}`,
+                },
                 body: JSON.stringify({ conversationId, sourceChannel: 'sms' }),
               })
               if (!res.ok) {

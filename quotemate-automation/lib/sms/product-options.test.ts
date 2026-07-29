@@ -68,6 +68,21 @@ describe('selectProductOptions', () => {
     ]
     const r = selectProductOptions(tie, 'tap')!
     expect(r[0].name).toBe('Go-To') // preferred wins the Good slot on the price tie
+    expect(r[1].name).toBe('Top') // Better must be strictly dearer, not the $100 twin
+  })
+  // Real prod data (Peppers Plumbing gpo $36/$42/$287, Sparky downlight
+  // $19.50/$56/$69): the Better slot is the NEXT price up, never the dearest
+  // row — otherwise a premium outlier hides the upsell the tradie meant.
+  it('3+ products → Better is the next price up, NOT the dearest outlier', () => {
+    const gpos: TenantMaterial[] = [
+      { id: 'g1', category: 'gpo', name: 'Clipsal 2000 GPO', unit_price_ex_gst: 36, active: true },
+      { id: 'g2', category: 'gpo', name: 'Clipsal Iconic', unit_price_ex_gst: 42, active: true },
+      { id: 'g3', category: 'gpo', name: 'Clipsal Iconic Wifi', unit_price_ex_gst: 287, active: true },
+    ]
+    const r = selectProductOptions(gpos, 'gpo')!
+    expect(r.map((o) => o.name)).toEqual(['Clipsal 2000 GPO', 'Clipsal Iconic'])
+    // two-product catalogues are unaffected — dearest IS the next price up
+    expect(selectProductOptions(gpos.slice(0, 2), 'gpo')!.map((o) => o.price_ex_gst)).toEqual([36, 42])
   })
 })
 

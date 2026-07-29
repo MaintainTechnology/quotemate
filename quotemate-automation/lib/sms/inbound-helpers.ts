@@ -133,12 +133,30 @@ export function sideEffectsAllowed(args: {
   wp9HoldingForChoice: boolean
   /** the customer texted while a previous quote is still drafting */
   inflightContinuation: boolean
+  /**
+   * Another trade already owns this thread — its `roofing_state.last_step` or
+   * `painting_state.last_step` is non-null.
+   *
+   * The handoff mints an intake, and `IntakeSchema.trade` is
+   * `z.enum(['electrical','plumbing'])` — it cannot represent roofing or
+   * painting. `deriveTradeFromJobType` then maps anything unrecognised,
+   * INCLUDING `'other'`, to `'electrical'` (lib/intake/schema.ts:129-132). So an
+   * unguarded handoff on a roofing thread produced a junk electrical intake and
+   * a real $99 electrical inspection quote. Verified in prod: `8d02aa98` PAID
+   * and `d1d3cc6c` ACCEPTED against re-roof enquiries, `530bd60b` left at $0.00.
+   *
+   * Derive this from the trade state ONLY. Deriving it from
+   * `conversation_state.slots.job_type` would suppress everything — that field
+   * is null on every conversation since 2026-07-08.
+   */
+  otherTradeActive: boolean
 }): boolean {
   return (
     args.decisionIsFinish &&
     !args.hasExistingIntake &&
     !args.wp9HoldingForChoice &&
-    !args.inflightContinuation
+    !args.inflightContinuation &&
+    !args.otherTradeActive
   )
 }
 

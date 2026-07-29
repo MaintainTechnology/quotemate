@@ -45,6 +45,7 @@ import {
   isEnforcementEnabled,
 } from '@/lib/billing/entitlements'
 import { getMonthlyUsage } from '@/lib/billing/usage'
+import { isCronAuthorised } from '@/lib/agents/cron'
 
 // R42-draft — the after() block does the heavy sends (PDF render, customer
 // quote SMS + retries, tradie notify + retries). Derive the Vercel function
@@ -64,6 +65,21 @@ const supabase = createClient(
 )
 
 export async function POST(req: Request) {
+  // Internal-only. This route mints a quotes row, real Stripe Checkout Sessions
+  // and a real customer SMS from nothing but an intake UUID, and proxy.ts:20 is
+  // a bare clerkMiddleware() that gates nothing — so without this guard any
+  // caller could run up quotes on any tenant's account.
+  //
+  // isCronAuthorised is reused rather than reimplemented: it is already
+  // unit-tested (lib/agents/cron.test.ts) and fail-closed in production. Note it
+  // conflates "Vercel Cron caller" and "internal self-call" into one secret; if
+  // those ever need separating, rename to isMachineAuthorised reading
+  // INTERNAL_API_SECRET ?? CRON_SECRET. Placed before req.json() so an
+  // unauthorised call parses nothing and registers no after() work.
+  if (!isCronAuthorised(req)) {
+    return new Response('unauthorised', { status: 401 })
+  }
+
   // tradieDrafted — set by the dashboard job quoter (/api/tenant/job-quote).
   // Forces the review gate on so a portal draft never texts the customer
   // before the tradie presses Send. Fail-safe by construction: the only
