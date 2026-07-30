@@ -80,11 +80,32 @@ the hint path must scale too, or this phase is invisible.
   only the latter reaches production today. A BOM row is a per-job quantity unless the phase adds
   an explicit per-item marker — decide and document which, and default to the behaviour that makes
   `downlight ×6` become `×10` when the customer asks for 10.
-- **R5** Seed the one genuinely missing recipe: `ev_charger` (`Install EV charger` resolves but has
-  no BOM rows). Use `scripts/import-bom-catalogue.mjs`, dry-run first.
-- **R6** Replace the two consumables-only recipes with real parts:
-  `Install oven (existing wiring)` and `Install cooktop (existing wiring)` currently carry only
-  `sundries ×1`.
+- ~~**R5** Seed the one genuinely missing recipe: `ev_charger`.~~ **STRUCK 2026-07-30.**
+- ~~**R6** Replace the two consumables-only recipes with real parts:
+  `Install oven (existing wiring)` and `Install cooktop (existing wiring)`.~~ **STRUCK 2026-07-30.**
+
+  Both were premised on seeding `shared_materials` rows for `ev_charger` and `oven_cooktop`, and
+  that premise is dead. Three reasons, in order of weight:
+
+  1. **The prices would be invented.** `shared_materials.default_unit_price_ex_gst` is the fallback
+     every tenant prices from when their catalogue is empty. Researched retail prices for a 7kW
+     wallbox spread $699–$1,345 across non-interchangeable models, and trade-account prices sit
+     below retail — so any single seeded number systematically over-quotes the tenants least able to
+     notice, silently.
+  2. **A tradie can now stock these themselves.** `chooseMaterial` resolves the tenant leg on
+     category match alone (`catalogue.ts:170-173`); no shared row is required. The vocabulary fix
+     (`lib/estimate/material-vocabulary.ts`, 2026-07-30) restored `ev_charger`, `security_camera`,
+     `oven_cooktop` and 14 others to both selects, so the product choice sits where it belongs.
+  3. **It contradicts a settled decision.** `CLAUDE.md`: *"Build the pricing book WITH the tradie."*
+     A guessed default makes a quote look complete while being wrong, so the tradie never learns to
+     add their real product.
+
+  What replaces them: surface the gap. The R33/R38 catalogue-gap apparatus already knows which
+  recipe lines have no matching product — extend it to say *"this job needs an EV charger in your
+  catalogue"*. That converts a data hole into an onboarding prompt.
+
+  If a shared fallback is still wanted later, take the numbers from a real wholesaler account
+  (Middy's / CNW / Sparky Direct) via `scripts/import-bom-catalogue.mjs` — not from the open web.
 - **R7** Fix the misleading helper text under both selects. The Recipes one says *"Pick the same
   category you use in Catalogue"*, which is the instruction that created the problem.
 
