@@ -11,11 +11,15 @@
 // Deliberately NOT run as part of the build. Renaming a tradie's product
 // category changes which jobs it prices, so it is a reviewable step of its own.
 //
-// ── Three outcomes, and why the third is not a failure ──────────────────
+// ── Four outcomes ───────────────────────────────────────────────────────
 // SAFE      an unambiguous one-to-one rename (fan → ceiling_fan)
-// AMBIGUOUS the old value maps to several real ones. `tap` could be any of four
-//           tapware_* values; `hot_water` any of three hws_*. Guessing would put
-//           a kitchen mixer price on a basin job. Reported for a human.
+// BY NAME   the old value maps to several real ones, but the PRODUCT NAME says
+//           which. "Rheem 5-star 260L gas storage HWS" is not ambiguous to a
+//           plumber. Resolved by lib/estimate/category-remap.ts, which prints
+//           the name it acted on so the decision is auditable.
+// AMBIGUOUS several candidates AND the name gives no evidence. Left alone and
+//           reported — a wrong pick puts a $1,845 gas unit's price on an
+//           electric job.
 // ORPHAN    no shared_materials row exists at all (oven_cooktop,
 //           security_camera, cctv). These need a material seeded first — a
 //           rename cannot help.
@@ -25,6 +29,7 @@
 
 import pg from 'pg'
 import { MATERIAL_VOCABULARY } from '../lib/estimate/material-vocabulary.ts'
+import { resolveByProductName } from '../lib/estimate/category-remap.ts'
 
 const APPLY = process.argv.includes('--apply')
 
@@ -48,8 +53,8 @@ const real = new Set(
 )
 
 const TARGETS = [
-  { table: 'tenant_material_catalogue', col: 'category', label: 'catalogue products' },
-  { table: 'tenant_assembly_bom', col: 'material_category', label: 'recipe lines' },
+  { table: 'tenant_material_catalogue', col: 'category', nameCol: 'name', label: 'catalogue products' },
+  { table: 'tenant_assembly_bom', col: 'material_category', nameCol: 'description', label: 'recipe lines' },
 ]
 
 const dbUrl = process.env.SUPABASE_DB_URL
@@ -66,9 +71,9 @@ const ambiguousFound = []
 const orphansFound = []
 
 try {
-  for (const { table, col, label } of TARGETS) {
+  for (const { table, col, nameCol, label } of TARGETS) {
     const { rows } = await client.query(
-      `select id, tenant_id, trade, ${col} as cat from ${table}
+      `select id, tenant_id, trade, ${col} as cat, ${nameCol} as pname from ${table}
         where trade in ('electrical','plumbing') and ${col} is not null
         order by trade, ${col}`,
     )
@@ -102,8 +107,34 @@ try {
         continue
       }
       if (AMBIGUOUS[key]) {
-        console.log(`   AMBIGUOUS ${trade}·${oldVal} → one of ${AMBIGUOUS[key].join(' | ')}  (${group.length} row${group.length === 1 ? '' : 's'}) — NOT changed`)
-        ambiguousFound.push({ table, key, rows: group.length, options: AMBIGUOUS[key] })
+        // Not really a guess: the product's own name says which one it is.
+        // Rows the name cannot settle stay unresolved and are still reported.
+        const resolved = new Map()
+        const unresolved = []
+        for (const r of group) {
+          const t = resolveByProductName(oldVal, r.pname, trade)
+          if (t) {
+            if (!resolved.has(t)) resolved.set(t, [])
+            resolved.get(t).push(r)
+          } else unresolved.push(r)
+        }
+        for (const [target, rows] of [...resolved.entries()].sort()) {
+          console.log(`   BY NAME   ${trade}·${oldVal} → ${target}  (${rows.length} row${rows.length === 1 ? '' : 's'})`)
+          for (const r of rows) console.log(`               "${r.pname}"`)
+          safeTotal += rows.length
+          if (APPLY) {
+            const { rowCount } = await client.query(
+              `update ${table} set ${col} = $1 where id = any($2::uuid[])`,
+              [target, rows.map((r) => r.id)],
+            )
+            console.log(`               applied to ${rowCount} row${rowCount === 1 ? '' : 's'}`)
+          }
+        }
+        if (unresolved.length > 0) {
+          console.log(`   AMBIGUOUS ${trade}·${oldVal} → one of ${AMBIGUOUS[key].join(' | ')}  (${unresolved.length} row${unresolved.length === 1 ? '' : 's'}) — name gave no evidence, NOT changed`)
+          for (const r of unresolved) console.log(`               "${r.pname ?? '(no name)'}"`)
+          ambiguousFound.push({ table, key, rows: unresolved.length, options: AMBIGUOUS[key] })
+        }
         continue
       }
       console.log(`   ORPHAN    ${trade}·${oldVal} — no shared_materials row exists  (${group.length} row${group.length === 1 ? '' : 's'}) — NOT changed`)
