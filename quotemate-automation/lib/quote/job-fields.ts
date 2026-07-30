@@ -96,7 +96,31 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
         code: 'replace_or_new',
         label: 'Replacing existing GPOs, adding near existing power, or a new run from the switchboard?',
         type: 'select',
-        options: ['replacing existing', 'adding near existing power', 'new run from the switchboard'],
+        options: ['replacing existing', 'adding near existing power', 'new run from the switchboard (on-site inspection)'],
+      },
+      // ── The two RECIPE SLOTS ────────────────────────────────────
+      // These are not ordinary questions: "Replace double GPO" is the only
+      // assembly in production carrying a price_recipe, and these are its two
+      // questions verbatim (`distance_to_existing_power`, `circuit_required`).
+      // The route stamps them onto intake.scope so applyPriceBands can read
+      // them. Leave them out and the recipe silently applies its
+      // default_when_unanswered — 2 metres and 10A, the cheapest band of each.
+      {
+        code: 'distance_to_existing_power',
+        label:
+          'For a new or extended run: how far from the nearest existing power point, in metres? (leave blank for a straight swap)',
+        type: 'number',
+      },
+      {
+        // Option strings MUST stay the literal recipe band values —
+        // applySelectBand (lib/estimate/price-bands.ts:230) compares exact
+        // lowercased strings, so "20 amp" or "single phase" would match
+        // nothing and silently price as 10A. 20A and three-phase each swap the
+        // whole base assembly via use_assembly_id.
+        code: 'circuit_required',
+        label: 'Circuit required? 20A is a dedicated circuit, three-phase is a 32A outlet',
+        type: 'select',
+        options: ['10A', '20A', 'three-phase'],
       },
     ],
   },
@@ -158,7 +182,7 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
         code: 'replace_or_new',
         label: 'Is there existing wiring in place, or does a new circuit need running?',
         type: 'select',
-        options: ['existing wiring', 'new circuit needed', 'not sure'],
+        options: ['existing wiring', 'new circuit needed (on-site inspection)', 'not sure'],
       },
     ],
   },
@@ -167,10 +191,17 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
     fields: [
       { code: 'room', label: 'Where is the charger going?', type: 'text' },
       {
-        code: 'circuit_required',
+        // NOT `circuit_required`. That code is a RECIPE SLOT
+        // (lib/quote/recipe-slots.ts), and the job-quote route filters recipe
+        // slot codes out of the prose transcript for every job type — so naming
+        // it that way silently dropped this answer, and 'three phase' matches no
+        // recipe band anyway (the band value is the hyphenated 'three-phase').
+        // Three-phase work is meant to force an inspection
+        // (lib/intake/structure.ts:397); with the answer lost it never did.
+        code: 'phase',
         label: 'Single phase or three phase?',
         type: 'select',
-        options: ['single phase', 'three phase', 'not sure'],
+        options: ['single phase', 'three phase (on-site inspection)', 'not sure'],
       },
     ],
   },
@@ -210,10 +241,24 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
     catalogueCategory: 'hot_water',
     fields: [
       {
+        // 'solar' and 'not sure' both route to the $99 inspection, and that is
+        // deliberate upstream behaviour, not a gap here: normaliseSystemType
+        // (lib/intake/structure.ts:45) maps only electric/gas/heat_pump, and the
+        // E8 backstop (structure.ts:153) refuses to guess a fuel it cannot map
+        // rather than ground the quote on the wrong HWS assembly. The labels say
+        // so out loud so a tradie is never surprised by an inspection they did
+        // not ask for. Do NOT map 'solar' to electric to make it price — a solar
+        // HWS is not an electric storage unit and the assembly would be wrong.
         code: 'energy_source',
         label: 'What type of hot water system is it?',
         type: 'select',
-        options: ['electric', 'gas', 'heat pump', 'solar', 'not sure'],
+        options: [
+          'electric',
+          'gas',
+          'heat pump',
+          'solar (on-site inspection)',
+          'not sure (on-site inspection)',
+        ],
       },
       {
         code: 'litres',

@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v17 (2026-07-26).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers; v17 makes the roofing + painting SMS receptionists **LLM-driven conversations** (flag-gated, default off) while keeping the money path deterministic, superseding v10's "zero LLM in the customer-facing flow". The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v17 rationale.
+> **Current iteration: v18 (2026-07-29).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers; v17 makes the roofing + painting SMS receptionists **LLM-driven conversations** (`SMS_LLM_RECEPTIONIST_ENABLED`, now default ON) while keeping the money path deterministic, superseding v10's "zero LLM in the customer-facing flow"; **v18** records that the SMS route does **not** pick a receptionist per message — an active roofing thread captures every turn — and that the intake handoff had no trade guard, so roofing enquiries were minting electrical intakes and charging real $99 electrical inspections. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v18 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -1230,5 +1230,77 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   - Turn latency pushes the SMS reply past the webhook budget → move the
     conversational turn behind the existing `after()` boundary rather than
     trimming the model.
+
+- **v18** (2026-07-29): **the SMS route does not choose a receptionist per message, and the intake handoff had no trade guard.** Corrects a load-bearing claim in `CLAUDE.md` and records money already taken wrongly.
+
+  **What was believed, and what is true:**
+
+  `CLAUDE.md` described `/api/sms/inbound` as fanning out to four receptionists
+  "depending on the tenant's trades **and the message**". The second half is
+  false. `shouldEngageRoofing` (`lib/sms/roofing-receptionist.ts:968`) is
+  `canResume = isActiveRoofingFlow(prev) && !followupPinActive; if (canResume)
+  return true` — it never inspects the inbound text. `route.ts:2185-2187` then
+  returns before `extractSlots` at `:2353`. On a tenant holding roofing, an
+  active roofing thread captures **every** subsequent turn, and the
+  electrical/plumbing dialog is unreachable for the life of that thread.
+
+  **The money consequence, found by following that thread.** `IntakeSchema.trade`
+  is `z.enum(['electrical','plumbing'])` — it cannot represent roofing — and
+  `deriveTradeFromJobType` maps anything unrecognised, including `'other'`, to
+  `'electrical'`. The handoff at `route.ts:3735` was gated only by
+  `sideEffectsAllowed`, which had no trade signal. Roofing enquiries therefore
+  minted **electrical** intakes and real $99 electrical inspection quotes:
+  `8d02aa98` was **paid**, `d1d3cc6c` **accepted**, `7030df6c` viewed, and
+  `530bd60b` sat at **$0.00** in `tradie_review`. One of those customers had a
+  $73,522 roofing estimate. Fixed by adding an `otherTradeActive` signal to
+  `sideEffectsAllowed`, derived from `roofing_state`/`painting_state.last_step`
+  only — deriving it from `slots.job_type` would suppress all SMS quoting,
+  because that field is null on every conversation since 2026-07-08.
+
+  **What was NOT a defect.** Every electrical intake from 2026-07-08 to 07-28
+  carried `job_type='other'`, which looked like a classifier regression that had
+  silently disabled the WP9 catalogue product offer. It is a **traffic
+  artefact**: three `power_points` intakes on 07-29 classify correctly, and the
+  offer gate reads `decision.job_type_guess` (`route.ts:3388`), an enum that does
+  not contain `'other'` at all. Both were downstream symptoms of the roofing
+  capture above. Recorded here so it is not "fixed" again.
+
+  **Reading this against v17.** v17 credits the LLM with handling "trade
+  switches", and that remains true at the *conversational* layer — the model can
+  acknowledge a customer changing trade and reply sensibly. What v18 adds is that
+  the *route* cannot act on it: the receptionist that owns the thread is chosen
+  before the model is consulted, so an acknowledged switch does not re-route the
+  turn. The two statements describe different layers, not a contradiction.
+
+  **R9 sanity bounds modelled labour as proportional when it is affine.**
+  `checkSanityBounds` compared `totalLabourHours / quantity` against
+  `per_unit_labour_hours × 1.75`, which divides every FIXED cost by the item
+  count and makes the cap tightest exactly where fixed costs dominate — at
+  quantity 1. Consequence: on the three tenants whose
+  `pricing_book.min_labour_hours` is 2.00, **every single-item `power_points` or
+  `downlights` quote failed R9 unconditionally** and was routed to the $99
+  inspection (intake `5350290e`), and a recipe's one-off cable run was charged
+  per unit (intake `0c39d4c2`). Now `cap = max(minCharge, per_unit × n × 1.75) +
+  recipeOneOff`, with `max` rather than a sum so the floor and the scaled
+  allowance cannot stack. All five `job_type_bounds` rows remain flagged
+  `PROVISIONAL — confirm with tradie`; no migration shipped.
+
+  **The two internal quote routes are no longer anonymous.** `POST /api/estimate/draft` and
+  `POST /api/intake/structure` mint quotes, Stripe sessions and customer SMS, and
+  both accepted unauthenticated calls — `proxy.ts:20` is a bare
+  `clerkMiddleware()` that gates nothing. Both now require the shared secret via
+  the already-tested `isCronAuthorised`, and all six internal callers send it.
+  ⚠ The guard is fail-closed in production, so `CRON_SECRET` must be present in
+  Vercel Production **and Preview** or every intake channel stops producing
+  quotes on that deployment (`NODE_ENV` is `'production'` on Vercel Preview too,
+  so Preview takes the strict branch). ⚠ This does **not** close every door:
+  `/api/vapi/webhook` still has no authentication of its own — no Vapi server
+  secret exists anywhere in the repo — so the pipeline stays reachable through
+  it. Scoped out of this change deliberately; it needs its own fix.
+
+  **Deliberately deferred:** making a live roofing thread yield mid-conversation
+  when the customer asks for another trade. That changes which receptionist wins
+  a turn on the two tenants holding all eight trades, and the eval harness is
+  only partially built — it needs its own regression corpus first.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

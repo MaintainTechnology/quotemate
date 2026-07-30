@@ -59,6 +59,8 @@ interface TenantRow {
   status: string | null
   activated_at: string | null
   owner_user_id: string | null
+  /** Clerk-native signups link here instead of owner_user_id (migration 163). */
+  clerk_user_id?: string | null
   trade: string | null
   trades: string[] | null
   twilio_sms_number: string | null
@@ -89,7 +91,7 @@ export async function checkTenantHealth(
     const { data, error } = await supabase
       .from('tenants')
       .select(
-        'id, business_name, status, activated_at, owner_user_id, trade, trades, twilio_sms_number, twilio_number_sid, vapi_assistant_id',
+        'id, business_name, status, activated_at, owner_user_id, clerk_user_id, trade, trades, twilio_sms_number, twilio_number_sid, vapi_assistant_id',
       )
       .eq('id', tenantOrId)
       .single()
@@ -104,13 +106,21 @@ export async function checkTenantHealth(
   const trades = tradesOf(tenant)
   const checks: HealthCheck[] = []
 
-  // 1. owner_user_id present (sign-in works)
+  // 1. Owner linked to an auth provider (sign-in works).
+  // EITHER id counts. A Clerk-native signup has no auth.users row at all, so
+  // owner_user_id is NULL by design and sign-in resolves by clerk_user_id
+  // (lib/tenant/current.ts:97). Asserting owner_user_id alone reported every
+  // Clerk tenant "can never sign in" — false, and since `ready` is a pass/fail
+  // rollup it also masked genuine required failures on the same tenant.
+  const ownerLinked = !!tenant.owner_user_id || !!tenant.clerk_user_id
   checks.push({
     key: 'owner_user_id',
-    label: 'Owner user linked (sign-in works)',
+    label: 'Owner account linked (sign-in works)',
     level: 'required',
-    ok: !!tenant.owner_user_id,
-    detail: tenant.owner_user_id ? undefined : 'owner_user_id is NULL — tradie can never sign in',
+    ok: ownerLinked,
+    detail: ownerLinked
+      ? undefined
+      : 'owner_user_id AND clerk_user_id are both NULL — tradie can never sign in',
   })
 
   // 2. status active + activated_at set

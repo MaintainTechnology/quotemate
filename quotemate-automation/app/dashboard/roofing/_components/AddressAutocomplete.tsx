@@ -42,7 +42,12 @@ type Props = {
   /** Optional state filter to scope suggestions. */
   state?: 'NSW' | 'VIC' | 'QLD' | 'SA' | 'WA' | 'TAS' | 'ACT' | 'NT'
   placeholder?: string
+  /** Applied to the positioning WRAPPER, not the input — the input keeps its
+   *  own field styling. Pass spacing utilities only. */
   className?: string
+  /** id for the rendered <input>, so a caller can point a real
+   *  <label htmlFor> at it. Callers using an unassociated label can omit it. */
+  id?: string
 }
 
 export function AddressAutocomplete({
@@ -53,6 +58,7 @@ export function AddressAutocomplete({
   state,
   placeholder = 'e.g. 27 Smith Street, Penrith',
   className,
+  id,
 }: Props) {
   const [items, setItems] = useState<AddressSuggestion[]>([])
   const [open, setOpen] = useState(false)
@@ -159,6 +165,7 @@ export function AddressAutocomplete({
   return (
     <div ref={containerRef} className={`relative ${className ?? ''}`}>
       <input
+        id={id}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}

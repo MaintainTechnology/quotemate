@@ -28,6 +28,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
+import { isMaterialCategory, materialCategoriesFor } from "../lib/estimate/material-vocabulary.ts";
 
 const { Client } = pg;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -42,8 +43,8 @@ if (EXAMPLE) {
   const examplePath = join(here, "example-bom-catalogue.json");
   const example = [
     { trade: "electrical", assembly_name: "Install LED downlight", material_category: "downlight", quantity: 6, required: true, sort: 1 },
-    { trade: "electrical", assembly_name: "Install LED downlight", material_category: "sundry", quantity: 1, required: true, sort: 2 },
-    { trade: "plumbing", assembly_name: "Replace kitchen mixer tap", material_category: "tap", quantity: 1, required: true, sort: 1 },
+    { trade: "electrical", assembly_name: "Install LED downlight", material_category: "sundries", quantity: 1, required: true, sort: 2 },
+    { trade: "plumbing", assembly_name: "Tap replacement", material_category: "tapware_kitchen", quantity: 1, required: true, sort: 1 },
   ];
   writeFileSync(examplePath, JSON.stringify(example, null, 2));
   console.log(
@@ -101,6 +102,22 @@ try {
       errors.push(`${where}: missing material_category`);
       continue;
     }
+    // Phase 2 R3 — the category must name a real material, not merely be a
+    // non-empty string. Without this the importer is a hole straight past the
+    // Zod gate on /api/tenant/bom: `sundry`, `fan` and `rcbo` all load fine and
+    // then silently match no product, leaving the line unpriceable with nothing
+    // reporting a problem. Same check the API uses, so the two cannot disagree.
+    const cat = r.material_category.trim().toLowerCase();
+    if (!isMaterialCategory(cat, r.trade)) {
+      errors.push(
+        `${where}: "${r.material_category}" is not a valid ${r.trade} material category. ` +
+          `Use one of: ${materialCategoriesFor(r.trade).map((o) => o.value).join(", ")}`,
+      );
+      continue;
+    }
+    // Normalise to the form chooseMaterial() compares in — storing `Ceiling_Fan`
+    // would fail to match at price time even though the value is right.
+    r.material_category = cat;
     const qty = Number(r.quantity);
     if (!Number.isFinite(qty) || qty <= 0) {
       errors.push(`${where}: quantity must be a positive number (got "${r.quantity}")`);

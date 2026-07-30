@@ -70,6 +70,19 @@ export type DraftLineItem = {
    *  in run.ts key off this explicit marker instead, so they act on exactly
    *  the lines the recipe touched and never on a legitimate Opus line. */
   recipe_origin?: boolean
+  /** True ONLY on the two lines a SWAP band substitutes in (the replacement
+   *  sundries + its replacement labour). Those REPLACE the base assembly's
+   *  own lines — the swap strips every prior `source==='labour'` line at
+   *  :234-239 — so they are not an additive one-off cost the way an appended
+   *  band extra is.
+   *
+   *  R9's affine cap (lib/estimate/sanity-bounds.ts) adds one-off recipe
+   *  labour to the ceiling. Counting swap labour there made
+   *  `recipeLabourHours === totalLabourHours` after any swap, so
+   *  `cap >= total` always held and the per-unit branch could never fire —
+   *  the guard silently went inert on exactly the job type it protects.
+   *  R7/R9 still index off `recipe_origin`, so both markers are set. */
+  recipe_swap?: boolean
   [k: string]: unknown
 }
 
@@ -246,6 +259,7 @@ export function mergeRecipesIntoTier(
         total_ex_gst: newSundriesPrice,
         source: `assembly:${newAsm.id}`,
         recipe_origin: true,
+        recipe_swap: true,
       }
       const newLabourLine: DraftLineItem = {
         description: `Labour — ${newAsm.name}`,
@@ -258,6 +272,7 @@ export function mergeRecipesIntoTier(
             : 0,
         source: 'labour',
         recipe_origin: true,
+        recipe_swap: true,
       }
       workingLines = [newSundriesLine, newLabourLine, ...preserved]
       outcome.swapped_from.push(overrideSourceId!)

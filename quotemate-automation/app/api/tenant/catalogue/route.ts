@@ -7,6 +7,7 @@
 // scoped to the bearer's tenant, so a tradie can only ever see/create
 // their own catalogue rows.
 
+import { mergeProductProperties } from '@/lib/tenant/catalogue-properties'
 import { createClient } from '@supabase/supabase-js'
 import { MaterialCatalogueSchema } from '@/lib/tenant/update-schema'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
@@ -106,6 +107,10 @@ export async function POST(req: Request) {
         : parsed.data.cost_price_ex_gst,
     is_preferred: parsed.data.is_preferred ?? false,
     active: parsed.data.active ?? true,
+    // Phase 2b — merged rather than assigned even on insert, so the shape is
+    // identical to the PATCH path and a future default-bearing column change
+    // cannot silently diverge between the two.
+    properties: mergeProductProperties({}, parsed.data.properties),
   }
 
   const { data, error } = await supabase

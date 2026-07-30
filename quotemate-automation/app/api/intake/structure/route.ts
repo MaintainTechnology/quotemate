@@ -11,6 +11,7 @@ import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
 import { buildIncompleteCallSms, buildIntakeRecoverySms, buildPhotoRequestSms, buildQuoteFailureSms, type MissingIntakeField } from '@/lib/sms/templates'
 import { findOrCreateCustomer, updateCustomerFromIntake } from '@/lib/customers/lookup'
+import { isCronAuthorised } from '@/lib/agents/cron'
 import {
   describeChosenProductDirective,
   chosenProductFromChoice,
@@ -41,6 +42,16 @@ type Body =
   | { conversationId: string; sourceChannel: 'sms' }
 
 export async function POST(req: Request) {
+  // Internal-only. This route structures an intake with Opus, inserts the
+  // intakes row and then self-calls /api/estimate/draft, so an anonymous caller
+  // reaches the whole money path. proxy.ts:20 is a bare clerkMiddleware() and
+  // gates nothing. Same shared guard as /api/estimate/draft — see the longer
+  // note there for why isCronAuthorised is reused and how to split the secret
+  // later. Placed before req.json() so nothing is parsed or scheduled.
+  if (!isCronAuthorised(req)) {
+    return new Response('unauthorised', { status: 401 })
+  }
+
   const body = (await req.json()) as Body
 
   // Identify the source. Use callId for voice or a synthetic id for SMS so
@@ -798,7 +809,12 @@ export async function POST(req: Request) {
         async () => {
           const res = await fetch(`${process.env.APP_URL}/api/estimate/draft`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              // Internal self-call — /api/estimate/draft and /api/intake/structure are
+              // guarded by isCronAuthorised, which is fail-closed in production.
+              Authorization: `Bearer ${process.env.CRON_SECRET}`,
+            },
             body: JSON.stringify({ intakeId: intakeRow.id }),
           })
           if (!res.ok) {

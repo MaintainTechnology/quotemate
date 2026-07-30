@@ -8,6 +8,7 @@ import {
   catalogueCandidateRows,
   formatCatalogueHint,
   formatBomHint,
+  scaleBomToItemCount,
   formatTierLadderHint,
   effectiveAssembly,
   enrichLinesWithCatalogue,
@@ -19,13 +20,19 @@ import {
   type SharedMaterial,
   type BomLine,
   type CatalogueProductRef,
+  isTradiePin,
 } from './catalogue'
-import { applyMinLabourFloor } from './min-labour'
+import { applyMinLabourFloor, resolveMinLabourHours } from './min-labour'
 import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount, reconcileInflatedLabour } from './reconcile'
 import { specGuardMode, evaluateSpecGuard, evaluateDraftSpecGuard } from './spec-guard'
 import { resolveInspectionReason } from './inspection-reason'
 import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
-import { checkSanityBounds, boundForJob, type JobTypeBound } from './sanity-bounds'
+import {
+  checkSanityBounds,
+  boundForJob,
+  recipeLabourFromLines,
+  type JobTypeBound,
+} from './sanity-bounds'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
@@ -40,12 +47,19 @@ import {
   type PastQuoteTiers,
 } from './price-history'
 import { buildDeterministicTiers, type DeterministicTierInput } from './deterministic-bom'
+import { buildAssemblyOrFilter, pickBestAssembly } from './assembly-search'
+
+// Phase 1 — a wider candidate pool than the old `.limit(5)`, which became a
+// truncation bug once the OR filter widened: with no ORDER BY, Postgres could
+// return any 5 of the matches and drop the right row before JS ever saw it.
+// Mirrors FETCH_LIMIT in ./tools so both lookup paths read the same way.
+const ASSEMBLY_FETCH_LIMIT = 12
 import { fetchSimilarPastQuotesContext } from './rag'
 import { runKbEstimateVerification } from './kb-verify'
 import { searchTenantStore } from '@/lib/filestore/tenant-store'
 import type { KbSearchResult } from '@/lib/admin-loader/mt-filestore-kb'
 import { pipelineLog } from '@/lib/log/pipeline'
-import { createTracer, stopwatch } from '@/lib/log/trace'
+import { createTracer, stopwatch, type Tracer } from '@/lib/log/trace'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -171,7 +185,7 @@ export async function runEstimation(
     (intake?.trade as string | null) ?? null,
     cacheLog,
   )
-  const bomBlock = await buildBomHint(intake, (intake?.trade as string | null) ?? null, cacheLog)
+  const bomBlock = await buildBomHint(intake, (intake?.trade as string | null) ?? null, cacheLog, trace)
 
   // WP2 historical-pricing (safe slice). SOFT advisory only — appended
   // to the user prompt exactly like the catalogue/BOM hints, NEVER fed
@@ -726,9 +740,17 @@ export async function runEstimation(
     // legitimate price the customer literally selected) so this is
     // consistent with the money model — same post-draft adjustment
     // pattern as applyMinLabourFloor. Flag-gated + best-effort.
-    if (process.env.WP9_PRODUCT_OPTIONS === '1') {
+    // A TRADIE pin (dashboard job quoter) runs regardless of WP9. That flag is
+    // the kill switch for the CUSTOMER-facing SMS picker, and it is absent from
+    // .env.local — so gating the tradie path on it would make the pin inert in
+    // dev and let local verification pass while doing nothing. Killing WP9 in
+    // prod therefore disables the SMS picker only; the tradie pin is a separate
+    // surface with its own review gate in front of it.
+    const chosenPre = (intake?.scope as { chosen_product?: any } | null)?.chosen_product
+    const tradiePinned = isTradiePin(chosenPre)
+    if (process.env.WP9_PRODUCT_OPTIONS === '1' || tradiePinned) {
       try {
-        const chosen = (intake?.scope as { chosen_product?: any } | null)?.chosen_product
+        const chosen = chosenPre
         if (chosen) {
           // The SMS offer froze a snapshot of the product when it was
           // sent. If the tradie uploaded/edited the photo or description
@@ -799,7 +821,17 @@ export async function runEstimation(
             const keep = (r.applied.includes('good')
               ? 'good'
               : r.applied[0]) as 'good' | 'better' | 'best'
-            if (draft[keep]) {
+            // A TRADIE pin keeps the menu. The rationale above holds for a
+            // CUSTOMER pick — they chose, so one option is the honest render.
+            // A tradie pin is different: the quote is held for their review, and
+            // TierSelect (app/dashboard/quote/[token]/TierSelect.tsx:40) renders
+            // nothing below two priced tiers, so collapsing here would delete the
+            // only tier control on the page the review gate exists to serve. The
+            // tiers are not necessarily identical either — they still differ in
+            // labour and sundries — and collapseDuplicateTiers further down
+            // already nulls the ones that genuinely match by line-item
+            // signature, which is the better-reasoned net.
+            if (draft[keep] && !tradiePinned) {
               for (const t of ['good', 'better', 'best'] as const) {
                 if (t !== keep) draft[t] = null
               }
@@ -934,9 +966,17 @@ export async function runEstimation(
       const requested =
         (intake?.scope as { specs?: { requested_specs?: unknown } } | null)?.specs
           ?.requested_specs ?? null
+      // Must widen in lockstep with the pin gate above. This flag's whole job is
+      // to stop the main-path guard re-judging a product the chosen-product
+      // block already locked in. A TRADIE pin runs that block without WP9, so
+      // gating this on WP9 alone would let the guard re-evaluate tiers whose
+      // headline line applyChosenProduct just rewrote — and under
+      // SPEC_GUARD_MODE=enforce that routes the whole quote to the $99
+      // inspection BECAUSE the tradie pinned a product.
+      const chosenForGuard = (intake?.scope as { chosen_product?: unknown } | null)?.chosen_product
       const wp9Handled =
-        process.env.WP9_PRODUCT_OPTIONS === '1' &&
-        !!(intake?.scope as { chosen_product?: unknown } | null)?.chosen_product
+        (process.env.WP9_PRODUCT_OPTIONS === '1' || isTradiePin(chosenForGuard as never)) &&
+        !!chosenForGuard
       if (guardMode !== 'off' && requested && !wp9Handled) {
         const category = categoryForJobType((intake?.job_type as string | null) ?? null)
         if (category) {
@@ -1067,7 +1107,7 @@ export async function runEstimation(
     // corrected; an out-of-band total signals a misread scope). Opt-in: only
     // job types with a job_type_bounds row are checked; table-missing / no row
     // → no-op, so this is inert where bounds aren't seeded.
-    const sanity = await checkDraftSanityBounds(draft, intake)
+    const sanity = await checkDraftSanityBounds(draft, intake, pricingBook)
     if (!sanity.ok) {
       cacheLog.err('sanity-bounds out of band — routing to inspection (R9)', null, { failures: sanity.failures })
       const downgraded = forceInspectionTiers({ ...draft }) as typeof draft
@@ -1404,6 +1444,7 @@ export async function loadCandidatePrices(
 async function checkDraftSanityBounds(
   draft: any,
   intake: any,
+  pricingBook: { min_labour_hours?: number | string | null } | null,
 ): Promise<{ ok: true } | { ok: false; failures: string[] }> {
   const trade = intake?.trade
   const jobType = intake?.job_type
@@ -1431,8 +1472,28 @@ async function checkDraftSanityBounds(
     const totalExGst =
       Number(t.subtotal_ex_gst) ||
       t.line_items.reduce((s: number, l: any) => s + (Number(l.total_ex_gst) || 0), 0)
+    // One-off labour the price-bands recipe appended (a single cable run shared
+    // by every unit). Read off the DRAFT's markers, NOT off TierMergeOutcome:
+    // the draft is post-R7-dedup and post-R9-per-tier-revert, the outcome object
+    // is not, so reading the outcome would over-count and inflate the cap.
+    // The summation (and its recipe_swap exclusion) is unit-tested in
+    // sanity-bounds.test.ts.
+    const recipeLabourHours = recipeLabourFromLines(t.line_items)
     const v = checkSanityBounds(
-      { jobType, trade, quantity: qty, totalLabourHours, totalExGst },
+      {
+        jobType,
+        trade,
+        quantity: qty,
+        totalLabourHours,
+        totalExGst,
+        // The tenant's minimum charge is a floor applied by applyMinLabourFloor
+        // upstream; without it here, every single-item quote on a tenant with a
+        // 2h floor fails the per-unit check unconditionally. Resolved through the
+        // SAME helper the floor uses, so a NULL column cannot mean 2.0h there and
+        // 0h here.
+        minLabourHours: resolveMinLabourHours(pricingBook),
+        recipeLabourHours,
+      },
       bound,
     )
     if (!v.ok) return v
@@ -1609,21 +1670,98 @@ async function buildCatalogueHint(
  * baseline parts so the same job quotes the same parts every time.
  * Resilient: no matching assembly / unseeded BOM / error -> null.
  */
+type ResolvedAssembly = {
+  id: string
+  name: string
+  trade: string | null
+  default_labour_hours: number | string
+}
+
+/**
+ * Phase 1 — the ONE place a job_type becomes an assembly row.
+ *
+ * Both lookup paths (the always-on BOM prompt hint and the deterministic tier
+ * loader) used to duplicate this query, and the second one's comment said
+ * "match the job the same way buildBomHint does" — the coupling this removes.
+ *
+ * Fails closed: an unmapped job_type or a mapped name absent from the pool both
+ * return `{assembly: null}` with a reason, so the caller falls back to the Opus
+ * draft rather than pricing a near-miss.
+ */
+/** Sub-type for a job type that maps to more than one assembly. Today only
+ *  plumbing `hot_water`, whose electric/gas/heat_pump split the intake already
+ *  captures at scope.specs.system_type (structure.ts requires it for that job
+ *  type). Absent → pickBestAssembly returns null and the estimator falls back
+ *  to Opus, which is correct: guessing gas for an electric unit is a $400 error
+ *  on the headline line. */
+function assemblyVariant(intake: unknown): string | null {
+  const st = (intake as { scope?: { specs?: { system_type?: unknown } } })?.scope?.specs
+    ?.system_type
+  return typeof st === 'string' && st.trim() ? st.trim() : null
+}
+
+async function resolveJobAssembly(
+  jobType: string,
+  trade: string | null,
+  variant?: string | null,
+): Promise<{ assembly: ResolvedAssembly | null; reason: string | null }> {
+  let aq = supabase
+    .from('shared_assemblies')
+    .select('id, name, trade, default_labour_hours')
+    .or(buildAssemblyOrFilter(jobType.replace(/_/g, ' ')))
+  if (trade) aq = aq.eq('trade', trade)
+  const { data: asm, error: aerr } = await aq.limit(ASSEMBLY_FETCH_LIMIT)
+  if (aerr) return { assembly: null, reason: `assembly query failed: ${aerr.message}` }
+  if (!asm || asm.length === 0) return { assembly: null, reason: 'no assembly candidates' }
+  const chosen = pickBestAssembly(jobType, asm as ResolvedAssembly[], variant)
+  if (!chosen) {
+    return {
+      assembly: null,
+      reason:
+        `no assembly mapping for job_type=${jobType}` +
+        (variant ? ` variant=${variant}` : '') +
+        ` (${asm.length} candidates)`,
+    }
+  }
+  return { assembly: chosen, reason: null }
+}
+
 async function buildBomHint(
   intake: any,
   trade: string | null,
   log: ReturnType<typeof pipelineLog>,
+  trace: Tracer,
 ): Promise<string | null> {
   const jobType = (intake?.job_type as string | null) ?? null
   if (!jobType) return null
   try {
-    const term = jobType.replace(/_/g, ' ')
-    let aq = supabase.from('shared_assemblies').select('id, name, trade').ilike('name', `%${term}%`)
-    if (trade) aq = aq.eq('trade', trade)
-    const { data: asm, error: aerr } = await aq.limit(5)
-    if (aerr || !asm || asm.length === 0) return null
-    const ids = asm.map((a: any) => a.id)
+    // Phase 1 — one shared resolution. Narrowing to a single assembly is
+    // load-bearing: the BOM reads below used to fan out over every match with
+    // `.in('assembly_id', ids)`, which would concatenate recipe lines from
+    // several unrelated assemblies once the candidate filter widened.
+    const { assembly: chosen, reason: resolveReason } = await resolveJobAssembly(jobType, trade, assemblyVariant(intake))
+    if (!chosen) {
+      log.err('BOM hint — unresolved job_type, falling back to Opus', resolveReason ?? 'unknown')
+      // pipelineLog is console-only, so a log line alone leaves this invisible
+      // to an operator. Trace it: once DETERMINISTIC_BOM is on, a silent miss
+      // is the difference between a recipe-built quote and an AI-drafted one
+      // that nobody notices.
+      trace('estimate', 'warn', {
+        substep: 'bom_hint_unresolved',
+        message: 'job_type did not resolve to an assembly; Opus drafts without a parts hint',
+        decisions: { job_type: jobType, trade: trade ?? null, reason: resolveReason ?? null },
+      })
+      return null
+    }
+    const ids = [chosen.id]
     const tenantId = (intake?.tenant_id as string | null) ?? null
+
+    // Phase 2 R4 — the recipe's headline quantity is a per-job default (the
+    // downlight recipe is seeded as literally 6). Scale it to what the customer
+    // actually asked for. This hint is the ONLY path a BOM reaches a real quote
+    // while DETERMINISTIC_BOM is off, so the scaling has to happen here or the
+    // whole phase is invisible in production.
+    const itemCount = Number(intake?.scope?.item_count ?? NaN)
 
     // Prefer this tradie's OWN recipe (tenant_assembly_bom, migration
     // 031) over the shared baseline. Absent table (prod pre-031) →
@@ -1637,7 +1775,7 @@ async function buildBomHint(
         .in('assembly_id', ids)
         .order('sort', { ascending: true })
       if (ownBom && ownBom.length > 0) {
-        return formatBomHint(ownBom as BomHintRow[])
+        return formatBomHint(scaleBomToItemCount(ownBom as BomHintRow[], itemCount))
       }
     }
 
@@ -1650,7 +1788,7 @@ async function buildBomHint(
       log.err('BOM hint fetch failed — continuing without it', berr.message)
       return null
     }
-    return formatBomHint((bom ?? []) as BomHintRow[])
+    return formatBomHint(scaleBomToItemCount((bom ?? []) as BomHintRow[], itemCount))
   } catch (e: any) {
     log.err('BOM hint build failed', e?.message ?? String(e))
     return null
@@ -1877,24 +2015,18 @@ async function loadDeterministicInputs(
   if (!jobType) return { input: null, reason: 'no job_type' }
   if (!tenantId) return { input: null, reason: 'no tenant_id' }
 
-  // Match the job the same way buildBomHint does (name ilike job term,
-  // trade-scoped). default_labour_hours grounds the labour line.
-  const term = jobType.replace(/_/g, ' ')
-  let aq = supabase
-    .from('shared_assemblies')
-    .select('id, name, trade, default_labour_hours')
-    .ilike('name', `%${term}%`)
-  if (trade) aq = aq.eq('trade', trade)
-  const { data: asm, error: aerr } = await aq.limit(5)
-  if (aerr || !asm || asm.length === 0) {
-    return { input: null, reason: 'no matching assembly' }
+  // Phase 1 — the SAME resolver buildBomHint uses. `primary` used to be
+  // `asm[0]` off an unordered `.limit(5)`, so default_labour_hours — which
+  // grounds the labour line — came from whichever row Postgres returned first.
+  const { assembly: primary, reason: resolveReason } = await resolveJobAssembly(
+    jobType,
+    trade,
+    assemblyVariant(intake),
+  )
+  if (!primary) {
+    return { input: null, reason: resolveReason ?? 'unresolved job_type' }
   }
-  const ids = asm.map((a: any) => a.id)
-  const primary = asm[0] as {
-    id: string
-    name: string
-    default_labour_hours: number | string
-  }
+  const ids = [primary.id]
 
   // The tradie's OWN recipe for this job wins; when they haven't authored
   // one, fall back to the shared baseline recipe (shared_assembly_bom) —
@@ -1975,7 +2107,13 @@ async function loadDeterministicInputs(
   const [{ data: catRows }, { data: sharedRows }] = await Promise.all([cq, mq])
 
   const input: DeterministicTierInput = {
-    bom: (recipe ?? []) as BomLine[],
+    // Phase 2 R4 — same scaling as the hint path. Applied here rather than
+    // inside deterministic-bom.ts, which has no `intake` to read the count
+    // from, so both paths share one helper and cannot disagree.
+    bom: scaleBomToItemCount(
+      (recipe ?? []) as BomLine[],
+      Number(intake?.scope?.item_count ?? NaN),
+    ) as BomLine[],
     tenantMaterials: (catRows ?? []) as TenantMaterial[],
     sharedMaterials: (sharedRows ?? []) as SharedMaterial[],
     labourHours: Number(eff.labourHours.value),

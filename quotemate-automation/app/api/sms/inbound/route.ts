@@ -27,6 +27,7 @@ import {
   closeStaleRoofingState,
   expireIdleRoofingState,
   roofingTurnInput,
+  isActiveRoofingFlow,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
 import {
@@ -49,6 +50,8 @@ import {
   type TenantFacts,
   type TurnCarry,
 } from '@/lib/sms/llm-receptionist'
+import { enforceDialogGrounding, composeInspectionOffer } from '@/lib/sms/dialog-grounding'
+import { rulesAsText } from '@/lib/sms/assumptions'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { ensureRoofQuotePdf, roofQuotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { quotePdfMmsEnabled } from '@/lib/sms/send-quote-pdf'
@@ -69,6 +72,7 @@ import {
   advancePainting,
   shouldEngagePainting,
   expireIdlePaintingState,
+  isActivePaintingFlow,
   type PaintingConversationState,
 } from '@/lib/sms/painting-receptionist'
 import {
@@ -411,6 +415,20 @@ function buildDialogFallbackReply(opts: {
   return first
     ? `Cheers ${first} - hit a quick snag on this turn. Give us a moment and we'll be right back.`
     : "Thanks - we'll be right back to confirm details, just a quick snag on our end."
+}
+
+/**
+ * Phase 1b — the MUST-ASK rules for a job type, used to ground the legitimate
+ * spec numbers a real question contains (e.g. the 600 mm wet-area clearance).
+ * Returns '' for a job type that has no rules rather than throwing, so an
+ * unmapped guess can never break a turn.
+ */
+function safeRulesAsText(jobType: string): string {
+  try {
+    return rulesAsText(jobType as Parameters<typeof rulesAsText>[0]) ?? ''
+  } catch {
+    return ''
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -2861,6 +2879,11 @@ export async function POST(req: Request) {
       // the quote dialog unless the customer explicitly says there is no
       // nearby power, a new switchboard circuit/run, outdoor/weatherproof
       // work, old wiring, or a too-close wet-area location.
+      // Phase 1b — snapshot the model's own words BEFORE any deterministic
+      // override replaces them, so the grounding guard below can tell model
+      // text (must be checked) from route-composed text (already trusted).
+      const modelReplyBeforeOverrides = decision.reply_to_send
+
       const gpoOverride = buildGpoInspectionOverride({
         decision,
         turns,
@@ -2990,6 +3013,75 @@ export async function POST(req: Request) {
         }
       }
 
+      // ─── Phase 1b — nothing ungrounded leaves this branch ────────────────
+      // Roofing has discarded ungrounded model turns since llm-receptionist
+      // shipped; the electrical/generic branch never did, and the prompt
+      // actively taught the model to write dollar amounts. Two steps:
+      //   1. If the model chose to escalate, the ROUTE composes the fee line.
+      //      The offer could never satisfy the guard (money is refused before
+      //      any grounding lookup), so guarding it would bail every escalation.
+      //   2. Otherwise, check whatever text the model still owns.
+      // A deterministic override upstream (GPO / Rule 5 / Rule 6) is trusted
+      // and skips both.
+      {
+        const replyIsModelAuthored = decision.reply_to_send === modelReplyBeforeOverrides
+        const slotFirst =
+          (conversationState.slots.first_name as string | undefined) ??
+          customer?.first_name ??
+          null
+        const slotJob =
+          (decision.job_type_guess !== 'unknown' ? decision.job_type_guess : null) ??
+          (conversationState.slots.job_type as string | undefined) ??
+          null
+
+        if (replyIsModelAuthored && decision.action === 'escalate_inspection') {
+          decision = {
+            ...decision,
+            reply_to_send: composeInspectionOffer(slotJob, slotFirst, tenant?.trades ?? undefined),
+          }
+        } else if (replyIsModelAuthored) {
+          // Tool-produced context ONLY. Prior outbound bodies are deliberately
+          // excluded: on this branch they are unguarded model text, so seeding
+          // them would launder one hallucinated figure into permanent authority.
+          // The MUST-ASK rules text carries the legitimate spec numbers (the
+          // 600 mm wet-area clearance) so a real question is not mistaken for
+          // an invented figure.
+          const authoritative = [
+            JSON.stringify(conversationState.slots ?? {}),
+            JSON.stringify(buildTenantFacts(tenant ?? null)),
+            ...(slotJob ? [safeRulesAsText(slotJob)] : []),
+            ...(customAssemblies ?? []).map((s) => s.name ?? ''),
+            // The follow-up block is tool-produced (formatActiveFollowupContext
+            // reads quote_followup_events) and carries the REAL quote link the
+            // prompt tells the model to resend. Without it, a correct
+            // "here's your quote" reply is rejected as an ungrounded link and
+            // the customer gets the snag fallback instead of their quote.
+            followupCtxBlock,
+          ].filter((s) => s.length > 0)
+
+          const grounding = enforceDialogGrounding({
+            decision,
+            authoritative,
+            conversational: turns
+              .filter((t) => t.direction === 'inbound')
+              .map((t) => t.body),
+            fallbackReply: buildDialogFallbackReply({
+              firstName: slotFirst,
+              jobType: slotJob,
+            }),
+            modelAuthored: true,
+          })
+          if (!grounding.grounded) {
+            console.warn('[sms/inbound:after] Phase 1b — ungrounded reply discarded', {
+              conversationId,
+              reason: grounding.reason,
+              discardedPreview: decision.reply_to_send.slice(0, 140),
+            })
+            decision = { ...decision, reply_to_send: grounding.decision.reply_to_send }
+          }
+        }
+      }
+
       // Quote-already-drafted guard (moved up before step 7 so we can decide
       // message ordering before dispatching anything).
       //
@@ -3023,11 +3115,26 @@ export async function POST(req: Request) {
       // Either signal is sufficient. Both must be true for normal flow.
       const { data: convoState } = await supabase
         .from('sms_conversations')
-        .select('intake_id')
+        .select('intake_id, roofing_state, painting_state')
         .eq('id', conversationId)
         .maybeSingle()
       const freshIntakeId = (convoState?.intake_id as string | null) ?? null
       const hasExistingIntake = !!freshIntakeId || quoteAlreadyDrafted
+      // Third duplicate/misroute signal: is this thread owned by another trade?
+      // Read off the SAME fresh row rather than a second round trip.
+      //
+      // Use the EXISTING tested predicates, not a hand-rolled `last_step != null`.
+      // `'closed'` is a VALUE of last_step, not its absence, and it is written on
+      // the sanctioned trade-switch path — roofing persists `last_step:'closed'`
+      // then returns false to hand the turn to the general dialog (route.ts:632).
+      // Step 10 is therefore reached almost exclusively AFTER roofing declined,
+      // so treating 'closed' as active would suppress the very handoffs this
+      // block exists to make: a customer switching from re-roof to downlights
+      // mid-thread would get the dialog's "I'll get that quote over" and then no
+      // quote, permanently, for the life of the conversation row.
+      const otherTradeActive =
+        isActiveRoofingFlow(convoState?.roofing_state as RoofingConversationState | null) ||
+        isActivePaintingFlow(convoState?.painting_state as PaintingConversationState | null)
       if (hasExistingIntake) {
         console.log(
           '[sms/inbound:after] quote already drafted on this conversation — suppressing photo + handoff',
@@ -3037,6 +3144,19 @@ export async function POST(req: Request) {
             priorIntakeId,
             priorStatusBeforeReopen: prior?.status,
             quoteAlreadyDrafted,
+          },
+        )
+      }
+      // Log the trade suppression too. Without this the handoff can be skipped
+      // with no trace at all, which is indistinguishable from a crash when you
+      // are staring at a customer who never got their quote.
+      if (otherTradeActive) {
+        console.log(
+          '[sms/inbound:after] another trade owns this thread — suppressing electrical/plumbing handoff',
+          {
+            conversationId,
+            roofingStep: (convoState?.roofing_state as RoofingConversationState | null)?.last_step ?? null,
+            paintingStep: (convoState?.painting_state as PaintingConversationState | null)?.last_step ?? null,
           },
         )
       }
@@ -3636,6 +3756,7 @@ export async function POST(req: Request) {
           hasExistingIntake,
           wp9HoldingForChoice,
           inflightContinuation,
+          otherTradeActive,
         })
       ) {
         console.log('[sms/inbound:after] step 10 — firing intake/structure handoff', { conversationId })
@@ -3644,7 +3765,12 @@ export async function POST(req: Request) {
             async () => {
               const res = await fetch(`${process.env.APP_URL}/api/intake/structure`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  // Internal self-call — /api/estimate/draft and /api/intake/structure are
+                  // guarded by isCronAuthorised, which is fail-closed in production.
+                  Authorization: `Bearer ${process.env.CRON_SECRET}`,
+                },
                 body: JSON.stringify({ conversationId, sourceChannel: 'sms' }),
               })
               if (!res.ok) {

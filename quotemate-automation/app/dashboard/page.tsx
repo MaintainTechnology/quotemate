@@ -27,6 +27,7 @@ import { useAuth } from '@clerk/nextjs'
 import Link from 'next/link'
 import { getAuthToken } from '@/lib/auth/client-token'
 import { CATEGORIES } from '@/lib/estimate/categories'
+import { materialCategoriesFor } from '@/lib/estimate/material-vocabulary'
 import {
   defaultAvailabilityForState,
   parseAvailability,
@@ -9810,6 +9811,9 @@ type CatalogueRow = {
   image_path: string | null
   is_preferred: boolean
   active: boolean
+  // Phase 2b — product attributes. Holds keys this form does not own
+  // (e.g. `amperage` from a GPO backfill), so it is merged server-side.
+  properties: Record<string, unknown> | null
 }
 
 // v7 Phase 2b — supplier_catalogue row shape returned by
@@ -11106,6 +11110,10 @@ function CatalogueTab({
     image_path: '',
     tier_hint: '',
     is_preferred: '',
+    // Phase 2b — string-encoded like is_preferred, because `set` takes a string.
+    smart: '',
+    dimmable: '',
+    integrated_driver: '',
     unit: 'each',
   }
   const [form, setForm] = useState({ ...blankForm })
@@ -11264,6 +11272,11 @@ function CatalogueTab({
           image_path: form.image_path.trim() || undefined,
           tier_hint: form.tier_hint || undefined,
           is_preferred: form.is_preferred === 'yes',
+          properties: {
+            smart: form.smart === 'yes',
+            dimmable: form.dimmable === 'yes',
+            integrated_driver: form.integrated_driver === 'yes',
+          },
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
@@ -11308,6 +11321,11 @@ function CatalogueTab({
       image_path: row.image_path ?? '',
       tier_hint: row.tier_hint ?? '',
       is_preferred: row.is_preferred ? 'yes' : '',
+      // Phase 2b — prefill from the stored jsonb, else editing a tagged product
+      // would silently clear its attributes on save.
+      smart: row.properties?.smart === true ? 'yes' : '',
+      dimmable: row.properties?.dimmable === true ? 'yes' : '',
+      integrated_driver: row.properties?.integrated_driver === true ? 'yes' : '',
       unit: row.unit || 'each',
     })
     setEditingId(row.id)
@@ -11347,6 +11365,11 @@ function CatalogueTab({
           image_path: form.image_path.trim(),
           tier_hint: form.tier_hint,
           is_preferred: form.is_preferred === 'yes',
+          properties: {
+            smart: form.smart === 'yes',
+            dimmable: form.dimmable === 'yes',
+            integrated_driver: form.integrated_driver === 'yes',
+          },
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
@@ -11466,8 +11489,14 @@ function CatalogueTab({
     return a.name.localeCompare(b.name)
   }
   const CATEGORY_ORDER = new Map(CATEGORIES.map((c, i) => [c.value as string, i]))
+  // Phase 2 R2 — the select now saves material vocabulary (ceiling_fan,
+  // safety_switch, …), which CATEGORIES does not contain. Without this fallback
+  // those rows would group under their raw value instead of a label. Both lists
+  // are consulted rather than swapped: legacy rows still hold CATEGORIES values.
   const categoryLabel = (v: string) =>
-    CATEGORIES.find((c) => c.value === v)?.label ?? v
+    CATEGORIES.find((c) => c.value === v)?.label ??
+    materialCategoriesFor(undefined).find((c) => c.value === v)?.label ??
+    v
 
   const groupMap = new Map<
     string,
@@ -11677,14 +11706,21 @@ function CatalogueTab({
               className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
             >
               <option value="">— choose a category —</option>
-              {CATEGORIES.map((c) => (
+              {/* Phase 2 R2 — the real shared_materials vocabulary, scoped to
+                  this product's trade. Was CATEGORIES (the grounding list), which
+                  offered `fan`, `rcbo` and `sundry` — none of which any material
+                  row uses. Both selects had to change together: they currently
+                  agree on `fan`, so three of this tenant's fans price correctly
+                  by accident. Fixing only Recipes would break them. */}
+              {materialCategoriesFor(form.trade).map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
               ))}
             </select>
             <span className="text-[0.65rem] text-text-dim leading-snug">
-              This must match the category your Recipes use, so the AI prices this product on the right jobs.
+              What this product actually is. The AI matches it to the same category on your
+              Recipes, so a job that needs this part prices from your product and your price.
             </span>
           </label>
           <label className="flex flex-col gap-1 sm:col-span-2">
@@ -11794,6 +11830,39 @@ function CatalogueTab({
             />
             This is my go-to product for its category (preferred)
           </label>
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+              What this product is
+            </span>
+            <label className="flex items-center gap-2 text-sm text-text-sec">
+              <input
+                type="checkbox"
+                checked={form.smart === 'yes'}
+                onChange={(e) => set('smart', e.target.checked ? 'yes' : '')}
+              />
+              Smart / app-controlled
+            </label>
+            <label className="flex items-center gap-2 text-sm text-text-sec">
+              <input
+                type="checkbox"
+                checked={form.dimmable === 'yes'}
+                onChange={(e) => set('dimmable', e.target.checked ? 'yes' : '')}
+              />
+              Dimmable
+            </label>
+            <label className="flex items-center gap-2 text-sm text-text-sec">
+              <input
+                type="checkbox"
+                checked={form.integrated_driver === 'yes'}
+                onChange={(e) => set('integrated_driver', e.target.checked ? 'yes' : '')}
+              />
+              Driver built in (no separate driver needed)
+            </label>
+            <span className="text-[0.65rem] text-text-dim leading-snug">
+              The AI uses these to pick the right product and to work out which other parts the
+              job needs.
+            </span>
+          </div>
           <div className="flex flex-col gap-1 sm:col-span-2">
             <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
               Product photo (optional)
@@ -12137,6 +12206,24 @@ type BaselineLine = {
   sort: number
 }
 type AsmOpt = { id: string; name: string; trade: string }
+// Phase 3 — the step checklist per job (migration 184). Scope-of-works only:
+// no price and no hours, so these never reach the estimator. Labour stays on
+// shared_assemblies.default_labour_hours.
+type TaskLineRow = {
+  id: string
+  assembly_id: string
+  trade: string
+  title: string
+  notes: string | null
+  required: boolean
+  sort: number
+}
+type BaselineTask = {
+  title: string
+  notes: string | null
+  required: boolean
+  sort: number
+}
 
 function RecipesTab({
   accessToken,
@@ -12173,6 +12260,19 @@ function RecipesTab({
   const [catalogueCats, setCatalogueCats] = useState<string[]>([])
   const blank = { material_category: '', quantity: '1', required: true, description: '' }
   const [form, setForm] = useState({ ...blank })
+  // Phase 3 — the step checklist, on its own endpoint and its own error
+  // channel so a tasks outage never blanks the parts list.
+  const [tasks, setTasks] = useState<TaskLineRow[] | null>(null)
+  const [taskBaselines, setTaskBaselines] = useState<Record<string, BaselineTask[]>>({})
+  const [taskErr, setTaskErr] = useState<string | null>(null)
+  const [taskBusyId, setTaskBusyId] = useState<string | null>(null)
+  const [taskSaving, setTaskSaving] = useState(false)
+  const [taskForking, setTaskForking] = useState(false)
+  const [taskFormErr, setTaskFormErr] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState<Record<string, string>>({})
+  const [draftNotes, setDraftNotes] = useState<Record<string, string>>({})
+  const blankTask = { title: '', notes: '', required: true }
+  const [taskForm, setTaskForm] = useState({ ...blankTask })
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -12212,6 +12312,30 @@ function RecipesTab({
         if (cur && pool.some((a) => a.id === cur)) return cur
         return pool[0]?.id ?? ''
       })
+
+      // Phase 3 — steps come from their own endpoint. Its own try/catch:
+      // migration 184 lands separately from this code, and a missing table
+      // must not take the parts list down with it.
+      try {
+        const tres = await fetch('/api/tenant/tasks', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        if (!tres.ok) {
+          const tb = (await tres.json().catch(() => ({}))) as { error?: string }
+          throw new Error(tb.error || `HTTP ${tres.status}`)
+        }
+        const tjson = (await tres.json()) as {
+          lines?: TaskLineRow[]
+          baselines?: Record<string, BaselineTask[]>
+        }
+        setTasks(tjson.lines ?? [])
+        setTaskBaselines(tjson.baselines ?? {})
+        setTaskErr(null)
+      } catch (e) {
+        setTasks([])
+        setTaskErr(e instanceof Error ? e.message : String(e))
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -12243,6 +12367,12 @@ function RecipesTab({
     .filter((l) => l.assembly_id === selectedId)
     .sort((a, b) => a.sort - b.sort)
   const jobBaseline = (baselines[selectedId] ?? [])
+    .slice()
+    .sort((a, b) => a.sort - b.sort)
+  const jobTasks = (tasks ?? [])
+    .filter((t) => t.assembly_id === selectedId)
+    .sort((a, b) => a.sort - b.sort)
+  const jobTaskBaseline = (taskBaselines[selectedId] ?? [])
     .slice()
     .sort((a, b) => a.sort - b.sort)
 
@@ -12361,6 +12491,130 @@ function RecipesTab({
     }
   }
 
+  // ─── Phase 3 · step checklist ────────────────────────────────────
+  // Mirrors the four BOM handlers above. Errors land in taskErr/taskFormErr,
+  // never the tab-wide `error`, so a step failure leaves the parts list up.
+
+  async function forkTaskBaseline() {
+    if (!accessToken || !selectedAsm) return
+    if (jobTasks.length > 0) return // safety: never fork over an existing checklist
+    setTaskForking(true)
+    setTaskErr(null)
+    try {
+      const token = (await getAuthToken()) ?? accessToken
+      const res = await fetch('/api/tenant/tasks/fork', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assembly_id: selectedAsm.id }),
+      })
+      const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
+      if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`)
+      await load()
+    } catch (e) {
+      setTaskErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTaskForking(false)
+    }
+  }
+
+  async function addTask() {
+    if (!accessToken || !selectedAsm) return
+    setTaskSaving(true)
+    setTaskFormErr(null)
+    try {
+      const token = (await getAuthToken()) ?? accessToken
+      const res = await fetch('/api/tenant/tasks', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assembly_id: selectedAsm.id,
+          trade: selectedAsm.trade,
+          title: taskForm.title.trim(),
+          notes: taskForm.notes.trim() || undefined,
+          required: taskForm.required,
+          sort: jobTasks.length + 1,
+        }),
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string
+        message?: string
+        line?: TaskLineRow
+      }
+      if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`)
+      setTaskForm({ ...blankTask })
+      await load()
+    } catch (e) {
+      setTaskFormErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTaskSaving(false)
+    }
+  }
+
+  async function patchTask(id: string, fields: Record<string, unknown>) {
+    if (!accessToken) return
+    setTaskBusyId(id)
+    try {
+      const token = (await getAuthToken()) ?? accessToken
+      const res = await fetch(`/api/tenant/tasks/${id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string
+        message?: string
+        line?: TaskLineRow
+      }
+      if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`)
+      if (json.line) {
+        setTasks((p) => (p ? p.map((t) => (t.id === id ? json.line! : t)) : p))
+      }
+    } catch (e) {
+      setTaskErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTaskBusyId(null)
+    }
+  }
+
+  async function deleteTask(id: string) {
+    if (!accessToken) return
+    if (!window.confirm('Remove this step from the checklist?')) return
+    setTaskBusyId(id)
+    try {
+      const token = (await getAuthToken()) ?? accessToken
+      const res = await fetch(`/api/tenant/tasks/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(b.error || `HTTP ${res.status}`)
+      }
+      setTasks((p) => (p ? p.filter((t) => t.id !== id) : p))
+    } catch (e) {
+      setTaskErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTaskBusyId(null)
+    }
+  }
+
+  // Renumber from 1 rather than swapping two `sort` values: a fork copies the
+  // baseline's sorts verbatim, so duplicates are possible and swapping equal
+  // numbers is a silent no-op. Iterates a snapshot, so mid-loop state updates
+  // can't reshuffle the target order.
+  // ponytail: N sequential PATCHes, fine for a checklist. Add a bulk-reorder
+  // endpoint if a job ever carries dozens of steps.
+  async function moveTask(id: string, dir: -1 | 1) {
+    const i = jobTasks.findIndex((t) => t.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= jobTasks.length) return
+    const next = jobTasks.slice()
+    ;[next[i], next[j]] = [next[j], next[i]]
+    for (const [k, t] of next.entries()) {
+      if (t.sort !== k + 1) await patchTask(t.id, { sort: k + 1 })
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -12446,6 +12700,236 @@ function RecipesTab({
         <div className="mt-6">
           <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-2">
             {selectedAsm.name} — recipe
+          </div>
+
+          {/* ── Phase 3 · the step checklist for this job ──
+              Second panel in the SAME card, reusing selectedAsm, the job
+              picker and the trade filter (spec R6 forbids a new tab).
+              Sits between the header and the parts list, per spec R6. The
+              R38 gap banner stays directly above the parts list it refers to
+              ("look for the marker below"), so its reference still holds.
+              Steps carry no price and no hours — nothing here is read by
+              the estimator. */}
+          <div data-testid="steps-panel" className="mt-4 border-b border-ink-line pb-6">
+            <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-2">
+              {selectedAsm.name} — steps
+            </div>
+            <p className="text-xs text-text-dim leading-snug max-w-2xl">
+              The steps this job always involves, in order. They describe the work — they
+              don&apos;t change the price or the hours.
+            </p>
+
+            {taskErr && (
+              <p className="mt-3 text-xs text-warning">
+                Couldn&apos;t load or save steps: {taskErr}
+              </p>
+            )}
+
+            {jobTasks.length === 0 ? (
+              jobTaskBaseline.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-sm text-text-sec">
+                    No saved steps for this job yet — here&apos;s the standard checklist.
+                    Hit <strong>Customise these steps</strong> to make it yours and start editing.
+                  </p>
+                  <div className="space-y-2">
+                    {jobTaskBaseline.map((b, i) => (
+                      <div
+                        key={`${b.title}|${i}`}
+                        className="rounded-card border border-ink-line bg-ink-deep px-4 py-3 flex items-start justify-between gap-4 flex-wrap opacity-90"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm text-text-pri font-medium">
+                            {i + 1}. {b.title}
+                          </div>
+                          {b.notes && (
+                            <div className="text-xs text-text-dim mt-0.5">{b.notes}</div>
+                          )}
+                          <div className="mt-1.5">
+                            <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                              shared baseline
+                            </span>
+                          </div>
+                        </div>
+                        <span className="font-mono text-[0.55rem] uppercase tracking-[0.15em] px-2 py-1 border border-ink-line text-text-dim shrink-0">
+                          {b.required ? 'required' : 'optional'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap pt-1">
+                    <button
+                      type="button"
+                      onClick={() => void forkTaskBaseline()}
+                      disabled={taskForking}
+                      className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
+                    >
+                      {taskForking ? 'Copying steps…' : 'Customise these steps'}
+                    </button>
+                    <span className="text-[0.65rem] text-text-dim leading-snug">
+                      Copies these {jobTaskBaseline.length} step
+                      {jobTaskBaseline.length === 1 ? '' : 's'} into your checklist so you can
+                      reword, reorder, or add your own.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-text-sec">
+                  No steps yet for this job, and no standard checklist either. Add the steps it
+                  always involves below.
+                </p>
+              )
+            ) : (
+              <div className="mt-4 space-y-2">
+                {jobTasks.map((t, idx) => {
+                  const tv = draftTitle[t.id] ?? t.title
+                  const nv = draftNotes[t.id] ?? (t.notes ?? '')
+                  return (
+                    <div
+                      key={t.id}
+                      className="rounded-card border border-ink-line bg-ink-deep px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
+                    >
+                      <div className="min-w-0 flex-1 flex items-start gap-3">
+                        <span className="font-mono text-[0.7rem] text-text-dim pt-2 shrink-0">
+                          {idx + 1}.
+                        </span>
+                        <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+                          <input
+                            value={tv}
+                            aria-label={`Step ${idx + 1} title`}
+                            onChange={(e) =>
+                              setDraftTitle((d) => ({ ...d, [t.id]: e.target.value }))
+                            }
+                            onBlur={() => {
+                              const v = tv.trim()
+                              // Empty is a delete, not a rename — the schema
+                              // rejects it. Snap back rather than 400.
+                              if (!v) {
+                                setDraftTitle((d) => ({ ...d, [t.id]: t.title }))
+                                return
+                              }
+                              if (v !== t.title) void patchTask(t.id, { title: v })
+                            }}
+                            className="w-full bg-ink-card border border-ink-line px-2.5 py-1.5 text-sm text-text-pri focus:border-accent focus:outline-none"
+                          />
+                          <input
+                            value={nv}
+                            aria-label={`Step ${idx + 1} note`}
+                            placeholder="Note (optional)"
+                            onChange={(e) =>
+                              setDraftNotes((d) => ({ ...d, [t.id]: e.target.value }))
+                            }
+                            onBlur={() => {
+                              const v = nv.trim()
+                              if (v !== (t.notes ?? '')) void patchTask(t.id, { notes: v })
+                            }}
+                            className="w-full bg-ink-card border border-ink-line px-2.5 py-1.5 text-xs text-text-sec placeholder:text-text-dim focus:border-accent focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex flex-col">
+                          <button
+                            type="button"
+                            onClick={() => void moveTask(t.id, -1)}
+                            disabled={idx === 0 || taskBusyId !== null}
+                            aria-label={`Move step ${idx + 1} up`}
+                            className="font-mono text-[0.7rem] leading-none px-1.5 py-1 text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void moveTask(t.id, 1)}
+                            disabled={idx === jobTasks.length - 1 || taskBusyId !== null}
+                            aria-label={`Move step ${idx + 1} down`}
+                            className="font-mono text-[0.7rem] leading-none px-1.5 py-1 text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => patchTask(t.id, { required: !t.required })}
+                          disabled={taskBusyId === t.id}
+                          className={`font-mono text-[0.55rem] uppercase tracking-[0.15em] px-2 py-1 border transition-colors cursor-pointer disabled:opacity-50 ${
+                            t.required
+                              ? 'border-accent/40 text-accent'
+                              : 'border-ink-line text-text-dim'
+                          }`}
+                        >
+                          {t.required ? 'required' : 'optional'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteTask(t.id)}
+                          disabled={taskBusyId === t.id}
+                          className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void addTask()
+              }}
+              className="rounded-card mt-4 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
+            >
+              <label className="flex flex-col gap-1 sm:col-span-2">
+                <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                  Step
+                </span>
+                <input
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Isolate the circuit at the switchboard"
+                  className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
+                />
+              </label>
+              <label className="flex flex-col gap-1 sm:col-span-2">
+                <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                  Note (optional)
+                </span>
+                <input
+                  value={taskForm.notes}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="e.g. test and tag before touching anything"
+                  className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-text-sec">
+                <input
+                  type="checkbox"
+                  checked={taskForm.required}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, required: e.target.checked }))}
+                />
+                Required step (always done)
+              </label>
+              {taskFormErr && <p className="sm:col-span-2 text-xs text-warning">{taskFormErr}</p>}
+              <div className="sm:col-span-2">
+                <button
+                  type="submit"
+                  disabled={taskSaving || !taskForm.title.trim()}
+                  className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {taskSaving ? 'Adding…' : '+ Add step to this job'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* The parts half keeps its own label now that the steps panel sits
+              above it — otherwise these rows read as unlabelled under the
+              card-level "— recipe" heading. */}
+          <div className="mt-6 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-2">
+            {selectedAsm.name} — parts
           </div>
 
           {/* R38 — post-fork catalogue-gap summary. Shown right after a fork so
@@ -12648,14 +13132,22 @@ function RecipesTab({
                 className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
               >
                 <option value="">— choose a category —</option>
-                {CATEGORIES.map((c) => (
+                {/* Phase 2 R2 — scoped to the selected JOB's trade, so an
+                    electrical recipe never offers a plumbing part. */}
+                {materialCategoriesFor(selectedAsm.trade).map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
               </select>
+              {/* Phase 2 R7 — the old copy said "pick the same category you use
+                  in Catalogue", which is the instruction that created the
+                  problem: it told tradies to copy a value from a list that was
+                  itself wrong. Both lists now come from the same source, so the
+                  advice is no longer needed. */}
               <span className="text-[0.65rem] text-text-dim leading-snug">
-                Pick the same category you use in Catalogue so your real product (and price) is used for this part.
+                What part the job needs. Add a product in this category under Catalogue and the
+                AI uses your product and your price; otherwise it falls back to a generic price.
               </span>
             </label>
             <label className="flex flex-col gap-1">

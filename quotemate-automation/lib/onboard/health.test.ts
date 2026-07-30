@@ -148,4 +148,49 @@ describe('checkTenantHealth', () => {
     expect(health.requiredFailures).not.toContain('Twilio number unverified')
     expect(health.requiredFailures).not.toContain('Real Twilio number')
   })
+
+  // specs/clerk-signup-parity.md R5 — a Clerk-native tenant has owner_user_id
+  // NULL by design (no auth.users row) and signs in via clerk_user_id. Reporting
+  // it "can never sign in" is false, and because readiness is a pass/fail
+  // rollup it also masks any genuine required failure on the same tenant.
+  const CLERK_NATIVE = {
+    id: 't4',
+    business_name: 'Clerk Native Co',
+    status: 'active',
+    activated_at: '2026-06-01T00:00:00Z',
+    owner_user_id: null,
+    clerk_user_id: 'user_2abc123XYZ',
+    trade: 'electrical',
+    trades: ['electrical'],
+    twilio_sms_number: '+61412345678',
+    twilio_number_sid: 'PN0123456789abcdef0123456789abcdef',
+    vapi_assistant_id: 'asst_real_123',
+  }
+
+  it('treats a Clerk-only tenant as sign-in-able (owner_user_id NULL is expected there)', async () => {
+    const sb = mockSupabase(CLERK_NATIVE)
+    const health = await checkTenantHealth(sb, 't4', { checkWebhook: false })
+    const owner = health.checks.find((c) => c.key === 'owner_user_id')!
+    expect(owner.ok).toBe(true)
+    expect(owner.detail).toBeUndefined()
+    // Readiness itself is NOT asserted here: this fixture also trips the
+    // trade-readiness gate (the mock doesn't serve the `trades` registry), which
+    // has nothing to do with auth linkage. What matters is that sign-in linkage
+    // no longer contributes a required failure.
+    expect(health.requiredFailures).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/sign-in|Owner account/i)]),
+    )
+  })
+
+  it('still fails a tenant linked to NEITHER auth provider', async () => {
+    const sb = mockSupabase({ ...CLERK_NATIVE, id: 't5', clerk_user_id: null })
+    const health = await checkTenantHealth(sb, 't5', { checkWebhook: false })
+    const owner = health.checks.find((c) => c.key === 'owner_user_id')!
+    expect(owner.ok).toBe(false)
+    expect(owner.detail).toMatch(/clerk_user_id/)
+    expect(health.ready).toBe(false)
+    expect(health.requiredFailures).toEqual(
+      expect.arrayContaining([expect.stringMatching(/Owner account linked/)]),
+    )
+  })
 })

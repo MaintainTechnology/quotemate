@@ -34,7 +34,7 @@ export default async function DashboardQuoteViewerPage({
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at, selected_tier, scope_of_works, assumptions, report_doc, report_style',
+      'id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at, selected_tier, scope_of_works, assumptions, risk_flags, report_doc, report_style',
     )
     .eq('share_token', token)
     .maybeSingle()
@@ -97,6 +97,13 @@ export default async function DashboardQuoteViewerPage({
       paid={!!quote.paid_at}
       customerPhone={contact.phone}
       customerEmail={contact.email}
+      // Tradie-only. Strings only — legacy rows stored objects here before the
+      // shape settled, and rendering one would print "[object Object]".
+      riskFlags={
+        Array.isArray(quote.risk_flags)
+          ? (quote.risk_flags as unknown[]).filter((f): f is string => typeof f === 'string' && f.trim() !== '')
+          : null
+      }
       docEditorEnabled={docEditorEnabled}
       reportDoc={reportDoc}
       reportStyle={(quote.report_style as ReportStyle | null) ?? {}}

@@ -234,20 +234,15 @@ body {
 }
 
 /* Boot-banner heartbeat (specs/dashboard-performance.md R2) — the QuoteMax
-   lockup expands and contracts like a beating heart (lub-dub, then rest)
-   while the accent glow layer behind it swells in sync. Uses the canonical
-   --accent token, never a hardcoded retired-palette colour. */
+   lockup expands and contracts like a beating heart (lub-dub, then rest).
+   The accent radial-glow layer that used to swell behind the mark on this same
+   cycle was removed on request; its boot-glow keyframe went with it rather than
+   being left orphaned. */
 @keyframes boot-heartbeat {
   0%, 40%, 100% { transform: scale(1); }
   10%           { transform: scale(1.07); }
   20%           { transform: scale(1); }
   30%           { transform: scale(1.05); }
-}
-@keyframes boot-glow {
-  0%, 40%, 100% { opacity: 0.35; transform: scale(0.92); }
-  10%           { opacity: 1;    transform: scale(1.12); }
-  20%           { opacity: 0.55; transform: scale(0.97); }
-  30%           { opacity: 0.85; transform: scale(1.06); }
 }
 /* Wordmark breathes from near-transparent to fully visible on the same
    cycle, so the whole lockup reads as one pulse. */

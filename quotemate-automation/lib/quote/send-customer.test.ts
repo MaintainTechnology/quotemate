@@ -108,7 +108,7 @@ describe('resolveCustomerContact', () => {
 
   it('falls back to customers.phone last', async () => {
     const c = await resolveCustomerContact(
-      stubSupabase({ customers: { phone: '+61444444444', email: null } }),
+      stubSupabase({ customers: { phone_number: '+61444444444', email: null } }),
       args,
     )
     expect(c.phone).toBe('+61444444444')
@@ -132,13 +132,13 @@ describe('resolveCustomerContact', () => {
 
   it('resolves email from intake.caller.email first, then customers.email', async () => {
     const fromCaller = await resolveCustomerContact(
-      stubSupabase({ customers: { phone: null, email: 'row@example.com' } }),
+      stubSupabase({ customers: { phone_number: null, email: 'row@example.com' } }),
       { ...args, caller: { email: 'caller@example.com' } },
     )
     expect(fromCaller.email).toBe('caller@example.com')
 
     const fromCustomer = await resolveCustomerContact(
-      stubSupabase({ customers: { phone: null, email: 'row@example.com' } }),
+      stubSupabase({ customers: { phone_number: null, email: 'row@example.com' } }),
       { ...args, caller: { email: '' } },
     )
     expect(fromCustomer.email).toBe('row@example.com')

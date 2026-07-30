@@ -58,14 +58,28 @@ export interface MinLabourResult {
  * list of tiers adjusted. Inspection-required / tier-less drafts and
  * already-compliant tiers are returned untouched.
  */
+/**
+ * The tenant's minimum billable labour, with the 2.0 h fallback this module has
+ * always applied when the column is NULL or unparseable.
+ *
+ * Exported because R9's affine cap (lib/estimate/sanity-bounds.ts) must use the
+ * SAME number: if the floor tops labour up to 2.0 h on a NULL column while R9
+ * assumes 0, the cap is 1.75 h and every single-item quote fails the per-unit
+ * check — reinstating the exact defect the affine cap removes. Two resolutions
+ * of one field is how that drift happens, so there is only one.
+ */
+export function resolveMinLabourHours(
+  pricingBook: { min_labour_hours?: number | string | null } | null | undefined,
+): number {
+  const m = n(pricingBook?.min_labour_hours)
+  return Number.isFinite(m) ? m : 2.0
+}
+
 export function applyMinLabourFloor(draft: any, pricingBook: any): MinLabourResult {
   if (!draft || draft.needs_inspection === true) {
     return { draft, adjustedTiers: [] }
   }
-  const minLabour = (() => {
-    const m = n(pricingBook?.min_labour_hours)
-    return Number.isFinite(m) ? m : 2.0
-  })()
+  const minLabour = resolveMinLabourHours(pricingBook)
   const hourly = n(pricingBook?.hourly_rate)
   // No safe rate to charge → do nothing (no fabrication, no regression).
   if (!Number.isFinite(hourly) || hourly <= 0) {

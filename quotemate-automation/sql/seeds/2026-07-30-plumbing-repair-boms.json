@@ -1,0 +1,29 @@
+[
+  {
+    "trade": "plumbing",
+    "assembly_name": "Tap washer replacement",
+    "material_category": "sundries",
+    "quantity": 1,
+    "required": true,
+    "sort": 1,
+    "description": "Tap washers, o-rings, seat tape"
+  },
+  {
+    "trade": "plumbing",
+    "assembly_name": "Toilet cistern repair",
+    "material_category": "toilet_repair",
+    "quantity": 1,
+    "required": true,
+    "sort": 1,
+    "description": "Cistern internals kit (fill + flush valve)"
+  },
+  {
+    "trade": "plumbing",
+    "assembly_name": "Toilet cistern repair",
+    "material_category": "sundries",
+    "quantity": 1,
+    "required": true,
+    "sort": 2,
+    "description": "Seals, connector, tape"
+  }
+]

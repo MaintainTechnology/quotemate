@@ -447,6 +447,53 @@ export interface BomHintRow {
   required?: boolean | null
   description?: string | null
 }
+
+// ── Phase 2 R4 · recipe quantities follow the customer's count ──────
+/**
+ * Set the HEADLINE line's quantity to `itemCount`, leaving every other line at
+ * its recipe quantity.
+ *
+ * Migration 118 seeds `downlight ×6`; nothing read `intake.scope.item_count`,
+ * so a customer asking for 10 got materials for 6.
+ *
+ * REPLACE, not multiply — the recipe quantity is a per-job default for the main
+ * product, so 6 with a count of 10 is 10, never 60. Only the headline line
+ * moves: a job needs one roll of tape whether it is 6 downlights or 10. That is
+ * the same rule the reconcile backstop already applies via
+ * findHeadlineMaterialIndex ("which line's quantity should equal item_count"),
+ * reused deliberately so the two cannot disagree.
+ *
+ * Headline = the first row in `sort` order whose category/description is not a
+ * sundry, matched with the SUNDRY_RE the backstop uses. A sundries-only recipe
+ * has no headline and is returned untouched.
+ *
+ * A missing, zero, negative, fractional, absurd (>10k, the schema's own cap) or
+ * non-finite count is ignored — today's behaviour is preserved rather than a
+ * junk quantity reaching a quote. Pure; never mutates the input.
+ */
+export function scaleBomToItemCount<T extends { material_category: string; quantity: number | string; sort?: number | null }>(
+  rows: readonly T[],
+  itemCount: number | null | undefined,
+): T[] {
+  const out = rows.map((r) => ({ ...r }))
+  const n = Number(itemCount)
+  if (!Number.isInteger(n) || n <= 0 || n > 10_000) return out
+
+  const isSundry = (r: T & { description?: string | null }) =>
+    SUNDRY_RE.test(String(r.material_category ?? '')) ||
+    SUNDRY_RE.test(String(r.description ?? ''))
+
+  // Pick by `sort`, not array order — the API returns sorted rows but a caller
+  // that maps or concatenates could hand them over shuffled.
+  const bySort = out
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => Number(a.r.sort ?? 0) - Number(b.r.sort ?? 0))
+  const headline = bySort.find(({ r }) => !isSundry(r as T & { description?: string | null }))
+  if (!headline) return out
+
+  out[headline.i] = { ...out[headline.i], quantity: n }
+  return out
+}
 /** "Standard bill of materials for this job" — makes WP3's structured
  *  BOM visible so the same job quotes the same parts every time. */
 export function formatBomHint(rows: BomHintRow[]): string | null {
@@ -606,6 +653,23 @@ const SUNDRY_RE = /sundr|seal|tape|\bclip\b|terminal|^fittings,/i
  * Prefers a non-sundry material line; falls back to any non-labour line; -1 if
  * none. Pure.
  */
+/**
+ * Did the TRADIE pin this product from the dashboard job quoter, rather than a
+ * CUSTOMER picking it mid-SMS?
+ *
+ * The two want opposite tier behaviour. A customer pick means they chose, so
+ * collapsing to the one option they picked is the honest render. A tradie pin
+ * lands on a quote held for their review, and TierSelect renders nothing below
+ * two priced tiers — so collapsing would delete the only tier control on the
+ * page the review gate exists to serve.
+ *
+ * Pure and exported so the rule is testable; the alternative is an inline
+ * condition buried in run.ts that nothing can assert.
+ */
+export function isTradiePin(chosen: { pinned_by?: unknown } | null | undefined): boolean {
+  return chosen?.pinned_by === 'tradie'
+}
+
 export function findHeadlineMaterialIndex(
   items: Array<Record<string, any>> | null | undefined,
 ): number {
