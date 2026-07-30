@@ -42,7 +42,9 @@
    THE NUMBERS ARE NOT OURS. Every figure on these graphics is a published
    third-party statistic and is attributed on the graphic itself, in the
    words it was given in. Xero Small Business Insights for the 24-day
-   average, CreditorWatch for the construction late-payment share. QuoteMax
+   average, CreditorWatch for the construction overdue-invoice share and the
+   highest late-payment and default rates. The 39%-past-30-days figure was
+   retired on 2026-07-30 and must not come back. QuoteMax
    claims nothing about them beyond quoting them.
 
    BRAND, from DESIGN.md at the repo root: canvas #16120F, ONE accent
@@ -185,9 +187,18 @@ body.one{padding:0;gap:0}
    it belongs in the hole rather than nothing. Sizes differ so there is one
    hero number and one supporting one, and flex-end lines the labels up. */
 .pair .figrow{margin-top:12px;display:flex;align-items:flex-end;gap:76px}
-.pair .fig .n{font-family:'JetBrains Mono',monospace;font-weight:700;line-height:.84;letter-spacing:-.06em;word-spacing:-.32em;color:var(--accent)}
-.pair .fig.lead .n{font-size:140px}
-.pair .fig.sub .n{font-size:88px}
+/* nowrap is load-bearing. A two-word figure ("24 DAYS") at 160px overran the
+   904px measure, wrapped to two lines, and silently pushed the claim out
+   through the yellow sign-off. Wrapping is never the right answer for a figure,
+   so it is forbidden: a figure that is too wide now overflows visibly at review
+   time instead, and the fix is the per-figure size below. */
+.pair .fig .n{font-family:'JetBrains Mono',monospace;font-weight:700;line-height:.84;letter-spacing:-.06em;word-spacing:-.32em;white-space:nowrap;color:var(--accent)}
+/* 160, not 140. At the 350px feed thumbnail everything on this graphic below
+   about 24px is a smudge, so the figure and the two order lines are the only
+   type doing any work, and the figure is the cheapest of the two to enlarge.
+   160 leaves 14px of slack in the 368px plate; 176 did not. */
+.pair .fig.lead .n{font-size:160px}
+.pair .fig.sub .n{font-size:96px}
 .pair .fig .l{margin-top:12px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
 .pair .pc{margin-top:22px;font-weight:800;font-size:30px;line-height:1.06;letter-spacing:-.03em;text-transform:uppercase;color:var(--pri)}
 .pair .pc em{color:var(--accent);font-style:normal}
@@ -195,6 +206,76 @@ body.one{padding:0;gap:0}
    through "OVERDUE INVOICE" when it carried on to the yellow. The statistic
    below applies to the whole industry, so it gets undivided ground. */
 .pair .seam{position:absolute;left:456px;width:2px;top:710px;height:176px;background:var(--hair);z-index:6}
+
+/* ── STACK frame ───────────────────────────────────────────────────
+   The split docket, but with both photographs in the right column, one above
+   the other, cut apart by a slash.
+
+   ┌──────────────────┬─────────────────────┐
+   │ lockup                    QM-2607-75   │ rail 150
+   ├──────────────────┼─────────────────────┤
+   │ TWO ORDERS       │                     │
+   │ SAME JOB.        │   the padlock       │
+   │ DIFFERENT ORDER. │                     │
+   │                  │                  ╱  │ the slash, 88px of drop
+   │ THE USUAL ORDER  │              ╱      │ across 540, about 9 degrees
+   │ QUOTE / BOOK /   │          ╱          │
+   ├──────────────────┼──────╱──────────────┤ the cut, at y704
+   │ DEPOSIT FIRST    │  ╱                  │
+   │ QUOTE / DEPOSIT  │                     │
+   │                  │   the tradesman     │
+   │ closing line     │                     │
+   ├──────────────────┴─────────────────────┤
+   │ QUOTEMAX.COM.AU              tagline   │ yellow 96
+   └────────────────────────────────────────┘
+
+   One division, two treatments. A straight hairline cuts the type column at
+   y704 and the slash crosses the photo column through the same y, so the
+   correspondence is structural: everything above the cut is the usual order
+   and the locked diary, everything below is deposit first and the tradesman.
+   Move either photograph and the alignment breaks, which is the test.
+
+   The slash is not decoration. It is the only join in this project that is not
+   a right angle, and it earns that by echoing the notch in the QuoteMax mark
+   and the tear line on a real docket. It also solves a practical problem a
+   straight divider does not: two portrait frames stacked in one column read as
+   a contact sheet, and an angled cut makes them one object.
+
+   Crop maths, both sources 1536x2752 so ia = 0.5581. Each cell is the full
+   540x596 box and the clip only trims corners, so:
+     ba = 540/596 = 0.9060, ia < ba, crop height, keeps 61.6% of each source.
+   Better than the 57% an even 552px split would have kept. */
+/* ONE column, not two zones split by a cut.
+   The first version put a hairline through the type column at the height the
+   slash crosses, and hung a three-word chain in each half. It read as two
+   unrelated fragments, and three words cannot carry an argument that rests on
+   two statistics and a reversed sequence. So the type side is now a single
+   editorial column that actually states the case, and the correspondence
+   between the photographs is left to the photographs: a locked job diary above,
+   a tradesman working below. */
+.stack .col2{position:absolute;left:0;width:var(--split);top:var(--head);bottom:var(--foot);z-index:5;
+  border-right:1px solid var(--hair);display:flex;flex-direction:column;justify-content:center;
+  padding:56px var(--gut) 56px var(--M)}
+.stack .h{margin-top:20px;font-size:48px;line-height:47px}
+.stack .fig2{margin-top:26px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:104px;
+  line-height:88px;letter-spacing:-.06em;word-spacing:-.32em;white-space:nowrap;color:var(--accent)}
+.stack .src2{margin-top:10px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;
+  line-height:1.55;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.stack .src2 b{color:var(--accent);font-weight:700}
+.stack .rule{margin-top:24px;height:1px;background:var(--hair)}
+.stack .body{margin-top:22px;font-weight:500;font-size:23px;line-height:1.43;color:var(--sec)}
+.stack .body p+p{margin-top:20px}
+.stack .body em{color:var(--pri);font-weight:700;font-style:normal}
+.stack .body b{color:var(--accent);font-weight:700}
+
+.stack .photos{position:absolute;left:var(--split);right:0;top:var(--head);bottom:var(--foot);z-index:4;overflow:hidden}
+.stack .cell{position:absolute;left:0;width:540px;height:596px;overflow:hidden}
+.stack .cell.up{top:0;clip-path:polygon(0 0,540px 0,540px 596px,0 508px)}
+.stack .cell.dn{top:508px;clip-path:polygon(0 4px,540px 92px,540px 596px,0 596px)}
+.stack .cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.stack .cell.up img{filter:grayscale(.10) saturate(.97) contrast(.99) brightness(1.02) sepia(.07)}
+.stack .cell.dn img{filter:grayscale(.10) saturate(.97) contrast(1.07) brightness(1.01) sepia(.07)}
+.stack .cell::after{content:"";position:absolute;inset:0;background:var(--accent);mix-blend-mode:soft-light;opacity:.11;pointer-events:none}
 
 /* ── SPLIT frame ──────────────────────────────────────────────────── */
 .split{position:absolute;left:0;right:0;top:var(--head);bottom:var(--foot);z-index:5;display:flex}
@@ -298,16 +379,35 @@ function pairBody(D){
       <div class="cap b"><div class="cl">${D.right.label}</div><div class="cv">${D.right.line}</div></div>
     </div>
     <div class="plate2"><div class="pe">${D.src}</div>
-      <div class="figrow">${D.figs.map(([n,l],i)=>`<div class="fig ${i?'sub':'lead'}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>
-      <div class="pc">${hl(D.claim)}</div></div>
+      <div class="figrow">${D.figs.map(([n,l,size],i)=>`<div class="fig ${i?'sub':'lead'}"><div class="n"${size?` style="font-size:${size}px;line-height:${Math.round(size*.84)}px"`:''}>${n}</div><div class="l">${l}</div></div>`).join('')}</div>
+      <div class="pc"${D.cs?` style="font-size:${D.cs}px;line-height:${Math.round(D.cs*1.06)}px"`:''}>${hl(D.claim)}</div></div>
     <div class="seam"></div>`;
+}
+
+/* STACK: both photographs in the right column, slashed apart, with the type
+   column cut at the same height so each block owns the photo beside it. */
+function stackBody(D){
+  // {braces} lift a phrase to full-strength text, [brackets] to the accent.
+  const em=s=>String(s).replace(/\{([^}]+)\}/g,'<em>$1</em>').replace(/\[([^\]]+)\]/g,'<b>$1</b>');
+  return `<div class="photos">
+      <div class="cell up"><img src="img/${D.up[0]}.jpg" style="object-position:${D.up[1]}"></div>
+      <div class="cell dn"><img src="img/${D.dn[0]}.jpg" style="object-position:${D.dn[1]}"></div>
+    </div>
+    <div class="col2">
+      <div class="kick">${D.kick}</div>
+      <div class="h">${hl(D.head)}</div>
+      ${D.big?`<div class="fig2">${D.big}</div><div class="src2">${em(D.src)}</div>`:''}
+      <div class="rule"></div>
+      <div class="body">${D.body.map(p=>`<p>${em(p)}</p>`).join('')}</div>
+    </div>`;
 }
 
 function render(D){
   const rail=`<div class="rail"><img src="${LOGO}" alt=""><div class="ref">QM-2607-${D.n} <b>/</b> ${D.tag}</div></div>`;
   const foot=`<div class="foot"><span>quotemax.com.au</span><span>${D.foot}</span></div>`;
-  const frame=D.kind==='pair'?'pair':PLATE[D.kind]?'hero':'split';
-  const body=frame==='pair'?pairBody(D)
+  const frame=D.kind==='stack'?'stack':D.kind==='pair'?'pair':PLATE[D.kind]?'hero':'split';
+  const body=frame==='stack'?stackBody(D)
+    :frame==='pair'?pairBody(D)
     :frame==='hero'?`<div class="body"><div class="shot">${pic(D)}<div class="sink"></div></div><div class="plate">${PLATE[D.kind](D)}</div></div>`
     :`<div class="split"><div class="col">${BLOCK[D.kind](D)}</div><div class="pic">${pic(D)}</div></div>`;
   return `<div class="d ${frame}${D.flip?' flip':''}">${rail}${body}${foot}${GRAIN}</div>`;
@@ -341,18 +441,102 @@ const D=[
    first. The seam between them is the argument. */
 {n:72,tag:'DATA',kind:'pair',
  left:{pic:['padlock-calendar','center 34%'],label:'THE USUAL ORDER',line:'Invoice, then wait.'},
- right:{pic:['builder-tablet','center 44%'],label:'DEPOSIT FIRST',line:'Deposit, then book.'},
+ // 49%, not 44%. At 44 the hard hat's bottom edge landed on 99.7% of the cell,
+ // which is about two pixels of clearance, and the tool belt and tablet were
+ // just as close. 49 buys 28px and still leaves 14% headroom above his hair.
+ right:{pic:['builder-tablet','center 49%'],label:'DEPOSIT FIRST',line:'Deposit, then book.'},
  src:'CREDITORWATCH <i>&middot; CONSTRUCTION, LAST 12 MONTHS</i>',
- figs:[['92%','HAD AN OVERDUE INVOICE'],['39%','SAT PAST 30 DAYS']],
- claim:'The {highest late-payment rate} in the country.',
+ // The eyebrow above already scopes this to construction and to the last 12
+ // months, so the label does not repeat either.
+ figs:[['92%','HAD AN OVERDUE INVOICE']],
+ claim:'The highest {late-payment and default rates} in the country.',cs:27,
  foot:'BOOKING HAPPENS AFTER THE DEPOSIT'},
+
+/* ── 75 to 79 · Both photographs stacked and slashed, one
+   editorial column beside them, kept brief.
+
+   Two passes got this wrong in opposite directions. Three-word chains said
+   nothing about a topic resting on two statistics; four full paragraphs said it
+   at a length nobody reads in a feed. Two short paragraphs is the setting:
+   enough to make the argument, short enough to finish.
+
+   Photo pairings stay distinct across the set and the grammar never changes:
+   a locked job diary on top, a tradesman working below.
+     75 calendar + tablet   76 wall + plans   77 diary + tablet
+     78 calendar + plans    79 wall + tablet                                */
+
+{n:75,tag:'DATA',kind:'stack',
+ up:['padlock-calendar','center 43%'],dn:['builder-tablet','center 50%'],
+ kick:'LATE PAYMENT',head:'Construction gets paid {last}.',
+ big:'92%',src:'[CREDITORWATCH] &middot; of construction firms carried an overdue invoice last year. The highest late-payment and default rates of any industry.',
+ body:[
+  'Australian small business now gets paid in {24 days}, the fastest on record. Construction did not get the memo.',
+  'So we run the sequence the other way. A priced quote, a deposit, then the calendar.'],
+ foot:'THE PROBLEM IS STRUCTURAL'},
+
+{n:76,tag:'DATA',kind:'stack',
+ up:['padlock-wall','center 45%'],dn:['builder-plans','center 44%'],
+ kick:'TWO NUMBERS',head:'The problem is not {the economy}.',
+ big:'24 DAYS',src:'[XERO SMALL BUSINESS INSIGHTS] &middot; average time an Australian small business waits to be paid.',
+ body:[
+  'The fastest since tracking began in 2017. Every industry got better at paying. {Except one}.',
+  'CreditorWatch found [92%] of construction firms carried an overdue invoice, and the highest default rates of any industry.'],
+ foot:'CONSTRUCTION DID NOT GET THE MEMO'},
+
+{n:77,tag:'VIEW',kind:'stack',
+ up:['padlock-diary','center 40%'],dn:['builder-tablet','center 50%'],
+ kick:'WHERE THE ASKING HAPPENS',head:'A quote asks someone {to think about it}.',
+ body:[
+  'By the time an invoice exists the work is done and the materials are paid for. You are not agreeing terms with a customer. You are {asking a debtor}.',
+  'The order is the problem. Not the paperwork, and not the economy.'],
+ foot:'A TRADIE IS NOT A BANK'},
+
+{n:78,tag:'EDU',kind:'stack',
+ up:['padlock-calendar','center 43%'],dn:['builder-plans','center 44%'],
+ kick:'THE SEQUENCE',head:'Deposit first. {Then the calendar}.',
+ body:[
+  'The customer describes the job. A priced quote comes back with three options, off the tradie&rsquo;s own rate book. They pay a deposit. [Only then] does the calendar open.',
+  'Same job, same price. The only thing that moved is when they commit.'],
+ foot:'BOOKING HAPPENS AFTER THE DEPOSIT'},
+
+{n:79,tag:'VIEW',kind:'stack',
+ up:['padlock-wall','center 45%'],dn:['builder-tablet','center 50%'],
+ kick:'WHERE IT DOES NOT FIT',head:'This will not suit {every trade}.',
+ body:[
+  'Big commercial work runs on progress claims and 30-day terms, and always will. We are not pretending otherwise.',
+  'But for domestic jobs, asking for commitment before scheduling beats asking for payment 30 days after you have {finished}.'],
+ foot:'DOMESTIC JOBS, NOT EVERY JOB'},
+
+/* ── 73 · The Xero counterpoint, on the same frame. ────────────────
+   The padlock is the money still owed after the work, the tradesman is the
+   money agreed before it. Different padlock and different tradesman from 72 so
+   a feed running both does not read as the same graphic twice. */
+{n:73,tag:'DATA',kind:'pair',
+ left:{pic:['padlock-diary','center 34%'],label:'AFTER THE WORK',line:'You chase it.'},
+ right:{pic:['builder-plans','center 46%'],label:'BEFORE THE WORK',line:'They commit.'},
+ src:'XERO SMALL BUSINESS INSIGHTS <i>&middot; AUSTRALIA</i>',
+ // One figure, not two, and set at 132 rather than 160. Seven characters of
+ // monospace will not share the 904px measure with a second figure, and the
+ // year belongs in the label where it reads as provenance anyway.
+ figs:[['24 DAYS','AVERAGE SMALL BUSINESS WAIT, THE FASTEST SINCE TRACKING BEGAN IN 2017',132]],
+ claim:'Construction {did not get the memo}.',
+ foot:'THE PROBLEM IS STRUCTURAL'},
+
+/* ── 74 · What arrives instead. Product facts, not third-party ones. ── */
+{n:74,tag:'EDU',kind:'pair',
+ left:{pic:['padlock-wall','center 36%'],label:'A QUOTE',line:'Asks them to think.'},
+ right:{pic:['builder-tablet','center 49%'],label:'A DEPOSIT',line:'Asks them to decide.'},
+ src:'QUOTEMAX <i>&middot; THREE OPTIONS, ONE DEPOSIT</i>',
+ figs:[['3','OPTIONS ON EVERY QUOTE'],['$0','COMMISSION, EVER']],
+ claim:'Booking opens {after the deposit clears}.',
+ foot:'COMMITMENT BEFORE SCHEDULING'},
 
 /* ── 66 · Alternate, the keys and the lock alone. ──────────────────── */
 {n:66,tag:'DATA',kind:'figure',pic:['padlock-calendar','center 36%'],
  src:'CREDITORWATCH <i>&middot; LAST 12 MONTHS</i>',
  big:'92%',
  claim:'of construction firms carried an {overdue invoice}.',
- note:'Thirty-nine per cent of them sat past 30 days. The highest late-payment rate of any industry in the country, in the same year Australian small business as a whole got paid faster than ever.',
+ note:'The highest late-payment and default rates of any industry in the country, in the same year Australian small business as a whole got paid faster than ever.',
  foot:'LATE PAYMENT IS STRUCTURAL'},
 
 /* ── 67 · POST IMAGE TWO. The tradie, and the sequence reversed. ──── */
@@ -370,7 +554,7 @@ const D=[
  kick:'TWO NUMBERS',head:'The economy is {not the problem}.',sm:true,
  figs:[
    ['24 DAYS','XERO SMALL BUSINESS INSIGHTS','Average time an Australian small business now waits to be paid. The {fastest since tracking began in 2017}.'],
-   ['92%','CREDITORWATCH','Share of construction firms with an overdue invoice in the last 12 months. Thirty-nine per cent sat past 30 days.']],
+   ['92%','CREDITORWATCH','Share of construction firms with an overdue invoice in the last 12 months. The highest late-payment and default rates of any industry.']],
  foot:'CONSTRUCTION DID NOT GET THE MEMO'},
 
 /* ── 69 · The structural point, said on its own. ──────────────────── */
