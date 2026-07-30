@@ -36,24 +36,32 @@ const total = refs.length
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' }
 const server = http.createServer(async (req, res) => {
-  let p = decodeURIComponent(req.url.split('?')[0])
-  if (p === '/') p = `/${SRC}`
+  const raw = decodeURIComponent(req.url.split('?')[0])
+  const rel = raw === '/' ? SRC : raw.replace(/^\/+/, '')
+  // Validate the REQUEST before building any path. An allowlist that permits no
+  // dot-segment and no separator other than '/' is the only thing that holds:
+  // resolve-then-check reads plausible but leaves the untrusted value flowing
+  // into readFile, and `join()` silently resolves `..` — so before this a
+  // GET /../../../.env.local (or its %2e%2e%2f form) read and served every live
+  // secret in the repo. Dev-only server on a random localhost port, but alive
+  // whenever graphics are rendered. (CodeQL js/path-injection, high.)
+  if (!/^[A-Za-z0-9._/-]+$/.test(rel) || rel.split('/').some((seg) => seg === '..' || seg === '')) {
+    res.writeHead(403)
+    res.end('forbidden')
+    return
+  }
   try {
-    // Confine reads to this directory. `join()` resolves `..`, so without this a
-    // request for /../../../.env.local would read and serve every live secret —
-    // decodeURIComponent runs first, so the encoded form works too. The server
-    // is dev-only and on a random localhost port, but anything on the machine
-    // that can make an HTTP request while it runs could exfiltrate the lot.
-    // (CodeQL js/path-injection, high.)
+    // Belt and braces: even with the input validated, confirm the result sits
+    // inside this directory.
     const root = resolve(here)
-    const full = resolve(root, p.replace(/^\/+/, ''))
+    const full = resolve(root, rel)
     if (full !== root && !full.startsWith(root + sep)) {
       res.writeHead(403)
       res.end('forbidden')
       return
     }
     const buf = await readFile(full)
-    res.writeHead(200, { 'content-type': MIME[extname(full)] || 'application/octet-stream' })
+    res.writeHead(200, { 'content-type': MIME[extname(rel)] || 'application/octet-stream' })
     res.end(buf)
   } catch { res.writeHead(404); res.end('not found') }
 })
