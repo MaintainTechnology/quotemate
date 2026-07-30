@@ -1688,9 +1688,22 @@ type ResolvedAssembly = {
  * return `{assembly: null}` with a reason, so the caller falls back to the Opus
  * draft rather than pricing a near-miss.
  */
+/** Sub-type for a job type that maps to more than one assembly. Today only
+ *  plumbing `hot_water`, whose electric/gas/heat_pump split the intake already
+ *  captures at scope.specs.system_type (structure.ts requires it for that job
+ *  type). Absent → pickBestAssembly returns null and the estimator falls back
+ *  to Opus, which is correct: guessing gas for an electric unit is a $400 error
+ *  on the headline line. */
+function assemblyVariant(intake: unknown): string | null {
+  const st = (intake as { scope?: { specs?: { system_type?: unknown } } })?.scope?.specs
+    ?.system_type
+  return typeof st === 'string' && st.trim() ? st.trim() : null
+}
+
 async function resolveJobAssembly(
   jobType: string,
   trade: string | null,
+  variant?: string | null,
 ): Promise<{ assembly: ResolvedAssembly | null; reason: string | null }> {
   let aq = supabase
     .from('shared_assemblies')
@@ -1700,11 +1713,14 @@ async function resolveJobAssembly(
   const { data: asm, error: aerr } = await aq.limit(ASSEMBLY_FETCH_LIMIT)
   if (aerr) return { assembly: null, reason: `assembly query failed: ${aerr.message}` }
   if (!asm || asm.length === 0) return { assembly: null, reason: 'no assembly candidates' }
-  const chosen = pickBestAssembly(jobType, asm as ResolvedAssembly[])
+  const chosen = pickBestAssembly(jobType, asm as ResolvedAssembly[], variant)
   if (!chosen) {
     return {
       assembly: null,
-      reason: `no assembly mapping for job_type=${jobType} (${asm.length} candidates)`,
+      reason:
+        `no assembly mapping for job_type=${jobType}` +
+        (variant ? ` variant=${variant}` : '') +
+        ` (${asm.length} candidates)`,
     }
   }
   return { assembly: chosen, reason: null }
@@ -1723,7 +1739,7 @@ async function buildBomHint(
     // load-bearing: the BOM reads below used to fan out over every match with
     // `.in('assembly_id', ids)`, which would concatenate recipe lines from
     // several unrelated assemblies once the candidate filter widened.
-    const { assembly: chosen, reason: resolveReason } = await resolveJobAssembly(jobType, trade)
+    const { assembly: chosen, reason: resolveReason } = await resolveJobAssembly(jobType, trade, assemblyVariant(intake))
     if (!chosen) {
       log.err('BOM hint — unresolved job_type, falling back to Opus', resolveReason ?? 'unknown')
       // pipelineLog is console-only, so a log line alone leaves this invisible
@@ -2002,7 +2018,11 @@ async function loadDeterministicInputs(
   // Phase 1 — the SAME resolver buildBomHint uses. `primary` used to be
   // `asm[0]` off an unordered `.limit(5)`, so default_labour_hours — which
   // grounds the labour line — came from whichever row Postgres returned first.
-  const { assembly: primary, reason: resolveReason } = await resolveJobAssembly(jobType, trade)
+  const { assembly: primary, reason: resolveReason } = await resolveJobAssembly(
+    jobType,
+    trade,
+    assemblyVariant(intake),
+  )
   if (!primary) {
     return { input: null, reason: resolveReason ?? 'unresolved job_type' }
   }

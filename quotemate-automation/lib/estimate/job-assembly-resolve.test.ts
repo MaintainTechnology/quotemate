@@ -121,7 +121,18 @@ describe('Phase 1 — job_type resolves to exactly one assembly', () => {
   })
 
   it('maps only job types that have a real assembly', () => {
-    for (const name of Object.values(JOB_TYPE_ASSEMBLY)) {
+    // SEEDED is the ELECTRICAL fixture. Step 2 added plumbing entries to the
+    // same map, so scope this assertion to the electrical keys — the plumbing
+    // names are checked against the plumbing fixture in
+    // plumbing-assembly-resolve.test.ts. Widening SEEDED instead would make
+    // one fixture claim to be two trades' catalogues.
+    const ELECTRICAL_KEYS = [
+      'downlights', 'power_points', 'ceiling_fans', 'smoke_alarms',
+      'outdoor_lighting', 'oven_cooktop', 'ev_charger', 'fault_finding',
+    ]
+    for (const key of ELECTRICAL_KEYS) {
+      const name = JOB_TYPE_ASSEMBLY[key]
+      expect(name, `electrical key lost from the map: ${key}`).toBeTruthy()
       expect(
         SEEDED.some((r) => r.name === name),
         `mapped to a name that is not seeded: ${name}`,
