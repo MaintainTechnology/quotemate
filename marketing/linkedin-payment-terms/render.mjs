@@ -9,7 +9,7 @@
 
 import { chromium } from 'playwright'
 import http from 'node:http'
-import { readFile, mkdir } from 'node:fs/promises'
+import { readFile, mkdir, readdir } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { dirname, join, extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -37,31 +37,27 @@ const total = refs.length
 const MIME = { '.html': 'text/html; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' }
 const server = http.createServer(async (req, res) => {
   const raw = decodeURIComponent(req.url.split('?')[0])
-  const rel = raw === '/' ? SRC : raw.replace(/^\/+/, '')
-  // Validate the REQUEST before building any path. An allowlist that permits no
-  // dot-segment and no separator other than '/' is the only thing that holds:
-  // resolve-then-check reads plausible but leaves the untrusted value flowing
-  // into readFile, and `join()` silently resolves `..` — so before this a
-  // GET /../../../.env.local (or its %2e%2e%2f form) read and served every live
-  // secret in the repo. Dev-only server on a random localhost port, but alive
-  // whenever graphics are rendered. (CodeQL js/path-injection, high.)
-  if (!/^[A-Za-z0-9._/-]+$/.test(rel) || rel.split('/').some((seg) => seg === '..' || seg === '')) {
-    res.writeHead(403)
-    res.end('forbidden')
-    return
-  }
+  const want = raw === '/' ? SRC : raw.replace(/^\/+/, '')
   try {
-    // Belt and braces: even with the input validated, confirm the result sits
-    // inside this directory.
-    const root = resolve(here)
-    const full = resolve(root, rel)
-    if (full !== root && !full.startsWith(root + sep)) {
-      res.writeHead(403)
-      res.end('forbidden')
+    // The request NEVER becomes a path. Two earlier attempts validated it and
+    // CodeQL still (correctly) objected: the untrusted value flowed into
+    // readFile, and safety rested on a check rather than on construction. So
+    // enumerate what actually exists and use the request only to SELECT from
+    // that list — the path handed to readFile is built from filesystem data.
+    //
+    // Before this, `join(here, req.url)` resolved `..`, so
+    // GET /../../../.env.local — or its %2e%2e%2f / %5c forms — read and served
+    // every live secret in the repo. Dev-only server on a random localhost
+    // port, but alive whenever graphics render. (CodeQL js/path-injection, high.)
+    const entries = await readdir(here, { recursive: true })
+    const hit = entries.find((e) => e.split(/[\/]/).join('/') === want)
+    if (!hit) {
+      res.writeHead(404)
+      res.end('not found')
       return
     }
-    const buf = await readFile(full)
-    res.writeHead(200, { 'content-type': MIME[extname(rel)] || 'application/octet-stream' })
+    const buf = await readFile(join(here, hit))
+    res.writeHead(200, { 'content-type': MIME[extname(hit)] || 'application/octet-stream' })
     res.end(buf)
   } catch { res.writeHead(404); res.end('not found') }
 })
