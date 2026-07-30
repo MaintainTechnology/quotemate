@@ -114,13 +114,20 @@ export async function resolveCustomerContact(
 
   if ((!phone || !email) && args.customerId) {
     try {
+      // `phone_number`, NOT `phone` — the column has never been called `phone`.
+      // Selecting a non-existent column makes supabase-js resolve
+      // {data:null,error} rather than throw, so this whole source silently
+      // resolved to nothing and the catch below never fired. The same bug was
+      // fixed on the other reader in app/api/tenant/me/route.ts (2026-07-23
+      // audit); this one survived because send-customer.test.ts stubbed `phone`
+      // and so asserted the broken shape.
       const { data } = await supabase
         .from('customers')
-        .select('phone, email')
+        .select('phone_number, email')
         .eq('id', args.customerId)
         .maybeSingle()
-      const row = data as { phone?: string | null; email?: string | null } | null
-      phone = phone ?? trimOrNull(row?.phone)
+      const row = data as { phone_number?: string | null; email?: string | null } | null
+      phone = phone ?? trimOrNull(row?.phone_number)
       email = email ?? trimOrNull(row?.email)
     } catch {
       /* source unresolved */

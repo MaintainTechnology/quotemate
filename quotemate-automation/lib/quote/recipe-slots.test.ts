@@ -96,6 +96,44 @@ describe('RECIPE_SLOT_CODES', () => {
     expect(orphans).toEqual([])
   })
 
+  // THE ROOT-CAUSE GUARD. The job-quote route filters RECIPE_SLOT_CODES out of
+  // the prose transcript for EVERY job type, because on power_points the recipe
+  // consumes them deterministically and restating them pulls the estimator into
+  // pricing the cable itself. But the filter matches by CODE ALONE — so any
+  // other job type that happens to reuse one of these codes has its answer
+  // silently dropped from the transcript AND from the extras fallback.
+  //
+  // That shipped: ev_charger used `circuit_required` for its phase question, so
+  // "three phase" reached nothing — not the transcript, not the recipe (whose
+  // band value is the hyphenated 'three-phase'), and therefore not
+  // structure.ts:397's rule that three-phase work always forces an inspection.
+  // The most expensive electrical job on the form was priced as single-phase.
+  //
+  // Only power_points has a price_recipe in production, so only power_points may
+  // use these codes. This test fails the next time a recipe slot is added whose
+  // name collides with an existing field.
+  it('no job type other than power_points uses a recipe slot code', () => {
+    const offenders: string[] = []
+    for (const [jobType, spec] of Object.entries(JOB_FIELDS)) {
+      if (jobType === 'power_points') continue
+      for (const f of spec.fields) {
+        if ((RECIPE_SLOT_CODES as readonly string[]).includes(f.code)) {
+          offenders.push(`${jobType}.${f.code}`)
+        }
+      }
+    }
+    expect(
+      offenders,
+      'these answers would be filtered out of the transcript and reach nothing',
+    ).toEqual([])
+  })
+
+  it("ev_charger's phase question is not a recipe slot code", () => {
+    const codes = JOB_FIELDS.ev_charger.fields.map((f) => f.code)
+    expect(codes).toContain('phase')
+    expect(codes).not.toContain('circuit_required')
+  })
+
   it('covers every code recipeSlotsFrom actually reads', () => {
     // If a slot is added to recipeSlotsFrom but not to RECIPE_SLOT_CODES, it
     // would be stamped into scope AND left in the prose — the exact bug above.

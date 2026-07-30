@@ -44,6 +44,81 @@ type CatalogueRow = {
   active: boolean | null
 }
 
+/**
+ * Pull the suburb out of a Geoscape address line. The provider returns no
+ * discrete suburb, so this takes the last comma-separated part and strips a
+ * trailing state and/or postcode: "12 Smith St, Penrith NSW 2750" → "Penrith".
+ * Returns null when it cannot tell, so a wrong guess never overwrites a blank.
+ *
+ * Exported for the unit test.
+ */
+export function suburbFromAddress(
+  address: string,
+  state?: string | null,
+  postcode?: string | null,
+): string | null {
+  const parts = address.split(',').map((p) => p.trim()).filter(Boolean)
+  if (parts.length < 2) return null
+  let tail = parts[parts.length - 1]
+  if (postcode) tail = tail.replace(postcode, '')
+  if (state) tail = tail.replace(new RegExp(`\\b${state}\\b`, 'i'), '')
+  // Belt and braces for a tail like "Penrith NSW 2750" when the provider gave
+  // us neither state nor postcode separately.
+  tail = tail.replace(/\b\d{4}\b/g, '')
+  tail = tail.replace(/\b(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b/gi, '')
+  const suburb = tail.replace(/\s+/g, ' ').trim()
+  return suburb.length > 1 ? suburb : null
+}
+
+/**
+ * Turn the route's failure envelope into something a tradie can act on.
+ *
+ * Every branch here is a real shape the route or its guard returns. Before this,
+ * only `issues` and `not_entitled` were handled and everything else rendered an
+ * internal slug — "Could not draft the quote — pipeline_failed" tells a tradie
+ * standing in a driveway nothing about whether to retry, fix something, or ring
+ * support.
+ *
+ * Exported for the unit test; pure so it needs no fixtures.
+ */
+export function explainFailure(
+  status: number,
+  json: { error?: string; reason?: string; issues?: string[]; intakeId?: string },
+): string {
+  if (json.issues?.length) return json.issues.join(', ')
+
+  const checkFirst = ' The quote may still have been drafted — check the Quotes tab before retrying.'
+
+  switch (json.error) {
+    case 'unauthorized':
+      return 'Your session expired. Reload the page and sign in again.'
+    case 'no_tenant':
+      return 'No tradie account is linked to this login. Ask the QuoteMax team to check your account.'
+    case 'feature_not_enabled':
+      return "This trade isn't enabled on your account. Ask the QuoteMax team to switch it on."
+    case 'not_entitled':
+    case 'voice_not_entitled':
+      return `Quoting is not enabled on your plan${json.reason ? ` (${json.reason})` : ''}.`
+    case 'invalid_body':
+      return 'Some answers were rejected. Check the fields and try again.'
+    case 'intake_insert_failed':
+      return 'The job was priced but could not be saved. Try again — nothing was charged.'
+    case 'draft_failed':
+    case 'draft_incomplete':
+      // The intake exists; the estimator leg failed. Retrying re-drafts from
+      // scratch and would leave two intakes behind.
+      return `The job was saved but the quote did not finish drafting.${json.intakeId ? checkFirst : ' Try again in a moment.'}`
+    case 'pipeline_failed':
+      // Usually an upstream model blip (Anthropic 529, embedding provider).
+      return `Drafting failed part-way — usually a temporary upstream problem. Wait a moment and try again.${json.intakeId ? checkFirst : ''}`
+  }
+
+  if (status === 504 || status === 502) {
+    return `The request timed out.${checkFirst}`
+  }
+  return `Could not draft the quote (${status}).${checkFirst}`
+}
+
 /** Ex-GST, whole dollars — matches how the SMS picker presents a product. */
 function priceLabel(v: number | string | null): string | null {
   const n = typeof v === 'string' ? parseFloat(v) : v
@@ -135,6 +210,13 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    // Duplicate-submit guard. `disabled` alone is not enough: the button is
+    // re-enabled while router.push is still navigating, and a submit that
+    // TIMED OUT client-side may well have succeeded server-side — the draft
+    // route runs in its own 300s invocation. A second fire would mint a second
+    // intake, a second quote, a second set of Stripe sessions and a second
+    // tradie notify.
+    if (busy) return
     setError(null)
     if (!address.trim() || !suburb.trim()) {
       setError('Address and suburb are required — the estimator prices by location.')
@@ -159,6 +241,13 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
       const token = await getAuthToken()
       if (!token) {
         setError('Your session expired. Reload the page and sign in again.')
+        // MUST clear busy. This is not the success path — leaving it latched
+        // combines with the `if (busy) return` guard above to brick the form
+        // permanently (the button reads "Drafting the quote…" forever and the
+        // live region announces a two-minute wait that will never end), and
+        // only a hard reload recovers. getAuthToken returns null on any lapsed
+        // session, so this is a routine exit, not an edge case.
+        setBusy(false)
         return
       }
       const res = await fetch('/api/tenant/job-quote', {
@@ -174,28 +263,42 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
           customer_mobile: customerMobile.trim(),
           customer_email: customerEmail.trim(),
           ...(productName ? { product_name: productName } : {}),
+          // The id is what makes the pin binding: the server re-reads the row
+          // and forces its price. The name alone is only a prompt hint.
+          ...(chosenProduct ? { product_id: chosenProduct.id } : {}),
         }),
       })
-      const json = (await res.json()) as {
+      // .catch(() => ({})) because a platform timeout or gateway error returns
+      // an HTML body, and res.json() then throws "Unexpected token '<'" — which
+      // is what the tradie used to see after waiting two minutes. Same pattern as
+      // app/dashboard/quote/[token]/SendQuotePanel.tsx.
+      const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
         shareToken?: string | null
         error?: string
         reason?: string
         issues?: string[]
+        intakeId?: string
+        needsInspection?: boolean
       }
-      if (!json.ok || !json.shareToken) {
-        setError(
-          json.issues?.join(', ') ??
-            (json.error === 'not_entitled'
-              ? `Quoting is not enabled on your plan${json.reason ? ` (${json.reason})` : ''}.`
-              : `Could not draft the quote${json.error ? ` — ${json.error}` : ''}.`),
-        )
+
+      // A share token means the quote EXISTS. Navigate even if some other part
+      // of the envelope looks off — erroring here while the quote sits in the
+      // Quotes tab is the worst of both worlds.
+      if (json.shareToken) {
+        // Deliberately no setBusy(false): the button stays disabled through
+        // navigation so it cannot be fired again.
+        router.push(`/dashboard/quote/${json.shareToken}`)
         return
       }
-      router.push(`/dashboard/quote/${json.shareToken}`)
+
+      setError(explainFailure(res.status, json))
+      setBusy(false)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong drafting the quote.')
-    } finally {
+      // Network drop / abort. The request may still have completed server-side.
+      setError(
+        `${err instanceof Error ? err.message : 'The connection dropped'} — the quote may still have been drafted. Check the Quotes tab before trying again.`,
+      )
       setBusy(false)
     }
   }
@@ -343,7 +446,23 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                   accessToken={token}
                   value={address}
                   onChange={setAddress}
-                  onSelect={(s) => setAddress(s.address)}
+                  // Fill Suburb too. Picking a suggestion used to leave Suburb
+                  // empty, so a tradie who selected a full address from the
+                  // type-ahead then failed the completeness check on submit.
+                  // Geoscape returns no discrete suburb field, so take the
+                  // second-to-last comma part of "12 Smith St, Penrith NSW 2750"
+                  // and drop any trailing state/postcode.
+                  onSelect={(s) => {
+                    setAddress(s.address)
+                    // OVERWRITE on a suggestion pick — the provider is
+                    // authoritative for the address it just returned. Guarding
+                    // on "only if empty" meant correcting a mis-picked address
+                    // left the first suburb behind, and Suburb is the field the
+                    // tradie stops watching precisely because it filled itself.
+                    // A null guess never clobbers what they typed.
+                    const guess = suburbFromAddress(s.address, s.state, s.postcode)
+                    if (guess) setSuburb(guess)
+                  }}
                   placeholder="12 Smith St"
                   // Spacing only — the component styles its own input, so
                   // passing INPUT here would draw a second bordered box.
@@ -433,18 +552,25 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
               </p>
             )}
 
+            {/* aria-disabled, not disabled: `disabled` removes the button from
+                the tab order mid-submit, so when drafting fails the tradie's
+                focus is thrown to the top of the page and they have to Tab all
+                the way back (WCAG 2.4.3). The submit handler's `if (busy) return`
+                is what actually prevents the double-fire. */}
             <button
               type="submit"
-              disabled={busy}
-              className="w-full bg-accent px-6 py-4 font-mono text-sm font-bold uppercase tracking-[0.14em] text-ink-deep transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-60"
+              aria-disabled={busy}
+              className="w-full bg-accent px-6 py-4 font-mono text-sm font-bold uppercase tracking-[0.14em] text-ink-deep transition-colors hover:bg-accent-press aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
             >
               {busy ? 'Drafting the quote…' : 'Draft the quote'}
             </button>
-            {busy && (
-              <p aria-live="polite" className="text-center text-sm text-text-sec">
-                Pricing the job — this takes up to a couple of minutes. Don&rsquo;t close the tab.
-              </p>
-            )}
+            {/* Always rendered. A live region created in the same tick as its
+                text is not announced by screen readers, so the two-minute wait
+                was silent — the region must exist first and have its text
+                swapped. */}
+            <p aria-live="polite" className="min-h-5 text-center text-sm text-text-sec">
+              {busy ? 'Pricing the job — this takes up to a couple of minutes. Don’t close the tab.' : ''}
+            </p>
           </div>
         </form>
       </div>

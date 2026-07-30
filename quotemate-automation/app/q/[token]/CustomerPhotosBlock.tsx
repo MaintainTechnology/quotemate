@@ -100,13 +100,23 @@ export function CustomerPhotosBlock({
       Received
     </span>
   ) : null
+  // A quote drafted in the tradie dashboard has no upload token, and cannot
+  // have one: /api/upload/[token] resolves only calls.photo_request_token and
+  // sms_conversations.photo_request_token, and a portal intake has neither. So
+  // for those quotes the invitation to upload is not merely disabled, it is
+  // impossible — inviting it anyway is what shipped, above a permanently greyed
+  // button. Say nothing rather than promise something that can't happen.
   const blurb = hasPhotos
     ? 'Your tradie reviewed these to draft the quote below. Tap any photo to view full-size.'
-    : 'No photos uploaded yet. Add one or two so your tradie can sense-check the job and your tier preview can render.'
+    : uploadToken
+      ? 'No photos uploaded yet. Add one or two so your tradie can sense-check the job and your tier preview can render.'
+      : 'No photos on this job.'
 
+  // No token ⇒ no upload is possible, so render nothing rather than a dead
+  // file-picker. The `blurb` above already states there are no photos.
   const body = hasPhotos ? (
     <PhotoGrid urls={urls} />
-  ) : (
+  ) : !uploadToken ? null : (
     <EmptyState
       phase={phase}
       errorMessage={errorMessage}

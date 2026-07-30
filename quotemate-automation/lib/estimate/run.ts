@@ -20,6 +20,7 @@ import {
   type SharedMaterial,
   type BomLine,
   type CatalogueProductRef,
+  isTradiePin,
 } from './catalogue'
 import { applyMinLabourFloor, resolveMinLabourHours } from './min-labour'
 import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount, reconcileInflatedLabour } from './reconcile'
@@ -739,9 +740,17 @@ export async function runEstimation(
     // legitimate price the customer literally selected) so this is
     // consistent with the money model — same post-draft adjustment
     // pattern as applyMinLabourFloor. Flag-gated + best-effort.
-    if (process.env.WP9_PRODUCT_OPTIONS === '1') {
+    // A TRADIE pin (dashboard job quoter) runs regardless of WP9. That flag is
+    // the kill switch for the CUSTOMER-facing SMS picker, and it is absent from
+    // .env.local — so gating the tradie path on it would make the pin inert in
+    // dev and let local verification pass while doing nothing. Killing WP9 in
+    // prod therefore disables the SMS picker only; the tradie pin is a separate
+    // surface with its own review gate in front of it.
+    const chosenPre = (intake?.scope as { chosen_product?: any } | null)?.chosen_product
+    const tradiePinned = isTradiePin(chosenPre)
+    if (process.env.WP9_PRODUCT_OPTIONS === '1' || tradiePinned) {
       try {
-        const chosen = (intake?.scope as { chosen_product?: any } | null)?.chosen_product
+        const chosen = chosenPre
         if (chosen) {
           // The SMS offer froze a snapshot of the product when it was
           // sent. If the tradie uploaded/edited the photo or description
@@ -812,7 +821,17 @@ export async function runEstimation(
             const keep = (r.applied.includes('good')
               ? 'good'
               : r.applied[0]) as 'good' | 'better' | 'best'
-            if (draft[keep]) {
+            // A TRADIE pin keeps the menu. The rationale above holds for a
+            // CUSTOMER pick — they chose, so one option is the honest render.
+            // A tradie pin is different: the quote is held for their review, and
+            // TierSelect (app/dashboard/quote/[token]/TierSelect.tsx:40) renders
+            // nothing below two priced tiers, so collapsing here would delete the
+            // only tier control on the page the review gate exists to serve. The
+            // tiers are not necessarily identical either — they still differ in
+            // labour and sundries — and collapseDuplicateTiers further down
+            // already nulls the ones that genuinely match by line-item
+            // signature, which is the better-reasoned net.
+            if (draft[keep] && !tradiePinned) {
               for (const t of ['good', 'better', 'best'] as const) {
                 if (t !== keep) draft[t] = null
               }
@@ -947,9 +966,17 @@ export async function runEstimation(
       const requested =
         (intake?.scope as { specs?: { requested_specs?: unknown } } | null)?.specs
           ?.requested_specs ?? null
+      // Must widen in lockstep with the pin gate above. This flag's whole job is
+      // to stop the main-path guard re-judging a product the chosen-product
+      // block already locked in. A TRADIE pin runs that block without WP9, so
+      // gating this on WP9 alone would let the guard re-evaluate tiers whose
+      // headline line applyChosenProduct just rewrote — and under
+      // SPEC_GUARD_MODE=enforce that routes the whole quote to the $99
+      // inspection BECAUSE the tradie pinned a product.
+      const chosenForGuard = (intake?.scope as { chosen_product?: unknown } | null)?.chosen_product
       const wp9Handled =
-        process.env.WP9_PRODUCT_OPTIONS === '1' &&
-        !!(intake?.scope as { chosen_product?: unknown } | null)?.chosen_product
+        (process.env.WP9_PRODUCT_OPTIONS === '1' || isTradiePin(chosenForGuard as never)) &&
+        !!chosenForGuard
       if (guardMode !== 'off' && requested && !wp9Handled) {
         const category = categoryForJobType((intake?.job_type as string | null) ?? null)
         if (category) {

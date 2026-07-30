@@ -80,6 +80,34 @@ describe('JOB_FIELDS', () => {
     }
   })
 
+  // lib/intake/structure.ts:405-407 forces inspection_required for any
+  // oven_cooktop / power_points / outdoor_lighting job mentioning a new circuit,
+  // mains or switchboard work, and :397 for three-phase. An option that triggers
+  // that is a guaranteed $99 inspection, so it must say so on the label — the
+  // tradie is choosing it without knowing it discards the price.
+  //
+  // Sharper on power_points: the 20A band's own risk_flag is "switchboard spare
+  // way required", so a tradie wanting a dedicated circuit naturally picks BOTH
+  // 20A and the switchboard run — and the second choice throws away the
+  // recipe's assembly swap along with the tiers.
+  it('labels every option that forces an on-site inspection', () => {
+    const mustWarn: Array<[string, string, string]> = [
+      ['power_points', 'replace_or_new', 'switchboard'],
+      ['oven_cooktop', 'replace_or_new', 'new circuit'],
+      ['ev_charger', 'phase', 'three phase'],
+    ]
+    for (const [jobType, code, needle] of mustWarn) {
+      const field = JOB_FIELDS[jobType].fields.find((f) => f.code === code)
+      expect(field, `${jobType}.${code} missing`).toBeDefined()
+      const option = (field!.options ?? []).find((o) => o.toLowerCase().includes(needle))
+      expect(option, `${jobType}.${code} has no option matching "${needle}"`).toBeDefined()
+      expect(
+        option!.toLowerCase(),
+        `"${option}" forces a $99 inspection but does not say so`,
+      ).toContain('inspection')
+    }
+  })
+
   it('falls back to a usable generic spec for an unknown job type', () => {
     const spec = fieldsForJobType('not_a_real_job')
     expect(spec.fields.length).toBeGreaterThan(0)

@@ -653,6 +653,23 @@ const SUNDRY_RE = /sundr|seal|tape|\bclip\b|terminal|^fittings,/i
  * Prefers a non-sundry material line; falls back to any non-labour line; -1 if
  * none. Pure.
  */
+/**
+ * Did the TRADIE pin this product from the dashboard job quoter, rather than a
+ * CUSTOMER picking it mid-SMS?
+ *
+ * The two want opposite tier behaviour. A customer pick means they chose, so
+ * collapsing to the one option they picked is the honest render. A tradie pin
+ * lands on a quote held for their review, and TierSelect renders nothing below
+ * two priced tiers — so collapsing would delete the only tier control on the
+ * page the review gate exists to serve.
+ *
+ * Pure and exported so the rule is testable; the alternative is an inline
+ * condition buried in run.ts that nothing can assert.
+ */
+export function isTradiePin(chosen: { pinned_by?: unknown } | null | undefined): boolean {
+  return chosen?.pinned_by === 'tradie'
+}
+
 export function findHeadlineMaterialIndex(
   items: Array<Record<string, any>> | null | undefined,
 ): number {

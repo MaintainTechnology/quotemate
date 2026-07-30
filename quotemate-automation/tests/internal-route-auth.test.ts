@@ -91,6 +91,10 @@ vi.mock('@supabase/supabase-js', () => ({
 describe('the guard rejects at runtime, not just in the source', () => {
   const handlers: Record<string, (req: Request) => Promise<Response>> = {}
 
+  // 60s, not the 10s default: these two route modules transitively pull in the
+  // whole estimator, Stripe, SMS, PDF and image-gen stack. ~3s alone, but past
+  // 10s under full-suite load when every worker is competing — which is how this
+  // passed in isolation and timed out in `vitest run`.
   beforeAll(async () => {
     // NODE_ENV is 'test' here, so isCronAuthorised takes its dev branch: a
     // no-header call is ALLOWED and a wrong-header call is rejected. Assert the
@@ -98,7 +102,7 @@ describe('the guard rejects at runtime, not just in the source', () => {
     process.env.CRON_SECRET = 'test-secret-value'
     handlers['draft'] = (await import('@/app/api/estimate/draft/route')).POST
     handlers['structure'] = (await import('@/app/api/intake/structure/route')).POST
-  })
+  }, 60_000)
 
   const post = (body: unknown, auth?: string) =>
     new Request('http://localhost/api/x', {

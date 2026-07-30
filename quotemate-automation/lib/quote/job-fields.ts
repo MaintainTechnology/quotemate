@@ -96,7 +96,7 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
         code: 'replace_or_new',
         label: 'Replacing existing GPOs, adding near existing power, or a new run from the switchboard?',
         type: 'select',
-        options: ['replacing existing', 'adding near existing power', 'new run from the switchboard'],
+        options: ['replacing existing', 'adding near existing power', 'new run from the switchboard (on-site inspection)'],
       },
       // ── The two RECIPE SLOTS ────────────────────────────────────
       // These are not ordinary questions: "Replace double GPO" is the only
@@ -182,7 +182,7 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
         code: 'replace_or_new',
         label: 'Is there existing wiring in place, or does a new circuit need running?',
         type: 'select',
-        options: ['existing wiring', 'new circuit needed', 'not sure'],
+        options: ['existing wiring', 'new circuit needed (on-site inspection)', 'not sure'],
       },
     ],
   },
@@ -191,10 +191,17 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
     fields: [
       { code: 'room', label: 'Where is the charger going?', type: 'text' },
       {
-        code: 'circuit_required',
+        // NOT `circuit_required`. That code is a RECIPE SLOT
+        // (lib/quote/recipe-slots.ts), and the job-quote route filters recipe
+        // slot codes out of the prose transcript for every job type — so naming
+        // it that way silently dropped this answer, and 'three phase' matches no
+        // recipe band anyway (the band value is the hyphenated 'three-phase').
+        // Three-phase work is meant to force an inspection
+        // (lib/intake/structure.ts:397); with the answer lost it never did.
+        code: 'phase',
         label: 'Single phase or three phase?',
         type: 'select',
-        options: ['single phase', 'three phase', 'not sure'],
+        options: ['single phase', 'three phase (on-site inspection)', 'not sure'],
       },
     ],
   },
