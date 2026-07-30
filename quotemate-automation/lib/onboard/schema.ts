@@ -33,8 +33,14 @@ export function normaliseAuMobile(input: string): string {
   throw new Error('Invalid AU mobile: must be 04xx xxx xxx or +61 4xx xxx xxx')
 }
 
-const positiveMoney = z.coerce.number().positive('Must be greater than 0')
-const positivePct = z.coerce.number().min(0).max(100, 'Must be 0–100')
+const positiveMoney = z.coerce.number().positive('Enter an amount above $0')
+// `.min(0)` carried no message, so a negative percentage fell through to Zod's
+// default ("Number must be greater than or equal to 0") — a validator string,
+// not something a tradie can act on. Both bounds now read as form guidance.
+const positivePct = z.coerce
+  .number()
+  .min(0, 'Enter a percentage between 0 and 100')
+  .max(100, 'Enter a percentage between 0 and 100')
 
 // Treat empty strings (from blank wizard inputs) as "not provided" so
 // z.coerce.number() doesn't silently turn '' into 0 and trip floors like

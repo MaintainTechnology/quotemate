@@ -6,10 +6,12 @@
 
 'use client'
 
-import { Suspense, useState, useEffect, type FormEvent } from 'react'
+import { Suspense, useState, useEffect, useRef, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth, useUser } from '@clerk/nextjs'
 import { LICENCE_BODIES, normaliseAuMobile } from '@/lib/onboard/schema'
+import { fieldLabel, stepForFields, activateErrorMessage } from '@/lib/onboard/field-labels'
+import { identityFromClerkUser } from '@/lib/onboard/clerk-identity'
 import { businessInitials } from '@/lib/brand/monogram'
 import { DEFAULT_PAINTING_RATE_CARD } from '@/lib/painting/pricing'
 import { DEFAULT_ROOFING_RATE_CARD } from '@/lib/roofing/pricing'
@@ -262,9 +264,52 @@ function OnboardWizardInner() {
     setForm((prev) => (prev.clerk_user_id ? prev : { ...prev, clerk_user_id: clerkSessionUserId }))
   }, [clerkSessionUserId])
 
-  // Hydrate identity fields. Source priority:
+  // Clerk identity backfill — the Clerk half of the Supabase session backfill
+  // below (which reads user_metadata and is a no-op for a Clerk-only signup,
+  // since supabase.auth.getUser() returns null there).
+  //
+  // Without this, a Clerk tradie who reached the wizard WITHOUT the URL params
+  // — bookmark, a refresh that dropped the query, or the dashboard's
+  // authed-but-no-tenant bounce (app/dashboard/page.tsx:715) — had to retype
+  // business name, first name, email and mobile that /sign-up already stored on
+  // their Clerk user. Fills blanks only, so a URL param applied above wins.
+  //
+  // ONE-SHOT on purpose. The Supabase pass below lives in a `[]` effect, so it
+  // hydrates exactly once; this must match. Clerk re-creates its `user` object on
+  // session-token refresh, and unlike the `clerk_user_id` effect above this one
+  // writes fields the tradie can EDIT — so a re-fire minutes into the wizard
+  // would refill a field they had deliberately cleared.
+  const { user: clerkUser } = useUser()
+  const clerkBackfilled = useRef(false)
+  useEffect(() => {
+    if (!clerkUser || clerkBackfilled.current) return
+    clerkBackfilled.current = true
+    const patch = identityFromClerkUser(clerkUser)
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        business_name: prev.business_name || patch.business_name || '',
+        owner_first_name: prev.owner_first_name || patch.owner_first_name || '',
+        owner_email: prev.owner_email || patch.owner_email || '',
+        owner_mobile: prev.owner_mobile || patch.owner_mobile || '',
+      }
+      // Return the SAME object when nothing changed — matches the useAuth effect
+      // above and keeps a new `clerkUser` reference from re-rendering the whole
+      // wizard (and, if Clerk ever hands back an unstable ref, from looping).
+      const changed = (
+        ['business_name', 'owner_first_name', 'owner_email', 'owner_mobile'] as const
+      ).some((k) => next[k] !== prev[k])
+      return changed ? next : prev
+    })
+  }, [clerkUser])
+
+  // Hydrate identity fields. Source priority, highest first:
   //   1. URL params (carried over from /signup, /sign-up, or /auth/callback)
-  //   2. Supabase session user + user_metadata (set by /api/auth/signup)
+  //   2. Clerk session user — the one-shot useUser effect ABOVE
+  //   3. Supabase session user + user_metadata (set by /api/auth/signup)
+  //
+  // 2 and 3 are mutually exclusive in practice (a tradie has one provider or the
+  // other) and both only ever fill blanks, so their relative order can't matter.
   //
   // The session fallback is critical — without it, returning users
   // arriving from /signin (which only passes owner_user_id) would
@@ -434,7 +479,17 @@ function OnboardWizardInner() {
         // missing URL carry-through.
         if (data.error === 'validation_failed' && data.fieldErrors) {
           const fields = Object.keys(data.fieldErrors)
-          const identityFields = ['business_name', 'owner_first_name', 'owner_email', 'owner_mobile', 'owner_user_id']
+          // clerk_user_id belongs here too: on the Clerk funnel it is the only
+          // id carried, so an identity failure there must offer the same
+          // "refresh to pull from your session" hint.
+          const identityFields = [
+            'business_name',
+            'owner_first_name',
+            'owner_email',
+            'owner_mobile',
+            'owner_user_id',
+            'clerk_user_id',
+          ]
           const missingIdentity = fields.filter((f) => identityFields.includes(f))
           if (missingIdentity.length > 0) {
             throw new Error(
@@ -442,12 +497,20 @@ function OnboardWizardInner() {
                 `Try refreshing this page — we now pull them from your active session as a fallback.`,
             )
           }
+          // Send the tradie back to the step that owns the first broken field,
+          // so the inline <Field error=…> under the real input is on screen.
+          // Without this the banner names a field the review step never renders.
+          const jumpTo = stepForFields(fields)
+          if (jumpTo) setStep(jumpTo)
           const summary = fields
-            .map((f) => `${f}: ${data.fieldErrors[f]?.[0] ?? 'invalid'}`)
+            .map((f) => `${fieldLabel(f)}: ${data.fieldErrors[f]?.[0] ?? 'Please check this'}`)
             .join(' · ')
           throw new Error(`Please fix: ${summary}`)
         }
-        throw new Error(data.error ?? 'Activation failed')
+        // Prefer the route's human `message` over its machine `error` code —
+        // without this the 422 put the literal "owner_user_id_unresolved" in the
+        // banner, and every other coded error read the same way.
+        throw new Error(activateErrorMessage(data))
       }
       const sp = new URLSearchParams({
         tenant: data.tenantId,

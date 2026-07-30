@@ -16,8 +16,9 @@
 import { Suspense, useState, useEffect, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { useSignUp } from '@clerk/nextjs'
+import { useAuth, useSignIn, useSignUp } from '@clerk/nextjs'
 import { normaliseAuMobile } from '@/lib/onboard/schema'
+import { classifySignUpFailure, decideDuplicateEmail } from '@/lib/onboard/resume-decision'
 import { FunnelShell } from '@/app/_components/funnel-shell'
 import { Field, INPUT, RequiredLegend, ErrorBanner, Arrow } from '@/app/signup/page'
 
@@ -60,6 +61,8 @@ function SignUpInner() {
   const router = useRouter()
   const params = useSearchParams()
   const { signUp } = useSignUp()
+  const { signIn } = useSignIn()
+  const { getToken } = useAuth()
 
   const [businessName, setBusinessName] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -68,7 +71,9 @@ function SignUpInner() {
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [emailExists, setEmailExists] = useState(false)
+  // Where the duplicate-email banner should send them: the Clerk sign-in page
+  // (password didn't prove ownership) or the dashboard (account already set up).
+  const [duplicateAction, setDuplicateAction] = useState<null | 'signin' | 'dashboard'>(null)
 
   // Email-verification sub-view (only when the Clerk instance requires it).
   const [pendingVerification, setPendingVerification] = useState(false)
@@ -131,7 +136,11 @@ function SignUpInner() {
 
   /** Complete a sign-up whose status is (or becomes) 'complete': supply an
    *  instance-required username the form doesn't collect, then finalize the
-   *  session and hand off to /onboard. Returns true if it navigated. */
+   *  session and hand off to /onboard.
+   *
+   *  Returns true when it HANDLED the outcome and the caller must stop — either
+   *  it navigated, or it surfaced a terminal error. False means "not complete
+   *  yet, carry on" (i.e. the caller should run email verification). */
   async function finish(mobileE164: string): Promise<boolean> {
     if (!signUp) return false
     // Some Clerk instances make username a required field. Supply a derived one
@@ -144,6 +153,20 @@ function SignUpInner() {
       }
     }
     if (signUp.status === 'complete') {
+      // Session conflict: Clerk created the user but could NOT make it the active
+      // session because another is already live (SignUpFutureResource
+      // .existingSession). Finalising anyway would hand /onboard the NEW user id
+      // while the browser stays authenticated as the OLD one — activate would
+      // stamp a tenant that its own session can't then resolve, i.e. an orphan
+      // reachable only after a manual sign-out. Stop and say so instead.
+      if (signUp.existingSession) {
+        setDuplicateAction('dashboard')
+        setError(
+          'Your account was created, but this device is still signed in to another account. Open your dashboard, or sign out and sign back in to finish setting up.',
+        )
+        setSubmitting(false)
+        return true
+      }
       const uid = signUp.createdUserId
       await signUp.finalize()
       goToOnboard(uid, mobileE164)
@@ -152,11 +175,82 @@ function SignUpInner() {
     return false
   }
 
+  /**
+   * Duplicate email — the Clerk port of /signup's `resumeAbandonedSignup`
+   * (app/api/auth/signup/route.ts:66-100).
+   *
+   * An account with NO tenant row is an abandoned wizard run, not a real
+   * account, and a hard stop would lock the tradie out of their own email. So:
+   * prove ownership with the password they just typed, THEN ask whether a tenant
+   * exists, then continue in this same submit. Keeping that order is what stops
+   * this becoming an email-enumeration oracle — exactly the property /signup has.
+   *
+   * The tenant question is answered by GET /api/tenant/me, which already resolves
+   * dual-auth and 404s for authed-but-no-tenant (the signal
+   * app/dashboard/page.tsx:715 relies on). No new endpoint.
+   */
+  async function handleDuplicateEmail(cleanEmail: string, mobileE164: string) {
+    let signInFailed = true
+    let tenantStatus: number | null = null
+
+    try {
+      if (signIn) {
+        const { error: signInErr } = await signIn.password({
+          identifier: cleanEmail,
+          password,
+        })
+        // Anything short of 'complete' (wrong password, 2FA required, …) is a
+        // failure here: we can't mint a token, so we can't answer the tenant
+        // question, so we must not resume.
+        if (!signInErr && signIn.status === 'complete') {
+          await signIn.finalize()
+          signInFailed = false
+          const token = await getToken().catch(() => null)
+          if (token) {
+            const res = await fetch('/api/tenant/me', {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            tenantStatus = res.status
+          }
+        }
+      }
+    } catch {
+      // Network/SDK throw. If it fired BEFORE sign-in completed, signInFailed is
+      // still true and we fail closed to 'needs_signin'. If it fired after (e.g.
+      // the /api/tenant/me fetch itself threw), signInFailed is already false but
+      // tenantStatus is not 404, so decideDuplicateEmail routes to
+      // 'existing_account' — never 'resume'. Safe on both sides of the await.
+    }
+
+    switch (decideDuplicateEmail({ signInFailed, tenantStatus })) {
+      case 'resume':
+        // Abandoned run. Same submit, no trip through /sign-in. clerk_user_id is
+        // left empty on purpose — /onboard stamps it from the live Clerk session
+        // (app/onboard/page.tsx:260-264), which is now authenticated.
+        goToOnboard(null, mobileE164)
+        return
+      case 'existing_account':
+        // Covers BOTH "a tenant already exists" and "we couldn't get a clean
+        // answer" — so the copy must be true either way. It is: the password
+        // authenticated, so they are signed in, and the dashboard self-routes to
+        // /onboard if no tenant turns up (app/dashboard/page.tsx:714-717).
+        setDuplicateAction('dashboard')
+        setError("You're signed in now — open your dashboard to pick up where you left off.")
+        setSubmitting(false)
+        return
+      case 'needs_signin':
+        setDuplicateAction('signin')
+        setError('An account with that email already exists. Sign in instead.')
+        setSubmitting(false)
+        return
+    }
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!signUp) return
     setError(null)
-    setEmailExists(false)
+    setDuplicateAction(null)
     setSubmitting(true)
     try {
       const cleanEmail = email.trim().toLowerCase()
@@ -180,15 +274,30 @@ function SignUpInner() {
         unsafeMetadata: { business_name: businessName.trim(), owner_mobile: mobileE164 },
       })
       if (createErr) {
-        const { message, code: errCode } = clerkErr(createErr)
-        if (errCode === 'form_identifier_exists') {
-          setEmailExists(true)
-          setError('An account with that email already exists.')
-        } else {
-          setError(message)
+        // Classified from Clerk's own resource signals first, error text second.
+        switch (
+          classifySignUpFailure({
+            existingSession: !!signUp.existingSession,
+            isTransferable: signUp.isTransferable,
+            error: createErr,
+          })
+        ) {
+          case 'already_signed_in':
+            // A duplicate-email attempt that authenticated leaves a live session,
+            // so a resubmit with a DIFFERENT email lands here. Without this the
+            // tradie gets a raw Clerk string and no way forward.
+            setDuplicateAction('dashboard')
+            setError("You're already signed in on this device.")
+            setSubmitting(false)
+            return
+          case 'identifier_taken':
+            await handleDuplicateEmail(cleanEmail, mobileE164)
+            return
+          case 'other':
+            setError(clerkErr(createErr).message)
+            setSubmitting(false)
+            return
         }
-        setSubmitting(false)
-        return
       }
 
       // Complete now if the instance needs nothing further (finish() also
@@ -362,9 +471,14 @@ function SignUpInner() {
           {error && (
             <ErrorBanner>
               {error}{' '}
-              {emailExists && (
+              {duplicateAction === 'signin' && (
                 <Link href="/sign-in" className="font-semibold text-accent hover:text-accent-press underline">
                   Sign in instead
+                </Link>
+              )}
+              {duplicateAction === 'dashboard' && (
+                <Link href="/dashboard" className="font-semibold text-accent hover:text-accent-press underline">
+                  Open your dashboard
                 </Link>
               )}
             </ErrorBanner>

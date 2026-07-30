@@ -81,11 +81,18 @@ export async function POST(req: Request) {
       )
     }
 
-    // Resolve owner_user_id authoritatively. The wizard CAN drop this
-    // value if URL params got lost or the Supabase session backfill
-    // didn't fire — and a NULL owner_user_id means the tradie can never
-    // sign back in (signin / /api/tenant/me both look up by user_id).
-    // Fall back to admin email lookup when the form didn't send one.
+    // Resolve owner_user_id authoritatively. The wizard CAN drop this value if
+    // URL params got lost or the session backfill didn't fire.
+    //
+    // ⚠ This comment used to say a NULL owner_user_id means the tradie can never
+    // sign back in. That stopped being true when dual-auth landed (migration 163,
+    // 2026-07-07): /api/tenant/me resolves EITHER provider
+    // (lib/tenant/current.ts:97), and a Clerk-native signup legitimately has
+    // owner_user_id NULL with sign-in carried by clerk_user_id. The A9 guard
+    // below is what actually enforces "linked to something".
+    //
+    // The lookup is still worth doing: a tradie who tried /signup first has a
+    // real auth.users row, and stamping it lands the tenant usefully dual-linked.
     let resolvedOwnerUserId: string | null = form.owner_user_id || null
     if (!resolvedOwnerUserId) {
       const looked = await lookupUserIdByEmail(form.owner_email)
@@ -94,6 +101,16 @@ export async function POST(req: Request) {
         console.log('[activate] owner_user_id missing in payload — resolved from email', {
           email: form.owner_email,
           userId: looked,
+        })
+      } else if (form.clerk_user_id) {
+        // EXPECTED on the Clerk funnel: a Clerk-native signup has no auth.users
+        // row at all, so the lookup is meant to miss and clerk_user_id carries
+        // sign-in. Warning here fired on every correct Clerk activation and
+        // trained operators to ignore a message that IS diagnostic below.
+        // The lookup itself is kept: a tradie who tried /signup first genuinely
+        // hits it, and the row lands usefully dual-linked.
+        console.log('[activate] clerk-native signup — no supabase auth user, linking by clerk_user_id', {
+          email: form.owner_email,
         })
       } else {
         console.warn('[activate] owner_user_id missing AND no auth user matches email', {
@@ -112,8 +129,12 @@ export async function POST(req: Request) {
         {
           ok: false,
           error: 'owner_user_id_unresolved',
+          // "Sign in again" was wrong advice for a Clerk tradie: they ARE signed
+          // in — the id just never reached this request (lost URL param, or
+          // clerk-js not hydrated at submit). Reloading re-runs the wizard's
+          // session backfill, which is what actually fixes it.
           message:
-            'Could not link this onboarding to a signed-in account. Sign in again and retry.',
+            'Could not link this onboarding to your account. Reload this page so we can read your signed-in session, then activate again.',
         },
         { status: 422 },
       )
