@@ -22,8 +22,15 @@ import { CATEGORIES } from './categories'
 import { TenantBomLineSchema } from '@/lib/tenant/update-schema'
 
 describe('Phase 2 R1 — the electrical material vocabulary', () => {
-  it('is exactly the seven real shared_materials.category values', () => {
-    expect(materialCategoriesFor('electrical').map((c) => c.value).sort()).toEqual([
+  // CORRECTED: this originally asserted the list was EXACTLY these seven. That
+  // encoded the over-restriction — it locked a tradie out of stocking an EV
+  // charger or security camera, neither of which has a shared row. The seven
+  // must all be PRESENT (they are the ones that price with an empty catalogue);
+  // the list is legitimately wider. vocabulary-regression.test.ts holds the
+  // wider set.
+  it('contains the seven values that price from shared_materials', () => {
+    expect(materialCategoriesFor('electrical').map((c) => c.value)).toEqual(
+      expect.arrayContaining([
       'ceiling_fan',
       'downlight',
       'gpo',
@@ -31,7 +38,8 @@ describe('Phase 2 R1 — the electrical material vocabulary', () => {
       'safety_switch',
       'smoke_alarm',
       'sundries',
-    ])
+    ]),
+    )
   })
 
   it('EXCLUDES the three near-miss synonyms that make a line unpriceable', () => {
@@ -41,26 +49,24 @@ describe('Phase 2 R1 — the electrical material vocabulary', () => {
     expect(vals).not.toContain('sundry') // real value is sundries
   })
 
-  it('excludes the grounding-only values that have no material at all', () => {
+  it('OFFERS the values with no shared row — a tradie stocks those themselves', () => {
+    // CORRECTED: these were originally asserted ABSENT, on the belief that no
+    // shared_materials row meant unpriceable. It does not — chooseMaterial's
+    // tenant leg matches on category alone.
     const vals = materialCategoriesFor('electrical').map((c) => c.value)
-    for (const dead of [
-      'switchboard',
-      'oven_cooktop',
-      'ev_charger',
-      'fault_find',
-      'strip_light',
-      'security_camera',
-      'doorbell_intercom',
-      'general',
+    for (const stockable of [
+      'switchboard', 'oven_cooktop', 'ev_charger', 'fault_find',
+      'strip_light', 'security_camera', 'doorbell_intercom', 'general',
     ]) {
-      expect(vals, `${dead} has no shared_materials row`).not.toContain(dead)
+      expect(vals, `${stockable} is stockable by a tradie`).toContain(stockable)
     }
   })
 
   it('leaks no plumbing value onto the electrical list', () => {
     const vals = materialCategoriesFor('electrical').map((c) => c.value)
     for (const p of materialCategoriesFor('plumbing').map((c) => c.value)) {
-      if (p === 'sundries') continue // legitimately shared by both trades
+      // sundries and general are legitimately shared by both trades.
+      if (p === 'sundries' || p === 'general') continue
       expect(vals, `${p} is plumbing`).not.toContain(p)
     }
   })
@@ -74,8 +80,9 @@ describe('Phase 2 R1 — the electrical material vocabulary', () => {
 })
 
 describe('Phase 2 R1 — plumbing and the unknown-trade case', () => {
-  it('is the ten real plumbing values', () => {
-    expect(materialCategoriesFor('plumbing').map((c) => c.value).sort()).toEqual([
+  it('contains the ten values that price from shared_materials', () => {
+    expect(materialCategoriesFor('plumbing').map((c) => c.value)).toEqual(
+      expect.arrayContaining([
       'hws_electric',
       'hws_gas',
       'hws_heat_pump',
@@ -86,7 +93,8 @@ describe('Phase 2 R1 — plumbing and the unknown-trade case', () => {
       'tapware_outdoor',
       'toilet',
       'toilet_repair',
-    ])
+    ]),
+    )
   })
 
   it('returns EVERY trade’s values when no trade is given (the cross-trade view)', () => {
