@@ -46,6 +46,7 @@ import {
   type PaintingTurnDecision,
 } from './painting-receptionist'
 import {
+  applyRoofingAnswer,
   isAffirmative,
   isGreetingOnly,
   isNegative,
@@ -1001,7 +1002,7 @@ export async function roofingTurnViaLlm(args: {
     fallback: () => advanceRoofing(args.prev, args.inbound),
     reask: () => ({ action: 'ask', slots: prevSlots, step: 'await_booking', reply: BOOKING_REASK }),
     map: (d, slots) =>
-      boundRepeatedAsk(
+      resolveGatherStep(
         breakConfirmLoop(
           enforceRoofingReadiness(
             mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
@@ -1012,6 +1013,7 @@ export async function roofingTurnViaLlm(args: {
         d.tool,
         prevStep,
         prevSlots,
+        args.inbound,
       ),
   })
 
@@ -1079,19 +1081,70 @@ const STEP_SLOT: Partial<Record<RoofingStep, keyof RoofingSlots>> = {
  * At the budget this does exactly what the deterministic path does: set the
  * `unknown` sentinel so readiness routes the job on site, or — for the
  * address, where there is nothing to put on a job sheet — route it directly.
+ *
+ * ⚠ But the budget must never eat an answer we CAN read. Live 2026-07-30
+ * (tenant "Quotemate Atomix", 28 Greens Rd Coorparoo): the bot asked the
+ * material, the customer answered "Currently tile", and the thread was routed
+ * on site reading "we couldn't confirm the roof material".
+ * `mapMaterial('Currently tile')` is `concrete_tile` — with the flag OFF that
+ * job would have been PRICED. The model chose ask_for_detail without recording
+ * the slot (its own question had offered concrete AND terracotta, so a bare
+ * "tile" looked ambiguous to it), the counter hit the budget, and the bound
+ * that exists to protect the customer threw their answer away instead.
+ *
+ * So before any miss is counted, the customer's own words are run through the
+ * SAME mappers the deterministic path uses (`applyRoofingAnswer`). Only words
+ * that map to nothing spend the budget. This is the same "the model didn't set
+ * it, so code does" pattern as fillAddressParts / confirmAddressIfAffirmed
+ * above, and it cannot disagree with the flag-OFF behaviour because it is
+ * literally the same function.
+ *
+ * The fold is keyed on the step we LAST ASKED, not on the one the model asks
+ * next: the customer was answering the question we sent them, whatever the
+ * model decided to say afterwards. Only a repeat of the SAME question spends
+ * the budget.
  */
-function boundRepeatedAsk(
+function resolveGatherStep(
   d: RoofingTurnDecision | null,
   tool: LlmTool,
   prevStep: RoofingStep | null,
   prevSlots: RoofingSlots,
+  inbound: string,
 ): RoofingTurnDecision | null {
   if (!d || d.action !== 'ask' || tool !== 'ask_for_detail') return d
-  if (!prevStep || d.step !== prevStep) return d
+  if (!prevStep) return d
   const key = STEP_SLOT[prevStep]
   if (!key) return d
   // Progress was made — the slot we asked about landed this turn.
   if (prevSlots[key] == null ? d.slots[key] != null : d.slots[key] !== prevSlots[key]) return d
+
+  /** Re-run readiness over `slots` and turn it into this turn's decision.
+   *  The model's own wording is kept when readiness agrees with the step it
+   *  was already asking; otherwise the question comes from the step. */
+  const settle = (slots: RoofingSlots): RoofingTurnDecision => {
+    const q = nextRoofingStep(slots)
+    if (q.step === 'ready') return { action: 'measure', slots }
+    if (q.step === 'inspection') {
+      return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
+    }
+    const keepModelWording = q.step === d.step && !!d.reply?.trim()
+    return { action: 'ask', slots, step: q.step, reply: keepModelWording ? d.reply : (q.question ?? d.reply) }
+  }
+
+  // The model left the slot empty. Read the customer's words ourselves before
+  // holding it against them. A fold that moves the conversation OFF this step
+  // is a landed answer — including "it's colorbond", which fills no material
+  // but sets metal_hint and so advances to the profile question.
+  const folded = applyRoofingAnswer(d.slots, prevStep, inbound)
+  if (nextRoofingStep(folded).step !== prevStep) {
+    const landed: RoofingSlots = { ...folded }
+    delete landed.misses
+    return settle(landed)
+  }
+
+  // Genuinely unreadable. Only a REPEAT of the same question spends the
+  // budget — a model that has already moved on gets its turn untouched.
+  if (d.step !== prevStep) return d
 
   const misses = (prevSlots.misses ?? 0) + 1
   if (misses < missBudget(prevStep)) {
@@ -1105,12 +1158,7 @@ function boundRepeatedAsk(
   if (prevStep === 'material') slots.material = 'unknown'
   else if (prevStep === 'pitch') slots.pitch = 'unknown'
   else if (prevStep === 'intent') slots.intent = 'unknown'
-  const q = nextRoofingStep(slots)
-  if (q.step === 'ready') return { action: 'measure', slots }
-  if (q.step === 'inspection') {
-    return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
-  }
-  return { action: 'ask', slots, step: q.step, reply: q.question ?? d.reply }
+  return settle(slots)
 }
 
 /**

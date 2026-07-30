@@ -770,10 +770,16 @@ describe('roofingTurnViaLlm', () => {
       last_step: 'material',
     }
 
+    // NOTE: the input here has to map to NOTHING. "dunno really" / "not sure"
+    // are recognised answers — the mappers read them as the 'unknown'
+    // sentinel, and R5b below escalates those on the FIRST turn rather than
+    // asking a customer who already said they don't know a second time (which
+    // is what the deterministic path has always done). Only words we genuinely
+    // cannot read spend the budget.
     it('counts a repeat of the SAME question when the slot did not move', async () => {
       const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What is the roof made of?' })
       const r = await roofingTurnViaLlm({
-        prev: AT_MATERIAL, inbound: 'dunno really', history: history('dunno really'), facts: FACTS, decide,
+        prev: AT_MATERIAL, inbound: 'the green one', history: history('the green one'), facts: FACTS, decide,
       })
       expect(r.decision.slots.misses).toBe(1)
     })
@@ -782,7 +788,7 @@ describe('roofingTurnViaLlm', () => {
       const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What is the roof made of?' })
       const r = await roofingTurnViaLlm({
         prev: { ...AT_MATERIAL, slots: { ...AT_MATERIAL.slots, misses: 1 } },
-        inbound: 'still not sure', history: history('still not sure'), facts: FACTS, decide,
+        inbound: 'the one at the back', history: history('the one at the back'), facts: FACTS, decide,
       })
       // material 'unknown' routes the job on site — the same safe fallback
       // the state machine uses.
@@ -820,6 +826,106 @@ describe('roofingTurnViaLlm', () => {
         inbound: 'somewhere over there', history: history('somewhere over there'), facts: FACTS, decide,
       })
       expect(r.decision.action).toBe('inspection')
+    })
+
+    // ── R5b · the miss budget must not eat a MAPPABLE answer ──────────
+    //
+    // Live 2026-07-30, tenant "Quotemate Atomix", 28 Greens Rd Coorparoo:
+    // the bot asked material, the customer answered "Currently tile", and
+    // the thread went to an on-site inspection reading "we couldn't confirm
+    // the roof material". mapMaterial('Currently tile') is 'concrete_tile'
+    // — the deterministic path would have PRICED that job. The model chose
+    // ask_for_detail without recording the slot (its own question offered
+    // concrete AND terracotta, so a bare "tile" looked ambiguous to it),
+    // the miss budget hit 2, and boundRepeatedAsk set the 'unknown'
+    // sentinel. The customer's answer was thrown away by the bound that
+    // exists to protect them.
+    describe('R5b a mappable answer is folded before a miss is counted', () => {
+      it('prices the job when the model re-asks material the customer just answered', async () => {
+        const { decide } = scripted({
+          tool: 'ask_for_detail',
+          reply_to_send: 'Is that concrete tile or terracotta?',
+        })
+        const r = await roofingTurnViaLlm({
+          // One miss already spent (the customer had answered pitch when
+          // material was asked), exactly as the live thread stood.
+          prev: {
+            slots: { ...AT_MATERIAL.slots, pitch: 'standard', misses: 1 },
+            last_step: 'material',
+          },
+          inbound: 'Currently tile',
+          history: history('Currently tile'),
+          facts: FACTS,
+          decide,
+        })
+        expect(r.decision.slots.material).toBe('concrete_tile')
+        expect(r.decision.action).toBe('measure')
+      })
+
+      it('folds on the FIRST re-ask too, without spending a miss', async () => {
+        const { decide } = scripted({
+          tool: 'ask_for_detail',
+          reply_to_send: 'Is that concrete tile or terracotta?',
+        })
+        const r = await roofingTurnViaLlm({
+          prev: AT_MATERIAL,
+          inbound: 'terracotta tiles',
+          history: history('terracotta tiles'),
+          facts: FACTS,
+          decide,
+        })
+        expect(r.decision.slots.material).toBe('terracotta_tile')
+        expect(r.decision.slots.misses ?? 0).toBe(0)
+        // pitch is still missing, so it asks that next — not material again.
+        expect(r.decision.action).toBe('ask')
+        if (r.decision.action === 'ask') expect(r.decision.step).toBe('pitch')
+      })
+
+      it('an ambiguous metal answer asks the PROFILE, not the same question', async () => {
+        const { decide } = scripted({
+          tool: 'ask_for_detail',
+          reply_to_send: 'What is the roof made of?',
+        })
+        const r = await roofingTurnViaLlm({
+          prev: AT_MATERIAL,
+          inbound: "it's colorbond",
+          history: history("it's colorbond"),
+          facts: FACTS,
+          decide,
+        })
+        expect(r.decision.action).toBe('ask')
+        if (r.decision.action === 'ask') expect(r.decision.step).toBe('material_profile')
+      })
+
+      it('still counts a miss when the words map to nothing', async () => {
+        const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What is the roof made of?' })
+        const r = await roofingTurnViaLlm({
+          prev: AT_MATERIAL, inbound: 'the green one', history: history('the green one'), facts: FACTS, decide,
+        })
+        expect(r.decision.slots.misses).toBe(1)
+      })
+
+      it('still honours a genuine "no idea" as the on-site sentinel', async () => {
+        const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What is the roof made of?' })
+        const r = await roofingTurnViaLlm({
+          prev: AT_MATERIAL, inbound: 'no idea mate', history: history('no idea mate'), facts: FACTS, decide,
+        })
+        expect(r.decision.action).toBe('inspection')
+        expect(r.decision.slots.material).toBe('unknown')
+      })
+
+      it('folds a re-asked INTENT the customer already gave', async () => {
+        const { decide } = scripted({ tool: 'ask_for_detail', reply_to_send: 'What do you need done?' })
+        const r = await roofingTurnViaLlm({
+          prev: MID_GATHER,
+          inbound: 'full reroof please',
+          history: history('full reroof please'),
+          facts: FACTS,
+          decide,
+        })
+        expect(r.decision.slots.intent).toBe('full_reroof')
+        expect(r.decision.slots.misses ?? 0).toBe(0)
+      })
     })
   })
 
