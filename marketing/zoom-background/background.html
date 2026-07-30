@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QuoteMax video-call backgrounds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   QUOTEMAX VIDEO-CALL BACKGROUNDS, 1920x1080
+
+   A virtual background is not a poster. Someone is standing in the middle of
+   it, and most of what makes a poster good makes a video background bad.
+
+   THREE RULES DRIVE EVERY DECISION
+
+   1. THE CENTRE IS NOT YOURS. A head-and-shoulders webcam frame fills roughly
+      x 600-1320, from y 90 to the bottom edge. Nothing goes there.
+
+   2. WHATEVER SITS BEHIND THE HEAD MUST BE PLAIN. Zoom's segmentation cuts a
+      soft, slightly wrong edge around hair and shoulders. Against busy or
+      high-contrast pixels that edge is obvious; against even mid-tone it
+      disappears. So the texture is masked OUT of the centre entirely.
+
+   3. IT MUST HAVE REAL TONAL RANGE. The first build ran from #1E1813 to
+      #16120F, about three values apart, and looked like an unfinished black
+      rectangle. Worse, on a call it makes a floating head. This one lights a
+      pool behind the subject at roughly #4A4137 and falls to #16120F in the
+      corners, which is the range an actual lit wall has.
+
+   HOW THE LIGHT IS BUILT, back to front
+      base      the lifted wall tone, surface or card
+      pool      one broad warm highlight, edge-glow #6E6354, where you stand
+      wings     the outer 560px on each side, darkened, with an inner hairline,
+                so the frame reads as a panelled wall rather than a gradient
+      floor     falloff across the bottom third, which is what sells "a room"
+      plate     wireframe texture, blurred, masked to the wings ONLY
+      grain     film grain over everything
+
+   SAFE ZONES, in 1920x1080 coordinates
+      subject keep-clear   x 600-1320   y 90-1080
+      Zoom name label      x 0-320      y 990-1080  (bottom-left of the tile)
+      brand column         x 96-560
+      right margin         x 1360-1824
+
+   MIRRORING, before you think it is broken: Zoom's "Mirror my video" is ON by
+   default and flips your SELF-VIEW only. You will see the lockup reversed.
+   Everyone else sees it correctly. Do not flip the file to "fix" it, or it will
+   be backwards for them and right for you.
+
+   BRAND, from DESIGN.md at the repo root: canvas #16120F, surface #1E1813,
+   card #2B2422, hairline #3A322C, edge-glow #6E6354, ONE accent #FFC400,
+   text-pri #F6F1EA, text-sec #C3B8AC, text-dim #A2968A. Manrope 800 all-caps
+   display, JetBrains Mono for labels, square corners, hairlines instead of
+   shadows, film grain, Australian English, no emoji.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --canvas:#16120F; --surface:#1E1813; --card:#2B2422; --hair:#3A322C;
+  --accent:#FFC400; --pri:#F6F1EA; --sec:#C3B8AC; --dim:#A2968A;
+  --M:96px;      /* outer margin */
+  --wing:560px;  /* the outer band on each side; the subject starts after it */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0908;font-family:'Manrope',sans-serif;display:flex;flex-direction:column;align-items:center;gap:40px;padding:40px 0}
+body.one{padding:0;gap:0}
+/* --base is the lit wall tone, --vig the darker palette value the edges fall
+   to, --lit the alpha of the highlight pool. All set per variant. */
+.bg{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--base);color:var(--pri);flex:0 0 auto}
+
+/* ── the light ─────────────────────────────────────────────────────
+   Two stops on the pool rather than one, so the falloff is a curve instead of
+   a ring. The vignette starts at 26% because starting it at 34% left the
+   middle two thirds flat. */
+.pool{position:absolute;inset:0;z-index:1;
+  background:radial-gradient(54% 68% at 50% 52%,
+    rgba(110,99,84,var(--lit)) 0%,
+    rgba(110,99,84,calc(var(--lit) * .44)) 44%,
+    transparent 76%)}
+.vig{position:absolute;inset:0;z-index:1;
+  background:radial-gradient(124% 118% at 50% 42%, transparent 26%, var(--vig) 100%)}
+
+/* Wings. Darkening the outer 560px and closing each with a hairline is what
+   turns a gradient into a wall you are standing in front of. */
+.wing{position:absolute;top:0;bottom:0;width:var(--wing);z-index:2}
+.wing.l{left:0;background:linear-gradient(90deg,var(--vig) 0%,rgba(22,18,15,0) 100%)}
+.wing.r{right:0;background:linear-gradient(270deg,var(--vig) 0%,rgba(22,18,15,0) 100%)}
+.wing::after{content:"";position:absolute;top:150px;bottom:150px;width:1px;
+  background:linear-gradient(180deg,transparent,var(--hair) 16%,var(--hair) 84%,transparent)}
+.wing.l::after{right:0}
+.wing.r::after{left:0}
+
+/* Floor falloff. Cheap, and it does more for realism than anything else here. */
+.floor{position:absolute;left:0;right:0;bottom:0;height:34%;z-index:2;
+  background:linear-gradient(180deg,rgba(22,18,15,0) 0%,var(--vig) 100%);opacity:.72}
+
+/* ── texture plate, masked to the wings only ───────────────────────
+   A horizontal mask, not a radial one: the keep-clear zone is a vertical band,
+   so the mask that matches it is linear. Gone completely from x 34% to 66%.
+   The #000 stops are an ALPHA STENCIL, not colour: mask-image reads only the
+   alpha channel and the hue never renders. */
+.plate{position:absolute;inset:0;z-index:3;overflow:hidden;opacity:var(--tex)}
+.plate img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  filter:grayscale(.30) saturate(.86) brightness(.86) contrast(.94) blur(var(--blur));
+  -webkit-mask-image:linear-gradient(90deg,#000 0%,#000 20%,transparent 34%,transparent 66%,#000 80%,#000 100%);
+  mask-image:linear-gradient(90deg,#000 0%,#000 20%,transparent 34%,transparent 66%,#000 80%,#000 100%)}
+
+/* ── brand furniture ──────────────────────────────────────────────── */
+.mark{position:absolute;left:var(--M);top:78px;z-index:6}
+.mark img{height:76px;width:auto;display:block}
+.rule{margin-top:26px;width:132px;height:3px;background:var(--accent)}
+.tag{margin-top:22px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;
+  letter-spacing:.20em;text-transform:uppercase;color:var(--sec);line-height:1.75}
+
+/* Bottom RIGHT, because Zoom puts its own name label bottom LEFT. */
+.url{position:absolute;right:var(--M);bottom:74px;z-index:6;text-align:right;
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;
+  letter-spacing:.20em;text-transform:uppercase;color:var(--pri)}
+.url span{display:block;margin-top:12px;font-weight:500;font-size:14px;letter-spacing:.22em;color:var(--dim)}
+
+/* ── the credentials panel, variant 04 only ───────────────────────── */
+.facts{position:absolute;left:var(--M);bottom:168px;z-index:6;width:404px}
+.facts>div{display:flex;gap:20px;align-items:baseline;padding:18px 0;border-top:1px solid var(--hair)}
+.facts .k{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:28px;line-height:1;
+  letter-spacing:-.04em;word-spacing:-.28em;color:var(--accent);flex:0 0 auto;min-width:92px}
+.facts .v{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:13px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--sec);line-height:1.5}
+
+.grain{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:.055;mix-blend-mode:soft-light}
+
+/* ── review overlay ────────────────────────────────────────────────
+   Scaffolding, not design. Shown only at ?guides, never present in an exported
+   background. The red and blue are deliberately OFF-palette and deliberately
+   ugly: a safe-zone marker has to be impossible to mistake for artwork, which
+   a brand tone would not achieve. */
+.guide{position:absolute;inset:0;z-index:20;pointer-events:none;display:none}
+body.guides .guide{display:block}
+.guide .subject{position:absolute;left:600px;top:90px;width:720px;bottom:0;
+  border:2px dashed rgba(255,90,90,.85);background:rgba(255,90,90,.10)}
+.guide .label{position:absolute;left:600px;top:98px;padding:6px 12px;background:rgba(255,90,90,.9);
+  font:700 15px 'JetBrains Mono',monospace;color:#fff;letter-spacing:.1em}
+.guide .name{position:absolute;left:0;bottom:0;width:320px;height:90px;
+  border:2px dashed rgba(90,170,255,.9);background:rgba(90,170,255,.12)}
+.guide .nlabel{position:absolute;left:12px;bottom:96px;padding:6px 12px;background:rgba(90,170,255,.9);
+  font:700 15px 'JetBrains Mono',monospace;color:#fff;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO='logo/quote-max-logo-dark.svg';
+const GRAIN=`<svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
+const GUIDE=`<div class="guide"><div class="subject"></div><div class="label">SUBJECT KEEP-CLEAR</div>
+  <div class="name"></div><div class="nlabel">ZOOM NAME LABEL</div></div>`;
+
+function render(V){
+  const vars=`--base:${V.base};--vig:${V.vig};--lit:${V.lit};--tex:${V.tex||0};--blur:${V.blur||'0px'}`;
+  return `<div class="bg" style="${vars}">
+    <div class="pool"></div><div class="vig"></div>
+    ${V.plate?`<div class="plate"><img src="img/${V.plate}.jpg"></div>`:''}
+    <div class="wing l"></div><div class="wing r"></div>
+    <div class="floor"></div>
+    <div class="mark"><img src="${LOGO}" alt="QuoteMax">
+      <div class="rule"></div>
+      ${V.tag?`<div class="tag">${V.tag}</div>`:''}</div>
+    ${V.facts?`<div class="facts">${V.facts.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>`:''}
+    <div class="url">quotemax.com.au${V.sub?`<span>${V.sub}</span>`:''}</div>
+    ${GRAIN}${GUIDE}</div>`;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   FOUR BACKGROUNDS. Different rooms, one identity.
+
+   01 studio-dark   the default. A lit wall and nothing competing with you.
+   02 studio-mid    the same wall one step up the ramp, for a dim room.
+   03 site-office   wireframe terrain in the wings, for depth.
+   04 onboarding    three real product facts, for calls where a tradie is
+                    deciding whether to trust the product.
+   ════════════════════════════════════════════════════════════════════ */
+const V=[
+
+/* 01 · Use this one for a client meeting. */
+{id:'01-studio-dark',base:'#1E1813',vig:'#16120F',lit:'.58',
+ tag:'AI quoting for<br>Australian tradies',
+ sub:'Quotes in under a minute'},
+
+/* 02 · One step up the same ramp, card over surface instead of surface over
+   canvas. Most home offices are dim, and a dark room behind a dark background
+   is what produces a floating head. */
+{id:'02-studio-mid',base:'#2B2422',vig:'#1E1813',lit:'.50',
+ tag:'AI quoting for<br>Australian tradies',
+ sub:'Quotes in under a minute'},
+
+/* 03 · Terrain wireframe in the wings at 24px blur. Reads as something on the
+   wall behind you rather than a picture you are standing in front of. */
+{id:'03-site-office',base:'#1E1813',vig:'#16120F',lit:'.52',
+ plate:'terrain-horizon',blur:'24px',tex:'.60',
+ tag:'AI quoting for<br>Australian tradies',
+ sub:'Eight trades live'},
+
+/* 04 · For onboarding. Three product facts at a size that reads on a laptop
+   without turning the call into a billboard. Every figure is true: under a
+   minute to draft, $0 commission on the tradie's work, eight trades live. */
+{id:'04-onboarding',base:'#1E1813',vig:'#16120F',lit:'.54',
+ plate:'wire-distant',blur:'30px',tex:'.46',
+ tag:'AI quoting for<br>Australian tradies',
+ facts:[['&lt;1 MIN','To draft a quote'],['$0','Commission, ever'],['8','Trades live today']],
+ sub:'Book a walkthrough'},
+];
+
+const q=new URLSearchParams(location.search);
+if(q.get('guides')!==null)document.body.classList.add('guides');
+const one=q.get('v');
+if(one!==null){document.body.classList.add('one');document.getElementById('app').innerHTML=render(V[Number(one)]);}
+else{document.getElementById('app').outerHTML=V.map(render).join('');}
+</script>
+</body>
+</html>
