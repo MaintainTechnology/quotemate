@@ -27,6 +27,7 @@ import { useAuth } from '@clerk/nextjs'
 import Link from 'next/link'
 import { getAuthToken } from '@/lib/auth/client-token'
 import { CATEGORIES } from '@/lib/estimate/categories'
+import { materialCategoriesFor } from '@/lib/estimate/material-vocabulary'
 import {
   defaultAvailabilityForState,
   parseAvailability,
@@ -11488,8 +11489,14 @@ function CatalogueTab({
     return a.name.localeCompare(b.name)
   }
   const CATEGORY_ORDER = new Map(CATEGORIES.map((c, i) => [c.value as string, i]))
+  // Phase 2 R2 — the select now saves material vocabulary (ceiling_fan,
+  // safety_switch, …), which CATEGORIES does not contain. Without this fallback
+  // those rows would group under their raw value instead of a label. Both lists
+  // are consulted rather than swapped: legacy rows still hold CATEGORIES values.
   const categoryLabel = (v: string) =>
-    CATEGORIES.find((c) => c.value === v)?.label ?? v
+    CATEGORIES.find((c) => c.value === v)?.label ??
+    materialCategoriesFor(undefined).find((c) => c.value === v)?.label ??
+    v
 
   const groupMap = new Map<
     string,
@@ -11699,14 +11706,21 @@ function CatalogueTab({
               className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
             >
               <option value="">— choose a category —</option>
-              {CATEGORIES.map((c) => (
+              {/* Phase 2 R2 — the real shared_materials vocabulary, scoped to
+                  this product's trade. Was CATEGORIES (the grounding list), which
+                  offered `fan`, `rcbo` and `sundry` — none of which any material
+                  row uses. Both selects had to change together: they currently
+                  agree on `fan`, so three of this tenant's fans price correctly
+                  by accident. Fixing only Recipes would break them. */}
+              {materialCategoriesFor(form.trade).map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
               ))}
             </select>
             <span className="text-[0.65rem] text-text-dim leading-snug">
-              This must match the category your Recipes use, so the AI prices this product on the right jobs.
+              What this product actually is. The AI matches it to the same category on your
+              Recipes, so a job that needs this part prices from your product and your price.
             </span>
           </label>
           <label className="flex flex-col gap-1 sm:col-span-2">
@@ -13118,14 +13132,22 @@ function RecipesTab({
                 className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
               >
                 <option value="">— choose a category —</option>
-                {CATEGORIES.map((c) => (
+                {/* Phase 2 R2 — scoped to the selected JOB's trade, so an
+                    electrical recipe never offers a plumbing part. */}
+                {materialCategoriesFor(selectedAsm.trade).map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
               </select>
+              {/* Phase 2 R7 — the old copy said "pick the same category you use
+                  in Catalogue", which is the instruction that created the
+                  problem: it told tradies to copy a value from a list that was
+                  itself wrong. Both lists now come from the same source, so the
+                  advice is no longer needed. */}
               <span className="text-[0.65rem] text-text-dim leading-snug">
-                Pick the same category you use in Catalogue so your real product (and price) is used for this part.
+                What part the job needs. Add a product in this category under Catalogue and the
+                AI uses your product and your price; otherwise it falls back to a generic price.
               </span>
             </label>
             <label className="flex flex-col gap-1">

@@ -8,6 +8,7 @@ import {
   catalogueCandidateRows,
   formatCatalogueHint,
   formatBomHint,
+  scaleBomToItemCount,
   formatTierLadderHint,
   effectiveAssembly,
   enrichLinesWithCatalogue,
@@ -1712,6 +1713,13 @@ async function buildBomHint(
     const ids = [chosen.id]
     const tenantId = (intake?.tenant_id as string | null) ?? null
 
+    // Phase 2 R4 — the recipe's headline quantity is a per-job default (the
+    // downlight recipe is seeded as literally 6). Scale it to what the customer
+    // actually asked for. This hint is the ONLY path a BOM reaches a real quote
+    // while DETERMINISTIC_BOM is off, so the scaling has to happen here or the
+    // whole phase is invisible in production.
+    const itemCount = Number(intake?.scope?.item_count ?? NaN)
+
     // Prefer this tradie's OWN recipe (tenant_assembly_bom, migration
     // 031) over the shared baseline. Absent table (prod pre-031) →
     // supabase returns {data:null} (no throw) → [] → falls back to
@@ -1724,7 +1732,7 @@ async function buildBomHint(
         .in('assembly_id', ids)
         .order('sort', { ascending: true })
       if (ownBom && ownBom.length > 0) {
-        return formatBomHint(ownBom as BomHintRow[])
+        return formatBomHint(scaleBomToItemCount(ownBom as BomHintRow[], itemCount))
       }
     }
 
@@ -1737,7 +1745,7 @@ async function buildBomHint(
       log.err('BOM hint fetch failed — continuing without it', berr.message)
       return null
     }
-    return formatBomHint((bom ?? []) as BomHintRow[])
+    return formatBomHint(scaleBomToItemCount((bom ?? []) as BomHintRow[], itemCount))
   } catch (e: any) {
     log.err('BOM hint build failed', e?.message ?? String(e))
     return null
@@ -2052,7 +2060,13 @@ async function loadDeterministicInputs(
   const [{ data: catRows }, { data: sharedRows }] = await Promise.all([cq, mq])
 
   const input: DeterministicTierInput = {
-    bom: (recipe ?? []) as BomLine[],
+    // Phase 2 R4 — same scaling as the hint path. Applied here rather than
+    // inside deterministic-bom.ts, which has no `intake` to read the count
+    // from, so both paths share one helper and cannot disagree.
+    bom: scaleBomToItemCount(
+      (recipe ?? []) as BomLine[],
+      Number(intake?.scope?.item_count ?? NaN),
+    ) as BomLine[],
     tenantMaterials: (catRows ?? []) as TenantMaterial[],
     sharedMaterials: (sharedRows ?? []) as SharedMaterial[],
     labourHours: Number(eff.labourHours.value),

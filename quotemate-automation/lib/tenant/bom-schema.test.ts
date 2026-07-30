@@ -20,11 +20,16 @@ describe('TenantBomLineSchema', () => {
     expect(r.success).toBe(true)
   })
 
+  // Phase 2 R3 changed these two deliberately. They used `tap` and `sundry`,
+  // neither of which is a real shared_materials.category — `tap` should be
+  // tapware_* and `sundry` should be `sundries`. Both used to parse fine and
+  // then silently match no product, which is the defect Phase 2 closes, so the
+  // fixtures move to real vocabulary rather than the assertion being relaxed.
   it('accepts a minimal line (required/sort/description omitted)', () => {
     const r = TenantBomLineSchema.safeParse({
       assembly_id: ASM,
       trade: 'plumbing',
-      material_category: 'tap',
+      material_category: 'tapware_kitchen',
       quantity: 1,
     })
     expect(r.success).toBe(true)
@@ -32,7 +37,7 @@ describe('TenantBomLineSchema', () => {
 
   it('coerces a numeric-string quantity', () => {
     const r = TenantBomLineSchema.safeParse({
-      assembly_id: ASM, trade: 'electrical', material_category: 'sundry', quantity: '2',
+      assembly_id: ASM, trade: 'electrical', material_category: 'sundries', quantity: '2',
     })
     expect(r.success).toBe(true)
     if (r.success) expect(r.data.quantity).toBe(2)

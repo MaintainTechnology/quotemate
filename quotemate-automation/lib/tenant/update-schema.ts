@@ -7,6 +7,7 @@
 //   • The schema itself is pure — easy to import + assert against.
 
 import { z } from 'zod'
+import { isMaterialCategory, materialCategoriesFor } from '@/lib/estimate/material-vocabulary'
 import { CATEGORY_ENUM_TUPLE } from '@/lib/estimate/categories'
 import { AvailabilitySchema } from '@/lib/quote/availability'
 
@@ -283,19 +284,60 @@ export type MaterialCataloguePatchOutput = z.output<typeof MaterialCataloguePatc
 // /api/tenant/bom and PATCH /api/tenant/bom/[id]. The job is a
 // shared_assemblies row; assembly_id is validated at runtime against
 // the catalogue (and the tradie's trades) by the route.
-export const TenantBomLineSchema = z.object({
+// Phase 2 R3 — material_category must name a real shared_materials.category,
+// not just be a non-empty string. `fan`, `rcbo` and `sundry` all passed the old
+// `.min(1).max(40)` and then silently matched no product, leaving the line
+// unpriceable with nothing anywhere reporting a problem.
+//
+// Normalised to trim+lowercase on the way through, because that is the form
+// chooseMaterial() compares in — storing `Ceiling_Fan` would fail to match at
+// price time even though the value is "right".
+//
+// The base object stays UNREFINED so `.partial()` still works for the patch
+// schema (`.partial()` does not exist on a refined Zod schema). The category
+// check is applied to each schema separately below.
+const TenantBomLineBase = z.object({
   assembly_id: z.string().uuid(),
   trade: TRADE_ENUM,
-  material_category: z.string().trim().min(1).max(40),
+  material_category: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .transform((s) => s.toLowerCase()),
   description: z.string().trim().max(200).optional().or(z.literal('')),
   quantity: z.coerce.number().positive().max(10_000),
   required: z.boolean().optional(),
   sort: z.coerce.number().int().min(0).max(999).optional(),
 })
+
+/** Shared category check. On a patch `trade` may be absent, in which case the
+ *  value is checked against every trade's vocabulary — still enough to reject
+ *  the three synonyms, which belong to no trade. */
+function refineMaterialCategory(
+  data: { trade?: string; material_category?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (data.material_category === undefined) return
+  if (isMaterialCategory(data.material_category, data.trade)) return
+  const allowed = materialCategoriesFor(data.trade).map((o) => o.value)
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ['material_category'],
+    message:
+      `"${data.material_category}" is not a material category` +
+      (data.trade ? ` for ${data.trade}` : '') +
+      `. Use one of: ${allowed.join(', ')}`,
+  })
+}
+
+export const TenantBomLineSchema = TenantBomLineBase.superRefine(refineMaterialCategory)
 export type TenantBomLineInput = z.input<typeof TenantBomLineSchema>
 export type TenantBomLineOutput = z.output<typeof TenantBomLineSchema>
 
-export const TenantBomLinePatchSchema = TenantBomLineSchema.partial()
+export const TenantBomLinePatchSchema = TenantBomLineBase.partial().superRefine(
+  refineMaterialCategory,
+)
 export type TenantBomLinePatchInput = z.input<typeof TenantBomLinePatchSchema>
 export type TenantBomLinePatchOutput = z.output<typeof TenantBomLinePatchSchema>
 
