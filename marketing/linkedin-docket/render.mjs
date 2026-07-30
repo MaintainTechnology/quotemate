@@ -13,7 +13,7 @@
 
 import { chromium } from 'playwright'
 import http from 'node:http'
-import { readFile, mkdir } from 'node:fs/promises'
+import { readFile, mkdir, readdir } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { dirname, join, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -43,11 +43,20 @@ const MIME = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
 }
 const server = http.createServer(async (req, res) => {
-  let p = decodeURIComponent(req.url.split('?')[0])
-  if (p === '/') p = '/docket.html'
+  const raw = decodeURIComponent(req.url.split('?')[0])
+  const want = raw === '/' ? 'docket.html' : raw.replace(/^\/+/, '')
   try {
-    const buf = await readFile(join(here, p))
-    res.writeHead(200, { 'content-type': MIME[extname(p)] || 'application/octet-stream' })
+    // The request NEVER becomes a path. join(here, req.url) resolved `..`, so
+    // GET /../../../.env.local read and served every live secret in the repo.
+    // Enumerate what exists and use the request only to SELECT from that list,
+    // so the path readFile gets is built from filesystem data and there is no
+    // check to get wrong. Dev-only server on a random localhost port, but alive
+    // whenever graphics render. (CodeQL js/path-injection, high.)
+    const entries = await readdir(here, { recursive: true })
+    const hit = entries.find((e) => e.split(/[\/]/).join('/') === want)
+    if (!hit) { res.writeHead(404); res.end('not found'); return }
+    const buf = await readFile(join(here, hit))
+    res.writeHead(200, { 'content-type': MIME[extname(hit)] || 'application/octet-stream' })
     res.end(buf)
   } catch {
     res.writeHead(404); res.end('not found')

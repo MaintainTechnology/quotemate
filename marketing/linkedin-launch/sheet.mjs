@@ -17,11 +17,21 @@ ${files.map((f) => `<div style="position:relative"><img src="${sub}/${f}" style=
 </body>`
 
 const srv = http.createServer(async (req, res) => {
-  const p = decodeURIComponent(req.url.split('?')[0])
-  if (p === '/') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(html) }
+  const raw = decodeURIComponent(req.url.split('?')[0])
+  if (raw === '/') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(html) }
+  const want = raw.replace(/^\/+/, '')
   try {
-    const b = await readFile(join(dir, p))
-    res.writeHead(200, { 'content-type': MIME[extname(p)] || 'application/octet-stream' }); res.end(b)
+    // The request NEVER becomes a path. join(dir, req.url) resolved `..`, so
+    // GET /../../../.env.local read and served every live secret in the repo.
+    // Enumerate what exists and use the request only to SELECT from that list,
+    // so the path readFile gets is built from filesystem data and there is no
+    // check to get wrong. Dev-only server on a random localhost port, but alive
+    // whenever graphics render. (CodeQL js/path-injection, high.)
+    const entries = await readdir(dir, { recursive: true })
+    const hit = entries.find((e) => e.split(/[\/]/).join('/') === want)
+    if (!hit) { res.writeHead(404); res.end('not found'); return }
+    const b = await readFile(join(dir, hit))
+    res.writeHead(200, { 'content-type': MIME[extname(hit)] || 'application/octet-stream' }); res.end(b)
   } catch { res.writeHead(404); res.end() }
 })
 const port = await new Promise((r) => srv.listen(0, () => r(srv.address().port)))
