@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>QuoteMax LinkedIn post, payment terms and deposit-first, 66 to 71</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   THE PAYMENT TERMS POST, refs 66 to 71.
+
+   DESIGN READ: a stats-led editorial post for Australian tradies and
+   construction operators, in a data-journalism register, rendered in the
+   locked QuoteMax identity. Dials: variance 7, density 4, motion n/a
+   (these export as static PNG).
+
+   Two frames only, because six graphics that get posted one at a time need
+   family resemblance more than they need novelty:
+
+   HERO                                  SPLIT (the endorsed docket frame)
+   ┌────────────────────────┐            ┌───────────────┬──────────────┐
+   │ lockup        ref/TAG  │ scrim      │ lockup            ref/TAG    │
+   │                        │            ├───────────────┼──────────────┤
+   │   photograph, full     │            │  KICKER       │              │
+   │   bleed, uncropped     │            │  BIG HEAD     │   photo,     │
+   │   at the top           │            │  content      │   full       │
+   ├────────────────────────┤ hairline   │  block        │   height     │
+   │  SOURCE                │            │               │              │
+   │  92%          <- mono  │            │               │              │
+   │  THE CLAIM IN CAPS     │            ├───────────────┴──────────────┤
+   │  the detail, sentence  │            │ QUOTEMAX.COM.AU     tagline  │
+   ├────────────────────────┤            └──────────────────────────────┘
+   │ QUOTEMAX.COM.AU  tag   │ yellow 96
+   └────────────────────────┘
+
+   Why HERO exists at all rather than setting type over the photo: the number
+   is the argument on this post, and a figure sitting on its own dark ground
+   is legible at thumbnail size in a way a figure over a workshop never is.
+   The photograph keeps every stop of its own exposure.
+
+   THE NUMBERS ARE NOT OURS. Every figure on these graphics is a published
+   third-party statistic and is attributed on the graphic itself, in the
+   words it was given in. Xero Small Business Insights for the 24-day
+   average, CreditorWatch for the construction late-payment share. QuoteMax
+   claims nothing about them beyond quoting them.
+
+   BRAND, from DESIGN.md at the repo root: canvas #16120F, ONE accent
+   #FFC400, text on yellow is #1C1812 and never white, Manrope 800 all-caps
+   display, JetBrains Mono for labels and figures, square corners, hairlines
+   instead of shadows, Australian English, no emoji, no exclamation marks,
+   no em dashes.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --canvas:#16120F; --card:#2B2422; --hair:#3A322C;
+  --accent:#FFC400; --on-accent:#1C1812;
+  --pri:#F6F1EA; --sec:#C3B8AC; --dim:#A2968A;
+  --M:88px;        /* outer margin */
+  --head:150px;    /* rail */
+  --foot:96px;     /* sign-off */
+  --split:540px;   /* where the photo column starts */
+  --gut:40px;      /* breathing room before the divider */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0908;font-family:'Manrope',sans-serif;display:flex;flex-direction:column;align-items:center;gap:46px;padding:46px 0}
+body.one{padding:0;gap:0}
+.d{position:relative;width:1080px;height:1350px;overflow:hidden;background:var(--canvas);color:var(--pri);flex:0 0 auto;
+  background-image:
+    radial-gradient(46% 30% at 4% -4%, rgba(110,99,84,.18), transparent 62%),
+    radial-gradient(40% 26% at 30% 102%, rgba(255,196,0,.07), transparent 60%);}
+.grain{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:.05;mix-blend-mode:soft-light}
+
+/* ── rail ─────────────────────────────────────────────────────────── */
+.rail{position:absolute;top:0;left:0;right:0;height:var(--head);z-index:7;
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M)}
+.rail::after{content:"";position:absolute;left:var(--M);right:var(--M);bottom:0;height:1px;background:var(--hair)}
+.rail img{height:52px;width:auto;display:block}
+.ref{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.ref b{color:var(--accent);font-weight:700}
+/* On HERO the rail sits over the photograph, so it earns a scrim of its own
+   and drops the hairline. Nothing else about it changes. */
+.hero .rail::after{display:none}
+.pair .rail::after{display:none}
+.hero .rail::before,.pair .rail::before{content:"";position:absolute;left:0;right:0;top:0;height:238px;z-index:-1;
+  background:linear-gradient(180deg,rgba(22,18,15,.94) 0%,rgba(22,18,15,.72) 46%,transparent 100%)}
+
+/* ── sign-off. Dark ink on yellow, always. ────────────────────────── */
+.foot{position:absolute;left:0;right:0;bottom:0;height:var(--foot);z-index:7;background:var(--accent);
+  display:flex;align-items:center;justify-content:space-between;padding:0 var(--M);
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.14em;text-transform:uppercase;color:var(--on-accent)}
+.foot span:last-child{font-weight:500;opacity:.76}
+
+/* Photography kept bright. A brand tint should say "this belongs", not hide
+   the subject: light desaturation and one warm accent pass, nothing more. */
+.shot img,.pic img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  filter:grayscale(.10) saturate(.97) contrast(1.04) brightness(1.02) sepia(.07)}
+.shot::after,.pic::after{content:"";position:absolute;inset:0;background:var(--accent);mix-blend-mode:soft-light;opacity:.11;pointer-events:none;z-index:2}
+
+/* ── HERO frame ───────────────────────────────────────────────────── */
+.hero .body{position:absolute;left:0;right:0;top:0;bottom:var(--foot);z-index:5;display:flex;flex-direction:column}
+.shot{flex:1 1 auto;position:relative;overflow:hidden;min-height:0}
+/* The photo does not simply stop. It sinks the last 130px into the plate so
+   the cut reads as one composition rather than two pasted rectangles. */
+.shot .sink{position:absolute;left:0;right:0;bottom:0;height:150px;z-index:3;
+  background:linear-gradient(180deg,transparent 0%,rgba(22,18,15,.42) 54%,var(--canvas) 100%)}
+.plate{flex:0 0 auto;position:relative;padding:44px var(--M) 52px;border-top:1px solid var(--hair);background:var(--canvas)}
+.src{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.20em;text-transform:uppercase;color:var(--accent)}
+.src i{color:var(--dim);font-style:normal;font-weight:500}
+.big{margin-top:16px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:186px;line-height:.84;
+  letter-spacing:-.06em;word-spacing:-.16em;color:var(--accent)}
+.claim{margin-top:20px;font-weight:800;font-size:44px;line-height:1.02;letter-spacing:-.03em;text-transform:uppercase;color:var(--pri)}
+.claim em{color:var(--accent);font-style:normal}
+.note{margin-top:22px;font-weight:500;font-size:23px;line-height:1.42;color:var(--sec);max-width:860px}
+.note em{color:var(--pri);font-weight:700;font-style:normal}
+/* The statement variant. Same plate, no figure: the sentence is the figure. */
+.mark{margin-top:24px;font-weight:800;font-size:124px;line-height:.5;height:58px;color:var(--accent)}
+/* 50px, not 58px: at 58 the sentence broke to three lines and orphaned "IT."
+   on the last one. Two full lines is worth the two points of scale. */
+.said{margin-top:26px;font-weight:800;font-size:50px;line-height:1.04;letter-spacing:-.035em;text-transform:uppercase;color:var(--pri)}
+.said em{color:var(--accent);font-style:normal}
+
+/* ── PAIR frame ────────────────────────────────────────────────────
+   Both photographs on one graphic, which is what a single-image LinkedIn post
+   can actually show without LinkedIn cropping a two-image post to tiles.
+
+   ┌────────────────────────────────────────┐
+   │ lockup                    QM-2607-72   │ rail 150, scrim, no hairline
+   ├──────────────────┬─────────────────────┤
+   │  the padlock     │   the tradie        │ band 560, 2px canvas seam
+   │  456 wide        │   622 wide          │
+   ├──────────────────┼─────────────────────┤
+   │ THE USUAL ORDER  │ DEPOSIT FIRST       │ captions 176, split on the seam
+   │ INVOICE,         │ DEPOSIT,            │
+   │ THEN WAIT.       │ THEN BOOK.          │
+   ├──────────────────┴─────────────────────┤
+   │ CREDITORWATCH · CONSTRUCTION           │ plate 368, full width
+   │ 92%                                    │
+   │ HAD AN OVERDUE INVOICE.                │
+   ├────────────────────────────────────────┤
+   │ QUOTEMAX.COM.AU              tagline   │ yellow 96
+   └────────────────────────────────────────┘
+
+   The seam runs unbroken from the top of the photography to the yellow, so this
+   is one vertical division through the whole composition rather than a
+   before-and-after pair of tiles. Each photograph owns the caption directly
+   under it: the locked diary is the usual order, the tradesman is deposit
+   first. Neither photo is decoration and neither is dimmed to rescue type.
+
+   Widths are deliberately uneven, 456 against 622. Equal halves read as a
+   stock template, and the answer deserves more room than the problem.
+
+   Crop maths, both sources being 1536x2752 so ia = 0.5581:
+     padlock in 456x560  ba 0.814  ia < ba  crop height  keeps 68.6%
+     tradie  in 622x560  ba 1.111  ia < ba  crop height  keeps 50.2%
+   Both windows hold their subject. Nothing here is a sliver. */
+.pair .band{position:absolute;left:0;right:0;top:var(--head);height:560px;z-index:4;display:flex;gap:2px}
+.pair .band .pic{position:relative;overflow:hidden;border:0}
+.pair .band .pic.a{flex:0 0 456px}
+.pair .band .pic.b{flex:1 1 auto}
+/* Measured, not guessed: these two frames sit 0.04 stops apart in mean
+   luminance, so no exposure correction is wanted. What differs is contrast.
+   47% of the padlock's pixels sit at the extremes against 25% of the
+   tradesman's, so the punchier frame gives a little back and the flatter one
+   takes a little on. */
+.pair .pic.a img{filter:grayscale(.10) saturate(.97) contrast(.99) brightness(1.02) sepia(.07)}
+.pair .pic.b img{filter:grayscale(.10) saturate(.97) contrast(1.07) brightness(1.01) sepia(.07)}
+
+.pair .caps{position:absolute;left:0;right:0;top:710px;height:176px;z-index:5;display:flex;
+  border-top:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.pair .cap{display:flex;flex-direction:column;justify-content:center;min-width:0}
+.pair .cap.a{flex:0 0 456px;padding-left:var(--M);padding-right:34px}
+.pair .cap.b{flex:1 1 auto;padding-left:34px;padding-right:var(--M)}
+.pair .cl{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;letter-spacing:.16em;text-transform:uppercase}
+.pair .cap.a .cl{color:var(--dim)}
+.pair .cap.b .cl{color:var(--accent)}
+.pair .cv{margin-top:14px;font-weight:800;font-size:30px;line-height:1.06;letter-spacing:-.025em;text-transform:uppercase}
+.pair .cap.a .cv{color:var(--dim)}
+.pair .cap.b .cv{color:var(--pri)}
+
+.pair .plate2{position:absolute;left:0;right:0;top:886px;bottom:var(--foot);z-index:5;padding:52px var(--M)}
+.pair .pe{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;letter-spacing:.19em;text-transform:uppercase;color:var(--accent)}
+.pair .pe i{color:var(--dim);font-style:normal;font-weight:500}
+/* Two figures, not one. The first pass left a large hole to the right of 92%,
+   and the second statistic is real, attributed and already in the caption, so
+   it belongs in the hole rather than nothing. Sizes differ so there is one
+   hero number and one supporting one, and flex-end lines the labels up. */
+.pair .figrow{margin-top:12px;display:flex;align-items:flex-end;gap:76px}
+.pair .fig .n{font-family:'JetBrains Mono',monospace;font-weight:700;line-height:.84;letter-spacing:-.06em;word-spacing:-.32em;color:var(--accent)}
+.pair .fig.lead .n{font-size:140px}
+.pair .fig.sub .n{font-size:88px}
+.pair .fig .l{margin-top:12px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+.pair .pc{margin-top:22px;font-weight:800;font-size:30px;line-height:1.06;letter-spacing:-.03em;text-transform:uppercase;color:var(--pri)}
+.pair .pc em{color:var(--accent);font-style:normal}
+/* The seam stops at the plate. It divides the two orders, and it ran straight
+   through "OVERDUE INVOICE" when it carried on to the yellow. The statistic
+   below applies to the whole industry, so it gets undivided ground. */
+.pair .seam{position:absolute;left:456px;width:2px;top:710px;height:176px;background:var(--hair);z-index:6}
+
+/* ── SPLIT frame ──────────────────────────────────────────────────── */
+.split{position:absolute;left:0;right:0;top:var(--head);bottom:var(--foot);z-index:5;display:flex}
+.col{flex:0 0 var(--split);padding-left:var(--M);padding-right:var(--gut);
+  display:flex;flex-direction:column;justify-content:center;min-width:0}
+.pic{flex:1 1 auto;position:relative;overflow:hidden;border-left:1px solid var(--hair)}
+.d.flip .split{flex-direction:row-reverse}
+.d.flip .pic{border-left:0;border-right:1px solid var(--hair)}
+.d.flip .col{padding-left:var(--gut);padding-right:var(--M)}
+
+/* ── type shared by the split content blocks ──────────────────────── */
+.kick{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.20em;text-transform:uppercase;color:var(--accent)}
+.h{margin-top:22px;font-weight:800;font-size:54px;line-height:.97;letter-spacing:-.035em;text-transform:uppercase;color:var(--pri)}
+.h em{color:var(--accent);font-style:normal}
+.h.sm{font-size:46px}
+.p{margin-top:24px;font-weight:500;font-size:24px;line-height:1.4;color:var(--sec)}
+.p em{color:var(--pri);font-weight:700;font-style:normal}
+.terms{margin-top:26px;display:flex;flex-wrap:wrap;gap:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-weight:500;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.terms b{color:var(--accent);font-weight:700}
+
+/* versus: the same job run two ways, as two short stacks side by side.
+   Two earlier attempts failed for the same reason. Label-left / value-right
+   pairs put a five-step sequence in a 240px column, so every value wrapped.
+   Setting the sequence as one inline run of slash-separated steps then clipped
+   at the column edge, because styling the separators removed every space and
+   left the browser one unbreakable word. Two stacked columns need no wrapping
+   at all, and the shorter right-hand stack is itself the argument. */
+.vs{margin-top:34px;display:flex}
+.vs>div{flex:1 1 0;min-width:0}
+.vs>div:first-child{padding-right:26px}
+.vs>div:last-child{padding-left:26px;border-left:1px solid var(--hair)}
+.vs .k{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+.vs ul{margin-top:14px;list-style:none}
+.vs li{padding:12px 0;border-bottom:1px solid var(--hair);font-weight:800;font-size:23px;line-height:1.1;
+  letter-spacing:-.01em;text-transform:uppercase;color:var(--pri)}
+.vs>div.old .k,.vs>div.old li{color:var(--dim)}
+.vs li.hot{color:var(--accent)}
+.vs li.gone{text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:rgba(162,150,138,.5)}
+
+/* figures: each one carries its own source line, then the plain-English read */
+.figs{margin-top:30px;display:flex;flex-direction:column;gap:26px}
+.figs>div{border-top:1px solid var(--hair);padding-top:18px}
+/* JetBrains Mono's word space is roughly twice Manrope's, so any figure with
+   an internal space ("24 DAYS") reads as double-spaced until it is pulled in. */
+.figs .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:66px;line-height:.9;letter-spacing:-.05em;word-spacing:-.32em;color:var(--accent)}
+.figs .l{margin-top:10px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+.figs .b{margin-top:12px;font-weight:500;font-size:21px;line-height:1.36;color:var(--sec)}
+.figs .b em{color:var(--pri);font-weight:700;font-style:normal}
+
+/* steps: numeral in a bordered tile on a spine */
+.steps{margin-top:28px;position:relative}
+.steps::before{content:"";position:absolute;left:27px;top:20px;bottom:20px;width:1px;background:var(--hair)}
+.steps>div{display:flex;gap:24px;align-items:flex-start;padding:13px 0}
+.steps .n{position:relative;z-index:1;flex:0 0 auto;width:54px;height:54px;display:grid;place-items:center;background:var(--canvas);
+  border:1px solid var(--accent);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;color:var(--accent)}
+/* The step that is the whole point of the post gets the solid fill. */
+.steps>div.key .n{background:var(--accent);color:var(--on-accent)}
+.steps .t{font-weight:800;font-size:24px;letter-spacing:-.02em;text-transform:uppercase;line-height:1.08}
+.steps .b{margin-top:5px;font-weight:500;font-size:19px;line-height:1.3;color:var(--sec)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO='logo/quote-max-logo-dark.svg';
+const GRAIN=`<svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.86" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
+const hl=s=>String(s).replace(/\{([^}]+)\}/g,'<em>$1</em>');
+const terms=a=>`<div class="terms">${a.map((t,i)=>`${i?'<b>&middot;</b>':''}<span>${t}</span>`).join('')}</div>`;
+const pic=D=>`<img src="img/${D.pic[0]}.jpg" style="object-position:${D.pic[1]}">`;
+
+/* HERO plate content. Either a figure or a sentence, never both. */
+const PLATE={
+  figure:D=>`<div class="src">${D.src}</div><div class="big">${D.big}</div>
+    <div class="claim">${hl(D.claim)}</div><div class="note">${hl(D.note)}</div>`,
+  saying:D=>`<div class="src">${D.src}</div><div class="mark">&ldquo;</div><div class="said">${hl(D.claim)}</div>
+    <div class="note">${hl(D.note)}</div>`,
+};
+
+/* SPLIT left-column content blocks. The frame never changes; only this does. */
+const BLOCK={
+  pitch:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="p">${hl(D.copy)}</div>${D.terms?terms(D.terms):''}`,
+  versus:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="vs">${D.vs.map(([k,steps,old])=>`<div${old?' class="old"':''}><div class="k">${k}</div>
+      <ul>${steps.map((s)=>`<li${/^\+/.test(s)?' class="hot"':/^-/.test(s)?' class="gone"':''}>${s.replace(/^[+-]/,'')}</li>`).join('')}</ul></div>`).join('')}</div>
+    ${D.copy?`<div class="p">${hl(D.copy)}</div>`:''}`,
+  stat:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="figs">${D.figs.map(([n,l,b])=>`<div><div class="n">${n}</div><div class="l">${l}</div><div class="b">${hl(b)}</div></div>`).join('')}</div>`,
+  steps:D=>`<div class="kick">${D.kick}</div><div class="h${D.sm?' sm':''}">${hl(D.head)}</div>
+    <div class="steps">${D.steps.map(([n,t,b,key])=>`<div${key?' class="key"':''}><div class="n">${n}</div><div><div class="t">${t}</div><div class="b">${b}</div></div></div>`).join('')}</div>`,
+};
+
+/* PAIR: both photographs on one graphic, divided by a single unbroken seam.
+   Each caption sits directly beneath the photograph it speaks for. */
+function pairBody(D){
+  const shot=(cls,p)=>`<div class="pic ${cls}"><img src="img/${p[0]}.jpg" style="object-position:${p[1]}"></div>`;
+  return `<div class="band">${shot('a',D.left.pic)}${shot('b',D.right.pic)}</div>
+    <div class="caps">
+      <div class="cap a"><div class="cl">${D.left.label}</div><div class="cv">${D.left.line}</div></div>
+      <div class="cap b"><div class="cl">${D.right.label}</div><div class="cv">${D.right.line}</div></div>
+    </div>
+    <div class="plate2"><div class="pe">${D.src}</div>
+      <div class="figrow">${D.figs.map(([n,l],i)=>`<div class="fig ${i?'sub':'lead'}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>
+      <div class="pc">${hl(D.claim)}</div></div>
+    <div class="seam"></div>`;
+}
+
+function render(D){
+  const rail=`<div class="rail"><img src="${LOGO}" alt=""><div class="ref">QM-2607-${D.n} <b>/</b> ${D.tag}</div></div>`;
+  const foot=`<div class="foot"><span>quotemax.com.au</span><span>${D.foot}</span></div>`;
+  const frame=D.kind==='pair'?'pair':PLATE[D.kind]?'hero':'split';
+  const body=frame==='pair'?pairBody(D)
+    :frame==='hero'?`<div class="body"><div class="shot">${pic(D)}<div class="sink"></div></div><div class="plate">${PLATE[D.kind](D)}</div></div>`
+    :`<div class="split"><div class="col">${BLOCK[D.kind](D)}</div><div class="pic">${pic(D)}</div></div>`;
+  return `<div class="d ${frame}${D.flip?' flip':''}">${rail}${body}${foot}${GRAIN}</div>`;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SIX GRAPHICS. The post itself carries two of them, in this order:
+
+     66  the padlock and the 92%     the hook. The uncomfortable number.
+     67  the tradie and the sequence  the answer. Deposit, then calendar.
+
+   The remaining four are alternates and follow-ups for the same argument:
+   68 sets the two statistics against each other, 69 states the structural
+   point on its own, 70 shows the two orders side by side, 71 carries the
+   caveat and the question.
+
+   Every third-party figure is attributed on the graphic. Every product claim
+   is a real one: three options per quote, deposit before the calendar opens,
+   the tradie's own rate book, domestic jobs only for this sequence.
+   ════════════════════════════════════════════════════════════════════ */
+const D=[
+
+/* ── 72 · THE POST IMAGE. Both photographs on one graphic. ─────────
+   This supersedes running 66 and 67 as a two-image post. A two-image LinkedIn
+   post renders as side-by-side tiles, centre-cropped, which clipped the claim
+   line on 66. One graphic carrying both photographs shows in full 4:5 and needs
+   no caveat.
+
+   The left photograph is the locked diary, so the left caption is the usual
+   order. The right photograph is the tradesman, so the right caption is deposit
+   first. The seam between them is the argument. */
+{n:72,tag:'DATA',kind:'pair',
+ left:{pic:['padlock-calendar','center 34%'],label:'THE USUAL ORDER',line:'Invoice, then wait.'},
+ right:{pic:['builder-tablet','center 44%'],label:'DEPOSIT FIRST',line:'Deposit, then book.'},
+ src:'CREDITORWATCH <i>&middot; CONSTRUCTION, LAST 12 MONTHS</i>',
+ figs:[['92%','HAD AN OVERDUE INVOICE'],['39%','SAT PAST 30 DAYS']],
+ claim:'The {highest late-payment rate} in the country.',
+ foot:'BOOKING HAPPENS AFTER THE DEPOSIT'},
+
+/* ── 66 · Alternate, the keys and the lock alone. ──────────────────── */
+{n:66,tag:'DATA',kind:'figure',pic:['padlock-calendar','center 36%'],
+ src:'CREDITORWATCH <i>&middot; LAST 12 MONTHS</i>',
+ big:'92%',
+ claim:'of construction firms carried an {overdue invoice}.',
+ note:'Thirty-nine per cent of them sat past 30 days. The highest late-payment rate of any industry in the country, in the same year Australian small business as a whole got paid faster than ever.',
+ foot:'LATE PAYMENT IS STRUCTURAL'},
+
+/* ── 67 · POST IMAGE TWO. The tradie, and the sequence reversed. ──── */
+{n:67,tag:'EDU',kind:'steps',pic:['builder-tablet','center center'],
+ kick:'THE SEQUENCE',head:'Deposit first. {Then the calendar}.',
+ steps:[
+   ['01','THE CUSTOMER DESCRIBES THE JOB','By text, by phone, or on a form.'],
+   ['02','A PRICED QUOTE COMES BACK','Three options, off the tradie&rsquo;s own rate book.'],
+   ['03','THEY PAY A DEPOSIT','Before a single window is offered.',true],
+   ['04','THEY PICK A TIME','From the calendar, once the deposit has cleared.']],
+ foot:'BOOKING HAPPENS AFTER THE DEPOSIT'},
+
+/* ── 68 · The two numbers, set against each other. ────────────────── */
+{n:68,tag:'DATA',kind:'stat',pic:['padlock-diary','center center'],flip:true,
+ kick:'TWO NUMBERS',head:'The economy is {not the problem}.',sm:true,
+ figs:[
+   ['24 DAYS','XERO SMALL BUSINESS INSIGHTS','Average time an Australian small business now waits to be paid. The {fastest since tracking began in 2017}.'],
+   ['92%','CREDITORWATCH','Share of construction firms with an overdue invoice in the last 12 months. Thirty-nine per cent sat past 30 days.']],
+ foot:'CONSTRUCTION DID NOT GET THE MEMO'},
+
+/* ── 69 · The structural point, said on its own. ──────────────────── */
+{n:69,tag:'VIEW',kind:'saying',pic:['padlock-wall','center 42%'],
+ src:'WHERE THE ASKING HAPPENS',
+ claim:'A quote is a document that asks someone {to think about it}.',
+ note:'By the time an invoice exists, the work is done, the materials are paid for, and you are asking rather than agreeing. The order is the problem, not the paperwork.',
+ foot:'THE ORDER IS THE PROBLEM'},
+
+/* ── 70 · The same job, run both ways. ────────────────────────────── */
+{n:70,tag:'EDU',kind:'versus',pic:['builder-plans','center center'],
+ kick:'TWO ORDERS',head:'Same job. {Different order}.',
+ // A leading + marks the accented step, a leading - the one that is struck out.
+ vs:[
+   ['THE USUAL ORDER',['Quote','Book','Work','Invoice','-Wait'],true],
+   ['DEPOSIT FIRST',['Quote','+Deposit','Book','Work']]],
+ copy:'Nothing about the job changes. Only the point at which the customer commits.',
+ foot:'COMMITMENT BEFORE SCHEDULING'},
+
+/* ── 71 · The caveat, and the question we are actually asking. ─────
+   Photography note: builder-stage.jpg is deliberately unused across this set.
+   The source frame composites a second tablet across the subject's hip at an
+   impossible angle, which is obvious once you look for it, and a public post
+   is the wrong place to ship a visible generation artefact. */
+{n:71,tag:'VIEW',kind:'pitch',pic:['builder-tablet','center center'],flip:true,
+ kick:'WHERE IT DOES NOT FIT',head:'This will not suit {every trade}.',
+ copy:'Big commercial work does not run on deposits and never will. But for domestic jobs, asking for commitment before scheduling seems more reasonable to us than asking for payment 30 days after you have finished.',
+ terms:['DOMESTIC JOBS','DEPOSIT THEN BOOKING'],
+ foot:'DOES DEPOSIT-FIRST WORK IN YOUR TRADE'},
+];
+
+const q=new URLSearchParams(location.search);
+const one=q.get('d');
+if(one!==null){document.body.classList.add('one');document.getElementById('app').innerHTML=render(D[Number(one)]);}
+else{document.getElementById('app').outerHTML=D.map(render).join('');}
+</script>
+</body>
+</html>
