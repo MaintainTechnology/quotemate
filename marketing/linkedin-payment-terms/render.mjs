@@ -11,7 +11,7 @@ import { chromium } from 'playwright'
 import http from 'node:http'
 import { readFile, mkdir } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
-import { dirname, join, extname } from 'node:path'
+import { dirname, join, extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -39,8 +39,21 @@ const server = http.createServer(async (req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0])
   if (p === '/') p = `/${SRC}`
   try {
-    const buf = await readFile(join(here, p))
-    res.writeHead(200, { 'content-type': MIME[extname(p)] || 'application/octet-stream' })
+    // Confine reads to this directory. `join()` resolves `..`, so without this a
+    // request for /../../../.env.local would read and serve every live secret —
+    // decodeURIComponent runs first, so the encoded form works too. The server
+    // is dev-only and on a random localhost port, but anything on the machine
+    // that can make an HTTP request while it runs could exfiltrate the lot.
+    // (CodeQL js/path-injection, high.)
+    const root = resolve(here)
+    const full = resolve(root, p.replace(/^\/+/, ''))
+    if (full !== root && !full.startsWith(root + sep)) {
+      res.writeHead(403)
+      res.end('forbidden')
+      return
+    }
+    const buf = await readFile(full)
+    res.writeHead(200, { 'content-type': MIME[extname(full)] || 'application/octet-stream' })
     res.end(buf)
   } catch { res.writeHead(404); res.end('not found') }
 })
