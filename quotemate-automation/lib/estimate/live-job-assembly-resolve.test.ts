@@ -60,7 +60,16 @@ describe.skipIf(!process.env.LIVE_DB)('Phase 1 — resolver vs the LIVE catalogu
 
       // Every name the map points at must actually exist in production. This is
       // the fixture-drift check — the whole reason this test exists.
-      const liveNames = new Set(rows.map((r) => r.name.trim().toLowerCase()))
+      // `rows` is the ELECTRICAL catalogue. Step 2 added plumbing entries to the
+      // same map, so the drift check needs BOTH trades — scoping it to
+      // electrical would stop guarding the plumbing names, which is where a
+      // typo is now most likely. One extra read-only select.
+      const { rows: plumbingRows } = await client.query<{ name: string }>(
+        `select name from shared_assemblies where trade = 'plumbing'`,
+      )
+      const liveNames = new Set(
+        [...rows, ...plumbingRows].map((r) => r.name.trim().toLowerCase()),
+      )
       const missing = Object.entries(JOB_TYPE_ASSEMBLY).filter(
         ([, name]) => !liveNames.has(name.trim().toLowerCase()),
       )
