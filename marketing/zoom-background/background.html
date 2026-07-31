@@ -68,6 +68,17 @@ body.one{padding:0;gap:0}
 /* --base is the lit wall tone, --vig the darker palette value the edges fall
    to, --lit the alpha of the highlight pool. All set per variant. */
 .bg{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--base);color:var(--pri);flex:0 0 auto}
+/* LIGHT MODE. The brand is dark-first, so rather than invent a second palette
+   this reassigns the SAME tokens: the tones that carry text on a dark wall are
+   already the right tones to BE a light wall, read the other way up.
+     text     accent-ink #1C1812   was the ink on yellow
+     second   hairline   #3A322C   dark enough to read on bone at 9.8:1
+     dim      edge-glow  #6E6354   4.7:1 on bone, passes AA
+     hairline text-sec   #C3B8AC   the warm grey
+   Every furniture rule below then works unchanged, and no new value enters the
+   system. The accent stays #FFC400 in both modes, which is the whole point of
+   having one accent. */
+.bg.light{--pri:#1C1812;--sec:#3A322C;--dim:#6E6354;--hair:#C3B8AC}
 
 /* ── the light ─────────────────────────────────────────────────────
    Two stops on the pool rather than one, so the falloff is a curve instead of
@@ -75,8 +86,8 @@ body.one{padding:0;gap:0}
    middle two thirds flat. */
 .pool{position:absolute;inset:0;z-index:1;
   background:radial-gradient(54% 68% at 50% 52%,
-    rgba(110,99,84,var(--lit)) 0%,
-    rgba(110,99,84,calc(var(--lit) * .44)) 44%,
+    rgba(var(--pool),var(--lit)) 0%,
+    rgba(var(--pool),calc(var(--lit) * .44)) 44%,
     transparent 76%)}
 .vig{position:absolute;inset:0;z-index:1;
   background:radial-gradient(124% 118% at 50% 42%, transparent 26%, var(--vig) 100%)}
@@ -84,16 +95,22 @@ body.one{padding:0;gap:0}
 /* Wings. Darkening the outer 560px and closing each with a hairline is what
    turns a gradient into a wall you are standing in front of. */
 .wing{position:absolute;top:0;bottom:0;width:var(--wing);z-index:2}
-.wing.l{left:0;background:linear-gradient(90deg,var(--vig) 0%,rgba(22,18,15,0) 100%)}
-.wing.r{right:0;background:linear-gradient(270deg,var(--vig) 0%,rgba(22,18,15,0) 100%)}
+.wing.l{left:0;background:linear-gradient(90deg,var(--vig) 0%,transparent 100%)}
+.wing.r{right:0;background:linear-gradient(270deg,var(--vig) 0%,transparent 100%)}
 .wing::after{content:"";position:absolute;top:150px;bottom:150px;width:1px;
   background:linear-gradient(180deg,transparent,var(--hair) 16%,var(--hair) 84%,transparent)}
 .wing.l::after{right:0}
 .wing.r::after{left:0}
+/* Not in light mode. On a dark wall the vignette swallows the ends of these two
+   rules and they read as panel edges. On a bone wall the corners are lighter
+   than the line, so both ends stay visible and the pair reads as a faint
+   rectangle drawn around the middle of the frame, which looks like a mistake.
+   The wings still carry their tonal step, which is the part doing the work. */
+.bg.light .wing::after{display:none}
 
 /* Floor falloff. Cheap, and it does more for realism than anything else here. */
 .floor{position:absolute;left:0;right:0;bottom:0;height:34%;z-index:2;
-  background:linear-gradient(180deg,rgba(22,18,15,0) 0%,var(--vig) 100%);opacity:.72}
+  background:linear-gradient(180deg,transparent 0%,var(--vig) 100%);opacity:var(--floor)}
 
 /* ── texture plate, masked to the wings only ───────────────────────
    A horizontal mask, not a radial one: the keep-clear zone is a vertical band,
@@ -101,10 +118,25 @@ body.one{padding:0;gap:0}
    The #000 stops are an ALPHA STENCIL, not colour: mask-image reads only the
    alpha channel and the hue never renders. */
 .plate{position:absolute;inset:0;z-index:3;overflow:hidden;opacity:var(--tex)}
+/* --pf is the per-plate treatment. The mountains needed their own: the source
+   carries a teal mesh behind the yellow ridge, and the brand allows ONE accent,
+   so grayscale plus sepia pulls the teal back to warm grey while the brighter
+   yellow survives as gold. Blur is 6px, not 24: the mask already removes the
+   plate from the whole keep-clear band, so detail in the wings cannot muddy the
+   cutout edge and there is no reason to hide it. */
 .plate img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-  filter:grayscale(.30) saturate(.86) brightness(.86) contrast(.94) blur(var(--blur));
+  filter:var(--pf) blur(var(--blur));
   -webkit-mask-image:linear-gradient(90deg,#000 0%,#000 20%,transparent 34%,transparent 66%,#000 80%,#000 100%);
   mask-image:linear-gradient(90deg,#000 0%,#000 20%,transparent 34%,transparent 66%,#000 80%,#000 100%)}
+
+/* grayscale(1) then sepia, not grayscale(.72). Inverting gold gives blue, and
+   leaving 28% of it made the mountains read cool on a warm bone wall, which is
+   the one colour mistake this palette cannot afford. Full grayscale kills the
+   blue outright and the sepia brings them back to warm grey. */
+.bg.light .plate img{filter:invert(1) grayscale(1) sepia(.38) saturate(.85) contrast(1.06) brightness(1.04) blur(var(--blur));
+  mix-blend-mode:multiply}
+/* Soft-light grain vanishes on a pale wall. Multiply keeps the tooth. */
+.bg.light .grain{mix-blend-mode:multiply;opacity:.04}
 
 /* ── brand furniture ──────────────────────────────────────────────── */
 .mark{position:absolute;left:var(--M);top:78px;z-index:6}
@@ -149,64 +181,91 @@ body.guides .guide{display:block}
 <body>
 <div id="app"></div>
 <script>
-const LOGO='logo/quote-max-logo-dark.svg';
+/* Two lockups, not one recoloured. quote-max-logo-dark.svg carries white and
+   bone marks and belongs on a dark wall; quotemax-logo-light.svg carries
+   #16120F and #241E1B marks and belongs on a pale one. The gold notch is
+   #E3C13C in both, so the accent does not shift between modes. */
+const LOGO={dark:'logo/quote-max-logo-dark.svg',light:'logo/quotemax-logo-light.svg'};
+// Every figure real: under a minute to draft, $0 commission, eight trades live.
+const FACTS=[['&lt;1 MIN','To draft a quote'],['$0','Commission, ever'],['8','Trades live today']];
 const GRAIN=`<svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
 const GUIDE=`<div class="guide"><div class="subject"></div><div class="label">SUBJECT KEEP-CLEAR</div>
   <div class="name"></div><div class="nlabel">ZOOM NAME LABEL</div></div>`;
 
 function render(V){
-  const vars=`--base:${V.base};--vig:${V.vig};--lit:${V.lit};--tex:${V.tex||0};--blur:${V.blur||'0px'}`;
-  return `<div class="bg" style="${vars}">
+  const m=V.mode||'dark';
+  const vars=[`--base:${V.base}`,`--vig:${V.vig}`,`--pool:${V.pool}`,`--lit:${V.lit}`,
+    `--floor:${V.floor}`,`--tex:${V.tex||0}`,`--blur:${V.blur||'0px'}`,
+    `--pf:${V.pf||'none'}`].join(';');
+  return `<div class="bg ${m}" style="${vars}">
     <div class="pool"></div><div class="vig"></div>
     ${V.plate?`<div class="plate"><img src="img/${V.plate}.jpg"></div>`:''}
     <div class="wing l"></div><div class="wing r"></div>
     <div class="floor"></div>
-    <div class="mark"><img src="${LOGO}" alt="QuoteMax">
+    <div class="mark"><img src="${LOGO[m]}" alt="QuoteMax">
       <div class="rule"></div>
       ${V.tag?`<div class="tag">${V.tag}</div>`:''}</div>
-    ${V.facts?`<div class="facts">${V.facts.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>`:''}
+    ${V.facts?`<div class="facts">${FACTS.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>`:''}
     <div class="url">quotemax.com.au${V.sub?`<span>${V.sub}</span>`:''}</div>
     ${GRAIN}${GUIDE}</div>`;
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   FOUR BACKGROUNDS. Different rooms, one identity.
+   SEVEN BACKGROUNDS. Four dark, three light, one identity.
 
-   01 studio-dark   the default. A lit wall and nothing competing with you.
-   02 studio-mid    the same wall one step up the ramp, for a dim room.
-   03 site-office   wireframe terrain in the wings, for depth.
-   04 onboarding    three real product facts, for calls where a tradie is
-                    deciding whether to trust the product.
+   01 studio-dark          the dark default. A lit wall, nothing else.
+   02 studio-dark-lighter  one step up the ramp, for a dim room.
+   03 mountains-dark       the peaks, sharp enough to actually read.
+   04 onboarding-dark      three real product facts.
+   05 studio-light         the light default.
+   06 mountains-light      the same peaks, inverted onto bone.
+   07 onboarding-light     the facts, light.
+
+   There is no light version of 02, because 02 exists only to lift a dark wall
+   for a dark room and a bone wall has nothing to lift.
    ════════════════════════════════════════════════════════════════════ */
+const TAG='AI quoting for<br>Australian tradies';
+/* The mountains need their own treatment: the source hides a teal mesh behind
+   the gold ridge, and the brand allows ONE accent, so grayscale plus sepia
+   pulls the teal back to warm grey while the brighter gold survives. */
+const PEAKS='grayscale(.50) sepia(.24) saturate(1.20) brightness(.95) contrast(1.04)';
+const SOFT ='grayscale(.30) saturate(.86) brightness(.86) contrast(.94)';
+/* Bone wall falling to warm grey. Both are existing tokens, so light mode adds
+   no new colour. A pale wall cannot be lifted further from this palette, so the
+   pool warms with the accent at 10% and the vignette does the modelling. */
+const LIGHT={mode:'light',base:'#F6F1EA',vig:'#C3B8AC',pool:'255,196,0',lit:'.10'};
+const DARK ={mode:'dark',base:'#1E1813',vig:'#16120F',pool:'110,99,84'};
+
 const V=[
+{...DARK,id:'01-studio-dark',lit:'.58',floor:'.72',tag:TAG,sub:'Quotes in under a minute'},
 
-/* 01 · Use this one for a client meeting. */
-{id:'01-studio-dark',base:'#1E1813',vig:'#16120F',lit:'.58',
- tag:'AI quoting for<br>Australian tradies',
- sub:'Quotes in under a minute'},
+{...DARK,id:'02-studio-dark-lighter',base:'#2B2422',vig:'#1E1813',lit:'.50',floor:'.72',
+ tag:TAG,sub:'Quotes in under a minute'},
 
-/* 02 · One step up the same ramp, card over surface instead of surface over
-   canvas. Most home offices are dim, and a dark room behind a dark background
-   is what produces a floating head. */
-{id:'02-studio-mid',base:'#2B2422',vig:'#1E1813',lit:'.50',
- tag:'AI quoting for<br>Australian tradies',
- sub:'Quotes in under a minute'},
+/* 6px blur, not the 24px this started at. The mask clears the plate from the
+   whole keep-clear band, so detail in the wings cannot muddy the cutout edge
+   and there was never a reason to hide it. Floor pulled back to .48 as well,
+   because at .72 the falloff swallowed the lower half of the range. */
+{...DARK,id:'03-mountains-dark',lit:'.52',floor:'.48',
+ plate:'peaks-glow',blur:'6px',tex:'.95',pf:PEAKS,tag:TAG,sub:'Eight trades live'},
 
-/* 03 · Terrain wireframe in the wings at 24px blur. Reads as something on the
-   wall behind you rather than a picture you are standing in front of. */
-{id:'03-site-office',base:'#1E1813',vig:'#16120F',lit:'.52',
- plate:'terrain-horizon',blur:'24px',tex:'.60',
- tag:'AI quoting for<br>Australian tradies',
- sub:'Eight trades live'},
+/* No plate on either onboarding variant. wire-distant at 22px was too blurred
+   to read as anything and too present to ignore, so it came out as smudges
+   behind the facts panel. The facts ARE the interest in that column; a texture
+   under them competes with the only thing on the frame you want read. Each
+   variant does one thing: a plain wall, mountains, or facts. */
+{...DARK,id:'04-onboarding-dark',lit:'.54',floor:'.70',
+ tag:TAG,facts:true,sub:'Book a walkthrough'},
 
-/* 04 · For onboarding. Three product facts at a size that reads on a laptop
-   without turning the call into a billboard. Every figure is true: under a
-   minute to draft, $0 commission on the tradie's work, eight trades live. */
-{id:'04-onboarding',base:'#1E1813',vig:'#16120F',lit:'.54',
- plate:'wire-distant',blur:'30px',tex:'.46',
- tag:'AI quoting for<br>Australian tradies',
- facts:[['&lt;1 MIN','To draft a quote'],['$0','Commission, ever'],['8','Trades live today']],
- sub:'Book a walkthrough'},
+{...LIGHT,id:'05-studio-light',floor:'.52',tag:TAG,sub:'Quotes in under a minute'},
+
+/* Same peaks, inverted and multiplied, so they read as dark lines on bone
+   rather than as a dark rectangle pasted on a pale wall. */
+{...LIGHT,id:'06-mountains-light',floor:'.40',
+ plate:'peaks-glow',blur:'6px',tex:'.70',pf:PEAKS,tag:TAG,sub:'Eight trades live'},
+
+{...LIGHT,id:'07-onboarding-light',floor:'.50',
+ tag:TAG,facts:true,sub:'Book a walkthrough'},
 ];
 
 const q=new URLSearchParams(location.search);
