@@ -116,8 +116,9 @@ describe('Phase 2 R4 — the HINT path scales (the only one live in production)'
 })
 
 describe('Phase 2 R4 — the deterministic path scales too', () => {
-  const resolveMaterial = (c: string) =>
-    c === 'downlight'
+  // Phase 4 R10 — the resolver now receives the whole line, not the category.
+  const resolveMaterial = (l: { material_category: string }) =>
+    l.material_category === 'downlight'
       ? { name: 'LED downlight', markedUpPrice: 40 }
       : { name: 'Sundries', markedUpPrice: 10 }
 

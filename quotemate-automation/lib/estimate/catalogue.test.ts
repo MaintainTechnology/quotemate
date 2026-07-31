@@ -190,10 +190,11 @@ describe('buildBomQuoteLines (WP3 determinism)', () => {
     { material_category: 'sundry', quantity: 1, required: true },
     { material_category: 'dimmer', quantity: 1, required: false },
   ]
-  const resolveMaterial = (c: string) =>
+  // Phase 4 R10 — resolver takes the whole line now.
+  const resolveMaterial = (l: { material_category: string }) => { const c = l.material_category; return (
     c === 'downlight' ? { name: 'LED downlight', markedUpPrice: 30 } :
     c === 'sundry' ? { name: 'Sundries', markedUpPrice: 12 } :
-    c === 'dimmer' ? { name: 'Dimmer', markedUpPrice: 45 } : null
+    c === 'dimmer' ? { name: 'Dimmer', markedUpPrice: 45 } : null) }
 
   it('produces the same lines every run (required only) + a labour line', () => {
     const a = buildBomQuoteLines({ bom, resolveMaterial, labourHours: 2, labourRate: 110 })
@@ -211,7 +212,7 @@ describe('buildBomQuoteLines (WP3 determinism)', () => {
   })
   it('flags missing required categories instead of shipping a hole', () => {
     const r = buildBomQuoteLines({
-      bom, resolveMaterial: (c) => (c === 'sundry' ? { name: 'Sundries', markedUpPrice: 12 } : null),
+      bom, resolveMaterial: (l) => (l.material_category === 'sundry' ? { name: 'Sundries', markedUpPrice: 12 } : null),
       labourHours: 2, labourRate: 110,
     })
     expect(r.missingRequired).toContain('downlight')

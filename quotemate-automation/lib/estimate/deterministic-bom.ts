@@ -113,7 +113,10 @@ export function buildDeterministicTiers(
     // it lands in the validator's accepted band. chooseMaterial already
     // prefers the operator's active catalogue ahead of shared and falls
     // back to shared when the catalogue doesn't cover the category.
-    const resolveMaterial = (category: string) => {
+    // Phase 4 R10 — receives the whole BOM line. Only the category is read
+    // today; R11 (catalogue_id pin) and R7 (include_when) will use the rest.
+    const resolveMaterial = (line: { material_category: string }) => {
+      const category = line.material_category
       const chosen = chooseMaterial({
         tenantRows: input.tenantMaterials,
         sharedRows: input.sharedMaterials,

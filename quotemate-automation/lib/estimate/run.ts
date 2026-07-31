@@ -2095,7 +2095,11 @@ async function loadDeterministicInputs(
   let cq = supabase
     .from('tenant_material_catalogue')
     .select(
-      'id, category, name, brand, range_series, supplier, unit, unit_price_ex_gst, customer_supply_price_ex_gst, tier_hint, active',
+      // Phase 4 R1 — properties/is_preferred/image_path/description are what the
+      // CHOSEN product needs: the tags R9 branches on, the go-to product R6 and
+      // R12 rank by, and the render metadata WP4 shows. Additive: nothing reads
+      // them until R3, so this changes no price on its own.
+      'id, category, name, brand, range_series, supplier, unit, unit_price_ex_gst, customer_supply_price_ex_gst, tier_hint, active, properties, is_preferred, image_path, description',
     )
     .eq('tenant_id', tenantId)
     .eq('active', true)

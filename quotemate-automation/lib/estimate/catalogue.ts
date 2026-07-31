@@ -260,12 +260,17 @@ export interface QuoteLine {
 }
 export interface BuildBomInput {
   bom: BomLine[]
-  /** Resolve a marked-up unit price + display name for a material category.
+  /** Resolve a marked-up unit price + display name for a BOM line.
    *  Injected so this stays DB-free and unit-testable. Return null when the
-   *  category cannot be priced (caller routes to inspection). The optional
+   *  line cannot be priced (caller routes to inspection). The optional
    *  catalogue_id/image_path are WP4 render metadata only — they never
-   *  influence price. */
-  resolveMaterial: (category: string) => {
+   *  influence price.
+   *
+   *  Phase 4 R10 — takes the whole line, not just `material_category`. A bare
+   *  category discards everything else on the row, which is why a line could
+   *  not pin a specific product (R11) or carry an include_when condition (R7).
+   *  Existing resolvers ignore the extra fields, so this is behaviour-neutral. */
+  resolveMaterial: (line: BomLine) => {
     name: string
     markedUpPrice: number
     catalogue_id?: string | null
@@ -299,7 +304,7 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
       if (required) missingRequired.push(b.material_category)
       continue
     }
-    const m = input.resolveMaterial(b.material_category)
+    const m = input.resolveMaterial(b)
     if (!m) {
       if (required) missingRequired.push(b.material_category)
       continue
