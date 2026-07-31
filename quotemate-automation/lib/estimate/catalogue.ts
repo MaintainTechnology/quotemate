@@ -193,8 +193,30 @@ export function chooseMaterial(input: ChooseMaterialInput): ChosenMaterial {
     .map((r) => ({ r, price: num(r.unit_price_ex_gst ?? r.default_unit_price_ex_gst) }))
     .filter((x) => Number.isFinite(x.price))
   if (shared.length === 0) return null
+  // An explicitly requested brand is a STATED preference — it outranks an
+  // inferred tier.
   const brandHit = shared.find((x) => eqi(x.r.brand, input.brand))
-  const pick = brandHit ?? shared[0]
+  if (brandHit) return { source: 'shared', row: brandHit.r, price: money(brandHit.price) }
+
+  // Phase 4 R4 — honour the tier. This path used to take `shared[0]` and
+  // ignore `input.tier` entirely, so a tenant with an empty catalogue got the
+  // SAME shared product at the SAME price for Good, Better and Best. Three
+  // identical tiers read to the customer as one option, and the collapse at
+  // run.ts then made that literal.
+  //
+  // Price-sort ascending, then index: Good cheapest, Best dearest, Better
+  // between. Fewer candidates than tiers simply share — one row serves all
+  // three rather than returning null, because a quote with a product beats no
+  // quote.
+  const byPrice = [...shared].sort((a, b) => a.price - b.price)
+  const last = byPrice.length - 1
+  const idx =
+    input.tier === 'good' ? 0
+    : input.tier === 'best' ? last
+    : input.tier === 'better' ? Math.min(last, Math.ceil(last / 2))
+    : -1
+  // No tier stated: unchanged behaviour, first matching row in source order.
+  const pick = idx >= 0 ? byPrice[idx] : shared[0]
   return { source: 'shared', row: pick.r, price: money(pick.price) }
 }
 
