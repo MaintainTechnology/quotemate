@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-30T04:19:05.475Z",
+  "timestamp": "2026-07-31T00:26:04.562Z",
   "projectRoot": "c:\\Users\\dalig\\Downloads\\QuoteMate\\quoteMate",
   "structure": {
     "hasPackageJson": false,
@@ -7,5 +7,5 @@
     "hasClaudeConfig": true,
     "hasClaudeFlow": true
   },
-  "scannedAt": 1785385145475
+  "scannedAt": 1785457564563
 }

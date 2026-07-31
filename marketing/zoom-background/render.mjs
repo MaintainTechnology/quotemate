@@ -31,7 +31,9 @@ const wantGuides = argv.includes('--guides')
 
 const src = readFileSync(join(here, SRC), 'utf8')
 // Counted from the source so adding a variant to the V array is the only edit.
-const ids = [...src.matchAll(/^\{id:'([^']+)'/gm)].map((m) => m[1])
+// Not anchored to the line start: the variants spread a shared DARK/LIGHT base
+// first, so `id:` is no longer the opening token on the line.
+const ids = [...src.matchAll(/\bid:'([^']+)'/g)].map((m) => m[1])
 if (!ids.length) throw new Error(`no variants found in ${SRC}`)
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' }
