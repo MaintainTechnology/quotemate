@@ -4,6 +4,8 @@
 // shapes, because the whole difficulty here was picking a signal that fires on
 // the 7 genuine class rows and not on the 15 legitimate handoffs.
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { generalDialogIsMidGather } from './general-gather'
 import { shouldEngageRoofing } from './roofing-receptionist'
@@ -213,5 +215,61 @@ describe('the guard closes the class', () => {
     // updated behaves exactly as it did before this change.
     expect(shouldEngageRoofing(null, 'I need a re-roof', false)).toBe(true)
     expect(shouldEngagePainting(null, 'can you paint my house', false)).toBe(true)
+  })
+})
+
+// ── the ROUTE wiring ───────────────────────────────────────────────────
+//
+// The tests above prove the guard works GIVEN the signal. They cannot prove
+// anything computes it. That gap has already shipped twice in this codebase:
+// R2 declared a tierLadder field the loader never set, and R9 read a
+// `properties` field QuoteLine does not have — both invisible to the type
+// checker and to every pure test. route.ts cannot be imported here (module-
+// scope Supabase client, no env in vitest), so the wiring is asserted at the
+// source level, the idiom used by tests/internal-route-auth.test.ts.
+
+describe('route.ts computes and passes the signal', () => {
+  const src = readFileSync(
+    resolve(process.cwd(), 'app', 'api', 'sms', 'inbound', 'route.ts'),
+    'utf8',
+  )
+
+  it('imports the helper', () => {
+    expect(src).toMatch(/import \{ generalDialogIsMidGather \} from '@\/lib\/sms\/general-gather'/)
+  })
+
+  it('computes it from the conversation row for BOTH receptionists', () => {
+    // Twice: once at the roofing call site, once at the painting one.
+    const calls = src.match(/generalMidGather: generalDialogIsMidGather\(/g) ?? []
+    expect(calls.length, 'expected both call sites wired').toBe(2)
+  })
+
+  it('reads conversation_state, not roofing_state or painting_state', () => {
+    // The signal is about the GENERAL dialog. Passing a receptionist's own
+    // state would make the guard self-referential and always false.
+    const idx = src.indexOf('generalMidGather: generalDialogIsMidGather(')
+    expect(idx).toBeGreaterThan(-1)
+    const block = src.slice(idx, idx + 220)
+    expect(block).toMatch(/\.conversation_state/)
+    expect(block).not.toMatch(/\.roofing_state|\.painting_state/)
+  })
+
+  it('passes it INTO shouldEngageRoofing as the 5th argument', () => {
+    // Position matters: the 4th is roofingOnly. Swapping them would make a
+    // roofing-only tenant stop engaging and every gather engage.
+    expect(src).toMatch(
+      /shouldEngageRoofing\(\s*prevState,\s*engage,\s*followupPinActive,\s*args\.roofingOnly,\s*args\.generalMidGather\s*\)/,
+    )
+  })
+
+  it('passes it INTO shouldEngagePainting as the 4th argument', () => {
+    expect(src).toMatch(
+      /shouldEngagePainting\(prevState, latestInbound, followupPinActive, args\.generalMidGather\)/,
+    )
+  })
+
+  it('declares it on both handler arg types, so a missing value is a type error', () => {
+    const decls = src.match(/^\s*generalMidGather: boolean$/gm) ?? []
+    expect(decls.length, 'expected both handler signatures to require it').toBe(2)
   })
 })
