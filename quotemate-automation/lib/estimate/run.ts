@@ -40,6 +40,7 @@ import {
   type JobTypeBound,
 } from './sanity-bounds'
 import { checkRecipeCoverage } from './recipe-coverage'
+import { deterministicBomEnabled } from './deterministic-flag'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
@@ -383,7 +384,11 @@ export async function runEstimation(
   // so the coverage check can reach it. null when the loader could not resolve
   // a recipe at all, in which case there is nothing to compare a quote against.
   let phase5Recipe: BomLine[] | null = null
-  if (process.env.DETERMINISTIC_BOM === '1') {
+  // Phase 6 — resolved PER TENANT rather than one global env check. Unset and
+  // '1' behave exactly as the old `=== '1'` did; the new capability is an
+  // allow-list, so one misbehaving tenant can be isolated on the next inbound
+  // without turning the engine off for the other seven.
+  if (deterministicBomEnabled(intake?.tenant_id ?? null)) {
     try {
       const loaded = await loadDeterministicInputs(intake, pricingBook)
       if (loaded.input) {

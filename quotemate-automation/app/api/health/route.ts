@@ -2,6 +2,8 @@
 // uptime monitor (UptimeRobot, BetterStack, etc.). Should return fast
 // — don't ping the DB here; that's what /api/health/deep is for.
 
+import { deterministicBomMode } from '@/lib/estimate/deterministic-flag'
+
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
@@ -35,7 +37,12 @@ export async function GET() {
     cron_secret_present: !!process.env.CRON_SECRET,
     features: {
       wp9_product_options: process.env.WP9_PRODUCT_OPTIONS === '1',
-      deterministic_bom: process.env.DETERMINISTIC_BOM === '1',
+      // Phase 6 — a boolean can no longer describe this. The flag resolves per
+      // tenant, so `=== '1'` would report FALSE while the engine is on for
+      // every tenant on an allow-list, which is worse than saying nothing.
+      // Reports the MODE and, for a list, how many tenants — never the ids,
+      // matching this endpoint's rule of exposing presence and not values.
+      deterministic_bom: deterministicBomMode(),
       wp4_render_verify: process.env.WP4_RENDER_VERIFY === '1',
       price_history_hint: process.env.PRICE_HISTORY_HINT === '1',
     },
