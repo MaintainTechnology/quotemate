@@ -537,7 +537,22 @@ export async function POST(req: Request) {
       // the live dispatch flip to honour it is the conscious go-live step.)
       pricing_path:        (draft as { pricing_path?: string }).pricing_path ?? 'opus_fallback',
       auto_sent:           routing_decision === 'auto_send',
-      grounding_result:    { ok: !isInspection, downgraded: !!estimation.downgradedToInspection },
+      // `failures` carries the SAME data the [grounding] risk_flags strings
+      // above carry, structured instead of formatted. risk_flags is a text
+      // array shared with billing/spec flags, so answering "which line was
+      // rejected, at what price" means regex-ing prose out of a mixed list.
+      // Here it stays jsonb and queryable:
+      //   select grounding_result->'failures' from quotes where ...
+      // Conditionally spread so a clean quote's column keeps its exact
+      // current two-key shape — nothing reading `.ok` sees a new field, and
+      // there is no empty array on the 99% path.
+      grounding_result:    {
+        ok: !isInspection,
+        downgraded: !!estimation.downgradedToInspection,
+        ...(estimation.groundingFailures?.length
+          ? { failures: estimation.groundingFailures }
+          : {}),
+      },
     }).select().single()
     log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, routing: routing_decision, inspection: isInspection, share_token: shareToken.slice(0, 8) + '…' })
 

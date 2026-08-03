@@ -501,6 +501,22 @@ export interface ChosenProduct {
   /** Structured specs of the chosen product — read by the reconcile guard,
    *  never by price math. Null/empty when the catalogue row has none. */
   properties?: Record<string, string | number | boolean | null> | null
+  /** Phase 4 R3 — WHICH of the two offered buckets the customer actually
+   *  picked. The tier already exists on ProductOption (it is what the SMS
+   *  rendered), and it was being computed and then dropped here: the
+   *  estimator received a product with no idea where it belonged, so
+   *  applyChosenProduct forced it into ALL THREE tiers and the quote was
+   *  collapsed to one to hide that.
+   *
+   *  Carrying it lets the deterministic builder anchor the product in the
+   *  tier the customer saw it in and let the other tiers resolve their own,
+   *  which is what makes three surviving tiers meaningful.
+   *
+   *  Only ever 'good' | 'better' — selectProductOptions offers two buckets
+   *  and never emits 'best' (product-options.ts:48). Optional because rows
+   *  written before this shipped have no tier; the anchor simply does not
+   *  engage for them and they keep the old behaviour. */
+  tier?: 'good' | 'better' | null
 }
 export function chosenProductFromChoice(
   choice: ProductChoiceState | null | undefined,
@@ -520,5 +536,8 @@ export function chosenProductFromChoice(
     category: choice.category,
     trade: choice.trade ?? null,
     properties: o.properties ?? null,
+    // Phase 4 R3 — the bucket the customer actually saw this product in.
+    // `o` is the matched ProductOption, which already carries it.
+    tier: o.tier ?? null,
   }
 }

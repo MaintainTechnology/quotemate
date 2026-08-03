@@ -16,6 +16,11 @@ import {
   type CatalogueHintRow,
   type BomHintRow,
   type TierLadderHintRow,
+  // Phase 4 R2 — the ladder shape the BUILDER consumes. Distinct from
+  // TierLadderHintRow above, which is the same table denormalised into
+  // prompt text; that one carries name/brand and no catalogue_id.
+  type TierLadderEntry,
+  type ChosenProductAnchor,
   type TenantMaterial,
   type SharedMaterial,
   type BomLine,
@@ -811,37 +816,68 @@ export async function runEstimation(
             ? { applied: [] as string[] }
             : applyChosenProduct(draft, chosenLive)
           if (r.applied.length > 0) {
-            // The customer already PICKED one product — Good/Better/Best
-            // no longer makes sense (all three now hold the same chosen
-            // product at the same price, which reads as 3 confusing
-            // identical tiers). Collapse to ONE option: keep the chosen
-            // tier, drop the others. The SMS builder + /q page + Stripe
-            // pay-links already support <3 tiers (this is the same shape
-            // as "BEST dropped"), so this is safe.
             const keep = (r.applied.includes('good')
               ? 'good'
               : r.applied[0]) as 'good' | 'better' | 'best'
-            // A TRADIE pin keeps the menu. The rationale above holds for a
-            // CUSTOMER pick — they chose, so one option is the honest render.
-            // A tradie pin is different: the quote is held for their review, and
-            // TierSelect (app/dashboard/quote/[token]/TierSelect.tsx:40) renders
-            // nothing below two priced tiers, so collapsing here would delete the
-            // only tier control on the page the review gate exists to serve. The
-            // tiers are not necessarily identical either — they still differ in
-            // labour and sundries — and collapseDuplicateTiers further down
-            // already nulls the ones that genuinely match by line-item
-            // signature, which is the better-reasoned net.
-            if (draft[keep] && !tradiePinned) {
+
+            // Phase 4 R5 — the collapse now depends on WHICH path priced
+            // the quote.
+            //
+            // WHY IT EXISTED. applyChosenProduct rewrites the headline line
+            // of every priced tier, so all three ended up holding the same
+            // product at the same price with the same label. Three
+            // identical options read as a bug, so the quote was collapsed
+            // to one. That also meant the pick could never change the PARTS
+            // of a job — the whole point of Phase 4.
+            //
+            // WHY IT CAN GO. R3 anchors the pick inside the deterministic
+            // builder instead: the chosen product occupies its own tier and
+            // the other two resolve their own product for the category. The
+            // three tiers are genuinely different, so there is nothing to
+            // hide and the customer keeps a real choice.
+            //
+            // WHY IT STAYS ON THE OPUS PATH. R3 only runs when the
+            // deterministic builder produced the tiers. When it bails (no
+            // recipe, no rate, unpriceable part) run.ts falls back to the
+            // Opus draft, applyChosenProduct rewrites all three tiers as
+            // before, and collapseDuplicateTiers will NOT rescue it —
+            // it matches on the full line-item signature and labour and
+            // sundries still differ per tier. Without this condition, R5
+            // would ship the exact "3 confusing identical tiers" the
+            // collapse was written to prevent.
+            //
+            // A TRADIE pin keeps the menu on both paths. The quote is held
+            // for their review, and TierSelect
+            // (app/dashboard/quote/[token]/TierSelect.tsx:40) renders
+            // nothing below two priced tiers, so collapsing would delete
+            // the only tier control on the page the review gate serves.
+            const anchored = draft?.pricing_path === 'deterministic'
+            if (draft[keep] && !tradiePinned && !anchored) {
               for (const t of ['good', 'better', 'best'] as const) {
                 if (t !== keep) draft[t] = null
               }
-              draft.selected_tier = keep
             }
-            cacheLog.ok('WP9 — chosen product forced into the quote (single option)', {
-              product: chosen?.name,
-              price: chosen?.price_ex_gst,
-              kept_tier: keep,
-            })
+            // selected_tier is set on BOTH paths, deliberately.
+            //
+            // pricing_book.quote_tier_mode defaults to 'single', so on a
+            // default tenant the customer is shown exactly one tier — the
+            // selected one. Leaving selected_tier unset here would let
+            // draft/route.ts:454-464 fall through to its `better → good →
+            // best` default, and a customer who picked the cheaper option
+            // would be shown the dearer tier instead. That is a silent
+            // price rise on the back of a change about giving them choice.
+            if (draft[keep]) draft.selected_tier = keep
+            cacheLog.ok(
+              anchored
+                ? 'WP9 — chosen product anchored by the deterministic builder (tiers kept)'
+                : 'WP9 — chosen product forced into the quote (single option)',
+              {
+                product: chosen?.name,
+                price: chosen?.price_ex_gst,
+                kept_tier: keep,
+                anchored,
+              },
+            )
           }
         }
       } catch (err: any) {
@@ -1995,6 +2031,36 @@ export function buildTenantGroundingQuery(intake: any): string | null {
 }
 
 /**
+ * Phase 4 R3 — narrow `intake.scope.chosen_product` to the three fields the
+ * builder needs to anchor a pick, or null.
+ *
+ * Everything between the SMS pick and here is jsonb and `any`, so this is
+ * the one place the shape is actually checked. Returns null rather than
+ * throwing on anything unexpected: a malformed pick must degrade to the
+ * pre-R3 behaviour (applyChosenProduct rewrites the headline line and the
+ * quote collapses), never break the quote.
+ *
+ * NO TIER, NO ANCHOR. Rows written before the tier was propagated
+ * (product-options.ts `chosenProductFromChoice`) carry a product with no
+ * record of which bucket the customer saw it in. Guessing — by price rank,
+ * say — could anchor it in a tier the customer never looked at, so those
+ * rows keep the old behaviour instead.
+ *
+ * 'best' is deliberately not accepted: selectProductOptions offers exactly
+ * two buckets and never emits it, so a 'best' here means corrupt data.
+ */
+function readChosenProductAnchor(intake: any): ChosenProductAnchor | null {
+  const c = (intake?.scope as { chosen_product?: any } | null)?.chosen_product
+  if (!c) return null
+  const tier = c.tier
+  if (tier !== 'good' && tier !== 'better') return null
+  const catalogueId = c.catalogue_id == null ? '' : String(c.catalogue_id).trim()
+  const category = c.category == null ? '' : String(c.category).trim()
+  if (!catalogueId || !category) return null
+  return { catalogue_id: catalogueId, category, tier }
+}
+
+/**
  * Phase 2 — load the DB inputs the deterministic BOM builder needs.
  * Returns { input:null, reason } whenever the job cannot be honoured
  * deterministically (no recipe / service switched off / no rate) so
@@ -2108,7 +2174,31 @@ async function loadDeterministicInputs(
     .from('shared_materials')
     .select('name, category, default_unit_price_ex_gst, unit')
   if (trade) mq = mq.eq('trade', trade)
-  const [{ data: catRows }, { data: sharedRows }] = await Promise.all([cq, mq])
+  // Phase 4 R2 — the tradie's explicit Good/Better/Best pins.
+  //
+  // Everything downstream of this read was already built and already right:
+  // tierLadder is a declared field of DeterministicTierInput, the builder
+  // forwards it per tier, and chooseMaterial resolves a (category, tier) hit
+  // ahead of brand/range scoring. THIS READ WAS THE MISSING LINK — without
+  // it input.tierLadder was always undefined, so the ladder branch was dead
+  // in production and a tradie's saved pin silently did nothing.
+  //
+  // Deliberately NOT reusing buildCatalogueHint's ladder query (~:1629):
+  // that one inner-joins tenant_material_catalogue for name/brand to build
+  // PROMPT TEXT, and omits catalogue_id — the one column TierLadderEntry
+  // cannot do without.
+  //
+  // No trade filter here, on purpose. chooseMaterial resolves catalogue_id
+  // against tenantMaterials, which `cq` above has already scoped to this
+  // trade, so a pin belonging to another trade simply fails to resolve and
+  // falls through to scoring — the correct outcome, without paying for a
+  // second join on every quote.
+  const lq = supabase
+    .from('tenant_tier_ladder')
+    .select('category, tier, catalogue_id')
+    .eq('tenant_id', tenantId)
+  const [{ data: catRows }, { data: sharedRows }, { data: ladderRows }] =
+    await Promise.all([cq, mq, lq])
 
   const input: DeterministicTierInput = {
     // Phase 2 R4 — same scaling as the hint path. Applied here rather than
@@ -2123,6 +2213,13 @@ async function loadDeterministicInputs(
     labourHours: Number(eff.labourHours.value),
     hourlyRate: Number((pricingBook as any)?.hourly_rate),
     markupPct: Number(eff.markupPct.value),
+    // An empty array rather than undefined when the tenant has pinned
+    // nothing: chooseMaterial guards on `.length > 0` so the two behave
+    // identically, and an always-present field is easier to read in a trace
+    // than one that vanishes.
+    tierLadder: (ladderRows ?? []) as TierLadderEntry[],
+    // Phase 4 R3 — the customer's pick, if one was recorded WITH its tier.
+    chosenProduct: readChosenProductAnchor(intake),
   }
   return { input, assemblyName: primary.name }
 }
