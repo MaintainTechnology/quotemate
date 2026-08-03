@@ -130,13 +130,38 @@ const ROOFING_KEYWORDS = [
 // away a live gather. A roof word still wins outright.
 const OTHER_TRADE =
   /\b(electrical|electrician|sparky|plumber|plumbing|aircon|air ?con|split system|signage)\b/
+
+/** Fittings that belong to another trade but DO turn up in ordinary roofing
+ *  answers — the reason the comment above refuses to list them outright.
+ *
+ *  The distinction that comment misses: "water coming through around the
+ *  downlights" is roofing because it names WATER, not because it names a
+ *  downlight. "New downlights" carries no roofing context at all. So these
+ *  count as a trade switch only when nothing in the message suggests a roof
+ *  problem — exactly the shape looksLikeRoofingEnquiry already uses for bare
+ *  "roof" (a noun alone is not a job).
+ *
+ *  Live 2026-08-03, Atomix: after the thread was hijacked, "New downlights."
+ *  and "No I need new downlights" were each counted as a FAILED roofing
+ *  answer, and two misses fire the inspection fallback. The clearest possible
+ *  correction, sent twice, could not get out. */
+const SOFT_OTHER_TRADE =
+  /\b(downlight\w*|down light\w*|gpo\w*|power ?point\w*|switchboard\w*|safety switch\w*|light fitting\w*|ceiling fan\w*)\b/
+
+/** Wording that makes a message a ROOF problem even when it names another
+ *  trade's fitting. Water is the giveaway: a leak is described by where it
+ *  comes out, which is often a light. */
+const ROOF_PROBLEM_CONTEXT =
+  /\b(water|leak\w*|drip\w*|stain\w*|damp|wet|rain\w*|through|pouring|coming in)\b/
+
 export function namesOtherTrade(text: string): boolean {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return false
   // `\b(?:re-?)?roof` also catches the unhyphenated "reroof" (a \broof guard
   // missed it, so the most on-topic answer possible looked like another trade).
   if (/\b(?:re-?)?roof|gutter|downpipe|eaves|fascia|ridge cap|sarking/.test(t)) return false
-  return OTHER_TRADE.test(t)
+  if (OTHER_TRADE.test(t)) return true
+  return SOFT_OTHER_TRADE.test(t) && !ROOF_PROBLEM_CONTEXT.test(t)
 }
 
 /** PURE — a bare greeting / pleasantry. It is not an answer to the step we
@@ -168,6 +193,13 @@ export function looksCommercial(text: string): boolean {
  *  first, so widening the verb list below can't leak into other trades. */
 const NOT_ROOFING = /\broof\s?(cavity|space|void)\b|\bin the roof\b|\bunder the roof\b/
 
+/** A ceiling/roof MATERIAL named on its own — the answer to "what's the ceiling
+ *  type?", not a request for roofing work. Checked only when no work or problem
+ *  word is present (see looksLikeRoofingEnquiry), so a real complaint that
+ *  names the material still engages. */
+const CEILING_MATERIAL =
+  /\b(insulated panel|panel roofing|sheet metal roofing|sheet roofing|metal sheeting)\b/
+
 /** F14 — an explicit paint job is a PAINTING enquiry, not roofing, even when it
  *  names the shared parts (gutter/eaves/fascia). But a ROOF-SPECIFIC term keeps
  *  it roofing even if paint is mentioned ("roof needs repainting and gutters
@@ -198,6 +230,23 @@ export function looksLikeRoofingEnquiry(text: string): boolean {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return false
   if (NOT_ROOFING.test(t)) return false
+  // A CEILING MATERIAL is not a roofing enquiry.
+  //
+  // Live 2026-08-03, Atomix (electrical + roofing): a customer asked for 16
+  // downlights, the electrical dialog asked "what's the ceiling type out there
+  // — flat, raked, cathedral, or sheet metal?", and they answered "it's a
+  // 125mm insulated panel roofing". The bare substring 'roofing' in
+  // ROOFING_KEYWORDS matched, the roofing receptionist took the thread, and
+  // the customer's next two messages — "New downlights." and "No I need new
+  // downlights" — were counted as failed roofing answers, which fired a $99
+  // ROOFING inspection for an electrical job. Answering our own question is
+  // what broke it.
+  //
+  // Gated on there being no work/problem word, so a genuine roof complaint
+  // that happens to name the material still engages: "water leaking through
+  // the panel roofing" keeps `leak`, so it stays roofing. Same shape as the
+  // bare-"roof" rule below — a material alone is a noun, not a job.
+  if (CEILING_MATERIAL.test(t) && !ROOFING_WORK.test(t)) return false
   // F14 — explicit paint job with NO roof-specific term is painting.
   if (PAINT_ENQUIRY.test(t) && !ROOF_SPECIFIC.test(t)) return false
   if (ROOFING_KEYWORDS.some((k) => t.includes(k))) return true
