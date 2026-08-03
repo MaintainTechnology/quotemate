@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuoteMax · AI Receptionist Architecture and the REST API Plan</title>
+<style>
+  /* QuoteMax Command Centre, printed. Charcoal ink on paper, one accent.
+     System stack rather than webfonts so the page works offline. */
+  :root{
+    --ink:#16120F;
+    --ink-2:#4A423B;
+    --ink-3:#7A7069;
+    --rule:#16120F;
+    --hair:#D6D0C9;
+    --paper:#FFFFFF;
+    --wash:#F6F4F1;
+    --accent:#FFC400;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --sans:"Manrope","Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--sans);font-size:15px;line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .sheet{max-width:1120px;margin:0 auto;padding:56px 40px 96px}
+  @media(max-width:720px){.sheet{padding:32px 18px 64px}}
+
+  /* ── masthead ─────────────────────────────────────────────── */
+  .masthead{border-bottom:2px solid var(--rule);padding-bottom:20px}
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-3);margin:0 0 10px
+  }
+  h1{font-size:30px;line-height:1.15;margin:0 0 8px;font-weight:800;letter-spacing:-.01em}
+  .standfirst{margin:0;max-width:70ch;color:var(--ink-2);font-size:15.5px}
+  .meta{
+    font-family:var(--mono);font-size:11px;color:var(--ink-3);
+    margin-top:14px;display:flex;gap:20px;flex-wrap:wrap
+  }
+
+  /* ── sections ─────────────────────────────────────────────── */
+  section{margin-top:52px}
+  .kicker{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-3);margin:0 0 6px
+  }
+  .sec-head{border-bottom:1px solid var(--rule);padding-bottom:8px}
+  h2{font-size:19px;margin:0;font-weight:750;letter-spacing:-.005em}
+  .sec-sub{margin:10px 0 0;color:var(--ink-2);max-width:78ch;font-size:14.5px}
+
+  /* ── figure frame ─────────────────────────────────────────── */
+  figure{margin:22px 0 0;border:1px solid var(--rule);background:var(--paper)}
+  .fig-bar{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    border-bottom:1px solid var(--hair);padding:7px 12px;background:var(--wash);
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)
+  }
+  .fig-body{padding:18px 14px;overflow-x:auto}
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  figcaption{
+    border-top:1px solid var(--hair);padding:9px 12px;
+    font-size:12.5px;color:var(--ink-2)
+  }
+
+  /* ── svg primitives ───────────────────────────────────────── */
+  .n-box{fill:var(--paper);stroke:var(--ink);stroke-width:1.4}
+  .n-box-fill{fill:var(--wash);stroke:var(--ink);stroke-width:1.4}
+  .n-accent{fill:var(--accent);stroke:var(--ink);stroke-width:1.4}
+  .n-label{font-family:var(--sans);font-size:11.5px;font-weight:700;fill:var(--ink)}
+  .n-sub{font-family:var(--mono);font-size:9px;fill:var(--ink-3)}
+  .n-tag{font-family:var(--mono);font-size:8.5px;fill:var(--ink-2)}
+  .wire{stroke:var(--ink);stroke-width:1.3;fill:none}
+  .wire-dash{stroke:var(--ink-3);stroke-width:1.1;fill:none;stroke-dasharray:4 3}
+  .wire-lbl{font-family:var(--mono);font-size:9px;fill:var(--ink-3)}
+  .band{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;fill:var(--ink-3);text-transform:uppercase}
+
+  /* ── node legend ──────────────────────────────────────────── */
+  .legend{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:0;border:1px solid var(--rule);border-bottom:0;margin-top:22px
+  }
+  .legend div{border-bottom:1px solid var(--rule);border-right:1px solid var(--hair);padding:12px 14px}
+  .legend div:last-child{border-right:0}
+  .legend h4{
+    margin:0 0 4px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;font-weight:700
+  }
+  .legend p{margin:0;font-size:13px;color:var(--ink-2)}
+  .legend code{font-family:var(--mono);font-size:11.5px;background:var(--wash);padding:0 3px}
+
+  /* ── tables ───────────────────────────────────────────────── */
+  table{width:100%;border-collapse:collapse;margin-top:22px;font-size:13.5px}
+  caption{
+    text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-3);padding-bottom:7px
+  }
+  th,td{border:1px solid var(--hair);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--wash);font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+  td code,p code{font-family:var(--mono);font-size:12px;background:var(--wash);padding:1px 4px}
+  tbody tr:nth-child(even) td{background:#FCFBFA}
+
+  /* ── callout ──────────────────────────────────────────────── */
+  .note{border:1px solid var(--rule);padding:13px 15px;margin-top:22px;background:var(--wash);font-size:13.5px}
+  .note b{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    display:inline-block;margin-bottom:6px;
+    border-bottom:2px solid var(--accent);padding-bottom:2px
+  }
+  .note p{margin:0}
+
+  footer{
+    margin-top:64px;border-top:2px solid var(--rule);padding-top:14px;
+    font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
+    display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap
+  }
+  @media print{
+    .sheet{max-width:none;padding:0}
+    section,figure{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <p class="eyebrow">QuoteMax · Engineering</p>
+    <h1>The AI Receptionist, and the plan to run each trade as its own REST API</h1>
+    <p class="standfirst">
+      Today one Next.js route holds every trade's receptionist. This sets out what runs now,
+      node by node, then the proposed split: a thin Front Desk on the website, and one
+      independently deployed receptionist service per trade.
+    </p>
+    <div class="meta">
+      <span>quotemax.com.au</span>
+      <span>Drafted 3 Aug 2026</span>
+      <span>Current system live · REST split proposed</span>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════ as built -->
+  <section>
+    <p class="kicker">As built</p>
+    <div class="sec-head"><h2>The AI Receptionist as it runs today</h2></div>
+    <p class="sec-sub">
+      One shared pipeline serves every trade. A customer text lands on a single route, an LLM runs
+      the conversation, and a chain of engines turns the answers into a priced quote. Every dollar
+      comes from a tool call, never from the model.
+    </p>
+
+    <figure>
+      <div class="fig-bar"><span>Fig 1 · current pipeline</span><span>single deployment</span></div>
+      <div class="fig-body">
+      <svg viewBox="0 0 1040 330" role="img" aria-label="Current AI receptionist pipeline from customer through to quote">
+        <defs>
+          <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#16120F" stroke-width="1.3"/>
+          </marker>
+          <marker id="ad" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#7A7069" stroke-width="1.1"/>
+          </marker>
+        </defs>
+
+        <text x="20" y="20" class="band">Inbound</text>
+        <text x="330" y="20" class="band">Understand</text>
+        <text x="640" y="20" class="band">Price</text>
+        <text x="880" y="20" class="band">Deliver</text>
+
+        <rect x="20" y="36" width="120" height="56" class="n-accent"/>
+        <text x="34" y="60" class="n-label">Customer</text>
+        <text x="34" y="76" class="n-sub">SMS · voice · form</text>
+
+        <rect x="180" y="36" width="130" height="56" class="n-box"/>
+        <text x="194" y="60" class="n-label">Front Door</text>
+        <text x="194" y="76" class="n-sub">/api/sms/inbound</text>
+
+        <rect x="350" y="36" width="140" height="56" class="n-box-fill"/>
+        <text x="364" y="60" class="n-label">Dialog Engine</text>
+        <text x="364" y="76" class="n-sub">claude-sonnet-5</text>
+
+        <rect x="530" y="36" width="140" height="56" class="n-box-fill"/>
+        <text x="544" y="60" class="n-label">Intake Engine</text>
+        <text x="544" y="76" class="n-sub">Opus 4.8 · vision</text>
+
+        <rect x="710" y="36" width="140" height="56" class="n-box-fill"/>
+        <text x="724" y="60" class="n-label">Estimation Engine</text>
+        <text x="724" y="76" class="n-sub">Opus 4.8 · tools only</text>
+
+        <rect x="710" y="140" width="140" height="56" class="n-box"/>
+        <text x="724" y="164" class="n-label">Evaluator</text>
+        <text x="724" y="180" class="n-sub">grounding validator</text>
+
+        <rect x="530" y="140" width="140" height="56" class="n-box"/>
+        <text x="544" y="164" class="n-label">Image Generation</text>
+        <text x="544" y="180" class="n-sub">FLUX · Gemini fallback</text>
+
+        <rect x="530" y="240" width="140" height="52" class="n-box"/>
+        <text x="544" y="263" class="n-label">$99 Inspection</text>
+        <text x="544" y="279" class="n-sub">ungrounded, routed out</text>
+
+        <rect x="890" y="36" width="130" height="56" class="n-accent"/>
+        <text x="904" y="60" class="n-label">Quote + Pay</text>
+        <text x="904" y="76" class="n-sub">G/B/B · Stripe</text>
+
+        <path d="M140,64 L178,64" class="wire" marker-end="url(#a)"/>
+        <path d="M310,64 L348,64" class="wire" marker-end="url(#a)"/>
+        <path d="M490,64 L528,64" class="wire" marker-end="url(#a)"/>
+        <path d="M670,64 L708,64" class="wire" marker-end="url(#a)"/>
+        <path d="M850,64 L888,64" class="wire" marker-end="url(#a)"/>
+        <path d="M780,92 L780,138" class="wire" marker-end="url(#a)"/>
+        <path d="M710,168 L672,168" class="wire" marker-end="url(#a)"/>
+        <path d="M600,196 L600,238" class="wire" marker-end="url(#a)"/>
+        <text x="606" y="216" class="wire-lbl">fails</text>
+        <path d="M780,196 C780,225 940,225 955,96" class="wire-dash" marker-end="url(#ad)"/>
+        <text x="836" y="222" class="wire-lbl">passes</text>
+        <path d="M600,140 L600,96" class="wire-dash" marker-end="url(#ad)"/>
+        <path d="M955,92 C1010,140 1010,300 150,300 L100,300 L100,96" class="wire-dash" marker-end="url(#ad)"/>
+        <text x="470" y="296" class="wire-lbl">priced quote returns to the customer by SMS</text>
+      </svg>
+      </div>
+      <figcaption>
+        Each stage is a separate internal endpoint. The Evaluator is the hard gate: a single line item
+        whose price cannot be traced to the pricing book sends the whole quote to the $99 inspection route.
+      </figcaption>
+    </figure>
+
+    <div class="legend">
+      <div><h4>Front Door</h4><p><code>/api/sms/inbound</code>, the Twilio webhook. Acknowledges in under 500&nbsp;ms, then works in the background. Holds four trade receptionists today.</p></div>
+      <div><h4>Dialog Engine</h4><p>Sonnet 5 runs the conversation and returns a <em>tool choice</em>, never a price. Deterministic state machines remain the per-turn fallback.</p></div>
+      <div><h4>Intake Engine</h4><p><code>/api/intake/structure</code>. Opus 4.8 with vision turns free text and photos into a typed job.</p></div>
+      <div><h4>Estimation Engine</h4><p><code>/api/estimate/draft</code>. Opus 4.8, tool-calling only. Roofing, solar and painting bypass it for pure deterministic pricers.</p></div>
+      <div><h4>Evaluator</h4><p>Checks every line against the pricing book and catalogue. Failure downgrades the quote rather than shipping a guess.</p></div>
+      <div><h4>Image Generation</h4><p>Trade "after" renders. FLUX.1-Kontext primary, Replicate then Gemini as fallbacks. Never touches price.</p></div>
+    </div>
+
+    <div class="note">
+      <b>Why change anything</b>
+      <p>
+        One route file carries every trade, so a roofing change can break painting. An open roofing
+        thread currently captures later turns whatever the customer asks, which is exactly the class
+        of fault that isolation removes.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ proposed -->
+  <section>
+    <p class="kicker">Proposed</p>
+    <div class="sec-head"><h2>New architecture: the website becomes a Front Desk</h2></div>
+    <p class="sec-sub">
+      The website stops doing the thinking. It identifies the trade and forwards the conversation to
+      that trade's own service. Each receptionist is a standalone NestJS app, deployed and versioned
+      on its own.
+    </p>
+
+    <figure>
+      <div class="fig-bar"><span>Fig 2 · front desk and per-trade services</span><span>proposed</span></div>
+      <div class="fig-body">
+      <svg viewBox="0 0 1040 400" role="img" aria-label="Front desk routing to five per-trade receptionist REST APIs">
+        <!-- Own defs. Referencing another SVG's marker by fragment id works in
+             most browsers but not all renderers, and breaks the moment a
+             figure is lifted out of this page. -->
+        <defs>
+          <marker id="a2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#16120F" stroke-width="1.3"/>
+          </marker>
+        </defs>
+        <rect x="20" y="150" width="130" height="66" class="n-accent"/>
+        <text x="34" y="178" class="n-label">Customer</text>
+        <text x="34" y="194" class="n-sub">request</text>
+
+        <rect x="215" y="132" width="215" height="102" class="n-box"/>
+        <text x="232" y="164" class="n-label">Front Desk</text>
+        <text x="232" y="181" class="n-sub">quotemax.com.au</text>
+        <text x="232" y="200" class="n-tag">· identify tenant + trade</text>
+        <text x="232" y="214" class="n-tag">· sign request, forward</text>
+        <text x="232" y="228" class="n-tag">· persist + render quote</text>
+
+        <text x="560" y="34" class="band">Receptionist services · Railway</text>
+
+        <rect x="560" y="46" width="240" height="48" class="n-box-fill"/>
+        <text x="574" y="68" class="n-label">Roofing Receptionist</text>
+        <text x="574" y="84" class="n-sub">:3103 · address, measure, price</text>
+
+        <rect x="560" y="110" width="240" height="48" class="n-box-fill"/>
+        <text x="574" y="132" class="n-label">Electrical Receptionist</text>
+        <text x="574" y="148" class="n-sub">:3101 · dialog, Opus, G/B/B</text>
+
+        <rect x="560" y="174" width="240" height="48" class="n-box-fill"/>
+        <text x="574" y="196" class="n-label">Plumbing Receptionist</text>
+        <text x="574" y="212" class="n-sub">:3102 · dialog, Opus, G/B/B</text>
+
+        <rect x="560" y="238" width="240" height="48" class="n-box-fill"/>
+        <text x="574" y="260" class="n-label">Painting Receptionist</text>
+        <text x="574" y="276" class="n-sub">:3104 · gather, tradie release</text>
+
+        <rect x="560" y="302" width="240" height="48" class="n-box-fill"/>
+        <text x="574" y="324" class="n-label">Solar Receptionist</text>
+        <text x="574" y="340" class="n-sub">:3105 · deterministic engine</text>
+
+        <path d="M150,183 L213,183" class="wire" marker-end="url(#a2)"/>
+        <path d="M430,183 L500,183" class="wire"/>
+        <path d="M500,183 L500,70 L558,70" class="wire" marker-end="url(#a2)"/>
+        <path d="M500,183 L500,134 L558,134" class="wire" marker-end="url(#a2)"/>
+        <path d="M500,183 L558,183" class="wire" marker-end="url(#a2)"/>
+        <path d="M500,183 L500,262 L558,262" class="wire" marker-end="url(#a2)"/>
+        <path d="M500,183 L500,326 L558,326" class="wire" marker-end="url(#a2)"/>
+        <text x="452" y="176" class="wire-lbl">route</text>
+        <text x="452" y="190" class="wire-lbl">by trade</text>
+
+        <rect x="856" y="150" width="160" height="66" class="n-box"/>
+        <text x="870" y="174" class="n-label">Shared Supabase</text>
+        <text x="870" y="190" class="n-sub">one database</text>
+        <text x="870" y="205" class="n-tag">tenancy stays app-layer</text>
+        <path d="M800,70 C840,70 846,150 854,172" class="wire-dash"/>
+        <path d="M800,134 C836,134 844,158 854,176" class="wire-dash"/>
+        <path d="M800,183 L854,183" class="wire-dash"/>
+        <path d="M800,262 C836,262 844,212 854,192" class="wire-dash"/>
+        <path d="M800,326 C840,326 846,216 854,196" class="wire-dash"/>
+      </svg>
+      </div>
+      <figcaption>
+        Five services, five ports, five deploys. They share one Supabase instance, so a quote drafted
+        by any receptionist still appears in the same dashboard.
+      </figcaption>
+    </figure>
+
+    <table>
+      <caption>What each service is carved from</caption>
+      <thead><tr><th style="width:16%">Service</th><th style="width:9%">Port</th><th>Carried across</th><th style="width:26%">Left behind</th></tr></thead>
+      <tbody>
+        <tr><td><b>Roofing</b></td><td><code>3103</code></td><td>Roofing handler, measurement providers, deterministic pricer, tokens</td><td>Every other trade's handler</td></tr>
+        <tr><td><b>Electrical</b></td><td><code>3101</code></td><td>Dialog, intake, Opus estimation, electrical prompt, grounding validator</td><td>Roofing and painting state machines</td></tr>
+        <tr><td><b>Plumbing</b></td><td><code>3102</code></td><td>Same chain as electrical, plus plumbing prompt and assemblies</td><td>As above</td></tr>
+        <tr><td><b>Painting</b></td><td><code>3104</code></td><td>Painting handler, area lookup, pricer, tradie release gate</td><td>Roofing trigger words that currently hijack painting</td></tr>
+        <tr><td><b>Solar</b></td><td><code>3105</code></td><td>Deterministic solar engine, publish and release rules</td><td>All SMS state machines</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <b>The carve is already scripted</b>
+      <p>
+        <code>scripts/export-receptionist.mjs</code> walks the import graph from the three route files,
+        copies the exact closure each trade needs, and writes the NestJS shell. Copied files are
+        byte-identical, so re-running after a change gives a clean diff instead of a merge conflict.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ contract -->
+  <section>
+    <p class="kicker">Proposed · call contract</p>
+    <div class="sec-head"><h2>How the Front Desk talks to a receptionist</h2></div>
+    <p class="sec-sub">
+      One request and one response per inbound message. The Front Desk keeps the Twilio webhook
+      contract and the fast acknowledgement; the receptionist owns the conversation and the price.
+    </p>
+
+    <figure>
+      <div class="fig-bar"><span>Fig 3 · request and response</span><span>per turn</span></div>
+      <div class="fig-body">
+      <svg viewBox="0 0 900 230" role="img" aria-label="Request and response between front desk and a receptionist REST API">
+        <defs>
+          <marker id="a3" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#16120F" stroke-width="1.3"/>
+          </marker>
+        </defs>
+        <text x="40" y="106" class="n-sub">customer request</text>
+        <path d="M170,100 L228,100" class="wire" marker-end="url(#a3)"/>
+
+        <rect x="232" y="56" width="190" height="92" class="n-box"/>
+        <text x="248" y="86" class="n-label">Front Desk</text>
+        <text x="248" y="103" class="n-tag">verify + sign</text>
+        <text x="248" y="118" class="n-tag">persist quote</text>
+        <text x="248" y="133" class="n-tag">send SMS</text>
+
+        <path d="M422,82 L646,82" class="wire" marker-end="url(#a3)"/>
+        <text x="470" y="74" class="wire-lbl">POST /api/sms/inbound · Bearer token</text>
+
+        <path d="M646,124 L422,124" class="wire" marker-end="url(#a3)"/>
+        <text x="470" y="142" class="wire-lbl">reply text · quote · state</text>
+
+        <rect x="650" y="46" width="210" height="112" class="n-accent"/>
+        <text x="666" y="76" class="n-label">AI Receptionist</text>
+        <text x="666" y="92" class="n-sub">REST API · one trade</text>
+        <text x="666" y="112" class="n-tag">/api/intake/structure</text>
+        <text x="666" y="127" class="n-tag">/api/estimate/draft</text>
+        <text x="666" y="142" class="n-tag">/api/health · /api/docs</text>
+
+        <text x="232" y="196" class="n-tag">Stateless call. Conversation state lives in Supabase, not in the service.</text>
+      </svg>
+      </div>
+      <figcaption>
+        <code>/api/receptionist/simulate</code> replays a whole conversation against a service without
+        Twilio, so a trade can be tested end to end before it is pointed at a real number.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ══════════════════════════════════════════ sample -->
+  <section>
+    <p class="kicker">Proposed · worked example</p>
+    <div class="sec-head"><h2>Sample service: the Roofing Receptionist</h2></div>
+    <p class="sec-sub">
+      The same shape as Fig&nbsp;1 drawn for one trade, with the model, tools and settings that
+      service actually carries. Roofing is the clearest example because no LLM touches its money path.
+    </p>
+
+    <figure>
+      <div class="fig-bar"><span>Fig 4 · roofing internals</span><span>:3103</span></div>
+      <div class="fig-body">
+      <svg viewBox="0 0 1040 300" role="img" aria-label="Roofing receptionist internal design">
+        <defs>
+          <marker id="a4" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#16120F" stroke-width="1.3"/>
+          </marker>
+          <marker id="ad4" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#7A7069" stroke-width="1.1"/>
+          </marker>
+        </defs>
+        <rect x="20" y="40" width="118" height="56" class="n-accent"/>
+        <text x="34" y="64" class="n-label">Customer</text>
+        <text x="34" y="80" class="n-sub">SMS</text>
+
+        <rect x="176" y="40" width="140" height="56" class="n-box-fill"/>
+        <text x="190" y="64" class="n-label">Dialog</text>
+        <text x="190" y="80" class="n-sub">claude-sonnet-5</text>
+
+        <rect x="354" y="40" width="150" height="56" class="n-box"/>
+        <text x="368" y="64" class="n-label">Address Verify</text>
+        <text x="368" y="80" class="n-sub">Google · map confirm</text>
+
+        <rect x="542" y="40" width="160" height="56" class="n-box"/>
+        <text x="556" y="64" class="n-label">Measure</text>
+        <text x="556" y="80" class="n-sub">Geoscape · PropRadar</text>
+
+        <rect x="740" y="40" width="150" height="56" class="n-box"/>
+        <text x="754" y="64" class="n-label">Pricer</text>
+        <text x="754" y="80" class="n-sub">pure · no LLM</text>
+
+        <rect x="928" y="40" width="92" height="56" class="n-accent"/>
+        <text x="942" y="64" class="n-label">Quote</text>
+        <text x="942" y="80" class="n-sub">/q/roof</text>
+
+        <rect x="354" y="150" width="150" height="52" class="n-box"/>
+        <text x="368" y="172" class="n-label">Grounding Guard</text>
+        <text x="368" y="188" class="n-sub">assertGroundedReply</text>
+
+        <rect x="542" y="150" width="160" height="52" class="n-box"/>
+        <text x="556" y="172" class="n-label">Roof Photos</text>
+        <text x="556" y="188" class="n-sub">satellite · which building</text>
+
+        <rect x="740" y="150" width="150" height="52" class="n-box"/>
+        <text x="754" y="172" class="n-label">Tradie Surface</text>
+        <text x="754" y="188" class="n-sub">/m/[measure_token]</text>
+
+        <path d="M138,68 L174,68" class="wire" marker-end="url(#a4)"/>
+        <path d="M316,68 L352,68" class="wire" marker-end="url(#a4)"/>
+        <path d="M504,68 L540,68" class="wire" marker-end="url(#a4)"/>
+        <path d="M702,68 L738,68" class="wire" marker-end="url(#a4)"/>
+        <path d="M890,68 L926,68" class="wire" marker-end="url(#a4)"/>
+        <path d="M246,96 L246,176 L352,176" class="wire" marker-end="url(#a4)"/>
+        <text x="252" y="140" class="wire-lbl">every reply</text>
+        <path d="M622,96 L622,148" class="wire-dash" marker-end="url(#ad4)"/>
+        <path d="M815,96 L815,148" class="wire-dash" marker-end="url(#ad4)"/>
+        <text x="220" y="248" class="n-tag">The model chooses the next tool. It never writes a price, an area, a structure count or a booking. The guard discards any reply that does.</text>
+      </svg>
+      </div>
+      <figcaption>
+        Two tokens are minted as a pair: a customer token for <code>/q/roof/…</code> and a tradie
+        token for <code>/m/…</code>, so the measurement can be corrected and re-priced.
+      </figcaption>
+    </figure>
+
+    <table>
+      <caption>What this service carries</caption>
+      <thead><tr><th style="width:22%">Component</th><th style="width:30%">Choice</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Conversation model</td><td><code>claude-sonnet-5</code></td><td>Handles greetings, refusals and trade switches. Returns a tool choice, not prose about price.</td></tr>
+        <tr><td>Money path</td><td>Deterministic pricer</td><td>No LLM. The same inputs always give the same quote.</td></tr>
+        <tr><td>Measurement</td><td>Geoscape primary, PropRadar and Google fallbacks</td><td>Area comes from a provider, never an estimate.</td></tr>
+        <tr><td>Reply guard</td><td><code>assertGroundedReply</code></td><td>Discards any turn stating a figure no tool produced.</td></tr>
+        <tr><td>Fallback</td><td>Pure state machine</td><td>Any model timeout or bad shape runs the deterministic path for that turn only.</td></tr>
+        <tr><td>Kill switch</td><td><code>SMS_LLM_RECEPTIONIST_ENABLED=0</code></td><td>Forces every turn down the state machine, per tenant or globally.</td></tr>
+        <tr><td>Framework</td><td>NestJS, Swagger at <code>/api/docs</code></td><td>Modules and DTOs give each trade a contract the others cannot break.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <b>What isolation buys, stated plainly</b>
+      <p>
+        Changing roofing cannot break painting. Each trade deploys, rolls back and scales on its own,
+        and its prompt, tools and flags live in one repo. The cost is five deploys to keep in step and
+        a shared database that still needs app-layer tenant scoping.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <span>QuoteMax · AI Receptionist architecture</span>
+    <span>Fig 1 current · Fig 2 to 4 proposed</span>
+  </footer>
+
+</div>
+</body>
+</html>
