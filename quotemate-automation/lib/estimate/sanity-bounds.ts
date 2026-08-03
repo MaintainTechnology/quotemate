@@ -157,3 +157,77 @@ export function checkSanityBounds(
 
   return failures.length ? { ok: false, failures } : { ok: true }
 }
+
+// ── Phase 5b — the monotonic tier assertion ─────────────────────────────
+//
+// Good ≤ Better ≤ Best. Obvious, and nothing checked it.
+//
+// It matters MORE after Phase 4 than before. Until R3/R4 all three tiers were
+// scored from one catalogue by one rule, so the ordering fell out for free.
+// Now three independent things can each place a product in one tier without
+// consulting the others:
+//   · R3 the customer's pick anchors ITS tier — they can choose the dearest
+//        product on offer and have it land in Better
+//   · R2 a tradie's ladder pin is per (category, tier) and nothing stops them
+//        pinning a $300 product to Good
+//   · R4 the shared fallback indexes by price, but only within one category
+// A quote reading "Good $250 / Better $200" is obviously broken to a customer
+// and invisible to every check that exists today.
+//
+// SHADOW ONLY, deliberately. This reports; it does not null a tier and does
+// not route to inspection. Two reasons. An inverted ladder is a presentation
+// fault, not a fabricated price, so the $99 inspection is a wildly
+// disproportionate answer — and this phase has already produced one bug where
+// a correct quote was billed as an inspection. Second, nobody yet knows how
+// often a legitimate tradie pin inverts the ladder; collect the signal on real
+// quotes first, then decide whether to enforce. The caller surfaces failures
+// as risk_flags, which is what a tradie actually reads.
+//
+// Pure and I/O-free, like the rest of this module.
+
+/** Subtotals for the tiers a draft actually carries. Absent/null = tier not
+ *  offered, which is normal: fault_finding has no best, and a review-gated or
+ *  Opus-fallback picked quote may hold only one. */
+export type TierSubtotals = {
+  good?: number | null
+  better?: number | null
+  best?: number | null
+}
+
+/**
+ * Assert the offered tiers ascend in price. Compares only the tiers PRESENT,
+ * in good → better → best order, so a quote offering Good + Best is checked as
+ * that pair rather than skipped for want of a middle.
+ *
+ * Equal subtotals PASS. Two tiers at one price is a duplicate, which
+ * `collapseDuplicateTiers` already owns; reporting it here too would hand an
+ * operator two findings for one fault.
+ *
+ * Non-finite or missing subtotals are SKIPPED, not read as zero. Treating a
+ * missing total as 0 would invent an inversion that is not there and put a
+ * false flag on a quote that is fine.
+ */
+export function checkTierMonotonicity(tiers: TierSubtotals): SanityVerdict {
+  const ORDER = ['good', 'better', 'best'] as const
+  const present = ORDER
+    // ⚠ null/undefined/'' are filtered BEFORE Number(). Number(null) is 0 and
+    // 0 IS finite, so a Number.isFinite check alone reads an absent tier as
+    // free and reports better:$0 < good:$100 — a false inversion on a quote
+    // that is perfectly fine. Caught by the test named for it.
+    .filter((key) => tiers[key] !== null && tiers[key] !== undefined && tiers[key] !== ('' as never))
+    .map((key) => ({ key, value: Number(tiers[key]) }))
+    .filter((t) => Number.isFinite(t.value))
+
+  const failures: string[] = []
+  for (let i = 1; i < present.length; i++) {
+    const prev = present[i - 1]
+    const cur = present[i]
+    if (cur.value < prev.value) {
+      failures.push(
+        `tier order: ${cur.key} $${cur.value.toFixed(2)} < ${prev.key} $${prev.value.toFixed(2)} ` +
+          `— the ladder is inverted, so a dearer option is being shown as the cheaper one`,
+      )
+    }
+  }
+  return failures.length ? { ok: false, failures } : { ok: true }
+}

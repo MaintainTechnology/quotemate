@@ -34,10 +34,12 @@ import { resolveInspectionReason } from './inspection-reason'
 import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
 import {
   checkSanityBounds,
+  checkTierMonotonicity,
   boundForJob,
   recipeLabourFromLines,
   type JobTypeBound,
 } from './sanity-bounds'
+import { checkRecipeCoverage } from './recipe-coverage'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
@@ -65,6 +67,13 @@ import { searchTenantStore } from '@/lib/filestore/tenant-store'
 import type { KbSearchResult } from '@/lib/admin-loader/mt-filestore-kb'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createTracer, stopwatch, type Tracer } from '@/lib/log/trace'
+
+/** Phase 5 — how many material lines beyond the recipe are acceptable before
+ *  it is worth reporting. A real job legitimately varies: an extra GPO because
+ *  the wall was already open, a part skipped because the customer supplied it.
+ *  Named rather than inlined so widening it is a visible decision, and set at
+ *  2 because the recipe describes the usual job, not a contract. */
+const PHASE5_EXTRAS_ALLOWANCE = 2
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -369,10 +378,23 @@ export async function runEstimation(
   // deterministic price self-corrects to inspection — same safety
   // envelope as the Opus path. This block is fully dormant until the
   // env flag is explicitly set.
+  //
+  // Phase 5 — the recipe this job resolved to, hoisted out of the block below
+  // so the coverage check can reach it. null when the loader could not resolve
+  // a recipe at all, in which case there is nothing to compare a quote against.
+  let phase5Recipe: BomLine[] | null = null
   if (process.env.DETERMINISTIC_BOM === '1') {
     try {
       const loaded = await loadDeterministicInputs(intake, pricingBook)
       if (loaded.input) {
+        // Phase 5 — keep the recipe for the coverage check further down.
+        // Captured BEFORE the build so it survives a build that BAILS: that is
+        // the case worth checking, because the draft then falls back to Opus
+        // while we still know what the job was supposed to contain. On the
+        // deterministic path coverage is near-tautological (the builder
+        // already reports missingRequired); on an Opus draft it is the only
+        // thing that can see an omitted part or an invented one.
+        phase5Recipe = loaded.input.bom
         const built = buildDeterministicTiers(loaded.input)
         if (built.tiers) {
           for (const tier of ['good', 'better', 'best'] as const) {
@@ -932,6 +954,56 @@ export async function runEstimation(
           ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
           ...qtyFlags,
         ]
+      }
+      // Phase 5b — Good ≤ Better ≤ Best. Runs AFTER reconcileTierMath and
+      // collapseDuplicateTiers so it judges the subtotals that will actually
+      // ship rather than the pre-correction ones.
+      //
+      // SHADOW: flag and log, never null a tier or route to inspection. An
+      // inverted ladder is a presentation fault, not a fabricated price, and
+      // this phase has already produced one bug that billed a correct quote as
+      // a $99 inspection. Enforcement is a decision to take once there is data
+      // on how often a legitimate tradie pin inverts the ladder.
+      const tierOrder = checkTierMonotonicity({
+        good: draft?.good?.subtotal_ex_gst,
+        better: draft?.better?.subtotal_ex_gst,
+        best: draft?.best?.subtotal_ex_gst,
+      })
+      if (!tierOrder.ok) {
+        draft.risk_flags = [
+          ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+          ...tierOrder.failures.map((f) => `[tier-order] ${f}`),
+        ]
+        cacheLog.err(
+          'Phase 5b — tier ladder is inverted (SHADOW: flagged, quote unchanged)',
+          tierOrder.failures.join(' | '),
+          { pricing_path: draft?.pricing_path ?? null },
+        )
+      }
+      // Phase 5 — does the quote match the recipe? Grounding proves each price
+      // traces to a DB row and sanity bounds prove the total is not absurd;
+      // neither can see a MISSING part or an invented one.
+      //
+      // SHADOW, same reasoning as 5b and as the spec asks. The recipe describes
+      // the USUAL job and a real one legitimately varies: an extra GPO because
+      // the wall was already open, a part skipped because the customer supplied
+      // it. PHASE5_EXTRAS_ALLOWANCE is the spec's "explicit extras allowance" —
+      // named rather than hidden, so widening it is a visible decision.
+      const coverage = checkRecipeCoverage({
+        tiers: { good: draft?.good, better: draft?.better, best: draft?.best },
+        recipe: phase5Recipe,
+        extrasAllowance: PHASE5_EXTRAS_ALLOWANCE,
+      })
+      if (coverage.findings.length > 0) {
+        draft.risk_flags = [
+          ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+          ...coverage.findings.map((f) => `[recipe-coverage] ${f}`),
+        ]
+        cacheLog.err(
+          'Phase 5 — quote diverges from the recipe (SHADOW: flagged, quote unchanged)',
+          coverage.findings.join(' | '),
+          { pricing_path: draft?.pricing_path ?? null, recipe_lines: phase5Recipe?.length ?? 0 },
+        )
       }
       if (corrections.length > 0 || qtyFlags.length > 0 || labour.corrections.length > 0) {
         cacheLog.ok('reconcile backstops applied', {
@@ -2102,7 +2174,14 @@ async function loadDeterministicInputs(
   // No tenant recipe AND no shared recipe → not deterministic (Opus path).
   const { data: ownRecipe } = await supabase
     .from('tenant_assembly_bom')
-    .select('material_category, quantity, required, description, sort')
+    // Phase 4 R7/R8/R11 (migration 185) — include_when, quantity_per and
+    // catalogue_id. Same class as the R1 fix: a Supabase select is a STRING,
+    // so an omitted column is a silent `undefined`, and every condition,
+    // ratio and pin a tradie sets would quietly do nothing.
+    // ⚠ ONE string literal, not a concatenation: supabase-js parses the
+    // select at the TYPE level, and a computed string collapses the row type
+    // to GenericStringError.
+    .select('material_category, quantity, required, description, sort, include_when, quantity_per, catalogue_id')
     .eq('tenant_id', tenantId)
     .in('assembly_id', ids)
     .order('sort', { ascending: true })
@@ -2110,10 +2189,16 @@ async function loadDeterministicInputs(
   if (!recipe || recipe.length === 0) {
     const { data: sharedRecipe } = await supabase
       .from('shared_assembly_bom')
-      .select('material_category, quantity, required, description, sort')
+      // Migration 186 — include_when/quantity_per exist here too, so a
+      // condition seeded on the SHARED downlight recipe works for every
+      // tenant, not only the minority who have customised theirs. No
+      // catalogue_id: a shared row cannot pin one tenant's product.
+      .select('material_category, quantity, required, description, sort, include_when, quantity_per')
       .in('assembly_id', ids)
       .order('sort', { ascending: true })
-    recipe = sharedRecipe
+    // catalogue_id is absent on shared rows; the builder reads it as
+    // undefined, which is "no pin".
+    recipe = (sharedRecipe ?? []).map((r) => ({ ...r, catalogue_id: null }))
   }
   if (!recipe || recipe.length === 0) {
     return { input: null, reason: 'no recipe (tenant or shared) for this job' }
@@ -2155,6 +2240,25 @@ async function loadDeterministicInputs(
         }
       : null,
   )
+  // Phase 5b — an out-of-range override was DROPPED. Log it: a drop that
+  // nobody reports is still a silent one, and the whole point is that the bad
+  // row gets found and fixed rather than quietly ignored on every future quote.
+  if (eff.labourHours.dropped || eff.markupPct.dropped) {
+    // Same construction as runEstimation's own logger (line ~130); this helper
+    // takes no log param.
+    const boundsLog = pipelineLog('estimate', intake?.id ?? null)
+    for (const [field, p] of [
+      ['labour_hours_override', eff.labourHours],
+      ['markup_pct_override', eff.markupPct],
+    ] as const) {
+      if (!p.dropped) continue
+      boundsLog.err(
+        `Phase 5b — tenant ${field} dropped as out of range (using the global default)`,
+        p.dropped,
+        { tenant_id: tenantId, assembly: primary.name, used: p.value },
+      )
+    }
+  }
 
   // Catalogue (active, trade) + shared materials (trade) — the price
   // sources. Selects mirror loadCandidatePrices for deploy-safety.
