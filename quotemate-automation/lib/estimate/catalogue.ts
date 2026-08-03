@@ -63,6 +63,11 @@ export interface BomLine {
   description?: string | null
   quantity: number | string
   required?: boolean | null
+  /** Display/ordering rank from the recipe row. Load-bearing: both
+   *  scaleBomToItemCount and the headline scan in buildBomQuoteLines pick by
+   *  `sort`, not array order, so a caller that maps or concatenates cannot
+   *  change which line the job is judged by. */
+  sort?: number | null
   /** Phase 4 R7 (migration 185) — include this line only when the RESOLVED
    *  product's attributes satisfy every key. NULL/absent = always include.
    *  See shouldIncludeLine for the unknown-attribute rule, which differs by
@@ -485,6 +490,29 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
   const lines: QuoteLine[] = []
   const missingRequired: string[] = []
   const sorted = [...input.bom]
+  // resolveMaterial is called once per line at most. The headline scan below
+  // needs a resolution before the main loop reaches that line, and a reviewer
+  // rightly pointed out that resolving twice assumes purity of every injected
+  // resolver forever. Memoised on line identity instead of assuming.
+  const resolved = new Map<BomLine, ReturnType<BuildBomInput['resolveMaterial']>>()
+  const resolve = (b: BomLine) => {
+    if (!resolved.has(b)) resolved.set(b, input.resolveMaterial(b))
+    return resolved.get(b)!
+  }
+
+  const isSundryLine = (b: BomLine) =>
+    SUNDRY_RE.test(String(b.material_category ?? '')) || SUNDRY_RE.test(String(b.description ?? ''))
+  const isRatioLine = (b: BomLine) => {
+    const per = Number(b.quantity_per)
+    return Number.isFinite(per) && per > 0
+  }
+  /** Will this line actually end up on the quote? */
+  const willShip = (b: BomLine) => {
+    if (!b.include_when && !(b.required ?? true) && !input.includeOptional) return false
+    const q = num(b.quantity)
+    return Number.isFinite(q) && q > 0
+  }
+
   // Phase 4 R7 — resolve the HEADLINE product first, because that is what the
   // conditions are about.
   //
@@ -497,15 +525,29 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
   // dropped. Judged per line, both scenarios are unexpressible — the driver
   // row has no integrated_driver tag and never will.
   //
-  // So the condition is judged against the job's headline product: the first
-  // non-sundry line that carries no condition of its own. Unconditional
-  // because a conditional line cannot be the thing conditions are measured
-  // against without the definition eating itself.
+  // ⚠ THE CANDIDATE MUST BE A LINE THAT ACTUALLY SHIPS. Review of the first
+  // version found this scan filtering on include_when and SUNDRY_RE alone,
+  // which let it pick an OPTIONAL line that the short-circuit then dropped, or
+  // a quantity_per RATIO line. Either way every condition on the job was
+  // judged against a product that was never priced, never shown and never
+  // billed — and with missingRequired empty the quote shipped silently. A
+  // dropped smart hub claiming integrated_driver removed a driver the
+  // downlight genuinely needed.
+  //
+  // Four filters, each load-bearing:
+  //   · no condition of its own — a conditional line cannot be the thing
+  //     conditions are measured against without the definition eating itself
+  //   · not a ratio line — scaleBomToItemCount already excludes those from
+  //     headline consideration and the two must agree on what the job is
+  //   · not a sundry — tape is not the job
+  //   · willShip — it has to be on the quote to describe it
+  // Picked in `sort` order, matching scaleBomToItemCount, so a caller that
+  // maps or concatenates cannot change the answer.
   const headlineProps: Record<string, unknown> | null = (() => {
-    for (const b of sorted) {
-      if (b.include_when) continue
-      if (SUNDRY_RE.test(String(b.material_category ?? '')) || SUNDRY_RE.test(String(b.description ?? ''))) continue
-      const m = input.resolveMaterial(b)
+    const bySort = [...sorted].sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0))
+    for (const b of bySort) {
+      if (b.include_when || isRatioLine(b) || isSundryLine(b) || !willShip(b)) continue
+      const m = resolve(b)
       if (m) return m.properties ?? null
     }
     return null
@@ -516,28 +558,38 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
     // A line that states a condition is governed BY that condition, not by
     // the blunt optional/includeOptional rule. Without this an optional
     // conditional line (the dimmer) could never be added, because the
-    // short-circuit below would drop it before the condition was read.
+    // short-circuit would drop it before the condition was read.
     if (!b.include_when && !required && !input.includeOptional) continue
+
+    // Phase 4 R7 — THE CONDITION IS EVALUATED FIRST, ahead of both the
+    // quantity guard and the resolver.
+    //
+    // Review found it running last, which meant a required line the condition
+    // would have DROPPED still had to be priceable: the resolver returned null
+    // for a category nothing stocks, the line went to missingRequired, and
+    // buildDeterministicTiers returned {tiers:null} — routing a correct quote
+    // to the $99 inspection. Production made that certain, not theoretical:
+    // no driver or dimmer product exists in shared_materials or any tenant
+    // catalogue, so the first tradie to seed the R9 condition this phase
+    // exists to support would have broken every integrated-driver quote.
+    //
+    // A condition whose whole meaning is "this part is not needed" cannot
+    // require the part to be priceable, or to have a sane quantity, first.
+    //
+    // An excluded line is NOT missingRequired: the condition was evaluated and
+    // the part is genuinely not needed.
+    if (!shouldIncludeLine(b.include_when, headlineProps, required)) continue
+
     const qty = num(b.quantity)
     if (!Number.isFinite(qty) || qty <= 0) {
       if (required) missingRequired.push(b.material_category)
       continue
     }
-    const m = input.resolveMaterial(b)
+    const m = resolve(b)
     if (!m) {
       if (required) missingRequired.push(b.material_category)
       continue
     }
-    // Phase 4 R7 — judged against the HEADLINE product's attributes (see
-    // above), because the conditions describe the thing being installed, not
-    // the accessory being conditioned.
-    //
-    // An excluded line is NOT missingRequired: the condition was evaluated
-    // and the part is genuinely not needed — an integrated-driver downlight
-    // needs no separate driver. Pushing it to missingRequired would route a
-    // correct quote to the $99 inspection, which is the failure mode this
-    // whole phase keeps running into.
-    if (!shouldIncludeLine(b.include_when, headlineProps, required)) continue
     const unitPrice = money(m.markedUpPrice)
     lines.push({
       description: b.description?.trim() || m.name,
