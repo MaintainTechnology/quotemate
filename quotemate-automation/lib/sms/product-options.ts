@@ -156,8 +156,31 @@ export function selectProductOptions(
   // ponytail: ordinal, not median — no live category has >3 products. If long
   // ladders appear, switch to the median index here and nowhere else.
   const goodPrice = num(good.unit_price_ex_gst)
+  // Phase 4 R6 — the operator's go-to product must actually be OFFERED.
+  //
+  // is_preferred used to be a price tie-break only (the sort above), so it
+  // decided which row won when two cost the same and did nothing otherwise.
+  // A tradie could mark their go-to and never see it: on a three-product
+  // category with the preferred row in the middle, the two slots went to the
+  // cheapest and the next one up, and the flagged product was invisible.
+  //
+  // `sorted` is ascending, so this takes the CHEAPEST preferred row — a
+  // deterministic answer when more than one is flagged. Skipping `good`
+  // matters: when the preferred row is already the cheapest it is on offer
+  // already, and Better should fall through to the ordinal rule below rather
+  // than be forced.
+  //
+  // ⚠ The spec's R6 says to fall back to `sorted[last]`. Deliberately not
+  // done: the ordinal "next price up" below is a LATER, better-reasoned
+  // decision (see the comment above it) that exists to stop an outlier — a
+  // $287 wifi GPO beside a $36 one — hiding the $42 the tradie meant as the
+  // upsell. R6's intent is that the preferred row is offered; that is
+  // satisfied here without reverting the outlier fix.
+  const preferred = sorted.find((r) => r.is_preferred === true && r !== good)
   const better =
-    sorted.find((r) => num(r.unit_price_ex_gst) > goodPrice) ?? sorted[1]
+    preferred ??
+    sorted.find((r) => num(r.unit_price_ex_gst) > goodPrice) ??
+    sorted[1]
   // Only one distinct product → offer it as the single option.
   if (!better || better === good) return [toOpt(good, 'good')]
   return [toOpt(good, 'good'), toOpt(better, 'better')]
