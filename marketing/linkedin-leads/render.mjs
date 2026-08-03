@@ -45,8 +45,11 @@ const server = http.createServer(async (req, res) => {
     //
     // Dev-only server on a random localhost port, but alive whenever graphics
     // render. (CodeQL js/path-injection, high.)
+    // Split on BOTH separators. readdir returns `img\roof-cavity.jpg` on
+    // Windows, so splitting on `/` alone leaves the backslash in place, the
+    // comparison never matches, and every photograph 404s silently.
     const entries = await readdir(here, { recursive: true })
-    const hit = entries.find((e) => e.split(/[\/]/).join('/') === want)
+    const hit = entries.find((e) => e.split(/[\\/]/).join('/') === want)
     if (!hit) {
       res.writeHead(404)
       res.end('not found')

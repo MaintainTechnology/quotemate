@@ -2,7 +2,7 @@
 <html lang="en-AU">
 <head>
 <meta charset="utf-8">
-<title>QuoteMax LinkedIn post, payment terms and deposit-first, 66 to 71</title>
+<title>QuoteMax LinkedIn post, quoting is work, 80 to 84</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -98,6 +98,14 @@ body.one{padding:0;gap:0}
   filter:grayscale(.10) saturate(.97) contrast(1.04) brightness(1.02) sepia(.07)}
 .shot::after,.pic::after{content:"";position:absolute;inset:0;background:var(--accent);mix-blend-mode:soft-light;opacity:.11;pointer-events:none;z-index:2}
 
+/* The lower panel of the source carries a saturated green confirmation tick,
+   and green "PAID BOOKING" text, baked into the tablet screen. The brand allows
+   ONE accent, and a second one arriving through photography is still a second
+   one. Desaturating this frame specifically pulls the green back to a muted
+   grey-green while the scene, the operator and the legible "$99" all survive.
+   Targeted by src so it applies in every frame the photograph appears in. */
+img[src$="paid-booking.jpg"]{filter:grayscale(.40) saturate(.88) contrast(1.06) brightness(1.02) sepia(.14) !important}
+
 /* ── HERO frame ───────────────────────────────────────────────────── */
 .hero .body{position:absolute;left:0;right:0;top:0;bottom:var(--foot);z-index:5;display:flex;flex-direction:column}
 .shot{flex:1 1 auto;position:relative;overflow:hidden;min-height:0}
@@ -126,7 +134,7 @@ body.one{padding:0;gap:0}
    can actually show without LinkedIn cropping a two-image post to tiles.
 
    ┌────────────────────────────────────────┐
-   │ lockup                    QM-2607-72   │ rail 150, scrim, no hairline
+   │ lockup                    QM-2608-72   │ rail 150, scrim, no hairline
    ├──────────────────┬─────────────────────┤
    │  the padlock     │   the tradie        │ band 560, 2px canvas seam
    │  456 wide        │   622 wide          │
@@ -212,7 +220,7 @@ body.one{padding:0;gap:0}
    the other, cut apart by a slash.
 
    ┌──────────────────┬─────────────────────┐
-   │ lockup                    QM-2607-75   │ rail 150
+   │ lockup                    QM-2608-75   │ rail 150
    ├──────────────────┼─────────────────────┤
    │ TWO ORDERS       │                     │
    │ SAME JOB.        │   the padlock       │
@@ -403,7 +411,7 @@ function stackBody(D){
 }
 
 function render(D){
-  const rail=`<div class="rail"><img src="${LOGO}" alt=""><div class="ref">QM-2607-${D.n} <b>/</b> ${D.tag}</div></div>`;
+  const rail=`<div class="rail"><img src="${LOGO}" alt=""><div class="ref">QM-2608-${D.n} <b>/</b> ${D.tag}</div></div>`;
   const foot=`<div class="foot"><span>quotemax.com.au</span><span>${D.foot}</span></div>`;
   const frame=D.kind==='stack'?'stack':D.kind==='pair'?'pair':PLATE[D.kind]?'hero':'split';
   const body=frame==='stack'?stackBody(D)
@@ -414,8 +422,7 @@ function render(D){
   // `.split` is already the class on the inner column wrapper, and that rule
   // carries position:absolute; top:150px. Applied to the artboard it moved the
   // whole 1350px graphic down by the rail height and pushed the yellow sign-off
-  // off the bottom of the shot, which is what 67, 68, 70 and 71 were doing.
-  // Split is the default frame and needs no class of its own.
+  // off the bottom of the shot. Split is the default frame and needs no class.
   const cls=`d${frame==='split'?'':' '+frame}${D.flip?' flip':''}`;
   return `<div class="${cls}">${rail}${body}${foot}${GRAIN}</div>`;
 }
@@ -435,163 +442,136 @@ function render(D){
    is a real one: three options per quote, deposit before the calendar opens,
    the tradie's own rate book, domestic jobs only for this sequence.
    ════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════
+   QUOTING IS WORK, refs 80 to 84.
+
+   The argument: three tradies quote the same job and two of them work for
+   free. Every other profession charges for the assessment. QuoteMax drafts
+   most quotes without a visit at all, and when a visit is genuinely needed the
+   customer pays $99, refundable and credited to the final quote.
+
+   PHOTOGRAPHY. One source, split into two. The supplied frame is a composite:
+   a tradie crammed in a roof cavity above, an operator holding a tablet
+   reading "PAID BOOKING: $99" below. Split at the white band it becomes the
+   whole argument in two pictures, the problem above and the answer below, and
+   it drops straight into the frames this project already uses.
+
+   TWO CONSTRAINTS THE SOURCE IMPOSES, both handled in split.mjs and here:
+     1. The lower panel's tablet interface is AI-garbled ("Search
+        fropdiecales", "40,25 mm" for a roof area). It is never used above
+        622px wide, where it scales to about 43% and reads as interface rather
+        than as words. "PAID BOOKING: $99" is large enough to survive that.
+        It is NEVER used full-bleed. The hero frame uses the roof cavity,
+        which carries no text at all.
+     2. A "RELIA-ROOFING" wall logo was cropped out at x 0.78. It is an
+        invented company and beside QuoteMax claims it would read as a named
+        customer, which there is no basis to imply.
+
+   CLAIMS. Every product claim here is real: the $99 site visit exists, it is
+   credited back off the work, quotes draft in under a minute, roofs measure
+   off satellite imagery, pricing comes from the tradie's own rate book. What
+   is NOT claimed anywhere on these graphics is volume or traction, because
+   the money path is running in test and not collecting at scale. That caveat
+   belongs in the caption, in the poster's own voice, and it is there.
+
+   "2 IN 3" is arithmetic off the post's own premise, not a survey, and the
+   source line on 80 says so in as many words.
+   ════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════
+   QUOTING IS WORK, refs 80 to 84.
+
+   The argument: three tradies quote the same job and two of them work for
+   free. Every other profession charges for the assessment. QuoteMax drafts
+   most quotes without a visit at all, and when a visit is genuinely needed the
+   customer pays $99, refundable and credited to the final quote.
+
+   PHOTOGRAPHY. One source, split into two. The supplied frame is a composite:
+   a tradie crammed in a roof cavity above, an operator holding a tablet
+   reading "PAID BOOKING: $99" below. Split at the white band it becomes the
+   whole argument in two pictures, the problem above and the answer below, and
+   it drops straight into the frames this project already uses.
+
+   TWO CONSTRAINTS THE SOURCE IMPOSES, both handled in split.mjs and here:
+     1. The lower panel's tablet interface is AI-garbled ("Search
+        fropdiecales", "40,25 mm" for a roof area). It is never used above
+        622px wide, where it scales to about 43% and reads as interface rather
+        than as words. "PAID BOOKING: $99" is large enough to survive that.
+        It is NEVER used full-bleed. The hero frame uses the roof cavity,
+        which carries no text at all.
+     2. A "RELIA-ROOFING" wall logo was cropped out at x 0.78. It is an
+        invented company and beside QuoteMax claims it would read as a named
+        customer, which there is no basis to imply.
+
+   CLAIMS. Every product claim here is real: the $99 site visit exists, it is
+   credited back off the work, quotes draft in under a minute, roofs measure
+   off satellite imagery, pricing comes from the tradie's own rate book. What
+   is NOT claimed anywhere on these graphics is volume or traction, because
+   the money path is running in test and not collecting at scale. That caveat
+   belongs in the caption, in the poster's own voice, and it is there.
+
+   "2 IN 3" is arithmetic off the post's own premise, not a survey, and the
+   source line on 80 says so in as many words.
+   ════════════════════════════════════════════════════════════════════ */
 const D=[
 
-/* ── 72 · THE POST IMAGE. Both photographs on one graphic. ─────────
-   This supersedes running 66 and 67 as a two-image post. A two-image LinkedIn
-   post renders as side-by-side tiles, centre-cropped, which clipped the claim
-   line on 66. One graphic carrying both photographs shows in full 4:5 and needs
-   no caveat.
-
-   The left photograph is the locked diary, so the left caption is the usual
-   order. The right photograph is the tradesman, so the right caption is deposit
-   first. The seam between them is the argument. */
-{n:72,tag:'DATA',kind:'pair',
- left:{pic:['padlock-calendar','center 34%'],label:'THE USUAL ORDER',line:'Invoice, then wait.'},
- // 49%, not 44%. At 44 the hard hat's bottom edge landed on 99.7% of the cell,
- // which is about two pixels of clearance, and the tool belt and tablet were
- // just as close. 49 buys 28px and still leaves 14% headroom above his hair.
- right:{pic:['builder-tablet','center 49%'],label:'DEPOSIT FIRST',line:'Deposit, then book.'},
- src:'CREDITORWATCH <i>&middot; CONSTRUCTION, LAST 12 MONTHS</i>',
- // The eyebrow above already scopes this to construction and to the last 12
- // months, so the label does not repeat either.
- figs:[['92%','HAD AN OVERDUE INVOICE']],
- claim:'The highest {late-payment and default rates} in the country.',cs:27,
- foot:'BOOKING HAPPENS AFTER THE DEPOSIT'},
-
-/* ── 75 to 79 · Both photographs stacked and slashed, one
-   editorial column beside them, kept brief.
-
-   Two passes got this wrong in opposite directions. Three-word chains said
-   nothing about a topic resting on two statistics; four full paragraphs said it
-   at a length nobody reads in a feed. Two short paragraphs is the setting:
-   enough to make the argument, short enough to finish.
-
-   Photo pairings stay distinct across the set and the grammar never changes:
-   a locked job diary on top, a tradesman working below.
-     75 calendar + tablet   76 wall + plans   77 diary + tablet
-     78 calendar + plans    79 wall + tablet                                */
-
-{n:75,tag:'DATA',kind:'stack',
- up:['padlock-calendar','center 43%'],dn:['builder-tablet','center 50%'],
- kick:'LATE PAYMENT',head:'Construction gets paid {last}.',
- big:'92%',src:'[CREDITORWATCH] &middot; of construction firms carried an overdue invoice last year. The highest late-payment and default rates of any industry.',
+/* ── 80 · THE HOOK. The flagship, and the one to post. ─────────────
+   Roof cavity above, paid booking below, slashed apart, with the whole
+   argument in one column beside them. */
+{n:80,tag:'VIEW',kind:'stack',
+ up:['roof-cavity','center center'],dn:['paid-booking','center center'],
+ kick:'THE MATHS OF QUOTING',head:'Two of the three {worked for free}.',
+ big:'2 IN 3',src:'[ARITHMETIC, NOT A SURVEY] &middot; three tradies quote the same job, one wins it, and the other two are paid nothing for the drive, the roof cavity or the write-up.',
  body:[
-  'Australian small business now gets paid in {24 days}, the fastest on record. Construction did not get the memo.',
-  'So we run the sequence the other way. A priced quote, a deposit, then the calendar.'],
- foot:'THE PROBLEM IS STRUCTURAL'},
+  'Drive out, park, measure up, get in the roof cavity, drive back, write it up that night at the kitchen table. Then wait. Then hear nothing.',
+  'So we built the opposite. Most jobs never need a visit. When one does, the customer pays [$99] to book it.'],
+ foot:'QUOTING IS WORK'},
 
-{n:76,tag:'DATA',kind:'stack',
- up:['padlock-wall','center 45%'],dn:['builder-plans','center 44%'],
- kick:'TWO NUMBERS',head:'The problem is not {the economy}.',
- big:'24 DAYS',src:'[XERO SMALL BUSINESS INSIGHTS] &middot; average time an Australian small business waits to be paid.',
- body:[
-  'The fastest since tracking began in 2017. Every industry got better at paying. {Except one}.',
-  'CreditorWatch found [92%] of construction firms carried an overdue invoice, and the highest default rates of any industry.'],
- foot:'CONSTRUCTION DID NOT GET THE MEMO'},
-
-{n:77,tag:'VIEW',kind:'stack',
- up:['padlock-diary','center 40%'],dn:['builder-tablet','center 50%'],
- kick:'WHERE THE ASKING HAPPENS',head:'A quote asks someone {to think about it}.',
- body:[
-  'By the time an invoice exists the work is done and the materials are paid for. You are not agreeing terms with a customer. You are {asking a debtor}.',
-  'The order is the problem. Not the paperwork, and not the economy.'],
- foot:'A TRADIE IS NOT A BANK'},
-
-{n:78,tag:'EDU',kind:'stack',
- up:['padlock-calendar','center 43%'],dn:['builder-plans','center 44%'],
- kick:'THE SEQUENCE',head:'Deposit first. {Then the calendar}.',
- body:[
-  'The customer describes the job. A priced quote comes back with three options, off the tradie&rsquo;s own rate book. They pay a deposit. [Only then] does the calendar open.',
-  'Same job, same price. The only thing that moved is when they commit.'],
- foot:'BOOKING HAPPENS AFTER THE DEPOSIT'},
-
-{n:79,tag:'VIEW',kind:'stack',
- up:['padlock-wall','center 45%'],dn:['builder-tablet','center 50%'],
- kick:'WHERE IT DOES NOT FIT',head:'This will not suit {every trade}.',
- body:[
-  'Big commercial work runs on progress claims and 30-day terms, and always will. We are not pretending otherwise.',
-  'But for domestic jobs, asking for commitment before scheduling beats asking for payment 30 days after you have {finished}.'],
- foot:'DOMESTIC JOBS, NOT EVERY JOB'},
-
-/* ── 73 · The Xero counterpoint, on the same frame. ────────────────
-   The padlock is the money still owed after the work, the tradesman is the
-   money agreed before it. Different padlock and different tradesman from 72 so
-   a feed running both does not read as the same graphic twice. */
-{n:73,tag:'DATA',kind:'pair',
- left:{pic:['padlock-diary','center 34%'],label:'AFTER THE WORK',line:'You chase it.'},
- right:{pic:['builder-plans','center 46%'],label:'BEFORE THE WORK',line:'They commit.'},
- src:'XERO SMALL BUSINESS INSIGHTS <i>&middot; AUSTRALIA</i>',
- // One figure, not two, and set at 132 rather than 160. Seven characters of
- // monospace will not share the 904px measure with a second figure, and the
- // year belongs in the label where it reads as provenance anyway.
- figs:[['24 DAYS','AVERAGE SMALL BUSINESS WAIT, THE FASTEST SINCE TRACKING BEGAN IN 2017',132]],
- claim:'Construction {did not get the memo}.',
- foot:'THE PROBLEM IS STRUCTURAL'},
-
-/* ── 74 · What arrives instead. Product facts, not third-party ones. ── */
-{n:74,tag:'EDU',kind:'pair',
- left:{pic:['padlock-wall','center 36%'],label:'A QUOTE',line:'Asks them to think.'},
- right:{pic:['builder-tablet','center 49%'],label:'A DEPOSIT',line:'Asks them to decide.'},
- src:'QUOTEMAX <i>&middot; THREE OPTIONS, ONE DEPOSIT</i>',
- figs:[['3','OPTIONS ON EVERY QUOTE'],['$0','COMMISSION, EVER']],
- claim:'Booking opens {after the deposit clears}.',
- foot:'COMMITMENT BEFORE SCHEDULING'},
-
-/* ── 66 · Alternate, the keys and the lock alone. ──────────────────── */
-{n:66,tag:'DATA',kind:'figure',pic:['padlock-calendar','center 36%'],
- src:'CREDITORWATCH <i>&middot; LAST 12 MONTHS</i>',
- big:'92%',
- claim:'of construction firms carried an {overdue invoice}.',
- note:'The highest late-payment and default rates of any industry in the country, in the same year Australian small business as a whole got paid faster than ever.',
- foot:'LATE PAYMENT IS STRUCTURAL'},
-
-/* ── 67 · POST IMAGE TWO. The tradie, and the sequence reversed. ──── */
-{n:67,tag:'EDU',kind:'steps',pic:['builder-tablet','center center'],
- kick:'THE SEQUENCE',head:'Deposit first. {Then the calendar}.',
- steps:[
-   ['01','THE CUSTOMER DESCRIBES THE JOB','By text, by phone, or on a form.'],
-   ['02','A PRICED QUOTE COMES BACK','Three options, off the tradie&rsquo;s own rate book.'],
-   ['03','THEY PAY A DEPOSIT','Before a single window is offered.',true],
-   ['04','THEY PICK A TIME','From the calendar, once the deposit has cleared.']],
- foot:'BOOKING HAPPENS AFTER THE DEPOSIT'},
-
-/* ── 68 · The two numbers, set against each other. ────────────────── */
-{n:68,tag:'DATA',kind:'stat',pic:['padlock-diary','center center'],flip:true,
- kick:'TWO NUMBERS',head:'The economy is {not the problem}.',sm:true,
- figs:[
-   ['24 DAYS','XERO SMALL BUSINESS INSIGHTS','Average time an Australian small business now waits to be paid. The {fastest since tracking began in 2017}.'],
-   ['92%','CREDITORWATCH','Share of construction firms with an overdue invoice in the last 12 months. The highest late-payment and default rates of any industry.']],
- foot:'CONSTRUCTION DID NOT GET THE MEMO'},
-
-/* ── 69 · The structural point, said on its own. ──────────────────── */
-{n:69,tag:'VIEW',kind:'saying',pic:['padlock-wall','center 42%'],
- src:'WHERE THE ASKING HAPPENS',
- claim:'A quote is a document that asks someone {to think about it}.',
- note:'By the time an invoice exists, the work is done, the materials are paid for, and you are asking rather than agreeing. The order is the problem, not the paperwork.',
- foot:'THE ORDER IS THE PROBLEM'},
-
-/* ── 70 · The same job, run both ways. ────────────────────────────── */
-{n:70,tag:'EDU',kind:'versus',pic:['builder-plans','center center'],
- kick:'TWO ORDERS',head:'Same job. {Different order}.',
- // A leading + marks the accented step, a leading - the one that is struck out.
+/* ── 81 · Who else charges. The columns carry the shape, the copy carries
+   the detail, and the shorter right-hand column is the whole point. */
+/* Roof cavity, not the tablet. A 540px column crops the tablet frame to 39% of
+   its width, which means it is DISPLAYED at about 86% of source size, not
+   shrunk. The garbled interface text came out fully legible, along with the
+   name badge. Cropping harder scales up, not down. The roof cavity carries no
+   text at all, so it is safe at any size. */
+{n:81,tag:'VIEW',kind:'versus',pic:['roof-cavity','center center'],
+ kick:'EVERY OTHER PROFESSION',head:'Only trades give away {the diagnosis}.',
  vs:[
-   ['THE USUAL ORDER',['Quote','Book','Work','Invoice','-Wait'],true],
-   ['DEPOSIT FIRST',['Quote','+Deposit','Book','Work']]],
- copy:'Nothing about the job changes. Only the point at which the customer commits.',
- foot:'COMMITMENT BEFORE SCHEDULING'},
+   ['THEY CHARGE FOR IT',['A VET','AN INSPECTOR','A CONVEYANCER']],
+   ['WE GIVE IT AWAY',['-A TRADIE'],true]],
+ copy:'A vet charges a consult. A building inspector charges hundreds before they say a word. A conveyancer bills to read a contract.',
+ foot:'THE ASSESSMENT IS THE PRODUCT'},
 
-/* ── 71 · The caveat, and the question we are actually asking. ─────
-   Photography note: builder-stage.jpg is deliberately unused across this set.
-   The source frame composites a second tablet across the subject's hip at an
-   impossible angle, which is obvious once you look for it, and a public post
-   is the wrong place to ship a visible generation artefact. */
-{n:71,tag:'VIEW',kind:'pitch',pic:['builder-tablet','center center'],flip:true,
- kick:'WHERE IT DOES NOT FIT',head:'This will not suit {every trade}.',
- copy:'Big commercial work does not run on deposits and never will. But for domestic jobs, asking for commitment before scheduling seems more reasonable to us than asking for payment 30 days after you have finished.',
- terms:['DOMESTIC JOBS','DEPOSIT THEN BOOKING'],
- foot:'DOES DEPOSIT-FIRST WORK IN YOUR TRADE'},
+/* ── 82 · The mechanism. Hero frame, so the photograph is full bleed, which
+   is why it has to be the roof cavity: the tablet frame carries garbled
+   interface text that only survives at small sizes. */
+{n:82,tag:'EDU',kind:'figure',pic:['roof-cavity','center 62%'],
+ src:'THE SITE VISIT <i>&middot; WHEN A JOB GENUINELY NEEDS EYES ON IT</i>',
+ big:'$99',
+ claim:'refundable, and credited to {the final quote}.',
+ note:'Nobody serious blinks at $99. The ones who do blink were never going to sign. Either way the tradie is paid for the trip.',
+ foot:'PAID FOR THE TRIP, EITHER WAY'},
+
+/* ── 83 · The part people miss. The $99 is the exception, not the rule. */
+{n:83,tag:'EDU',kind:'stack',
+ up:['roof-cavity','center center'],dn:['paid-booking','center center'],
+ kick:'BEFORE THE $99',head:'Most jobs {never need a visit}.',
+ big:'<1 MIN',src:'[FROM THE CUSTOMER&rsquo;S TEXT] &middot; or the roof measured off satellite imagery, priced from the tradie&rsquo;s own rate book.',
+ body:[
+  'The quote is drafted and back with the customer before anyone has left the yard.',
+  'The [$99] is for the jobs that genuinely need eyes on them. Not for the ones that do not.'],
+ foot:'NO TRIP, NO CHARGE'},
+
+/* ── 84 · The position, and the question. */
+{n:84,tag:'VIEW',kind:'pair',
+ left:{pic:['roof-cavity','center center'],label:'THE OLD DEAL',line:'Free, then silence.'},
+ right:{pic:['paid-booking','center center'],label:'THE NEW DEAL',line:'Paid, then booked.'},
+ src:'QUOTEMAX <i>&middot; THE SITE VISIT</i>',
+ figs:[['$99','REFUNDABLE, CREDITED TO THE QUOTE']],
+ claim:'Quoting is work. {Work gets paid for}.',cs:30,
+ foot:'WOULD YOU CHARGE FOR A QUOTE'},
 ];
+
+
 
 const q=new URLSearchParams(location.search);
 const one=q.get('d');
