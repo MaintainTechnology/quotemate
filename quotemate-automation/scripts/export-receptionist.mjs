@@ -399,17 +399,56 @@ export async function sendWebResponse(webRes: Response, res: import('express').R
 }
 `,
 
+  requiredEnv: (required) => `// Env vars this service cannot start a turn without.
+// Generated from what the copied code actually reads — see
+// scripts/export-receptionist.mjs in the monorepo.
+export const REQUIRED_ENV = ${JSON.stringify(required, null, 2)} as const
+
+export function missingEnv(): string[] {
+  return REQUIRED_ENV.filter((k) => !process.env[k])
+}
+`,
+
   main: (trade, cfg) => `import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe, Logger } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import type { NestExpressApplication } from '@nestjs/platform-express'
-import { AppModule } from './app.module'
 import { drainAfter } from './runtime/after'
+import { missingEnv } from './config/required-env'
+
+// NOTE: AppModule is imported DYNAMICALLY inside bootstrap(), never at the
+// top of this file. Several vendored modules construct their Supabase client
+// at module scope, so merely importing the graph with no config throws
+// "supabaseUrl is required." before any of our code runs — on Railway that
+// is a crash-loop with an unreadable stack trace. Validating first and
+// importing second turns that into one clear log line.
 
 const TRADE = '${trade}'
 
+// The receptionist self-calls \`\${APP_URL}/api/intake/structure\`, which THIS
+// app serves. On Railway nobody sets APP_URL by hand on first deploy, and an
+// unset value would make the pipeline call localhost and silently produce no
+// quotes. Railway injects RAILWAY_PUBLIC_DOMAIN — use it as the default.
+// An explicit APP_URL always wins (custom domains, local dev).
+if (!process.env.APP_URL && process.env.RAILWAY_PUBLIC_DOMAIN) {
+  process.env.APP_URL = \`https://\${process.env.RAILWAY_PUBLIC_DOMAIN}\`
+}
+
 async function bootstrap() {
+  const missing = missingEnv()
+  if (missing.length) {
+    // Exit before importing the app graph, with something an operator can act
+    // on. Railway shows this verbatim in deploy logs.
+    const log = new Logger('bootstrap')
+    log.error(\`Cannot start the \${TRADE} receptionist — missing required configuration:\`)
+    for (const key of missing) log.error(\`  · \${key}\`)
+    log.error('Set these as service variables, then redeploy. See .env.example.')
+    process.exit(1)
+  }
+
+  const { AppModule } = await import('./app.module')
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // Twilio signs the raw request bytes — the validator needs them intact.
     rawBody: true,
@@ -441,18 +480,25 @@ async function bootstrap() {
     customSiteTitle: \`QuoteMax \${TRADE} receptionist API\`,
   })
 
+  // Railway injects PORT and routes to the container's published port.
+  // 0.0.0.0 is required — binding to localhost makes the container
+  // unreachable from Railway's proxy and the deploy healthcheck fails.
   const port = Number(process.env.PORT ?? ${cfg.port})
-  const server = await app.listen(port)
+  const server = await app.listen(port, '0.0.0.0')
   // A roofing measure turn can run ~200-300s; don't let the HTTP layer
   // cut the request out from under it.
   server.setTimeout(Number(process.env.HTTP_TIMEOUT_MS ?? 310_000))
 
+  // Railway sends SIGTERM on redeploy. Drain in-flight background work
+  // (an after() turn mid-measure) before the process goes away.
   process.on('SIGTERM', async () => {
     await drainAfter()
     await app.close()
   })
 
-  new Logger('bootstrap').log(\`\${TRADE} receptionist on :\${port} — docs at /api/docs\`)
+  const log = new Logger('bootstrap')
+  log.log(\`\${TRADE} receptionist on :\${port} — docs at /api/docs\`)
+  log.log(\`APP_URL=\${process.env.APP_URL ?? '(unset — self-calls will fail)'}\`)
 }
 
 void bootstrap()
@@ -677,32 +723,55 @@ export class EstimateController {
 }
 `,
 
-  healthController: (trade, required) => `import { Controller, Get } from '@nestjs/common'
-import { ApiOperation, ApiTags } from '@nestjs/swagger'
+  healthController: (trade, required) => `import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common'
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import type { Response } from 'express'
 
-/** Generated from the env vars this service's code actually reads —
- *  see scripts/export-receptionist.mjs in the monorepo. */
-const REQUIRED = ${JSON.stringify(required)} as const
+import { missingEnv } from '../config/required-env'
 
 @ApiTags('health')
 @Controller('api/health')
 export class HealthController {
+  /** LIVENESS — Railway's healthcheckPath points here. Always 200 while the
+   *  process is serving, so a deploy is not blocked by config that the
+   *  operator is about to add. Config problems surface on /deep below. */
   @Get()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Liveness + configuration check',
-    description: 'Reports which required env vars are present. Never returns their values.',
+    summary: 'Liveness — is the process serving?',
+    description: 'Always 200 while the app is up. This is the Railway healthcheck target.',
   })
-  check(): {
+  live(): { ok: true; trade: string; uptimeSeconds: number } {
+    return { ok: true, trade: '${trade}', uptimeSeconds: Math.round(process.uptime()) }
+  }
+
+  /** READINESS — 503 when a required env var is missing, so a misconfigured
+   *  deploy is caught by a curl instead of by a customer's first SMS.
+   *  Reports names only; never values. */
+  @Get('deep')
+  @ApiOperation({
+    summary: 'Readiness — is it configured well enough to quote?',
+    description:
+      'Returns 503 with the list of missing env var NAMES when the service cannot run a turn. ' +
+      'Check this once after the first deploy. Values are never returned.',
+  })
+  @ApiResponse({ status: 200, description: 'All required configuration present.' })
+  @ApiResponse({ status: 503, description: 'Missing required configuration — see "missing".' })
+  ready(@Res({ passthrough: true }) res: Response): {
     ok: boolean
     trade: string
     uptimeSeconds: number
+    appUrl: string | null
     missing: string[]
   } {
-    const missing = REQUIRED.filter((k) => !process.env[k])
+    const missing = missingEnv()
+    if (missing.length) res.status(HttpStatus.SERVICE_UNAVAILABLE)
     return {
       ok: missing.length === 0,
       trade: '${trade}',
       uptimeSeconds: Math.round(process.uptime()),
+      // Surfaced because a wrong APP_URL breaks the intake self-call silently.
+      appUrl: process.env.APP_URL ?? null,
       missing,
     }
   }
@@ -767,6 +836,83 @@ dist/
 *.tsbuildinfo
 .DS_Store
 `,
+
+  // Debian slim, NOT Alpine. sharp pulls a prebuilt native binary and the
+  // glibc build (@img/sharp-linux-x64) is the well-trodden one; Alpine needs
+  // the musl variant plus libc6-compat and fails in subtler ways. The image
+  // is bigger; the deploy is boring. That trade is correct here.
+  dockerfile: (trade) => `# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────────────────────────────
+# qm-${trade}-receptionist — multi-stage build for Railway (or any Docker host)
+#   docker build -t qm-${trade}-receptionist .
+#   docker run -p 8080:8080 --env-file .env.local qm-${trade}-receptionist
+# ─────────────────────────────────────────────────────────────────────
+FROM node:22-bookworm-slim AS base
+ENV NODE_ENV=production
+
+# ─── Stage 1: install + build ────────────────────────────────────────
+# NODE_ENV=development so npm ci installs devDependencies — the build
+# needs @nestjs/cli, typescript and tsc-alias.
+FROM base AS builder
+WORKDIR /app
+ENV NODE_ENV=development
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY tsconfig.json nest-cli.json ./
+COPY src ./src
+RUN npm run build
+# Drop devDependencies in place so the runtime stage copies a lean tree
+# and we never pay for a second install.
+RUN npm prune --omit=dev
+
+# ─── Stage 2: runtime ────────────────────────────────────────────────
+FROM base AS runner
+WORKDIR /app
+
+# Non-root. node:*-slim ships a \`node\` user (uid 1000) already.
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --chown=node:node package.json ./
+
+USER node
+
+# Railway overrides PORT at runtime; main.ts binds 0.0.0.0 either way.
+ENV PORT=8080
+EXPOSE 8080
+
+# Exec form: node is PID 1 and receives SIGTERM directly, so the
+# graceful-shutdown hook in main.ts actually runs on redeploy.
+CMD ["node", "dist/main.js"]
+`,
+
+  dockerignore: () => `node_modules
+dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+*.md
+.DS_Store
+Dockerfile
+.dockerignore
+`,
+
+  railwayJson: () => JSON.stringify({
+    $schema: 'https://railway.com/railway.schema.json',
+    build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile' },
+    deploy: {
+      // Liveness, not readiness — see src/health/health.controller.ts.
+      // A missing env var should not wedge the deploy; curl /api/health/deep
+      // after the first boot to confirm configuration.
+      healthcheckPath: '/api/health',
+      healthcheckTimeout: 300,
+      restartPolicyType: 'ON_FAILURE',
+      restartPolicyMaxRetries: 10,
+      numReplicas: 1,
+    },
+  }, null, 2) + '\n',
 }
 
 // ── env template ─────────────────────────────────────────────────────────
@@ -975,6 +1121,45 @@ Swagger UI: <http://localhost:${cfg.port}/api/docs>
 \`APP_URL\` must point at this service: the receptionist self-calls
 \`/api/intake/structure\`, which this app serves itself.
 
+## Deploy to Railway
+
+Builds from the \`Dockerfile\` (Debian slim + Node 22). \`railway.json\` pins the
+builder, the healthcheck and the restart policy, so a new service needs no
+dashboard build configuration.
+
+\`\`\`bash
+railway init
+railway up
+\`\`\`
+
+Then set variables — **\`railway variables --set 'KEY=value'\`**, one per key, or
+paste them in the dashboard. The minimum to run a turn:
+
+| Variable | Why |
+|---|---|
+| \`NEXT_PUBLIC_SUPABASE_URL\` | Database. Named \`NEXT_PUBLIC_*\` because the code is copied verbatim from the Next monorepo; it is server-only here. |
+| \`SUPABASE_SERVICE_ROLE_KEY\` | Database. Secret. |
+| \`ANTHROPIC_API_KEY\` | Dialog + estimation models. |
+| \`TWILIO_ACCOUNT_SID\`, \`TWILIO_AUTH_TOKEN\` | Inbound signature validation and outbound sends. |
+| \`CRON_SECRET\` | Guards the internal intake/estimate self-calls. **Absent in production ⇒ the pipeline fails closed and no quotes are produced.** |
+
+You do **not** need to set \`PORT\` (Railway injects it) or \`APP_URL\` — \`main.ts\`
+defaults \`APP_URL\` to \`https://$RAILWAY_PUBLIC_DOMAIN\`. Set \`APP_URL\` explicitly
+only when serving from a custom domain.
+
+After the first deploy, confirm configuration:
+
+\`\`\`bash
+curl https://<your-service>.up.railway.app/api/health/deep
+\`\`\`
+
+\`200\` means ready. \`503\` lists the missing variable names — Railway's own
+healthcheck targets \`/api/health\` (liveness) so missing config never wedges a
+deploy, it just shows up here.
+
+Last, point the tenant's Twilio number's inbound SMS webhook at
+\`https://<your-service>.up.railway.app/api/sms/inbound\`.
+
 ## Two things that will bite you
 
 1. **\`/api/receptionist/simulate\` is not a mock.** It runs the real
@@ -1096,7 +1281,8 @@ function buildTrade(trade, opts) {
   write('src/estimate/estimate.module.ts', tpl.estimateModule())
   write('src/estimate/estimate.controller.ts', tpl.estimateController())
   const usedEnv = envVarsUsed(files, generated)
-  write('src/health/health.controller.ts', tpl.healthController(trade, REQUIRED_ENV.filter((v) => usedEnv.includes(v))))
+  write('src/config/required-env.ts', tpl.requiredEnv(REQUIRED_ENV.filter((v) => usedEnv.includes(v))))
+  write('src/health/health.controller.ts', tpl.healthController(trade))
 
   const runtimeDeps = {
     '@nestjs/common': '^11.1.6',
@@ -1130,7 +1316,7 @@ function buildTrade(trade, opts) {
     description: cfg.blurb,
     scripts: {
       build: 'nest build && tsc-alias -p tsconfig.json',
-      start: 'node dist/main',
+      start: 'node dist/main.js',
       'start:dev': 'nest start --watch',
       typecheck: 'tsc --noEmit',
       lint: 'eslint src --ext .ts',
@@ -1150,6 +1336,10 @@ function buildTrade(trade, opts) {
   write('tsconfig.json', tpl.tsconfig())
   write('nest-cli.json', tpl.nestCli())
   write('.gitignore', tpl.gitignore())
+  write('Dockerfile', tpl.dockerfile(trade))
+  write('.dockerignore', tpl.dockerignore())
+  write('railway.json', tpl.railwayJson())
+  write('.nvmrc', '22\n')
   write('.env.example', envExample(trade, cfg, usedEnv))
   write('README.md', readme(trade, cfg, stats))
   write('ISOLATION.md', isolationDoc(trade, cfg, libFiles))
