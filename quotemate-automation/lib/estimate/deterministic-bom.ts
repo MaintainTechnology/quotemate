@@ -80,6 +80,11 @@ export interface DeterministicTierInput {
 export interface DeterministicTier {
   line_items: QuoteLine[]
   subtotal_ex_gst: number
+  /** Phase 4 R9 — the headline product's attributes for THIS tier, so the
+   *  caller can decide which steps the tier earns. Per tier, not per quote:
+   *  each tier can hold a different product, so a smart light on Better earns
+   *  the pairing step while the plain one on Good does not. */
+  headlineProperties?: Record<string, unknown> | null
 }
 export interface DeterministicTiers {
   good: DeterministicTier
@@ -180,7 +185,11 @@ export function buildDeterministicTiers(
     const subtotal = money(
       built.lines.reduce((s, l) => s + (Number(l.total_ex_gst) || 0), 0),
     )
-    out[tier] = { line_items: built.lines, subtotal_ex_gst: subtotal }
+    out[tier] = {
+      line_items: built.lines,
+      subtotal_ex_gst: subtotal,
+      headlineProperties: built.headlineProperties ?? null,
+    }
   }
 
   return { tiers: out as DeterministicTiers }

@@ -41,6 +41,7 @@ import {
 } from './sanity-bounds'
 import { checkRecipeCoverage } from './recipe-coverage'
 import { deterministicBomEnabled } from './deterministic-flag'
+import { resolveAssemblyTasks, type AssemblyTask } from './assembly-tasks'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
@@ -405,10 +406,30 @@ export async function runEstimation(
           for (const tier of ['good', 'better', 'best'] as const) {
             const prev =
               draft[tier] && typeof draft[tier] === 'object' ? draft[tier] : {}
+            // Phase 4 R9 — the checklist for THIS tier. Conditioned per tier
+            // because each tier can hold a different product: a smart light on
+            // Better earns the pairing step, the plain one on Good does not.
+            //
+            // Attributes come from the BUILDER, which already resolved the
+            // headline product for R7's conditions, so parts and steps are
+            // judged against the same thing by construction. An earlier
+            // version read `line.properties` off the quote line — QuoteLine has
+            // no such field, so it was always undefined and no conditional step
+            // could ever appear. A cast hid it from the typechecker.
+            const tasks = resolveAssemblyTasks({
+              tenantTasks: loaded.taskRows.tenant,
+              sharedTasks: loaded.taskRows.shared,
+              productProperties: built.tiers[tier].headlineProperties ?? null,
+            })
             draft[tier] = {
               ...prev,
               line_items: built.tiers[tier].line_items,
               subtotal_ex_gst: built.tiers[tier].subtotal_ex_gst,
+              // Rides inside the tier jsonb, which is already persisted on the
+              // quotes row — no schema change needed to keep it. Omitted
+              // entirely when empty so a quote with no checklist is byte-
+              // identical to before.
+              ...(tasks.length > 0 ? { tasks } : {}),
             }
           }
           draft.needs_inspection = false
@@ -2149,7 +2170,13 @@ async function loadDeterministicInputs(
   intake: any,
   pricingBook: any,
 ): Promise<
-  | { input: DeterministicTierInput; assemblyName: string }
+  | {
+      input: DeterministicTierInput
+      assemblyName: string
+      /** Phase 4 R9 — raw task rows; filtered per tier by the caller, because
+       *  the condition depends on which product landed on that tier. */
+      taskRows: { tenant: AssemblyTask[]; shared: AssemblyTask[] }
+    }
   | { input: null; reason: string }
 > {
   const jobType = (intake?.job_type as string | null) ?? null
@@ -2330,7 +2357,41 @@ async function loadDeterministicInputs(
     // Phase 4 R3 — the customer's pick, if one was recorded WITH its tier.
     chosenProduct: readChosenProductAnchor(intake),
   }
-  return { input, assemblyName: primary.name }
+
+  // Phase 4 R9, the task half — the tradie's step checklist for this job.
+  //
+  // Migration 184 built these tables, gave them a CRUD API and a dashboard
+  // panel, and nothing ever read them, so a curated checklist never reached a
+  // quote. Loaded here, filtered per tier in the caller (the condition depends
+  // on which product landed on that tier).
+  //
+  // Best-effort: a missing table (pre-184 deploy) or a failed read leaves the
+  // list empty and the quote is built exactly as before. A checklist is not a
+  // price, so it must never be able to fail a quote.
+  let taskRows: { tenant: AssemblyTask[]; shared: AssemblyTask[] } = { tenant: [], shared: [] }
+  try {
+    const [own, base] = await Promise.all([
+      supabase
+        .from('tenant_assembly_tasks')
+        .select('title, notes, required, sort, include_when')
+        .eq('tenant_id', tenantId)
+        .in('assembly_id', ids)
+        .order('sort', { ascending: true }),
+      supabase
+        .from('shared_assembly_tasks')
+        .select('title, notes, required, sort, include_when')
+        .in('assembly_id', ids)
+        .order('sort', { ascending: true }),
+    ])
+    taskRows = {
+      tenant: (own.data ?? []) as AssemblyTask[],
+      shared: (base.data ?? []) as AssemblyTask[],
+    }
+  } catch {
+    // Deliberately silent: see above. Empty list = today's behaviour.
+  }
+
+  return { input, assemblyName: primary.name, taskRows }
 }
 
 /**

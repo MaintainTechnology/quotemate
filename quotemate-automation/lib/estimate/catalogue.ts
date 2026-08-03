@@ -535,6 +535,17 @@ export interface BuildBomInput {
 }
 export interface BuildBomResult {
   lines: QuoteLine[]
+  /** Phase 4 R9 — the HEADLINE product's attributes, the same ones the R7
+   *  include_when conditions were judged against.
+   *
+   *  Returned rather than stamped onto QuoteLine on purpose. The tier jsonb is
+   *  persisted on the quotes row and rendered to customers, so putting product
+   *  tags on every line would persist and expose data no quote surface needs.
+   *  The caller wants it for ONE decision — which steps this tier earns — so it
+   *  travels as a result field.
+   *
+   *  null when nothing unconditional and non-sundry could be priced. */
+  headlineProperties?: Record<string, unknown> | null
   /** Required BOM categories that could not be priced — non-empty means
    *  the caller should route the quote to inspection rather than ship a
    *  hole. Mirrors the grounding validator's safe-failure philosophy. */
@@ -674,7 +685,7 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
       source: 'labour',
     })
   }
-  return { lines, missingRequired }
+  return { lines, missingRequired, headlineProperties: headlineProps }
 }
 
 // ── validator-acceptance feed (the WP2 "trap") ──────────────────────
