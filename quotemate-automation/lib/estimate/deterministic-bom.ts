@@ -41,6 +41,7 @@ import {
   type Tier,
   type QuoteLine,
   type TierLadderEntry,
+  type ChosenProductAnchor,
 } from './catalogue'
 
 const TIERS: Tier[] = ['good', 'better', 'best']
@@ -69,6 +70,11 @@ export interface DeterministicTierInput {
    *  brand/range/tier inference. Optional — empty ladder = unchanged
    *  legacy behaviour. */
   tierLadder?: TierLadderEntry[]
+  /** Phase 4 R3 — the product the customer picked, and the tier they saw it
+   *  in. Anchors that product into that tier only; the others resolve their
+   *  own. Optional — absent means unchanged legacy behaviour, which is also
+   *  what a pre-R3 intake row (no tier recorded) gets. */
+  chosenProduct?: ChosenProductAnchor | null
 }
 
 export interface DeterministicTier {
@@ -123,6 +129,10 @@ export function buildDeterministicTiers(
         category,
         tier,
         tierLadder: input.tierLadder,
+        // Phase 4 R3 — chooseMaterial anchors this into ITS tier only, so
+        // passing it on every tier is correct: the other two see a tier
+        // mismatch and resolve their own product.
+        chosenProduct: input.chosenProduct,
       })
       if (!chosen) return null
       // WP4: when the price came from the operator's own catalogue,

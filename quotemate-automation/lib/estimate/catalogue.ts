@@ -124,7 +124,29 @@ export interface ChooseMaterialInput {
    *  Better tier, ALWAYS use SAL Anova" even when the model's brand/range
    *  inference would have picked a different row. */
   tierLadder?: TierLadderEntry[]
+  /** Phase 4 R3 — the product the CUSTOMER picked from the two options the
+   *  SMS offered, and the bucket they saw it in. Anchors that one product
+   *  into that one tier; the other tiers resolve their own product for the
+   *  category, which is what makes three surviving tiers meaningful.
+   *
+   *  Beats the tier ladder, deliberately. The two options were generated
+   *  FROM this tradie's catalogue, so the tradie already sanctioned every
+   *  product on offer — and a pick that visibly changes nothing is worse
+   *  than not offering the pick. The ladder still governs the two tiers the
+   *  customer did not pick. */
+  chosenProduct?: ChosenProductAnchor | null
 }
+
+/** Phase 4 R3 — the minimum needed to anchor a pick. Deliberately NOT the
+ *  whole ChosenProduct: price and render fields play no part in choosing,
+ *  and `tier` is optional upstream, so this type makes it required and the
+ *  caller does the narrowing. No tier → no anchor → old behaviour. */
+export interface ChosenProductAnchor {
+  catalogue_id: string
+  category: string
+  tier: Tier
+}
+
 export type ChosenMaterial =
   | { source: 'tenant'; row: TenantMaterial; price: number }
   | { source: 'shared'; row: SharedMaterial; price: number }
@@ -147,6 +169,42 @@ const eqi = (a?: string | null, b?: string | null) =>
  */
 export function chooseMaterial(input: ChooseMaterialInput): ChosenMaterial {
   const cat = input.category?.trim().toLowerCase()
+
+  // Phase 4 R3 — the customer's own pick wins, for ITS tier only.
+  //
+  // This is the half of the original brief that was never built. Before it,
+  // applyChosenProduct rewrote the headline line of ALL THREE tiers after
+  // the draft was built, so every tier held the same product at the same
+  // price — and run.ts collapsed the quote to a single option to hide that.
+  // The pick could never change which PARTS a job needed, only relabel one
+  // line.
+  //
+  // Anchoring inside the builder instead means the chosen product occupies
+  // its own tier and the other two resolve their own product for the
+  // category, so the customer keeps a real choice of three.
+  //
+  // Scoped hard: only this category, only this tier. A pick for downlights
+  // must not decide the safety switch, and must not decide the two tiers
+  // the customer did not pick.
+  if (input.tier && input.chosenProduct && input.chosenProduct.tier === input.tier) {
+    const wantCat = input.chosenProduct.category?.trim().toLowerCase()
+    if (wantCat && wantCat === cat) {
+      const pickedRow = input.tenantRows.find(
+        (r) =>
+          r.id === input.chosenProduct!.catalogue_id &&
+          Number.isFinite(num(r.unit_price_ex_gst)),
+      )
+      if (pickedRow) {
+        // NOTE no `active` check, unlike the ladder branch below. The
+        // customer was SHOWN this product and chose it; a tradie
+        // deactivating it between the offer and the quote must not silently
+        // swap what they bought. Same reasoning as the validator's M-6.
+        return { source: 'tenant', row: pickedRow, price: money(num(pickedRow.unit_price_ex_gst)) }
+      }
+      // Row gone entirely → fall through. The quote is still built, just
+      // without the anchor, and applyChosenProduct remains the backstop.
+    }
+  }
 
   // v7 Phase 3 — explicit ladder hit wins.
   if (input.tier && input.tierLadder && input.tierLadder.length > 0) {
