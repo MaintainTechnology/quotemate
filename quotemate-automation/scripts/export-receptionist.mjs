@@ -24,7 +24,7 @@
 // so drift between repos is expected and deliberate. Re-run to re-sync.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -425,6 +425,20 @@ import { missingEnv } from './config/required-env'
 // importing second turns that into one clear log line.
 
 const TRADE = '${trade}'
+
+// Load .env / .env.local into process.env BEFORE anything reads it. Nest's
+// ConfigModule would do this, but it only runs once AppModule is imported —
+// which is after the config check below, so a valid local .env would still
+// look "missing". Platform-injected variables always win over the files:
+// on Railway there is no .env in the image at all, and locally there is no
+// platform to override.
+{
+  const platform = { ...process.env }
+  for (const file of ['.env', '.env.local']) {
+    try { process.loadEnvFile(file) } catch { /* absent is fine */ }
+  }
+  Object.assign(process.env, platform)
+}
 
 // The receptionist self-calls \`\${APP_URL}/api/intake/structure\`, which THIS
 // app serves. On Railway nobody sets APP_URL by hand on first deploy, and an
@@ -829,10 +843,14 @@ export class HealthController {
     compilerOptions: { deleteOutDir: true, tsConfigPath: 'tsconfig.json' },
   }, null, 2) + '\n',
 
+  // Ignore every .env variant, then re-admit the blank template. The
+  // catch-all matters: fill-receptionist-env.mjs writes .env.bak.<n>
+  // backups that contain real secrets, and listing only `.env` left those
+  // sitting untracked-but-committable.
   gitignore: () => `node_modules/
 dist/
-.env
-.env.local
+.env*
+!.env.example
 *.tsbuildinfo
 .DS_Store
 `,
@@ -930,92 +948,241 @@ const REQUIRED_ENV = [
   'APP_URL',
 ]
 
-/** Every `process.env.NAME` the copied code reads. */
-function envVarsUsed(files, generated) {
+/** Every `process.env.NAME` read anywhere under a written src/ tree.
+ *  Scans the OUTPUT directory rather than the source closure, so the
+ *  generated scaffolding (main.ts, controllers, DTOs) is included too —
+ *  scanning only the copied lib missed PORT, SIM_API_KEY and friends. */
+function envVarsUsed(srcDir) {
   const found = new Set()
-  const add = (text) => {
-    for (const m of text.matchAll(/process\.env\.([A-Z][A-Z0-9_]{2,})\b/g)) found.add(m[1])
-    for (const m of text.matchAll(/process\.env\[['"]([A-Z][A-Z0-9_]{2,})['"]\]/g)) found.add(m[1])
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name)
+      if (e.isDirectory()) { walk(p); continue }
+      if (!p.endsWith('.ts')) continue
+      const text = readFileSync(p, 'utf8')
+      for (const m of text.matchAll(/process\.env\.([A-Z][A-Z0-9_]{2,})\b/g)) found.add(m[1])
+      for (const m of text.matchAll(/process\.env\[['"]([A-Z][A-Z0-9_]{2,})['"]\]/g)) found.add(m[1])
+    }
   }
-  for (const f of files) if (!f.endsWith('.json')) add(readFileSync(f, 'utf8'))
-  for (const g of generated) add(g.text)
+  walk(srcDir)
   return [...found].sort()
 }
 
-function envExample(trade, cfg, used) {
-  const optional = used.filter((v) => !REQUIRED_ENV.includes(v) && v !== 'PORT' && v !== 'NODE_ENV')
-  const tradeFlags = {
-    roofing: [
-      '# Roofing measurement providers',
-      'ROOFING_PROVIDER=geoscape',
-      'GEOSCAPE_API_KEY=',
-      'GOOGLE_MAPS_API_KEY=',
-      'ROOFING_EDGE_ANALYSIS_ENABLED=0',
-      'SMS_ROOFING_ENABLED=1   # no-tenant fallback only; tenants.trades[] is the real gate',
-    ],
-    painting: [
-      '# Painting area lookup',
-      'GOOGLE_MAPS_API_KEY=',
-      'SMS_PAINTING_ENABLED=1  # no-tenant fallback only; tenants.trades[] is the real gate',
-    ],
-    solar: [
-      '# Solar sizing + rebate',
-      'GOOGLE_MAPS_API_KEY=',
-      'SOLAR_AUTO_RELEASE=1',
-      'PYLON_ENABLED=0',
-    ],
-    electrical: ['# Electrical uses the shared pricing book — no extra providers.'],
-    plumbing: ['# Plumbing uses the shared pricing book — no extra providers.'],
-  }[trade]
+// Every group below is keyed to variables the copied code ACTUALLY reads —
+// the generator cross-checks against the process.env scan and refuses to
+// emit a name nothing references, so this file can't drift into listing
+// knobs that do nothing.
+const ENV_GROUPS = [
+  {
+    title: 'REQUIRED — the service refuses to boot without these',
+    note: 'main.ts validates these before importing the app and exits listing\nwhatever is missing. Set all of them on Railway.',
+    vars: {
+      NEXT_PUBLIC_SUPABASE_URL: 'Supabase project URL. Named NEXT_PUBLIC_* only because the code is copied verbatim from the Next monorepo — this service is server-only and nothing here is public.',
+      SUPABASE_SERVICE_ROLE_KEY: 'Supabase service-role key. SECRET. Bypasses RLS; tenancy is enforced in app code.',
+      ANTHROPIC_API_KEY: 'Claude API key — powers the receptionist dialog and the estimator.',
+      TWILIO_ACCOUNT_SID: 'Twilio account SID.',
+      TWILIO_AUTH_TOKEN: 'Twilio auth token. SECRET. Also what inbound webhook signature validation is keyed on — absent means inbound requests cannot be verified.',
+      CRON_SECRET: 'Shared secret for this service\'s internal self-calls to /api/intake/structure and /api/estimate/draft. Absent in production ⇒ the pipeline FAILS CLOSED and no quotes are produced.',
+    },
+  },
+  {
+    title: 'Railway sets these — leave blank',
+    note: 'Injected by the platform at runtime. Setting them by hand usually breaks something.',
+    vars: {
+      PORT: 'Injected by Railway. main.ts binds 0.0.0.0 on this port.',
+      RAILWAY_PUBLIC_DOMAIN: 'Injected by Railway. APP_URL defaults to https://$RAILWAY_PUBLIC_DOMAIN when APP_URL is unset.',
+      APP_URL: 'Only set this for a custom domain. The receptionist self-calls it, so a WRONG value silently produces no quotes.',
+      NEXT_PUBLIC_APP_URL: 'Public base URL used when building customer-facing quote links. Defaults to APP_URL behaviour if unset.',
+      HTTP_TIMEOUT_MS: 'Server socket timeout. Default 310000 — a roofing measure turn can run 200-300s.',
+      NODE_ENV: 'Set to production by the Dockerfile.',
+    },
+  },
+  {
+    title: 'Messaging — outbound SMS/WhatsApp and tradie alerts',
+    vars: {
+      TWILIO_SMS_NUMBER: 'Fallback outbound sender when a tenant has no provisioned number.',
+      TWILIO_PHONE_NUMBER: 'Legacy alias for the fallback sender.',
+      TWILIO_WHATSAPP_FROM: 'WhatsApp sender (whatsapp:+61...). Unset ⇒ SMS only, no WhatsApp fallback.',
+      TRADIE_NOTIFY_NUMBER: 'Catch-all number for tradie notifications when a tenant has no owner_mobile. Unset ⇒ those alerts go NOWHERE (known gap).',
+      TRADIE_NOTIFY_WHATSAPP: 'WhatsApp equivalent of the above.',
+      SMS_QUOTE_PDF_MMS: '1 = attach the quote PDF as MMS alongside the link.',
+      TEST_CUSTOMER_NUMBERS: 'Comma-separated numbers treated as test traffic.',
+    },
+  },
+  {
+    title: 'Payments',
+    vars: {
+      STRIPE_SECRET_KEY: 'Stripe secret key. Use a TEST key unless you mean it — this mints real deposit links.',
+      BILLING_ENFORCEMENT_ENABLED: '1 = enforce per-tenant plan limits.',
+    },
+  },
+  {
+    title: 'Quote documents (PDF)',
+    vars: {
+      GOTENBERG_URL: 'Gotenberg HTML→PDF service URL. Unset ⇒ no PDF is generated; the HTML quote page still works.',
+      FULL_QUOTE_DOC: '1 = render the long-form quote document.',
+    },
+  },
+  {
+    title: 'Receptionist behaviour',
+    vars: {
+      SMS_LLM_RECEPTIONIST_ENABLED: 'Default ON. 0 = kill switch for ALL tenants, falling back to the deterministic state machine. A comma-separated tenant-id list narrows it to a pilot.',
+      SMS_ROOFING_ENABLED: 'No-tenant fallback only. The real gate is tenants.trades[].',
+      SMS_PAINTING_ENABLED: 'No-tenant fallback only. The real gate is tenants.trades[].',
+      WP9_PRODUCT_OPTIONS: '1 = offer mid-conversation product choices.',
+      DETERMINISTIC_BOM: '1 = prefer deterministic assembly/BOM pricing over an LLM draft.',
+      PRICE_HISTORY_HINT: '1 = feed the tradie\'s past prices to the estimator as a hint.',
+      FORCE_GAS_HWS_SITE_VISIT: '1 = always route gas hot-water jobs to an inspection.',
+      SOLAR_PREMIUM_QUOTE: '1 = use the premium solar quote template.',
+      TENANT_FILESTORE_ENABLED: '1 = enable the per-tenant document store used for KB grounding.',
+      PLATFORM_ADMIN_USER_IDS: 'Comma-separated admin user ids.',
+    },
+  },
+  {
+    title: 'Quote accuracy — RAG over past jobs (recommended)',
+    note: 'Unset ⇒ retrieval is stubbed and the estimator loses its similar-past-\nquote context. Quotes still generate, just with less grounding.',
+    vars: {
+      VOYAGE_API_KEY: 'Voyage embeddings — powers similar-past-quote retrieval.',
+      VOYAGE_EMBED_MODEL: 'Override the embedding model.',
+      VOYAGE_RERANK_MODEL: 'Override the Voyage rerank model.',
+      COHERE_API_KEY: 'Cohere reranker.',
+      COHERE_RERANK_MODEL: 'Override the Cohere rerank model.',
+      RAG_RERANK_PROVIDER: 'cohere | voyage | unset.',
+      RAG_DISABLED: '1 = turn retrieval off entirely.',
+      RAG_RERANK_DISABLED: '1 = retrieve but skip reranking.',
+      RAG_RERANK_FALLBACK: '1 = fall back to raw retrieval when the reranker errors.',
+    },
+  },
+  {
+    title: 'Swagger test harness',
+    note: '/api/receptionist/simulate runs the REAL pipeline — real SMS, real rows,\nreal Stripe links. Leave disabled unless pointed at a test tenant.',
+    vars: {
+      SMS_SIMULATE_ENABLED: '1 = enable POST /api/receptionist/simulate.',
+      SIM_API_KEY: 'Required x-sim-key header value for that endpoint. SECRET.',
+    },
+  },
+  {
+    title: 'Address + property measurement',
+    vars: {
+      GOOGLE_MAPS_API_KEY: 'Geocoding, static maps and street view.',
+      GOOGLE_ADDRESS_VALIDATION_API_KEY: 'AU address verification during the SMS turn.',
+      GOOGLE_ADDRESS_VALIDATION_API_URL: 'Override the validation endpoint.',
+      GEOSCAPE_API_KEY: 'Geoscape — the primary roof measurement provider.',
+      GEOSCAPE_API_BASE_URL: 'Override the Geoscape base URL.',
+      GOOGLE_SOLAR_API_KEY: 'Google Solar building insights — roof facets, and wall area for painting.',
+      GOOGLE_SOLAR_API_BASE_URL: 'Override the Solar API base URL.',
+      PROPRADAR_API_KEY: 'PropRadar — secondary property data.',
+      PROPRADAR_API_BASE_URL: 'Override the PropRadar base URL.',
+      PROPRADAR_API: 'Legacy PropRadar endpoint alias.',
+      PROPRADAR_ENRICHMENT: '1 = enrich measurements with PropRadar data.',
+      ROOFING_PROVIDER: 'Primary measurement provider. Default geoscape.',
+      ROOFING_SOLAR_ENRICHMENT: '1 = detect existing solar panels on the roof.',
+      SOLAR_EXPANDED_COVERAGE: '1 = widen the Google Solar coverage gate.',
+      ROOFING_LAYOUT_MODEL: 'Model used for roof layout planning.',
+      ROOFING_VISION_PROVIDER: 'Vision provider for roof photo analysis.',
+      ROOFING_VISION_MODEL: 'Vision model for roof photo analysis.',
+      TRADIE_NOTIFY_SELF_TEST: '1 = send a self-test notification on boot.',
+    },
+  },
+  {
+    title: 'Solar design cross-checks',
+    vars: {
+      OPENSOLAR_USERNAME: 'OpenSolar login for background proposal cross-checks.',
+      OPENSOLAR_PASSWORD: 'OpenSolar password. SECRET.',
+      OPENSOLAR_API_TOKEN: 'OpenSolar API token (alternative to username/password).',
+      OPENSOLAR_ORG_ID: 'OpenSolar organisation id.',
+      PYLON_ENABLED: '1 = enable Pylon cross-checks.',
+      PYLON_API_KEY: 'Pylon API key.',
+      PYLON_LEAD_PUSH_TENANTS: 'Comma-separated tenant ids to push leads for.',
+    },
+  },
+  {
+    title: 'Image generation and vision — all optional',
+    note: 'Powers "after" renders, SMS preview images and photo classification.\nEvery one is optional: unset simply means that provider is off.',
+    vars: {
+      IG_IMAGE_PROVIDER: 'Selector for the SMS preview/sample image provider.',
+      GEMINI_API_KEY: 'Google Gemini — text, vision and image generation.',
+      GEMINI_TEXT_MODEL: '', GEMINI_IMAGE_MODEL: '', GEMINI_VISION_MODEL: '', GEMINI_VERIFY_MODEL: '',
+      GEMINI_IMAGE_ASPECT: '', GEMINI_IMAGE_SIZE: '', GEMINI_IMAGE_TEMPERATURE: '',
+      GEMINI_IMAGE_THINKING_LEVEL: '', GEMINI_IMAGE_TOP_P: '',
+      GEMINI_RETRY_ATTEMPTS: '', GEMINI_RETRY_BASE_MS: '', GEMINI_RETRY_MAX_DELAY_MS: '',
+      HF_TOKEN: 'Hugging Face token — FLUX.1-Kontext "after" renders.',
+      HUGGING_FACE_API_TOKEN: 'Alias for HF_TOKEN.',
+      HF_IMAGE_PROVIDER: '', HF_IMAGE_MODEL: '', HF_IMAGE_TIMEOUT_MS: '', HF_VISION_MODEL: '',
+      ROOFING_IMAGE_PROVIDER: 'Per-trade override for roofing "after" renders.',
+      REPLICATE_API_TOKEN: 'Replicate — image generation fallback.',
+      REPLICATE_IMAGE_MODEL: '', REPLICATE_IMAGE_RESOLUTION: '',
+      STABILITY_API_KEY: 'Stability AI.',
+      STABILITY_NIM_URL: '', STABILITY_IMAGE_MODE: '', STABILITY_IMAGE_STEPS: '',
+      STABILITY_IMAGE_CFG_SCALE: '', STABILITY_IMAGE_NEGATIVE_PROMPT: '',
+      CLOUDFLARE_ACCOUNT_ID: 'Cloudflare Workers AI — vision.',
+      CLOUDFLARE_API_TOKEN: '', CLOUDFLARE_WORKERS_AI_TOKEN: '',
+      CLOUDFLARE_VISION_MODEL: '', CLOUDFLARE_CLAUDE_VISION: '',
+      NVIDIA_API_KEY: 'NVIDIA NIM — vision.',
+      PREVIEW_JUDGE_MODEL: 'Model that scores generated preview images.',
+      PREVIEW_PROMPT_VERSION: '', PREVIEW_TWO_PASS: '', PREVIEW_VERIFY_LOOP: '',
+      PREVIEW_VERIFY_MAX_RETRIES: '', WP4_RENDER_VERIFY: '',
+      DISABLE_AI_SAMPLES: '1 = skip sample image generation entirely.',
+      TRUST_VIDEO_AUTOGEN: '1 = auto-generate tradie trust videos.',
+      TRUST_VIDEO_MODEL: '',
+    },
+  },
+]
 
-  return `# ── QuoteMax ${trade} receptionist ──────────────────────────────────
-# ${cfg.blurb}
-# Copy to .env.local. NEVER commit a filled-in copy.
+/** Build the .env body from the vars this trade's code actually reads. */
+function envBody(trade, cfg, used) {
+  const usedSet = new Set(used)
+  const claimed = new Set()
+  const lines = [
+    `# ── QuoteMax ${trade} receptionist — environment ${'─'.repeat(Math.max(0, 24 - trade.length))}`,
+    `# ${cfg.blurb}`,
+    '#',
+    '# Every name below is read by THIS service\'s code — generated by scanning',
+    '# src/ for process.env reads, so nothing here is decorative.',
+    '#',
+    '# Railway: paste this whole file into the service\'s Variables → Raw Editor,',
+    '# or set them one at a time with:  railway variables --set \'KEY=value\'',
+    '#',
+    '# NEVER commit a filled-in copy. .env is gitignored; .env.example is not.',
+    '',
+  ]
 
-PORT=${cfg.port}
-NODE_ENV=development
+  for (const group of ENV_GROUPS) {
+    const present = Object.keys(group.vars).filter((v) => usedSet.has(v) && !claimed.has(v))
+    if (!present.length) continue
+    present.forEach((v) => claimed.add(v))
+    lines.push(`# ${'─'.repeat(70)}`)
+    lines.push(`# ${group.title}`)
+    if (group.note) for (const l of group.note.split('\n')) lines.push(`# ${l}`)
+    lines.push(`# ${'─'.repeat(70)}`)
+    for (const v of present) {
+      const desc = group.vars[v]
+      if (desc) for (const l of wrap(desc, 68)) lines.push(`# ${l}`)
+      lines.push(`${v}=`)
+    }
+    lines.push('')
+  }
 
-# APP_URL must point at THIS service — the receptionist self-calls
-# /api/intake/structure and /api/estimate/draft, which this app serves.
-APP_URL=http://localhost:${cfg.port}
+  const leftover = [...usedSet].filter((v) => !claimed.has(v)).sort()
+  if (leftover.length) {
+    lines.push(`# ${'─'.repeat(70)}`)
+    lines.push('# Other — read by the code but not yet categorised')
+    lines.push(`# ${'─'.repeat(70)}`)
+    for (const v of leftover) lines.push(`${v}=`)
+    lines.push('')
+  }
+  return lines.join('\n')
+}
 
-# Shared secret for those internal self-calls. Absent in production ⇒ the
-# pipeline fails closed and no quotes are produced. Required.
-CRON_SECRET=
-
-# ── Data ──────────────────────────────────────────────────────────────
-# Named NEXT_PUBLIC_* because the code is copied verbatim from the Next
-# monorepo. Nothing here is public — this service is server-only.
-NEXT_PUBLIC_SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# ── Models ────────────────────────────────────────────────────────────
-ANTHROPIC_API_KEY=
-SMS_LLM_RECEPTIONIST_ENABLED=1   # 0 = kill switch, falls back to the state machine
-
-# ── Twilio ────────────────────────────────────────────────────────────
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_MESSAGING_SERVICE_SID=
-# Dev only — skips inbound signature validation. Never set in production.
-SMS_SKIP_SIGNATURE=0
-
-# ── Stripe (test keys unless you mean it) ─────────────────────────────
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-
-# ── Swagger test harness ──────────────────────────────────────────────
-# /api/receptionist/simulate runs the real pipeline: real SMS, real rows.
-SMS_SIMULATE_ENABLED=0
-SIM_API_KEY=
-
-${tradeFlags.join('\n')}
-
-# ── Also referenced by this service's code ────────────────────────────
-# Auto-listed from every process.env read in src/. All optional: unset
-# means the matching provider or feature is simply off.
-${optional.map((v) => `# ${v}=`).join('\n')}
-`
+function wrap(text, width) {
+  const out = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    if ((line + ' ' + word).trim().length > width) { out.push(line.trim()); line = word }
+    else line += ' ' + word
+  }
+  if (line.trim()) out.push(line.trim())
+  return out
 }
 
 /** Names the trade boundary explicitly, because "isolated" does not mean
@@ -1248,7 +1415,7 @@ function buildTrade(trade, opts) {
   }
 
   const libLoc = libFiles.reduce((n, f) => n + readFileSync(f, 'utf8').split('\n').length, 0)
-  const stats = { libFiles: libFiles.length, libLoc, deps: [...deps].sort(), strays, missing, stubbornNext }
+  const stats = { libFiles: libFiles.length, libLoc, deps: [...deps].sort(), strays, missing, stubbornNext, envVars: 0, envCreated: false }
 
   if (opts.dry) return stats
 
@@ -1259,6 +1426,16 @@ function buildTrade(trade, opts) {
     const p = join(outDir, rel)
     mkdirSync(dirname(p), { recursive: true })
     writeFileSync(p, text)
+  }
+
+  /** For files the operator FILLS IN. Re-running the exporter must never
+   *  clobber real secrets, so an existing file is left exactly as it is. */
+  const writeIfAbsent = (rel, text) => {
+    const p = join(outDir, rel)
+    if (existsSync(p)) return false
+    mkdirSync(dirname(p), { recursive: true })
+    writeFileSync(p, text)
+    return true
   }
 
   for (const f of [...libFiles, ...strays]) {
@@ -1280,7 +1457,10 @@ function buildTrade(trade, opts) {
   write('src/intake/intake.controller.ts', tpl.intakeController())
   write('src/estimate/estimate.module.ts', tpl.estimateModule())
   write('src/estimate/estimate.controller.ts', tpl.estimateController())
-  const usedEnv = envVarsUsed(files, generated)
+  // Scan AFTER the scaffolding above is on disk — main.ts and the
+  // controllers read PORT, RAILWAY_PUBLIC_DOMAIN, SIM_API_KEY and friends,
+  // which a scan of the copied lib alone would miss.
+  const usedEnv = envVarsUsed(join(outDir, 'src'))
   write('src/config/required-env.ts', tpl.requiredEnv(REQUIRED_ENV.filter((v) => usedEnv.includes(v))))
   write('src/health/health.controller.ts', tpl.healthController(trade))
 
@@ -1340,10 +1520,16 @@ function buildTrade(trade, opts) {
   write('.dockerignore', tpl.dockerignore())
   write('railway.json', tpl.railwayJson())
   write('.nvmrc', '22\n')
-  write('.env.example', envExample(trade, cfg, usedEnv))
+  // .env.example is committed and always regenerated. .env is gitignored and
+  // written ONLY when absent — it's where real values go.
+  const body = envBody(trade, cfg, usedEnv)
+  write('.env.example', body)
+  const envCreated = writeIfAbsent('.env', body)
   write('README.md', readme(trade, cfg, stats))
   write('ISOLATION.md', isolationDoc(trade, cfg, libFiles))
 
+  stats.envVars = usedEnv.length
+  stats.envCreated = envCreated
   return stats
 }
 
@@ -1361,6 +1547,7 @@ for (const trade of list) {
     console.log(`\n── ${trade} ${dry ? '(dry run)' : ''}`)
     console.log(`   lib files : ${s.libFiles}  (${s.libLoc.toLocaleString()} lines)`)
     console.log(`   npm deps  : ${s.deps.join(', ')}`)
+    console.log(`   env vars  : ${s.envVars} in .env.example` + (dry ? '' : s.envCreated ? '  · .env created (blank)' : '  · .env left as-is'))
     if (s.strays.length) console.log(`   non-lib   : ${s.strays.map((f) => relative(SRC_ROOT, f)).join(', ')}`)
     if (s.stubbornNext.length) console.log(`   NEXT DEP  : not shimmable — ${s.stubbornNext.join(' | ')}`)
     if (s.missing.length) console.log(`   UNRESOLVED: ${s.missing.slice(0, 10).join(' | ')}${s.missing.length > 10 ? ` (+${s.missing.length - 10})` : ''}`)
