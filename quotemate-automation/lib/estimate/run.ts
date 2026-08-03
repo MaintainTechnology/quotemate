@@ -2240,6 +2240,25 @@ async function loadDeterministicInputs(
         }
       : null,
   )
+  // Phase 5b — an out-of-range override was DROPPED. Log it: a drop that
+  // nobody reports is still a silent one, and the whole point is that the bad
+  // row gets found and fixed rather than quietly ignored on every future quote.
+  if (eff.labourHours.dropped || eff.markupPct.dropped) {
+    // Same construction as runEstimation's own logger (line ~130); this helper
+    // takes no log param.
+    const boundsLog = pipelineLog('estimate', intake?.id ?? null)
+    for (const [field, p] of [
+      ['labour_hours_override', eff.labourHours],
+      ['markup_pct_override', eff.markupPct],
+    ] as const) {
+      if (!p.dropped) continue
+      boundsLog.err(
+        `Phase 5b — tenant ${field} dropped as out of range (using the global default)`,
+        p.dropped,
+        { tenant_id: tenantId, assembly: primary.name, used: p.value },
+      )
+    }
+  }
 
   // Catalogue (active, trade) + shared materials (trade) — the price
   // sources. Selects mirror loadCandidatePrices for deploy-safety.

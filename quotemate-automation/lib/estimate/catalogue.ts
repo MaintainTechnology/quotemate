@@ -390,6 +390,12 @@ export function chooseMaterial(input: ChooseMaterialInput): ChosenMaterial {
 export interface ResolvedParam<T> {
   value: T
   source: 'local' | 'global'
+  /** Phase 5b — set when a local override EXISTED and was DROPPED for being
+   *  out of range. Without it, `source: 'global'` means two different things —
+   *  "the tradie set nothing" and "the tradie set something absurd and we
+   *  ignored it" — and the second must be visible or a typo goes unnoticed
+   *  until it lands on a customer's quote. */
+  dropped?: string
 }
 /** Local override wins when present (non-null, and finite for numbers). */
 export function resolveParam<T>(globalVal: T, localOverride: T | null | undefined): ResolvedParam<T> {
@@ -416,17 +422,70 @@ export interface EffectiveAssembly {
  *  but nothing wrote to it. The Services-tab toggle writes
  *  tenant_service_offerings.enabled instead, and that is now the single
  *  source of truth (read by /api/tenant/me AND /api/tenant/estimation). */
+
+// ── Phase 5b — read-time bounds on tenant overrides, drop not clamp ──────
+//
+// Until now effectiveAssembly accepted ANY finite override. A tradie who typed
+// 800 meaning 8.00 got 800 labour hours on the quote, and 2500 meaning 25.00
+// got a 2500% markup. Nothing in between caught it: checkSanityBounds only
+// fires when the job type has a job_type_bounds row, and that table covers 5 of
+// 14 live job types.
+//
+// DROP, NOT CLAMP — the spec is explicit and it is the right call. Clamping 800
+// to 40 ships a price nobody chose and looks deliberate. Dropping falls back to
+// the global default, which is a number a human actually set, and records WHY
+// so the bad row can be fixed.
+//
+// These are absolute sanity rails, not business policy. They exist to catch
+// data entry that is off by a factor of a hundred, so they are deliberately
+// loose: a real assembly can genuinely take a long day, and a real markup can
+// genuinely be high. Anything past these is a typo, not a pricing strategy.
+/** One assembly line needing more than a working week is a typo, not a job. */
+const OVERRIDE_LABOUR_HOURS_MAX = 40
+/** Above this the tradie has typed cents-as-percent (2500 for 25.00). */
+const OVERRIDE_MARKUP_PCT_MAX = 300
+
+function boundedOverride(
+  raw: number,
+  max: number,
+  label: string,
+  unit: string,
+): { ok: true; value: number } | { ok: false; reason: string } {
+  if (!Number.isFinite(raw)) return { ok: false, reason: `${label} override is not a number` }
+  if (raw < 0) return { ok: false, reason: `${label} override ${raw}${unit} is negative` }
+  if (raw > max) {
+    return { ok: false, reason: `${label} override ${raw}${unit} exceeds the ${max}${unit} sanity limit` }
+  }
+  return { ok: true, value: raw }
+}
+
 export function effectiveAssembly(
   globalLabourHours: number | string,
   globalMarkupPct: number | string,
   override?: AssemblyOverride | null,
 ): EffectiveAssembly {
-  const lhOv = override ? num(override.labour_hours_override) : NaN
-  const muOv = override ? num(override.markup_pct_override) : NaN
-  return {
-    labourHours: resolveParam(num(globalLabourHours), Number.isFinite(lhOv) ? lhOv : null),
-    markupPct: resolveParam(num(globalMarkupPct), Number.isFinite(muOv) ? muOv : null),
-  }
+  const lhRaw = override ? num(override.labour_hours_override) : NaN
+  const muRaw = override ? num(override.markup_pct_override) : NaN
+
+  // An ABSENT override is not a dropped one. Only validate a value the tradie
+  // actually set, so a blank column keeps reading as plain 'global'.
+  const lhSet = override != null && override.labour_hours_override != null
+  const muSet = override != null && override.markup_pct_override != null
+
+  const lh = lhSet ? boundedOverride(lhRaw, OVERRIDE_LABOUR_HOURS_MAX, 'labour hours', 'h') : null
+  const mu = muSet ? boundedOverride(muRaw, OVERRIDE_MARKUP_PCT_MAX, 'markup', '%') : null
+
+  const labourHours: ResolvedParam<number> =
+    lh && lh.ok
+      ? resolveParam(num(globalLabourHours), lh.value)
+      : { value: num(globalLabourHours), source: 'global', ...(lh ? { dropped: lh.reason } : {}) }
+
+  const markupPct: ResolvedParam<number> =
+    mu && mu.ok
+      ? resolveParam(num(globalMarkupPct), mu.value)
+      : { value: num(globalMarkupPct), source: 'global', ...(mu ? { dropped: mu.reason } : {}) }
+
+  return { labourHours, markupPct }
 }
 
 // ── structured BOM -> deterministic quote lines (WP3) ───────────────
