@@ -49,6 +49,25 @@ export async function GET(req: Request) {
     hourlyByTrade.set(b.trade as string, Number(b.hourly_rate))
   }
 
+  // Phase 7 — every assembly for this tenant's trades, recipe or not.
+  //
+  // The BOM query below is the only place assemblies used to come from, and it
+  // reads `shared_assembly_bom` with `shared_assemblies!inner`. That is an
+  // inner join in both directions: an assembly with NO recipe rows produces no
+  // BOM rows, so it never entered the map and was simply MISSING from the
+  // Estimating tab. A tradie could not see the job, let alone give it a
+  // recipe — the tab that exists to build recipes hid exactly the jobs that
+  // needed one.
+  //
+  // Fetching assemblies first and attaching BOM rows to them is the left join
+  // the spec asks for, without depending on PostgREST embed semantics.
+  let asmQ = supabase
+    .from('shared_assemblies')
+    .select('id, name, trade, default_labour_hours, default_unit_price_ex_gst')
+  if (trades.length > 0) asmQ = asmQ.in('trade', trades)
+  const { data: asmRows, error: asmErr } = await asmQ
+  if (asmErr) return Response.json({ error: asmErr.message }, { status: 500 })
+
   // Structured BOM joined to its shared assembly (name + global labour).
   let bomQ = supabase
     .from('shared_assembly_bom')
@@ -142,6 +161,19 @@ export async function GET(req: Request) {
     bom: Array<{ material_category: string; quantity: number; required: boolean; description: string | null }>
   }
   const byAssembly = new Map<string, AsmAgg>()
+  // Phase 7 — seed from the ASSEMBLY list, so a job with no recipe still
+  // appears (with an empty bom) instead of vanishing.
+  for (const a of asmRows ?? []) {
+    if (!a?.id) continue
+    byAssembly.set(a.id, {
+      id: a.id,
+      name: a.name,
+      trade: a.trade,
+      default_labour_hours: a.default_labour_hours,
+      default_unit_price_ex_gst: a.default_unit_price_ex_gst,
+      bom: [],
+    })
+  }
   for (const r of (bomRows ?? []) as any[]) {
     const a = Array.isArray(r.shared_assemblies) ? r.shared_assemblies[0] : r.shared_assemblies
     if (!a) continue
