@@ -30,6 +30,7 @@ import {
   isActiveRoofingFlow,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
+import { generalDialogIsMidGather } from '@/lib/sms/general-gather'
 import {
   applySolarToTiers,
   buildRoofingReplyMessage,
@@ -444,6 +445,9 @@ function safeRulesAsText(jobType: string): string {
 async function handleRoofingTurn(args: {
   conversationId: string
   roofingStateRaw: unknown
+  /** Closes the hijack class: true when the general dialog already gathered
+   *  a trade-specific slot from this thread. Gates the KEYWORD arm only. */
+  generalMidGather: boolean
   turns: ConversationTurn[]
   toNumber: string
   fromNumber: string
@@ -493,7 +497,10 @@ async function handleRoofingTurn(args: {
   // When a follow-up pin is active the thread was just chased about a
   // DIFFERENT quote, so a stale roofing_state must not resume — only a
   // genuinely new roofing enquiry may engage (spec 2026-07-05 Part A2).
-  if (!shouldEngageRoofing(prevState, engage, followupPinActive, args.roofingOnly)) return false
+  if (
+    !shouldEngageRoofing(prevState, engage, followupPinActive, args.roofingOnly, args.generalMidGather)
+  )
+    return false
 
   // ── The conversation layer. Flag OFF (the default) ⇒ exactly the call
   // this route has always made, and not one extra token spent. Flag ON ⇒
@@ -1016,6 +1023,9 @@ async function handleRoofingTurn(args: {
 async function handlePaintingTurn(args: {
   conversationId: string
   paintingStateRaw: unknown
+  /** Closes the hijack class: true when the general dialog already gathered
+   *  a trade-specific slot from this thread. Gates the fresh-enquiry arm. */
+  generalMidGather: boolean
   turns: ConversationTurn[]
   toNumber: string
   fromNumber: string
@@ -1036,7 +1046,8 @@ async function handlePaintingTurn(args: {
   // NOT active, so an unrelated follow-up never re-quotes. When a follow-up
   // pin is active a stale painting_state must not resume — only a genuinely
   // new painting enquiry may engage (spec 2026-07-05 Part A2).
-  if (!shouldEngagePainting(prevState, latestInbound, followupPinActive)) return false
+  if (!shouldEngagePainting(prevState, latestInbound, followupPinActive, args.generalMidGather))
+    return false
 
   // Same conversation layer as the roofing handler: flag OFF ⇒ the
   // deterministic call this route has always made; flag ON ⇒ Sonnet 5 picks
@@ -2152,6 +2163,12 @@ export async function POST(req: Request) {
           const handledRoofing = await handleRoofingTurn({
             conversationId,
             roofingStateRaw: (conversation as Record<string, unknown>).roofing_state,
+            // The PREVIOUS turn's state: extractSlots runs AFTER the
+            // receptionists, so this is the gather as it stood when the
+            // customer sent this message.
+            generalMidGather: generalDialogIsMidGather(
+              (conversation as Record<string, unknown>).conversation_state,
+            ),
             turns,
             toNumber,
             fromNumber,
@@ -2230,6 +2247,9 @@ export async function POST(req: Request) {
           const handledPainting = await handlePaintingTurn({
             conversationId,
             paintingStateRaw: (conversation as Record<string, unknown>).painting_state,
+            generalMidGather: generalDialogIsMidGather(
+              (conversation as Record<string, unknown>).conversation_state,
+            ),
             turns,
             toNumber,
             fromNumber,

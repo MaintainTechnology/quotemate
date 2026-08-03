@@ -958,6 +958,11 @@ export function shouldEngageRoofing(
   /** This tenant does roofing and NOTHING else (trades === ['roofing']).
    *  See the note below — for these tenants the keyword test is skipped. */
   roofingOnly = false,
+  /** Phase: close the hijack class. True when the general dialog has already
+   *  gathered a TRADE-SPECIFIC slot from this thread's transcript. Gates the
+   *  KEYWORD arm only — see the note there. Defaults false so every existing
+   *  caller and test behaves exactly as before. */
+  generalMidGather = false,
 ): boolean {
   // A trade the customer has already turned down is never asked about
   // again in this conversation. Checked FIRST, ahead of every engage arm:
@@ -967,7 +972,35 @@ export function shouldEngageRoofing(
   if ((prev?.declined_trades ?? []).includes('roofing')) return false
   const canResume = isActiveRoofingFlow(prev) && !followupPinActive
   if (canResume) return true
-  if (looksLikeRoofingEnquiry(inbound)) return true
+  // A FRESH KEYWORD MUST NOT OUTRANK A GATHER ALREADY IN PROGRESS.
+  //
+  // This is the structural half of the 2026-07-31 failure (conversation
+  // b2625cbe, Atomic Electrical). The general dialog had gathered
+  // count=16/room=patio/job_type=downlights from the transcript and asked
+  // "what's the ceiling type — flat, raked, cathedral, or sheet metal?". The
+  // customer answered "It's a 125mm insulated panel roofing", the bare
+  // substring 'roofing' matched here, and this receptionist engaged COLD on an
+  // electrical job — then kept the thread via canResume above for nine more
+  // messages, telling an electrical customer a roofer would call.
+  //
+  // The vocabulary fix for that specific phrase shipped separately. It does not
+  // close the class: four such patches are already recorded in roofing-intake.ts
+  // (22, 24, 25 July, 3 August), each for a new word. Only this guard changes
+  // the shape of the problem.
+  //
+  // SCOPED TO THIS ARM DELIBERATELY:
+  //   · canResume above is untouched — a genuine roofing thread must still
+  //     resume across turns.
+  //   · the roofingOnly arm below is untouched — a roofing-only tenant has no
+  //     other trade to route to and needs no keyword.
+  //
+  // THE TRADE-OFF, stated because it is real: a customer mid-electrical-gather
+  // who genuinely adds "and can you quote my roof" now stays with the general
+  // dialog instead of switching. That loses a roofing upsell on a live thread.
+  // Accepted, because the alternative is what actually happened — quoting the
+  // wrong trade, ignoring the customer four times, and offering a $99 roofing
+  // inspection for a downlight job. A missed upsell is recoverable; that is not.
+  if (!generalMidGather && looksLikeRoofingEnquiry(inbound)) return true
   // SINGLE-TRADE ROOFING TENANT — no keyword required.
   //
   // The keyword test exists to ROUTE BETWEEN trades on a cross-trade
