@@ -63,6 +63,80 @@ export interface BomLine {
   description?: string | null
   quantity: number | string
   required?: boolean | null
+  /** Phase 4 R7 (migration 185) — include this line only when the RESOLVED
+   *  product's attributes satisfy every key. NULL/absent = always include.
+   *  See shouldIncludeLine for the unknown-attribute rule, which differs by
+   *  `required` and is the load-bearing part of the semantic. */
+  include_when?: Record<string, unknown> | null
+  /** Phase 4 R8 (migration 185) — ratio denominator. One driver per four
+   *  lights is `quantity_per: 4`; with item_count 10 the line becomes 3
+   *  (ceil), not 10. NULL/absent = use `quantity` as-is. Applied in
+   *  scaleBomToItemCount, which is where item_count lives. */
+  quantity_per?: number | string | null
+  /** Phase 4 R11 (migration 185) — pin this line to one exact product from
+   *  the tenant's catalogue. A tier-ladder hit still beats it (R12). */
+  catalogue_id?: string | null
+}
+
+/** Phase 4 R7 — does this line survive its include_when condition?
+ *
+ *  Evaluated against the attributes of the product that was actually
+ *  RESOLVED for the line, not against the job or the recipe, so the same
+ *  recipe reshapes itself around whatever product the tier landed on. That
+ *  is the whole point of the phase.
+ *
+ *  THE UNKNOWN RULE, which is the part worth arguing about. When the product
+ *  simply has no such attribute we cannot evaluate the condition, and the
+ *  safe answer depends on what the line IS:
+ *
+ *    required line  → INCLUDE. Dropping a required part because a tradie
+ *                     never tagged a product would put a hole in the quote
+ *                     and the customer would be billed for a job missing a
+ *                     part. This is the spec's "include-on-unknown so a
+ *                     missing attribute never drops a required part".
+ *    optional line  → EXCLUDE. Optional lines are upsells (a dimmer for a
+ *                     smart light). Adding one on a guess bills the customer
+ *                     for something nobody established they need.
+ *
+ *  A KNOWN mismatch always excludes, required or not. That is not a hole,
+ *  it is the condition doing its job: an integrated-driver downlight really
+ *  does not need the separate driver line.
+ */
+export function shouldIncludeLine(
+  condition: Record<string, unknown> | null | undefined,
+  properties: Record<string, unknown> | null | undefined,
+  required: boolean,
+): boolean {
+  if (!condition || typeof condition !== 'object' || Array.isArray(condition)) return true
+  const keys = Object.keys(condition)
+  if (keys.length === 0) return true
+  const props = properties && typeof properties === 'object' ? properties : {}
+  for (const key of keys) {
+    const has = Object.prototype.hasOwnProperty.call(props, key)
+    const actual = has ? (props as Record<string, unknown>)[key] : undefined
+    if (!has || actual === null || actual === '') {
+      // Unknown. Required lines stay, optional lines go.
+      if (!required) return false
+      continue
+    }
+    if (!attrEquals(actual, condition[key])) return false
+  }
+  return true
+}
+
+/** Loose equality for product attributes. `properties` is jsonb typed by
+ *  whoever filled the CSV, so "true"/true/1 all turn up for the same tag and
+ *  a strict === would silently fail every condition on a real catalogue. */
+function attrEquals(actual: unknown, want: unknown): boolean {
+  const norm = (v: unknown): string => {
+    if (typeof v === 'boolean') return v ? 'true' : 'false'
+    if (typeof v === 'number') return v === 1 ? 'true' : v === 0 ? 'false' : String(v)
+    const s = String(v).trim().toLowerCase()
+    if (s === 'yes' || s === 'y' || s === '1') return 'true'
+    if (s === 'no' || s === 'n' || s === '0') return 'false'
+    return s
+  }
+  return norm(actual) === norm(want)
 }
 
 function num(v: number | string | null | undefined): number {
@@ -135,6 +209,14 @@ export interface ChooseMaterialInput {
    *  than not offering the pick. The ladder still governs the two tiers the
    *  customer did not pick. */
   chosenProduct?: ChosenProductAnchor | null
+  /** Phase 4 R11 — this recipe LINE pins an exact product
+   *  (tenant_assembly_bom.catalogue_id, migration 185).
+   *
+   *  R12 precedence: a tier-ladder hit BEATS the pin, because the ladder is
+   *  declared per tier while a pin is not. A tier-agnostic pin applied ahead
+   *  of the ladder would put the same product on Good, Better and Best and
+   *  flatten the quote — the exact failure R4 and R3 were written to fix. */
+  pinnedCatalogueId?: string | null
 }
 
 /** Phase 4 R3 — the minimum needed to anchor a pick. Deliberately NOT the
@@ -223,6 +305,27 @@ export function chooseMaterial(input: ChooseMaterialInput): ChosenMaterial {
       }
       // Ladder row not stocked / inactive → fall through to scoring.
     }
+  }
+
+  // Phase 4 R11 — the recipe line's own pin. Sits HERE, below the ladder and
+  // above scoring, which is R12's stated order:
+  //   customer pick (R3) → tier ladder → recipe pin → scoring → shared.
+  // The pin is tier-agnostic, so running it above the ladder would give all
+  // three tiers the same product; running it below scoring would make it
+  // pointless, since scoring always returns something.
+  if (input.pinnedCatalogueId) {
+    const pinned = input.tenantRows.find(
+      (r) =>
+        r.id === input.pinnedCatalogueId &&
+        (r.active ?? true) &&
+        Number.isFinite(num(r.unit_price_ex_gst)),
+    )
+    if (pinned) {
+      return { source: 'tenant', row: pinned, price: money(num(pinned.unit_price_ex_gst)) }
+    }
+    // Pinned row deleted or deactivated → fall through to scoring rather than
+    // fail the line. The FK is ON DELETE SET NULL so a deleted product clears
+    // the pin, but a DEACTIVATED one still points here.
   }
 
   const tenant = input.tenantRows
@@ -355,6 +458,12 @@ export interface BuildBomInput {
     markedUpPrice: number
     catalogue_id?: string | null
     image_path?: string | null
+    /** Phase 4 R7 — the resolved product's own attributes, so include_when
+     *  can be judged against the product that actually landed on this tier
+     *  rather than against the recipe. Absent on shared-material fallbacks,
+     *  which have no attributes; that reads as "unknown" and the required
+     *  line is kept. */
+    properties?: Record<string, unknown> | null
   } | null
   labourHours: number
   labourRate: number
@@ -376,9 +485,39 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
   const lines: QuoteLine[] = []
   const missingRequired: string[] = []
   const sorted = [...input.bom]
+  // Phase 4 R7 — resolve the HEADLINE product first, because that is what the
+  // conditions are about.
+  //
+  // R7's wording says include_when is judged against "the resolved product",
+  // which reads as the product for THAT line. R9's acceptance scenarios say
+  // otherwise, and they are the concrete requirement: "a smart product adds
+  // its dimmer part", "an integrated_driver product drops the separate driver
+  // line". The smart thing is the DOWNLIGHT, not the dimmer; the integrated
+  // driver is a property of the DOWNLIGHT, not of the driver line being
+  // dropped. Judged per line, both scenarios are unexpressible — the driver
+  // row has no integrated_driver tag and never will.
+  //
+  // So the condition is judged against the job's headline product: the first
+  // non-sundry line that carries no condition of its own. Unconditional
+  // because a conditional line cannot be the thing conditions are measured
+  // against without the definition eating itself.
+  const headlineProps: Record<string, unknown> | null = (() => {
+    for (const b of sorted) {
+      if (b.include_when) continue
+      if (SUNDRY_RE.test(String(b.material_category ?? '')) || SUNDRY_RE.test(String(b.description ?? ''))) continue
+      const m = input.resolveMaterial(b)
+      if (m) return m.properties ?? null
+    }
+    return null
+  })()
+
   for (const b of sorted) {
     const required = b.required ?? true
-    if (!required && !input.includeOptional) continue
+    // A line that states a condition is governed BY that condition, not by
+    // the blunt optional/includeOptional rule. Without this an optional
+    // conditional line (the dimmer) could never be added, because the
+    // short-circuit below would drop it before the condition was read.
+    if (!b.include_when && !required && !input.includeOptional) continue
     const qty = num(b.quantity)
     if (!Number.isFinite(qty) || qty <= 0) {
       if (required) missingRequired.push(b.material_category)
@@ -389,6 +528,16 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
       if (required) missingRequired.push(b.material_category)
       continue
     }
+    // Phase 4 R7 — judged against the HEADLINE product's attributes (see
+    // above), because the conditions describe the thing being installed, not
+    // the accessory being conditioned.
+    //
+    // An excluded line is NOT missingRequired: the condition was evaluated
+    // and the part is genuinely not needed — an integrated-driver downlight
+    // needs no separate driver. Pushing it to missingRequired would route a
+    // correct quote to the $99 inspection, which is the failure mode this
+    // whole phase keeps running into.
+    if (!shouldIncludeLine(b.include_when, headlineProps, required)) continue
     const unitPrice = money(m.markedUpPrice)
     lines.push({
       description: b.description?.trim() || m.name,
@@ -556,13 +705,38 @@ export interface BomHintRow {
  * non-finite count is ignored — today's behaviour is preserved rather than a
  * junk quantity reaching a quote. Pure; never mutates the input.
  */
-export function scaleBomToItemCount<T extends { material_category: string; quantity: number | string; sort?: number | null }>(
-  rows: readonly T[],
-  itemCount: number | null | undefined,
-): T[] {
+export function scaleBomToItemCount<
+  T extends {
+    material_category: string
+    quantity: number | string
+    sort?: number | null
+    quantity_per?: number | string | null
+  },
+>(rows: readonly T[], itemCount: number | null | undefined): T[] {
   const out = rows.map((r) => ({ ...r }))
   const n = Number(itemCount)
   if (!Number.isInteger(n) || n <= 0 || n > 10_000) return out
+
+  // Phase 4 R8 — ratio lines scale by division, not replacement.
+  //
+  // Applied here rather than in buildBomQuoteLines because this function is
+  // where item_count lives, and because BOTH pricing paths already call it:
+  // putting it in the builder would leave the Opus hint path with the wrong
+  // quantity and the two paths silently disagreeing.
+  //
+  // ceil, not round: one driver per four lights with ten lights needs THREE
+  // drivers. Rounding gives 2.5 → 2 and the job is short a driver.
+  //
+  // A ratio line is scaled and then skipped for headline consideration —
+  // "one driver per four lights" is never the headline of the job.
+  const ratioIdx = new Set<number>()
+  out.forEach((r, i) => {
+    const per = Number(r.quantity_per)
+    if (Number.isFinite(per) && per > 0) {
+      out[i] = { ...out[i], quantity: Math.ceil(n / per) }
+      ratioIdx.add(i)
+    }
+  })
 
   const isSundry = (r: T & { description?: string | null }) =>
     SUNDRY_RE.test(String(r.material_category ?? '')) ||
@@ -573,7 +747,9 @@ export function scaleBomToItemCount<T extends { material_category: string; quant
   const bySort = out
     .map((r, i) => ({ r, i }))
     .sort((a, b) => Number(a.r.sort ?? 0) - Number(b.r.sort ?? 0))
-  const headline = bySort.find(({ r }) => !isSundry(r as T & { description?: string | null }))
+  const headline = bySort.find(
+    ({ r, i }) => !ratioIdx.has(i) && !isSundry(r as T & { description?: string | null }),
+  )
   if (!headline) return out
 
   out[headline.i] = { ...out[headline.i], quantity: n }

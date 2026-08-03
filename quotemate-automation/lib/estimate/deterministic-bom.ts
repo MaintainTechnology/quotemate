@@ -119,9 +119,10 @@ export function buildDeterministicTiers(
     // it lands in the validator's accepted band. chooseMaterial already
     // prefers the operator's active catalogue ahead of shared and falls
     // back to shared when the catalogue doesn't cover the category.
-    // Phase 4 R10 — receives the whole BOM line. Only the category is read
-    // today; R11 (catalogue_id pin) and R7 (include_when) will use the rest.
-    const resolveMaterial = (line: { material_category: string }) => {
+    // Phase 4 R10 — receives the whole BOM line, which R11 uses for the
+    // product pin and R7 for include_when (judged by the caller against the
+    // `properties` returned below).
+    const resolveMaterial = (line: BomLine) => {
       const category = line.material_category
       const chosen = chooseMaterial({
         tenantRows: input.tenantMaterials,
@@ -133,6 +134,9 @@ export function buildDeterministicTiers(
         // passing it on every tier is correct: the other two see a tier
         // mismatch and resolve their own product.
         chosenProduct: input.chosenProduct,
+        // Phase 4 R11 — the recipe line's own product pin. R10 widened this
+        // callback to receive the whole line so this field could reach here.
+        pinnedCatalogueId: line.catalogue_id ?? null,
       })
       if (!chosen) return null
       // WP4: when the price came from the operator's own catalogue,
@@ -145,6 +149,10 @@ export function buildDeterministicTiers(
           markedUpPrice: money(chosen.price * (1 + mk / 100)),
           catalogue_id: chosen.row.id ?? null,
           image_path: chosen.row.image_path ?? null,
+          // Phase 4 R7 — the tags the caller judges include_when against.
+          // Only tenant rows carry them; a shared fallback returns none,
+          // which reads as "unknown" and keeps a required line.
+          properties: (chosen.row.properties as Record<string, unknown> | null) ?? null,
         }
       }
       return {

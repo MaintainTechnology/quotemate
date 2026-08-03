@@ -2102,7 +2102,14 @@ async function loadDeterministicInputs(
   // No tenant recipe AND no shared recipe → not deterministic (Opus path).
   const { data: ownRecipe } = await supabase
     .from('tenant_assembly_bom')
-    .select('material_category, quantity, required, description, sort')
+    // Phase 4 R7/R8/R11 (migration 185) — include_when, quantity_per and
+    // catalogue_id. Same class as the R1 fix: a Supabase select is a STRING,
+    // so an omitted column is a silent `undefined`, and every condition,
+    // ratio and pin a tradie sets would quietly do nothing.
+    // ⚠ ONE string literal, not a concatenation: supabase-js parses the
+    // select at the TYPE level, and a computed string collapses the row type
+    // to GenericStringError.
+    .select('material_category, quantity, required, description, sort, include_when, quantity_per, catalogue_id')
     .eq('tenant_id', tenantId)
     .in('assembly_id', ids)
     .order('sort', { ascending: true })
@@ -2110,10 +2117,16 @@ async function loadDeterministicInputs(
   if (!recipe || recipe.length === 0) {
     const { data: sharedRecipe } = await supabase
       .from('shared_assembly_bom')
-      .select('material_category, quantity, required, description, sort')
+      // Migration 186 — include_when/quantity_per exist here too, so a
+      // condition seeded on the SHARED downlight recipe works for every
+      // tenant, not only the minority who have customised theirs. No
+      // catalogue_id: a shared row cannot pin one tenant's product.
+      .select('material_category, quantity, required, description, sort, include_when, quantity_per')
       .in('assembly_id', ids)
       .order('sort', { ascending: true })
-    recipe = sharedRecipe
+    // catalogue_id is absent on shared rows; the builder reads it as
+    // undefined, which is "no pin".
+    recipe = (sharedRecipe ?? []).map((r) => ({ ...r, catalogue_id: null }))
   }
   if (!recipe || recipe.length === 0) {
     return { input: null, reason: 'no recipe (tenant or shared) for this job' }
