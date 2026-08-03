@@ -357,12 +357,25 @@ export function shouldEngagePainting(
   prev: PaintingConversationState | null | undefined,
   inbound: string,
   followupPinActive: boolean,
+  /** True when the general dialog has already gathered a TRADE-SPECIFIC slot
+   *  from this thread's transcript. Gates the fresh-enquiry arm only. Defaults
+   *  false so every existing caller and test is unchanged. */
+  generalMidGather = false,
 ): boolean {
   // Same rule as shouldEngageRoofing: a trade the customer already turned
   // down is never re-opened in this conversation, and the refusal itself
   // usually carries the trade's own keyword.
   if ((prev?.declined_trades ?? []).includes('painting')) return false
   const canResume = isActivePaintingFlow(prev) && !followupPinActive
-  const isNewEnquiry = looksLikePaintingEnquiry(inbound)
+  // A FRESH KEYWORD MUST NOT OUTRANK A GATHER ALREADY IN PROGRESS.
+  //
+  // The same structural hole shouldEngageRoofing had, and worse on this side:
+  // there is no namesOtherTrade equivalent here, so once painting engages on a
+  // live electrical thread there is NO escape hatch at all — the customer's
+  // corrections are parsed as failed painting answers.
+  //
+  // Scoped to this arm only: canResume is untouched, so a genuine painting
+  // thread still resumes across turns.
+  const isNewEnquiry = !generalMidGather && looksLikePaintingEnquiry(inbound)
   return canResume || isNewEnquiry
 }
