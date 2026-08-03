@@ -151,8 +151,16 @@ Ordered by dependency. Each stage must pass its gates before the next begins.
     values, and drop-not-clamp on an out-of-range value. Make `roundTo` non-finite-safe. Fix
     `lib/estimate/catalogue.ts:191-198` so the shared-material fallback honours the tier
     argument instead of returning one row for all three.
-11. **GATE.** Decouple auto-send from the recipe switch in `lib/routing/decide.ts:106` so
-    enabling `DETERMINISTIC_BOM` does not simultaneously enable auto-send.
+11. ~~**GATE.** Decouple auto-send from the recipe switch in `lib/routing/decide.ts:106` so
+    enabling `DETERMINISTIC_BOM` does not simultaneously enable auto-send.~~
+
+    **STRUCK 2026-08-03 — already satisfied, by a different route than the one
+    specified.** `decide.ts` carries `v3AutoSendEnabled` as an independent
+    hard-off, and separately requires `pricingPath === 'deterministic'` for
+    auto-send (R7). So enabling the recipe engine cannot enable auto-send: the
+    two are controlled independently, and the deterministic path is a
+    *precondition* for auto-send rather than a trigger for it. Building the
+    specced decoupling would add a knob for a problem that no longer exists.
 
 ### Stage 4 — turn it on
 
