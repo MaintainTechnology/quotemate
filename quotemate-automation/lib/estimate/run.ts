@@ -34,6 +34,7 @@ import { resolveInspectionReason } from './inspection-reason'
 import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
 import {
   checkSanityBounds,
+  checkTierMonotonicity,
   boundForJob,
   recipeLabourFromLines,
   type JobTypeBound,
@@ -932,6 +933,31 @@ export async function runEstimation(
           ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
           ...qtyFlags,
         ]
+      }
+      // Phase 5b — Good ≤ Better ≤ Best. Runs AFTER reconcileTierMath and
+      // collapseDuplicateTiers so it judges the subtotals that will actually
+      // ship rather than the pre-correction ones.
+      //
+      // SHADOW: flag and log, never null a tier or route to inspection. An
+      // inverted ladder is a presentation fault, not a fabricated price, and
+      // this phase has already produced one bug that billed a correct quote as
+      // a $99 inspection. Enforcement is a decision to take once there is data
+      // on how often a legitimate tradie pin inverts the ladder.
+      const tierOrder = checkTierMonotonicity({
+        good: draft?.good?.subtotal_ex_gst,
+        better: draft?.better?.subtotal_ex_gst,
+        best: draft?.best?.subtotal_ex_gst,
+      })
+      if (!tierOrder.ok) {
+        draft.risk_flags = [
+          ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+          ...tierOrder.failures.map((f) => `[tier-order] ${f}`),
+        ]
+        cacheLog.err(
+          'Phase 5b — tier ladder is inverted (SHADOW: flagged, quote unchanged)',
+          tierOrder.failures.join(' | '),
+          { pricing_path: draft?.pricing_path ?? null },
+        )
       }
       if (corrections.length > 0 || qtyFlags.length > 0 || labour.corrections.length > 0) {
         cacheLog.ok('reconcile backstops applied', {
