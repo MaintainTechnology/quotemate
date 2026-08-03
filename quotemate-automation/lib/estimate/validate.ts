@@ -25,7 +25,8 @@
 // (also consumed by the custom-service Zod schema + the dashboard form).
 // Re-exported so existing `import { type Category } from './validate'`
 // callers keep working unchanged.
-import { isCategory, type Category } from './categories'
+import { type Category } from './categories'
+import { granularToGroundingCategory } from '@/lib/catalogue/category-mapping'
 export type { Category } from './categories'
 
 export type PricingBookForValidation = {
@@ -1176,7 +1177,31 @@ export function buildCandidatePrices(
       // never drops a name-derived tag, so a row that grounds today keeps
       // grounding; this only ADDS the correct tag for names the regex
       // misses, e.g. "Install whole-house water filter").
-      if (isCategory(row.category)) categories.add(row.category)
+      //
+      // TRANSLATE, don't test. This used to be `isCategory(row.category)`,
+      // which asks whether the value is spelled in the GROUNDING vocab —
+      // and half the rows that reach here are spelled in the MATERIAL one.
+      // shared_materials.category says 'sundries' (migration 022); this
+      // module's Category union says 'sundry'. isCategory said false, the
+      // column was dropped, and the row fell back to its name-derived tag.
+      //
+      // That cost a real customer a $99 inspection on 2026-07-31: a $6.40
+      // "Cable, terminals, clips" line, whose price is exactly the $5.00
+      // 'sundries' TPS-cable row × the 28% markup, was rejected as
+      // "a different category" against the very row it came from.
+      //
+      // granularToGroundingCategory is the existing, unit-tested bridge
+      // between the two vocabularies and is idempotent, so it strictly
+      // supersedes isCategory: a value already in the grounding vocab
+      // passes straight through, an unknown value returns null and adds
+      // nothing (NOT 'general' — that would hand every unrecognised row the
+      // catch-all tag and quietly widen the validator).
+      //
+      // Not always a widening, either: 'safety_switch' → 'rcbo' pulls those
+      // rows INTO the SAFETY_CRITICAL whitelist, so they stop grounding
+      // unrelated same-priced lines.
+      const rowCategory = granularToGroundingCategory(row.category)
+      if (rowCategory) categories.add(rowCategory)
       // R-1 — preserve the row id through every markup variant so the
       // validator's strict path can index candidates by id.
       const sourceId = row.id ?? null
