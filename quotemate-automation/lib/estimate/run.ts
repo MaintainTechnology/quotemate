@@ -16,6 +16,10 @@ import {
   type CatalogueHintRow,
   type BomHintRow,
   type TierLadderHintRow,
+  // Phase 4 R2 — the ladder shape the BUILDER consumes. Distinct from
+  // TierLadderHintRow above, which is the same table denormalised into
+  // prompt text; that one carries name/brand and no catalogue_id.
+  type TierLadderEntry,
   type TenantMaterial,
   type SharedMaterial,
   type BomLine,
@@ -2108,7 +2112,31 @@ async function loadDeterministicInputs(
     .from('shared_materials')
     .select('name, category, default_unit_price_ex_gst, unit')
   if (trade) mq = mq.eq('trade', trade)
-  const [{ data: catRows }, { data: sharedRows }] = await Promise.all([cq, mq])
+  // Phase 4 R2 — the tradie's explicit Good/Better/Best pins.
+  //
+  // Everything downstream of this read was already built and already right:
+  // tierLadder is a declared field of DeterministicTierInput, the builder
+  // forwards it per tier, and chooseMaterial resolves a (category, tier) hit
+  // ahead of brand/range scoring. THIS READ WAS THE MISSING LINK — without
+  // it input.tierLadder was always undefined, so the ladder branch was dead
+  // in production and a tradie's saved pin silently did nothing.
+  //
+  // Deliberately NOT reusing buildCatalogueHint's ladder query (~:1629):
+  // that one inner-joins tenant_material_catalogue for name/brand to build
+  // PROMPT TEXT, and omits catalogue_id — the one column TierLadderEntry
+  // cannot do without.
+  //
+  // No trade filter here, on purpose. chooseMaterial resolves catalogue_id
+  // against tenantMaterials, which `cq` above has already scoped to this
+  // trade, so a pin belonging to another trade simply fails to resolve and
+  // falls through to scoring — the correct outcome, without paying for a
+  // second join on every quote.
+  const lq = supabase
+    .from('tenant_tier_ladder')
+    .select('category, tier, catalogue_id')
+    .eq('tenant_id', tenantId)
+  const [{ data: catRows }, { data: sharedRows }, { data: ladderRows }] =
+    await Promise.all([cq, mq, lq])
 
   const input: DeterministicTierInput = {
     // Phase 2 R4 — same scaling as the hint path. Applied here rather than
@@ -2123,6 +2151,11 @@ async function loadDeterministicInputs(
     labourHours: Number(eff.labourHours.value),
     hourlyRate: Number((pricingBook as any)?.hourly_rate),
     markupPct: Number(eff.markupPct.value),
+    // An empty array rather than undefined when the tenant has pinned
+    // nothing: chooseMaterial guards on `.length > 0` so the two behave
+    // identically, and an always-present field is easier to read in a trace
+    // than one that vanishes.
+    tierLadder: (ladderRows ?? []) as TierLadderEntry[],
   }
   return { input, assemblyName: primary.name }
 }
