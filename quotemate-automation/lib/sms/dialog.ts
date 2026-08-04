@@ -1817,6 +1817,24 @@ export async function decideNextTurn(args: {
       // which Sonnet 5 shares with its adaptive-thinking tokens.
       maxOutputTokens: SMS_RECEPTIONIST_MAX_TOKENS,
       schema: TurnDecisionSchema,
+      // Server-side schema enforcement instead of a forced `json` TOOL.
+      //
+      // The pinned @ai-sdk/anthropic@3.0.71 has no capability entry for
+      // 'claude-sonnet-5', so it defaults that model to
+      // supportsStructuredOutput:false and falls back to the json-tool path
+      // — the same path that produces the "model answered in text, not a
+      // tool call" failures llm-receptionist.ts has to hand-recover from.
+      // Asking for outputFormat explicitly sends output_config.format and
+      // the model can no longer answer off-schema.
+      //
+      // NOTE this is deliberately NOT applied to the roofing/painting
+      // receptionist: its structure_choices field is
+      // z.number().int().min(1).max(20), and native json_schema rejects
+      // min/max on an integer ("For 'integer' type, properties maximum,
+      // minimum are not supported") — 400 on every turn. TurnDecisionSchema
+      // has no such constraint; measured 10/10 and 6/6 against the live
+      // model with this exact prompt.
+      providerOptions: { anthropic: { structuredOutputMode: 'outputFormat' as const } },
       // R30 — cache ONLY the large STATIC instruction block. Anthropic
       // caches the prefix up to (and including) the last cache_control
       // breakpoint; by marking the system message ephemeral and putting

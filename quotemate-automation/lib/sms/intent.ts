@@ -214,6 +214,11 @@ async function classifyIntentWithSonnet(
       model: anthropic(SMS_RECEPTIONIST_MODEL),
       maxOutputTokens: SMS_RECEPTIONIST_MAX_TOKENS,
       schema: Schema,
+      // Native json_schema rather than the provider's forced-`json`-tool
+      // fallback — see the long note in lib/sms/dialog.ts. Safe here because
+      // this schema is three enums and a capped string, with no numeric
+      // min/max for the API to reject.
+      providerOptions: { anthropic: { structuredOutputMode: 'outputFormat' as const } },
       system: SONNET_SYSTEM_PROMPT,
       prompt: `Customer message: "${message.slice(0, 500)}"`,
       maxRetries: 1,
