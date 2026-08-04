@@ -32,6 +32,7 @@ import type {
   PitchBucket,
 } from './types'
 import { deriveEdgeWorks } from './pricing'
+import { deterministicSampling } from '@/lib/llm/sampling'
 
 export type LayoutMode = 'patch_repair' | 'reroof' | 'upgrade'
 
@@ -675,7 +676,11 @@ async function anthropicLayoutGenerate(args: LayoutGenerateArgs): Promise<string
   ]
   const { text } = await generateText({
     model: anthropic(model),
-    temperature: 0,
+    // temperature 0 where the model still takes it. ROOFING_LAYOUT_MODEL /
+    // ROOFING_VISION_MODEL can point at a model that 400s on the parameter
+    // (Sonnet 5 does), and an unguarded `temperature: 0` here failed the
+    // whole layout call rather than degrading.
+    ...deterministicSampling(model),
     messages: [{ role: 'user' as const, content }],
   })
   return text

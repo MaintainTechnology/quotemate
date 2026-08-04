@@ -29,6 +29,8 @@
 // The raw callers throw on failure; roofingVisionParsed wraps them best-effort.
 // ════════════════════════════════════════════════════════════════════
 
+import { deterministicSampling } from '@/lib/llm/sampling'
+
 export type VisionImage = { base64: string; mime: string }
 
 type RawVisionCall = (args: { prompt: string; images: VisionImage[]; model?: string }) => Promise<string>
@@ -105,7 +107,11 @@ export const claudeVisionText: RawVisionCall = async ({ prompt, images, model })
   for (const img of images) content.push({ type: 'image', image: img.base64, mediaType: img.mime })
   const { text } = await generateText({
     model: anthropic(mdl),
-    temperature: 0,
+    // See lib/llm/sampling.ts — ROOFING_VISION_MODEL is the model id for
+    // roof photo analysis, solar photo vision AND vision-verify, so an
+    // unguarded `temperature: 0` here 400s three callers at once the moment
+    // it points at a model that has dropped the parameter.
+    ...deterministicSampling(mdl),
     messages: [{ role: 'user' as const, content }],
   })
   return text
