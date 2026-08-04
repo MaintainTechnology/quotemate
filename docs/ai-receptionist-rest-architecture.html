@@ -128,16 +128,16 @@
 
   <header class="masthead">
     <p class="eyebrow">QuoteMax · Engineering</p>
-    <h1>The AI Receptionist, and the plan to run each trade as its own REST API</h1>
+    <h1>The AI Receptionist, and each trade running as its own REST API</h1>
     <p class="standfirst">
-      Today one Next.js route holds every trade's receptionist. This sets out what runs now,
-      node by node, then the proposed split: a thin Front Desk on the website, and one
-      independently deployed receptionist service per trade.
+      One Next.js route on the website still serves today's customer traffic. The split is now
+      built and deployed beside it: a thin Front Desk service and five per-trade receptionists,
+      live on Railway, wired, and verified end to end, awaiting the per-number cutover.
     </p>
     <div class="meta">
       <span>quotemax.com.au</span>
-      <span>Drafted 3 Aug 2026</span>
-      <span>Current system live · REST split proposed</span>
+      <span>Drafted 3 Aug · Updated 4 Aug 2026</span>
+      <span>Monolith live · fleet deployed, pre-cutover · not yet pushed to main</span>
     </div>
   </header>
 
@@ -246,18 +246,20 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════ proposed -->
+  <!-- ══════════════════════════════════════════ deployed -->
   <section>
-    <p class="kicker">Proposed</p>
-    <div class="sec-head"><h2>New architecture: the website becomes a Front Desk</h2></div>
+    <p class="kicker">Deployed</p>
+    <div class="sec-head"><h2>New architecture: a Front Desk in front of five services</h2></div>
     <p class="sec-sub">
-      The website stops doing the thinking. It identifies the trade and forwards the conversation to
-      that trade's own service. Each receptionist is a standalone NestJS app, deployed and versioned
-      on its own.
+      The Front Desk is its own service, not the website: it identifies tenant + trade from the
+      message and the live conversation state, then forwards the turn to that trade's receptionist.
+      Each receptionist is a standalone NestJS app on Railway. The website keeps everything the
+      customer clicks — quote pages, booking, payment, dashboard — reading the same database the
+      receptionists write.
     </p>
 
     <figure>
-      <div class="fig-bar"><span>Fig 2 · front desk and per-trade services</span><span>proposed</span></div>
+      <div class="fig-bar"><span>Fig 2 · front desk and per-trade services</span><span>deployed · railway production</span></div>
       <div class="fig-body">
       <svg viewBox="0 0 1040 400" role="img" aria-label="Front desk routing to five per-trade receptionist REST APIs">
         <!-- Own defs. Referencing another SVG's marker by fragment id works in
@@ -274,10 +276,10 @@
 
         <rect x="215" y="132" width="215" height="102" class="n-box"/>
         <text x="232" y="164" class="n-label">Front Desk</text>
-        <text x="232" y="181" class="n-sub">quotemax.com.au</text>
+        <text x="232" y="181" class="n-sub">qm-front-desk · :3100 · Railway</text>
         <text x="232" y="200" class="n-tag">· identify tenant + trade</text>
-        <text x="232" y="214" class="n-tag">· sign request, forward</text>
-        <text x="232" y="228" class="n-tag">· persist + render quote</text>
+        <text x="232" y="214" class="n-tag">· forward, signed (x-sim-key)</text>
+        <text x="232" y="228" class="n-tag">· read the reply back from the DB</text>
 
         <text x="560" y="34" class="band">Receptionist services · Railway</text>
 
@@ -314,7 +316,7 @@
         <rect x="856" y="150" width="160" height="66" class="n-box"/>
         <text x="870" y="174" class="n-label">Shared Supabase</text>
         <text x="870" y="190" class="n-sub">one database</text>
-        <text x="870" y="205" class="n-tag">tenancy stays app-layer</text>
+        <text x="870" y="205" class="n-tag">read by the website: /q/* · dashboard</text>
         <path d="M800,70 C840,70 846,150 854,172" class="wire-dash"/>
         <path d="M800,134 C836,134 844,158 854,176" class="wire-dash"/>
         <path d="M800,183 L854,183" class="wire-dash"/>
@@ -323,8 +325,11 @@
       </svg>
       </div>
       <figcaption>
-        Five services, five ports, five deploys. They share one Supabase instance, so a quote drafted
-        by any receptionist still appears in the same dashboard.
+        Six services, six deploys, all live on Railway production. They share one Supabase instance
+        (tenancy stays app-layer), so a quote drafted by any receptionist appears on the website's
+        <code>/q/*</code> pages and dashboard exactly as the monolith's do. Customer-facing links are
+        built on <code>APP_URL = quotemax.com.au</code>; each service's intake/estimate engines run
+        in-service via <code>ENGINE_BASE_URL</code> (loopback default).
       </figcaption>
     </figure>
 
@@ -341,22 +346,33 @@
     </table>
 
     <div class="note">
-      <b>The carve is already scripted</b>
+      <b>The carve is scripted — and shipped</b>
       <p>
         <code>scripts/export-receptionist.mjs</code> walks the import graph from the three route files,
         copies the exact closure each trade needs, and writes the NestJS shell. Copied files are
         byte-identical, so re-running after a change gives a clean diff instead of a merge conflict.
+        Two copy-time transforms were added while wiring the deployed fleet: the simulate channel signs
+        its synthetic webhook with the service's own Twilio token (the route's signature validation has
+        no bypass), and the two engine self-calls are rewritten to
+        <code>ENGINE_BASE_URL&nbsp;??&nbsp;APP_URL</code> so each service runs its own intake/estimate
+        engines. (Found live: <code>www.quotemax.com.au</code> 307-redirects to the apex and fetch
+        strips the Authorization header on a cross-host redirect, so a Bearer-authenticated engine
+        call via <code>APP_URL=www.…</code> arrives without its secret and 401s. Loopback is immune.)
+        These script changes are not yet pushed to main.
       </p>
     </div>
   </section>
 
   <!-- ══════════════════════════════════════════ contract -->
   <section>
-    <p class="kicker">Proposed · call contract</p>
+    <p class="kicker">Deployed · call contract</p>
     <div class="sec-head"><h2>How the Front Desk talks to a receptionist</h2></div>
     <p class="sec-sub">
-      One request and one response per inbound message. The Front Desk keeps the Twilio webhook
-      contract and the fast acknowledgement; the receptionist owns the conversation and the price.
+      One forwarded turn per inbound message, over the signed <code>/api/receptionist/simulate</code>
+      channel (<code>x-sim-key</code>). The Front Desk keeps the Twilio webhook contract and the fast
+      acknowledgement; the receptionist owns the conversation and the price, signs the synthetic
+      webhook internally with its own Twilio token, and replies by SMS. The Front Desk reads that
+      reply back out of the shared <code>sms_messages</code> table.
     </p>
 
     <figure>
@@ -373,15 +389,15 @@
 
         <rect x="232" y="56" width="190" height="92" class="n-box"/>
         <text x="248" y="86" class="n-label">Front Desk</text>
-        <text x="248" y="103" class="n-tag">verify + sign</text>
-        <text x="248" y="118" class="n-tag">persist quote</text>
-        <text x="248" y="133" class="n-tag">send SMS</text>
+        <text x="248" y="103" class="n-tag">verify Twilio signature</text>
+        <text x="248" y="118" class="n-tag">route by state + vocab</text>
+        <text x="248" y="133" class="n-tag">poll the reply</text>
 
         <path d="M422,82 L646,82" class="wire" marker-end="url(#a3)"/>
-        <text x="470" y="74" class="wire-lbl">POST /api/sms/inbound · Bearer token</text>
+        <text x="450" y="74" class="wire-lbl">POST /api/receptionist/simulate · x-sim-key</text>
 
         <path d="M646,124 L422,124" class="wire" marker-end="url(#a3)"/>
-        <text x="470" y="142" class="wire-lbl">reply text · quote · state</text>
+        <text x="470" y="142" class="wire-lbl">reply read from sms_messages</text>
 
         <rect x="650" y="46" width="210" height="112" class="n-accent"/>
         <text x="666" y="76" class="n-label">AI Receptionist</text>
@@ -394,15 +410,16 @@
       </svg>
       </div>
       <figcaption>
-        <code>/api/receptionist/simulate</code> replays a whole conversation against a service without
-        Twilio, so a trade can be tested end to end before it is pointed at a real number.
+        <code>/api/receptionist/simulate</code> is both the test harness and the production forwarding
+        channel: the same JSON turn drives the identical pipeline, so a trade is tested on exactly the
+        path real traffic takes before its number is pointed anywhere.
       </figcaption>
     </figure>
   </section>
 
   <!-- ══════════════════════════════════════════ sample -->
   <section>
-    <p class="kicker">Proposed · worked example</p>
+    <p class="kicker">Deployed · worked example</p>
     <div class="sec-head"><h2>Sample service: the Roofing Receptionist</h2></div>
     <p class="sec-sub">
       The same shape as Fig&nbsp;1 drawn for one trade, with the model, tools and settings that
@@ -499,9 +516,44 @@
     </div>
   </section>
 
+  <!-- ══════════════════════════════════════════ status -->
+  <section>
+    <p class="kicker">As of 4 Aug 2026</p>
+    <div class="sec-head"><h2>Deployment status: live, verified, pre-cutover</h2></div>
+    <p class="sec-sub">
+      All six services run on Railway production. The wiring between them, and between the fleet and
+      the website's database, has been verified live. Customer SMS traffic still flows through the
+      monolith: no Twilio number points at the Front Desk yet.
+    </p>
+
+    <table>
+      <caption>The deployed fleet</caption>
+      <thead><tr><th style="width:18%">Service</th><th>URL</th><th style="width:34%">Verified</th></tr></thead>
+      <tbody>
+        <tr><td><b>Front Desk</b></td><td><code>qm-front-desk-production.up.railway.app</code></td><td>Health, fleet fanout (five up), tenant reads, routing decisions</td></tr>
+        <tr><td><b>Electrical</b></td><td><code>qm-electrical-receptionist-production.up.railway.app</code></td><td>Health, engine auth in-service, one full live turn (38&nbsp;s, reply received)</td></tr>
+        <tr><td><b>Plumbing</b></td><td><code>qm-plumbing-receptionist-production.up.railway.app</code></td><td>Health, engine auth in-service</td></tr>
+        <tr><td><b>Roofing</b></td><td><code>qm-roofing-receptionist-production.up.railway.app</code></td><td>Health, engine auth in-service</td></tr>
+        <tr><td><b>Painting</b></td><td><code>qm-painting-receptionist-production.up.railway.app</code></td><td>Health, engine auth in-service</td></tr>
+        <tr><td><b>Solar</b></td><td><code>qm-solar-receptionist-production.up.railway.app</code></td><td>Health, engine auth in-service</td></tr>
+      </tbody>
+    </table>
+
+    <table>
+      <caption>What remains before the fleet takes real traffic</caption>
+      <thead><tr><th style="width:26%">Step</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td><b>Push to main</b></td><td>The export-script changes (simulate signing, engine redirect) and the six repos' trees are working-tree only. Nothing from the split is committed or pushed yet.</td></tr>
+        <tr><td><b>Full-conversation test</b></td><td>One turn has run end to end. A complete dialog to a minted quote and a live <code>/q/*</code> page has not yet been driven through the fleet.</td></tr>
+        <tr><td><b>Cutover, per number</b></td><td>Point a quiet tenant's Twilio SMS webhook at the Front Desk's <code>/api/sms/inbound</code>, watch it, then roll the rest. Rollback is repointing the webhook.</td></tr>
+        <tr><td><b>The www redirect</b></td><td><code>www.quotemax.com.au</code> 307-redirects everything to the apex, and clients strip the <code>Authorization</code> header across that hop. Harmless for customers clicking links; fatal for any server-to-server Bearer call aimed at <code>www</code>. All domains serve the same deployment (an earlier "config drift" reading of this was wrong); the five older numbers webhooking at <code>quote-mate-rho</code> are hitting live production. Prefer the apex in any service-to-service URL.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
   <footer>
     <span>QuoteMax · AI Receptionist architecture</span>
-    <span>Fig 1 current · Fig 2 to 4 proposed</span>
+    <span>Fig 1 monolith, still serving · Fig 2 to 4 deployed fleet, pre-cutover</span>
   </footer>
 
 </div>

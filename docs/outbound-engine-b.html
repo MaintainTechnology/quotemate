@@ -11,14 +11,15 @@
 </style>
 <style>
 :root{
-  --canvas:#16120F; --surface:#1D1813; --surface2:#221C16;
-  --line:#322B23; --line-lit:#4A4136;
-  --ink:#F0EAE0; --muted:#9C9184; --faint:#6E655A;
-  --accent:#FFC400;
-  --good:#8FB573; --warn:#D9A45B; --bad:#C96F5E;
+  --canvas:#FFFFFF; --surface:#FAF8F5; --surface2:#F3F0EA;
+  --line:#E3DFD8; --line-lit:#B9B3A9;
+  --ink:#16120F; --muted:#5C564E; --faint:#6F695F;
+  --charcoal:#16120F;
+  --accent:#FFC400; --accent-ink:#7A6100;
+  --good:#4E7A34; --warn:#8A6117; --bad:#A8442F;
   --sans:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:'JetBrains Mono',ui-monospace,'Cascadia Code',Consolas,monospace;
-  color-scheme:dark;
+  color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -26,7 +27,7 @@ html{scroll-behavior:smooth}
 body{background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
 body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:2147483647;opacity:.035;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")}
 .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-a{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+a{color:var(--accent-ink);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 60%,transparent)}
 a:hover{border-bottom-color:var(--accent)}
 a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 strong{font-weight:700}
@@ -34,7 +35,7 @@ p{max-width:72ch}
 h1,h2,h3{text-wrap:balance}
 
 /* ---------- type ---------- */
-.eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink)}
 .kicker{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
 h1{font-weight:800;font-size:clamp(42px,7vw,68px);line-height:.98;letter-spacing:-.02em;margin:18px 0 20px}
 h2{font-weight:800;font-size:clamp(24px,3.4vw,32px);letter-spacing:-.015em;margin-bottom:10px}
@@ -53,7 +54,7 @@ header{padding:72px 0 8px}
 
 /* ---------- chips ---------- */
 .chip{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;border:1px solid var(--line-lit);color:var(--muted);padding:2px 8px;white-space:nowrap}
-.c-p{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.c-p{color:var(--accent-ink);border-color:color-mix(in srgb,var(--accent-ink) 45%,transparent)}
 .c-b{color:var(--muted)}
 .c-a{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 55%,transparent)}
 .c-free{color:var(--good);border-color:color-mix(in srgb,var(--good) 50%,transparent)}
@@ -66,9 +67,9 @@ header{padding:72px 0 8px}
 .n-pri{background:var(--surface2);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent) 70%,transparent)}
 .n-avoid{border-style:dashed;background:transparent}
 .n-avoid .t{color:var(--muted)}
-.gate{background:var(--accent);color:#16120F;border:1px solid var(--accent);padding:13px 15px}
+.gate{background:var(--accent);color:var(--charcoal);border:1px solid var(--accent);padding:13px 15px}
 .gate .t{font-family:var(--mono);font-size:13px;font-weight:700;display:flex;justify-content:space-between;gap:10px}
-.gate .r{font-size:12.5px;margin-top:5px;color:color-mix(in srgb,var(--canvas) 82%,var(--accent));line-height:1.5}
+.gate .r{font-size:12.5px;margin-top:5px;color:color-mix(in srgb,var(--charcoal) 82%,var(--accent));line-height:1.5}
 .q{border:1px dashed var(--line-lit);background:transparent;padding:8px 13px;font-family:var(--mono);font-size:11.5px;color:var(--muted);align-self:center;white-space:nowrap}
 
 .rail{display:flex;align-items:stretch;margin:18px 0}
@@ -101,8 +102,10 @@ header{padding:72px 0 8px}
 .spine .r{font-size:12.5px;color:var(--muted)}
 .spine.acc{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent) 70%,transparent)}
 
-.diagram{border:1px solid var(--line);padding:26px;background:color-mix(in srgb,var(--surface) 45%,transparent);overflow-x:auto;margin:26px 0}
-.diagram-title{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.diagram{border:1px solid var(--line);padding:26px;background:color-mix(in srgb,var(--surface2) 60%,var(--canvas));overflow-x:auto;margin:26px 0 14px}
+.cap{font-size:12.5px;color:var(--muted);max-width:80ch;margin:0 0 26px;padding-left:2px}
+.cap b{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink);font-weight:600}
+.diagram-title{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .diagram-title em{font-style:normal;color:var(--faint)}
 
 /* ---------- panels / cards ---------- */
@@ -110,7 +113,7 @@ header{padding:72px 0 8px}
 .panel h3{font-size:15px}
 .panel .mono-lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:8px}
 .panel p{font-size:13.5px;color:var(--muted)}
-.stat{font-family:var(--mono);font-weight:600;font-size:26px;color:var(--accent);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.stat{font-family:var(--mono);font-weight:600;font-size:26px;color:var(--accent-ink);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
 .stat small{font-size:12px;color:var(--muted);font-weight:400;letter-spacing:0}
 
 /* ---------- verdict list ---------- */
@@ -119,7 +122,7 @@ header{padding:72px 0 8px}
 .verdict-row:first-child{border-top:0}
 .verdict-row>div{padding:16px 20px;min-width:0}
 .verdict-row .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border-right:1px solid var(--line);padding-top:19px}
-.verdict-row .pick{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--accent)}
+.verdict-row .pick{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--accent-ink)}
 .verdict-row .why{font-size:13px;color:var(--muted);margin-top:4px;max-width:none}
 @media(max-width:640px){.verdict-row{grid-template-columns:1fr}.verdict-row .k{border-right:0;border-bottom:1px dashed var(--line);padding-bottom:8px}}
 
@@ -135,10 +138,10 @@ tr.dim td{color:var(--muted)}
 
 /* ---------- law panel ---------- */
 .law{border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 7%,var(--canvas)),var(--canvas));padding:30px;margin:26px 0}
-.law h3{font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.law h3{font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink)}
 .law ol{margin:14px 0 0 18px;display:grid;gap:10px}
 .law li{font-size:13.5px;color:var(--ink);max-width:78ch}
-.law li b{color:var(--accent)}
+.law li b{color:var(--accent-ink)}
 .fine{font-size:12px;color:var(--faint);margin-top:16px;max-width:80ch}
 
 /* ---------- gaps grid / rollout ---------- */
@@ -150,7 +153,7 @@ tr.dim td{color:var(--muted)}
 .roll{counter-reset:wk;margin-top:26px;border:1px solid var(--line)}
 .roll-row{display:grid;grid-template-columns:120px 1fr;border-top:1px solid var(--line)}
 .roll-row:first-child{border-top:0}
-.roll-row .wk{font-family:var(--mono);font-size:12px;color:var(--accent);padding:16px 18px;border-right:1px solid var(--line)}
+.roll-row .wk{font-family:var(--mono);font-size:12px;color:var(--accent-ink);padding:16px 18px;border-right:1px solid var(--line)}
 .roll-row .do{padding:16px 20px;font-size:13.5px;color:var(--ink)}
 .roll-row .do b{font-family:var(--mono);font-size:12.5px}
 .roll-row .do span{display:block;color:var(--muted);font-size:12.5px;margin-top:3px}
@@ -236,7 +239,7 @@ footer p{font-size:12px;color:var(--faint);max-width:none}
   <p class="secnote">The data research is identical either way, so <strong>A-then-B is a legitimate path, not a failure</strong>. Write down the abandonment criteria now — after three invested weeks, sunk cost will argue for patching forever.</p>
 
   <div class="tbl-wrap"><table>
-    <thead><tr><th></th><th>Approach A — n8n</th><th>Approach B — custom CRM</th></tr></thead>
+    <thead><tr><th>Criterion</th><th>Approach A — n8n</th><th>Approach B — custom CRM</th></tr></thead>
     <tbody>
       <tr><td>Time to first send</td><td>Days (warmup is the only clock)</td><td class="m">4–6 weeks realistic</td></tr>
       <tr><td>Build effort</td><td>Configure workflows</td><td>MVP ≈ 3–6 weeks part-time — auth, dedupe and the dry-run story are half of it</td></tr>
@@ -288,6 +291,7 @@ footer p{font-size:12px;color:var(--faint);max-width:none}
       <div class="node" style="flex:1"><div class="t">Prospect's inbox</div><div class="r">Replies, bounces and unsubscribes webhook straight back into the API layer: status flips, suppression syncs, Resend pings you — you answer 1:1 from Gmail.</div></div>
     </div>
   </div>
+  <p class="cap"><b>How to read it</b> — One-click actions travel down from the dashboard through the API routes into Inngest jobs, which call the provider connectors and write every result to Supabase. The compliance gate sits between the database and Smartlead, and provider webhooks re-enter at the API layer — so the database is always the source of truth.</p>
 </section>
 
 <!-- ============ SOURCING FLOW ============ -->
@@ -316,6 +320,7 @@ footer p{font-size:12px;color:var(--faint);max-width:none}
       <div class="node n-pri"><div class="t">leads table</div><div class="r">Lifecycle state machine: sourced → deduped → enriched → verified → queued → in-campaign → replied / bounced / unsubscribed / suppressed. Which states permit a Smartlead push is schema, not convention.</div></div>
     </div>
   </div>
+  <p class="cap"><b>How to read it</b> — A pull starts in the dashboard, runs as a budget-checked Inngest job, and returns through the provider's own webhook. Merge keys (ABN, E.164 phone, root domain) collapse duplicates before a lead exists, and uncertain ABN matches wait in the review queue for a human.</p>
 </section>
 
 <!-- ============ ENRICHMENT FLOW ============ -->
@@ -348,6 +353,7 @@ footer p{font-size:12px;color:var(--faint);max-width:none}
       <div class="node n-pri"><div class="t">Status on the lead</div><div class="r">good → eligible · test → low-volume probe · bad → parked. Bounces later flow back to mark the verifier wrong and cool off the pattern that produced the email.</div></div>
     </div>
   </div>
+  <p class="cap"><b>How to read it</b> — The same waterfall as Approach A in its US$0 ordering. The provider_budgets table decides whether a rung may fire at all, so an empty credit pool parks the lead for later instead of failing the whole batch.</p>
 </section>
 
 <!-- ============ CAMPAIGN FLOW ============ -->
@@ -376,6 +382,7 @@ footer p{font-size:12px;color:var(--faint);max-width:none}
       <div class="node"><div class="t">Demo → trial → subscriber</div><div class="r">Won leads convert to paying QuoteMax subscriptions; the lead row links to the tenant record so cost-per-subscriber is a query, not a guess.</div></div>
     </div>
   </div>
+  <p class="cap"><b>How to read it</b> — A campaign reaches Smartlead only through the SQL gate and the single rate-limited push function. Every webhook that comes back updates the lead and the suppression table in your own database, which remains the source of truth end to end.</p>
 </section>
 
 <!-- ============ EXPORT FLOW ============ -->
@@ -394,6 +401,7 @@ footer p{font-size:12px;color:var(--faint);max-width:none}
       <div class="node n-avoid"><div class="t">Airtable <span class="chip c-a">avoid</span></div><div class="r">Free plan: 1,000 records/base and 1,000 API calls per month — one pilot sync burns the quota. Supabase is already the CRM store; Airtable adds nothing here.</div></div>
     </div>
   </div>
+  <p class="cap"><b>How to read it</b> — An export is just another Inngest job: the current dashboard filter goes out as one batched Google Sheets write, and the resulting Sheet link is stored on the export run.</p>
 </section>
 
 <!-- ============ DASHBOARD ============ -->
