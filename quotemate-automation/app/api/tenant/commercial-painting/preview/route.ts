@@ -4,8 +4,8 @@
 // Stateless like the residential preview routes: returns data URLs
 // inline; failure is non-blocking — the quote works without a preview.
 //
-// Provider: ig-engine/providers/edit-select.ts — Hugging Face (FLUX.1-Kontext)
-// first, then Replicate, then Gemini. Override with PAINTING_IMAGE_PROVIDER.
+// Provider: ig-engine/providers/edit-select.ts — Gemini first, then Hugging
+// Face (FLUX.1-Kontext), then Replicate. Override with PAINTING_IMAGE_PROVIDER.
 //
 // Body:
 //   { paintRunId, colour? }                      → initial render

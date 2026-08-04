@@ -1,6 +1,8 @@
-// IG Engine — provider selector tests. Verifies the config-gated rollout:
-// Stability when STABILITY_NIM_URL is set, Gemini otherwise, with an
-// explicit IG_IMAGE_PROVIDER override winning over both.
+// IG Engine — provider selector tests. Gemini is the unconditional default
+// (2026-08-04); only an explicit IG_IMAGE_PROVIDER override moves off it.
+// The old "STABILITY_NIM_URL set → stability" auto-switch is gone and is
+// pinned as gone below — that env var must never re-acquire the power to
+// silently route the image stage away from Gemini.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -25,20 +27,30 @@ describe('image provider selector', () => {
     expect(selectImageProvider().name).toBe('gemini')
   })
 
-  it('selects stability when STABILITY_NIM_URL is set', () => {
+  it('stays on gemini even when STABILITY_NIM_URL is set', () => {
+    // The regression this guards: STABILITY_NIM_URL used to flip the whole
+    // el/plumbing image stage to Stability as a side effect of being set.
     process.env.STABILITY_NIM_URL = 'http://nim.test/v1/infer'
-    expect(imageProviderName()).toBe('stability')
-    expect(selectImageProvider().name).toBe('stability')
+    expect(imageProviderName()).toBe('gemini')
+    expect(selectImageProvider().name).toBe('gemini')
   })
 
-  it('IG_IMAGE_PROVIDER override wins over the URL heuristic', () => {
-    process.env.STABILITY_NIM_URL = 'http://nim.test/v1/infer'
+  it('only an explicit IG_IMAGE_PROVIDER override moves off gemini', () => {
+    process.env.IG_IMAGE_PROVIDER = 'stability'
+    expect(imageProviderName()).toBe('stability')
+
+    process.env.IG_IMAGE_PROVIDER = 'replicate'
+    expect(imageProviderName()).toBe('replicate')
+
     process.env.IG_IMAGE_PROVIDER = 'gemini'
     expect(imageProviderName()).toBe('gemini')
+  })
 
-    process.env.IG_IMAGE_PROVIDER = 'stability'
-    delete process.env.STABILITY_NIM_URL
-    expect(imageProviderName()).toBe('stability')
+  it('ignores an unknown or blank override and stays on gemini', () => {
+    process.env.IG_IMAGE_PROVIDER = 'dall-e'
+    expect(imageProviderName()).toBe('gemini')
+    process.env.IG_IMAGE_PROVIDER = '   '
+    expect(imageProviderName()).toBe('gemini')
   })
 
   it('readiness reflects the selected provider credential', () => {

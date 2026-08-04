@@ -6,20 +6,22 @@
 // selector so the underlying generator can be swapped by config alone.
 //
 // Selection order:
-//   1. IG_IMAGE_PROVIDER env override ('stability' | 'gemini') — wins.
-//   2. STABILITY_NIM_URL set  → 'stability' (SD 3.5 Large, text-to-image).
-//   3. otherwise               → 'gemini' (legacy behaviour).
+//   1. IG_IMAGE_PROVIDER env override ('gemini' | 'stability' | 'replicate') — wins.
+//   2. otherwise → 'gemini'.
 //
-// This makes the Stability swap a safe, config-gated rollout: until the
-// SD 3.5 Large NIM is deployed and STABILITY_NIM_URL points at it, the
-// engine keeps using Gemini — nothing breaks. Set the URL (and the
-// optional STABILITY_API_KEY) and the el/plumbing image stage switches
-// to Stability automatically.
+// ⚠ Gemini is the unconditional default as of 2026-08-04 — one image
+// provider across every trade. Until then this auto-switched to Stability
+// whenever STABILITY_NIM_URL happened to be set, which silently routed the
+// electrical/plumbing image stage away from Gemini as a side effect of an
+// unrelated env var. Selecting Stability is now an explicit, deliberate act:
+// IG_IMAGE_PROVIDER=stability. STABILITY_NIM_URL is still the credential that
+// makes that choice *ready* (see imageGenReadiness), it just no longer
+// *makes* the choice.
 //
-// NOTE: this only governs IMAGE GENERATION for the SMS receptionist
-// preview/samples. The judge/verify QA paths (off by default) and the
-// dedicated painting/roofing/solar routes pick their own providers and
-// are intentionally not routed through here.
+// NOTE: this only governs text-to-image for the SMS receptionist
+// preview/samples. The trade "after" renders use ./edit-select.ts (also
+// Gemini-first); the judge/verify QA paths pick their own and are
+// intentionally not routed through here.
 // ════════════════════════════════════════════════════════════════════
 
 import type { ImageProvider } from './base'
@@ -34,8 +36,7 @@ export function imageProviderName(): ImageGenProvider {
   const override = (process.env.IG_IMAGE_PROVIDER || '').trim().toLowerCase()
   if (override === 'replicate') return 'replicate'
   if (override === 'stability') return 'stability'
-  if (override === 'gemini') return 'gemini'
-  return process.env.STABILITY_NIM_URL?.trim() ? 'stability' : 'gemini'
+  return 'gemini'
 }
 
 /** The selected image-generation provider instance. */

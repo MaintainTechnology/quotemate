@@ -63,8 +63,8 @@ export type RoofAfterResult =
  * the provider. Best-effort: never throws; records 'failed' on error.
  */
 export async function generateRoofAfterImage(token: string): Promise<RoofAfterResult> {
-  // Hugging Face (FLUX.1-Kontext) is the primary image-edit provider; Replicate
-  // then Gemini are the fallbacks. Force one with ROOFING_IMAGE_PROVIDER.
+  // Gemini is the primary image-edit provider; Hugging Face (FLUX.1-Kontext)
+  // then Replicate are the fallbacks. Force one with ROOFING_IMAGE_PROVIDER.
   const provider = resolveEditImageProvider(process.env.ROOFING_IMAGE_PROVIDER)
   if (!provider) return { ok: false, status: 'skipped', error: NO_EDIT_PROVIDER }
   if (!process.env.GOOGLE_MAPS_API_KEY) return { ok: false, status: 'skipped', error: 'GOOGLE_MAPS_API_KEY missing' }

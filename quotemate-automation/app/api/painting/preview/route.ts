@@ -6,8 +6,8 @@
 // with a "repaint ONLY the exterior in <colour>" prompt → return the
 // edited image as a data URL.
 //
-// The provider is selected by ig-engine/providers/edit-select.ts — Hugging
-// Face (FLUX.1-Kontext) first, then Replicate, then Gemini. Override with
+// The provider is selected by ig-engine/providers/edit-select.ts — Gemini
+// first, then Hugging Face (FLUX.1-Kontext), then Replicate. Override with
 // PAINTING_IMAGE_PROVIDER.
 //
 // Auth: bearer token. Body: { address, postcode?, state?, colour?, scopes? }.

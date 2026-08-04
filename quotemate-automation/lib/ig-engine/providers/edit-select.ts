@@ -6,12 +6,17 @@
 // renders is image-to-image: a real photo in, the same photo with the roof or
 // paint changed out.
 //
-// Hugging Face is the PRIMARY provider (2026-07-14) — FLUX.1-Kontext-dev via
-// HF Inference Providers. Replicate then Gemini remain fallbacks:
-//   · Gemini's direct image API is free-tier quota-limited and 429s ("limit: 0").
-//   · Replicate (google/nano-banana-pro) works but is a paid per-render token.
+// Gemini is the PRIMARY provider (2026-08-04) — one provider for every trade,
+// so a render looks the same whichever funnel produced it. Hugging Face
+// (FLUX.1-Kontext-dev) then Replicate remain fallbacks, used only when
+// GEMINI_API_KEY is absent.
 //
-// Preference order: huggingface → replicate → gemini. Force one per trade with
+// ⚠ Was huggingface-first until 2026-08-04. If Gemini image renders start
+// 429ing on a free-tier key ("limit: 0" — the reason HF was primary before),
+// the revert is per-trade and needs no deploy:
+// ROOFING_IMAGE_PROVIDER=huggingface / PAINTING_IMAGE_PROVIDER=huggingface.
+//
+// Preference order: gemini → huggingface → replicate. Force one per trade with
 // ROOFING_IMAGE_PROVIDER / PAINTING_IMAGE_PROVIDER (an override to a provider
 // with no credential resolves to null, so we never silently use another one).
 //
@@ -47,9 +52,9 @@ export function pickEditImageProvider(env: EditProviderEnv): EditImageProviderNa
   if (o === 'replicate') return env.hasReplicate ? 'replicate' : null
   if (o === 'gemini') return env.hasGemini ? 'gemini' : null
 
+  if (env.hasGemini) return 'gemini'
   if (env.hasHuggingFace) return 'huggingface'
   if (env.hasReplicate) return 'replicate'
-  if (env.hasGemini) return 'gemini'
   return null
 }
 
@@ -77,4 +82,4 @@ export function resolveEditImageProvider(override?: string | null): ImageProvide
 
 /** The skip reason to log/return when no provider is configured. */
 export const NO_EDIT_PROVIDER =
-  'no image provider (HUGGING_FACE_API_TOKEN / REPLICATE_API_TOKEN / GEMINI_API_KEY)'
+  'no image provider (GEMINI_API_KEY / HUGGING_FACE_API_TOKEN / REPLICATE_API_TOKEN)'

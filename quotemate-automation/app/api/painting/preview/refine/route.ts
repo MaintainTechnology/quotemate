@@ -6,8 +6,8 @@
 //   { image: "data:image/...;base64,...", instruction: "paint the fence grey too" }
 // → image-to-image applies ONLY that change → returns the new image.
 //
-// Provider: ig-engine/providers/edit-select.ts — Hugging Face (FLUX.1-Kontext)
-// first, then Replicate, then Gemini. Override with PAINTING_IMAGE_PROVIDER.
+// Provider: ig-engine/providers/edit-select.ts — Gemini first, then Hugging
+// Face (FLUX.1-Kontext), then Replicate. Override with PAINTING_IMAGE_PROVIDER.
 //
 // Auth: bearer token. The render takes ~10–20s → maxDuration raised.
 

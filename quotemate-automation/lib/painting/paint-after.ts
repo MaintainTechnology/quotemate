@@ -96,8 +96,8 @@ export async function generatePaintAfterImage(
   token: string,
   deps?: PaintAfterDeps,
 ): Promise<PaintAfterResult> {
-  // Hugging Face (FLUX.1-Kontext) is the primary image-edit provider; Replicate
-  // then Gemini are the fallbacks. Force one with PAINTING_IMAGE_PROVIDER.
+  // Gemini is the primary image-edit provider; Hugging Face (FLUX.1-Kontext)
+  // then Replicate are the fallbacks. Force one with PAINTING_IMAGE_PROVIDER.
   const provider = deps?.render ? null : resolveEditImageProvider(process.env.PAINTING_IMAGE_PROVIDER)
   if (!deps?.render && !provider) {
     return { ok: false, status: 'skipped', error: NO_EDIT_PROVIDER }

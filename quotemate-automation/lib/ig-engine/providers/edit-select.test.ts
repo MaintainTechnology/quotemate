@@ -9,20 +9,25 @@ afterEach(() => {
 const ALL = { hasHuggingFace: true, hasReplicate: true, hasGemini: true }
 
 describe('pickEditImageProvider', () => {
-  it('prefers Hugging Face when its token is set (the primary provider)', () => {
-    expect(pickEditImageProvider(ALL)).toBe('huggingface')
+  it('prefers Gemini when its key is set (the primary provider)', () => {
+    // The whole point of the 2026-08-04 change: with every credential
+    // present, every trade's "after" render goes to Gemini.
+    expect(pickEditImageProvider(ALL)).toBe('gemini')
     expect(
-      pickEditImageProvider({ hasHuggingFace: true, hasReplicate: false, hasGemini: false }),
-    ).toBe('huggingface')
-  })
-
-  it('falls back to Replicate, then Gemini, as tokens drop out', () => {
-    expect(
-      pickEditImageProvider({ hasHuggingFace: false, hasReplicate: true, hasGemini: true }),
-    ).toBe('replicate')
+      pickEditImageProvider({ hasHuggingFace: true, hasReplicate: true, hasGemini: true }),
+    ).toBe('gemini')
     expect(
       pickEditImageProvider({ hasHuggingFace: false, hasReplicate: false, hasGemini: true }),
     ).toBe('gemini')
+  })
+
+  it('falls back to Hugging Face, then Replicate, as credentials drop out', () => {
+    expect(
+      pickEditImageProvider({ hasHuggingFace: true, hasReplicate: true, hasGemini: false }),
+    ).toBe('huggingface')
+    expect(
+      pickEditImageProvider({ hasHuggingFace: false, hasReplicate: true, hasGemini: false }),
+    ).toBe('replicate')
   })
 
   it('returns null when no provider is configured', () => {
@@ -47,8 +52,8 @@ describe('pickEditImageProvider', () => {
   })
 
   it('ignores an unknown override and uses the preference order', () => {
-    expect(pickEditImageProvider({ override: 'dall-e', ...ALL })).toBe('huggingface')
-    expect(pickEditImageProvider({ override: '  ', ...ALL })).toBe('huggingface')
+    expect(pickEditImageProvider({ override: 'dall-e', ...ALL })).toBe('gemini')
+    expect(pickEditImageProvider({ override: '  ', ...ALL })).toBe('gemini')
   })
 })
 
@@ -64,11 +69,13 @@ describe('editProviderEnv', () => {
 })
 
 describe('resolveEditImageProvider', () => {
-  it('returns the Hugging Face provider instance by default when its token is set', () => {
+  it('returns the Gemini provider instance by default when every credential is set', () => {
     process.env.HUGGING_FACE_API_TOKEN = 'hf_x'
     process.env.REPLICATE_API_TOKEN = 'r8_x'
     process.env.GEMINI_API_KEY = 'g_x'
-    expect(resolveEditImageProvider()?.name).toBe('huggingface')
+    expect(resolveEditImageProvider()?.name).toBe('gemini')
+    // The per-trade escape hatch still works — this is the no-deploy revert.
+    expect(resolveEditImageProvider('huggingface')?.name).toBe('huggingface')
     expect(resolveEditImageProvider('replicate')?.name).toBe('replicate')
   })
 
@@ -78,6 +85,6 @@ describe('resolveEditImageProvider', () => {
     delete process.env.REPLICATE_API_TOKEN
     delete process.env.GEMINI_API_KEY
     expect(resolveEditImageProvider()).toBeNull()
-    expect(NO_EDIT_PROVIDER).toContain('HUGGING_FACE_API_TOKEN')
+    expect(NO_EDIT_PROVIDER).toContain('GEMINI_API_KEY')
   })
 })
