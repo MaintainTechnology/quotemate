@@ -14,6 +14,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import type { PaintDocType } from './types'
+import { deterministicSampling } from '@/lib/llm/sampling'
 
 export const CLASSIFY_MODEL = 'claude-sonnet-4-6'
 
@@ -70,10 +71,11 @@ export async function classifyPaintDoc(args: {
   if (!args.firstPageImage || !process.env.ANTHROPIC_API_KEY) return fallback
 
   try {
+    const model = args.model ?? CLASSIFY_MODEL
     const { object } = await generateObject({
-      model: anthropic(args.model ?? CLASSIFY_MODEL),
+      model: anthropic(model),
       schema: ClassifySchema,
-      temperature: 0,
+      ...deterministicSampling(model),
       maxRetries: 0,
       system: CLASSIFY_SYSTEM,
       messages: [

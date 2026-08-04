@@ -33,10 +33,11 @@ export const PLAN_MEDIA_TYPES = [
 ] as const
 export type PlanMediaType = (typeof PLAN_MEDIA_TYPES)[number]
 
-/** Models that reject `temperature` (Opus 4.7+) — same guard as estimation. */
-export function modelAcceptsTemperature(model: string): boolean {
-  return !/opus-4-[78]/.test(model)
-}
+/** Models that reject `temperature` — one shared list, see lib/llm/sampling.ts.
+ *  `AC_PLAN_MODEL` / `ESTIMATION_MODEL` can point anywhere, so this must not be
+ *  a local copy that drifts. */
+import { modelAcceptsTemperature } from '@/lib/llm/sampling'
+export { modelAcceptsTemperature }
 
 const ROOM_TYPES: ExtractedRoomType[] = [
   'bedroom',

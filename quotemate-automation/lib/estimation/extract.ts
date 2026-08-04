@@ -46,11 +46,14 @@ export type ParsedExtraction = {
 export const DEFAULT_ESTIMATION_MODEL = 'claude-opus-4-8'
 const MAX_PDF_BYTES = 32 * 1024 * 1024 // Anthropic PDF ceiling
 
-/** Models that reject the `temperature` parameter (Opus 4.7+). Determinism for
- *  those comes from the strict count-don't-estimate prompt, not temperature. */
-export function modelAcceptsTemperature(model: string): boolean {
-  return !/opus-4-[78]/.test(model)
-}
+/** Models that reject the `temperature` parameter. Determinism for those comes
+ *  from the strict count-don't-estimate prompt, not temperature.
+ *
+ *  Re-exported (not redefined) so `ESTIMATION_MODEL` can be pointed at any
+ *  model without this file's copy of the list going stale — the local
+ *  `/opus-4-[78]/` never covered Sonnet 5. See lib/llm/sampling.ts. */
+import { modelAcceptsTemperature } from '@/lib/llm/sampling'
+export { modelAcceptsTemperature }
 
 /** The take-off prompt (kept in sync with scripts/estimation-spike.mjs):
  *  read the legend first, latest sheet revision only, one line item per legend

@@ -8,6 +8,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import type { ColumnMapping } from './types'
+import { deterministicSampling } from '@/lib/llm/sampling'
 
 export const COLUMN_MAP_MODEL = 'claude-sonnet-4-6'
 
@@ -59,10 +60,11 @@ export async function mapColumns(
   const fallback = heuristicColumnMap(header)
   if (!process.env.ANTHROPIC_API_KEY || header.length === 0) return fallback
   try {
+    const model = opts?.model ?? COLUMN_MAP_MODEL
     const { object } = await generateObject({
-      model: anthropic(opts?.model ?? COLUMN_MAP_MODEL),
+      model: anthropic(model),
       schema: MappingSchema,
-      temperature: 0,
+      ...deterministicSampling(model),
       maxRetries: 0,
       system: COLUMN_MAP_SYSTEM,
       messages: [

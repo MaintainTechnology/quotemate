@@ -11,6 +11,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { Confidence, ShotDef, VerdictMode } from './types'
+import { deterministicSampling } from '@/lib/llm/sampling'
 
 const DEFAULT_MODEL = process.env.SIGNAGE_EXTRACT_MODEL ?? 'claude-sonnet-4-6'
 
@@ -222,7 +223,7 @@ export async function extractBrand(args: {
     const prompt = buildBrandExtractionPrompt(args)
     const { text } = await generateText({
       model: anthropic(args.model ?? DEFAULT_MODEL),
-      temperature: 0,
+      ...deterministicSampling(args.model ?? DEFAULT_MODEL),
       // A full rule set is large JSON — give it room so the output isn't
       // truncated (truncation → unparseable → silently empty).
       maxOutputTokens: 32000,
@@ -251,7 +252,7 @@ export async function proposeBrandShots(args: {
     const { generateText } = await import('ai')
     const { text } = await generateText({
       model: anthropic(args.model ?? DEFAULT_MODEL),
-      temperature: 0,
+      ...deterministicSampling(args.model ?? DEFAULT_MODEL),
       maxOutputTokens: 2000,
       messages: [{ role: 'user' as const, content: buildShotProposalPrompt(args) }],
     })

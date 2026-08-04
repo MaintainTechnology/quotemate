@@ -15,6 +15,7 @@
 import type { Confidence, RuleVerdict, ShotSlot, SignageRule, VerdictStatus } from './types'
 import { autoRulesForShot } from './shots'
 import { chunk, runWithVisionLimit, visionChunkSize } from './vision-limit'
+import { deterministicSampling } from '@/lib/llm/sampling'
 
 const DEFAULT_MODEL = process.env.SIGNAGE_VISION_MODEL ?? 'claude-sonnet-4-6'
 
@@ -211,7 +212,7 @@ async function assessChunk(args: AssessArgs, rules: SignageRule[]): Promise<Rule
     const prompt = buildAssessmentPrompt({ persona: args.persona, shotLabel: args.shotLabel, rules })
     const { text } = await generateText({
       model: anthropic(args.model ?? DEFAULT_MODEL),
-      temperature: 0,
+      ...deterministicSampling(args.model ?? DEFAULT_MODEL),
       messages: [
         {
           role: 'user' as const,

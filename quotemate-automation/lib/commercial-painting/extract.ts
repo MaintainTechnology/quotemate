@@ -27,10 +27,10 @@ export const DEFAULT_PAINT_EXTRACTION_MODEL = 'claude-opus-4-8'
 export const MEASUREMENT_PARSE_MODEL = 'claude-sonnet-4-6'
 const MAX_PDF_BYTES = 32 * 1024 * 1024
 
-/** Opus 4.7+ reject the temperature param (same guard as electrical). */
-function modelAcceptsTemperature(model: string): boolean {
-  return !/opus-4-[789]/.test(model)
-}
+/** Which models reject the temperature param — one shared list, so pointing
+ *  `ESTIMATION_MODEL` at a newer model cannot 400 this take-off.
+ *  See lib/llm/sampling.ts. */
+import { modelAcceptsTemperature } from '@/lib/llm/sampling'
 
 // ── Plan-set takeoff prompt (PURE) ────────────────────────────────────
 

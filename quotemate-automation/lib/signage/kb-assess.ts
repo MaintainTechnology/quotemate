@@ -27,6 +27,7 @@ import { kbSearch, type KbConfig, type KbFetch, type KbGroundingPassage } from '
 import { kbStoresForBrand, type KbStoreRef } from './kb-supplement'
 import { autoRulesForShot } from './shots'
 import { chunk, runWithVisionLimit, visionChunkSize } from './vision-limit'
+import { deterministicSampling } from '@/lib/llm/sampling'
 import type {
   AdvisoryFinding,
   BrandConfig,
@@ -220,7 +221,7 @@ async function defaultKbVision(args: {
   const { generateText } = await import('ai')
   const { text } = await generateText({
     model: anthropic(args.model),
-    temperature: 0,
+    ...deterministicSampling(args.model),
     messages: [
       {
         role: 'user' as const,

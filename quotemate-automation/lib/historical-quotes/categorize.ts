@@ -8,6 +8,7 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 import { JobTypeEnum, tradeForJobType, type JobType, type Trade } from './job-types'
 import type { Confidence } from './types'
+import { deterministicSampling } from '@/lib/llm/sampling'
 
 export const CATEGORIZE_MODEL = 'claude-sonnet-4-6'
 
@@ -46,10 +47,11 @@ export async function categorizeQuote(
   const desc = (input.description ?? '').trim()
   if (!desc || !process.env.ANTHROPIC_API_KEY) return fallback
   try {
+    const model = opts?.model ?? CATEGORIZE_MODEL
     const { object } = await generateObject({
-      model: anthropic(opts?.model ?? CATEGORIZE_MODEL),
+      model: anthropic(model),
       schema: CategorizeSchema,
-      temperature: 0,
+      ...deterministicSampling(model),
       maxRetries: 0,
       system: CATEGORIZE_SYSTEM,
       messages: [
