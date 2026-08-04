@@ -79,11 +79,293 @@ const FORCE_INCLUDE = {
   painting: [],
 }
 
+// ── web surface ──────────────────────────────────────────────────────────
+// Canonical page/auth/sandbox sources live in scripts/web-surface/ and are
+// copied verbatim into every service; only content.ts is generated here, so
+// all six sites stay byte-identical except for what they say.
+
+const WEB_FILES = ['design.ts', 'session.ts', 'session.check.ts', 'sandbox.service.ts', 'web.controller.ts', 'web.module.ts']
+
+const RECEPTIONIST_ENDPOINTS = [
+  { method: 'POST', path: '/api/sms/inbound', auth: 'Twilio signature', desc: 'Production webhook — the tenant’s Twilio number points here. Form-encoded, signature-validated.' },
+  { method: 'POST', path: '/api/receptionist/simulate', auth: 'x-sim-key', desc: 'Test harness: same pipeline from JSON. The sandbox drives this. Needs SMS_SIMULATE_ENABLED=1.' },
+  { method: 'POST', path: '/api/intake/structure', auth: 'Bearer CRON_SECRET', desc: 'Intake engine — free text + photos into a structured, validated intake.' },
+  { method: 'POST', path: '/api/estimate/draft', auth: 'Bearer CRON_SECRET', desc: 'Estimation engine — grounded G/B/B quote, validated line-by-line against the pricing book.' },
+  { method: 'GET', path: '/api/health', auth: 'none', desc: 'Liveness. Railway’s healthcheck target.' },
+  { method: 'GET', path: '/api/health/deep', auth: 'none', desc: 'Readiness — 503 plus missing variable names when configuration is incomplete.' },
+]
+
+const RECEPTIONIST_AUTH = [
+  { name: 'Twilio signature', body: 'Inbound webhooks are validated against the Twilio auth token — a request that does not come from Twilio is rejected before any processing.' },
+  { name: 'x-sim-key header', body: 'The simulate channel (and therefore the sandbox) requires SMS_SIMULATE_ENABLED=1 and a matching SIM_API_KEY. Closed by default.' },
+  { name: 'Bearer CRON_SECRET', body: 'The internal intake and estimate engines only accept calls carrying the shared secret. Absent in production, the pipeline fails closed.' },
+  { name: 'Operator session', body: 'The web sandbox and keys pages sit behind WEB_ADMIN_PASSWORD with an HMAC-signed 24-hour cookie.' },
+]
+
+const RECEPTIONIST_KEYS = [
+  { env: 'SIM_API_KEY', label: 'Simulate key', desc: 'Opens POST /api/receptionist/simulate (the sandbox and the Front Desk both use it). Rotate by changing the Railway variable on this service AND the Front Desk’s RECEPTIONIST_SIM_KEY.' },
+  { env: 'CRON_SECRET', label: 'Internal secret', desc: 'Guards the intake/estimate self-calls. Shown for completeness — external callers should never need it.' },
+]
+
+const moduleMermaid = (pipelineLabel) => `flowchart LR
+  IN["POST /api/sms/inbound\\nTwilio webhook"] --> TURN{receptionist turn}
+  TURN -->|default| LLM["Sonnet dialog\\npicks a tool"]
+  TURN -->|"any failure"| SM["deterministic\\nstate machine"]
+  LLM --> GUARD["grounding guard\\nno invented figures"]
+  SM --> GUARD
+  GUARD --> PIPE[["${pipelineLabel}"]]
+  PIPE --> DB[("Supabase\\nconversations - quotes")]
+  PIPE --> SMS["reply SMS\\nvia Twilio"]
+  SIM["POST /api/receptionist/simulate\\nsandbox - Front Desk"] --> TURN
+  subgraph Engines["internal engines (Bearer CRON_SECRET)"]
+    I2["/api/intake/structure"] --> E2["/api/estimate/draft"]
+    E2 --> VAL["grounding validator\\nline items vs pricing book"]
+    VAL --> Q["quote + Stripe deposit links"]
+  end
+  PIPE -.handoff.-> I2`
+
+const WEB_CONTENT = {
+  electrical: {
+    name: 'Electrical Receptionist', tint: '#FFD34D',
+    tagline: 'Texts in, a grounded electrical quote out — priced from the tradie’s own book, never guessed.',
+    intro: [
+      'This service answers a tradie’s SMS number like front-desk staff. A Claude-driven dialog gathers the job in plain language — what needs doing, where, access, photos — then hands a structured intake to the estimation engine.',
+      'The estimator drafts a Good/Better/Best quote using tool calls only: every line item price is looked up in the tenant’s pricing book and shared assembly library, then checked by a grounding validator. Anything the database cannot substantiate downgrades the quote to a paid site inspection instead of guessing.',
+      'The customer gets a quote link and Stripe deposit options by SMS, and the tradie is notified — usually inside a minute of the last question being answered.',
+    ],
+    capabilities: [
+      { title: 'Natural SMS dialog', body: 'Greets, asks only what is missing, handles refusals and topic changes — Sonnet-driven with a deterministic fallback every turn.' },
+      { title: 'Structured intake', body: 'Free text and photos become a validated intake: job type, scope, address, access, risks.' },
+      { title: 'Grounded pricing', body: 'The model can only select priced rows via tools. A validator re-derives every line; failures route to inspection.' },
+      { title: 'Good/Better/Best quotes', body: 'Three tiers with scope, assumptions and GST handling, delivered as a live link and PDF.' },
+      { title: 'Stripe deposits', body: 'Deposit links minted per tier — pay-first booking straight from the quote page.' },
+      { title: 'Photo requests', body: 'Asks for photos when the job needs eyes on it, with a tokenised upload link.' },
+    ],
+    flowTitle: 'From first text to priced quote',
+    flow: `sequenceDiagram
+  participant C as Customer
+  participant T as Twilio
+  participant R as Receptionist dialog
+  participant I as Intake engine
+  participant E as Estimator
+  participant DB as Pricing book
+  C->>T: "Need 4 downlights put in the kitchen"
+  T->>R: POST /api/sms/inbound
+  R->>C: asks address, access, timing
+  C->>R: answers over a few texts
+  R->>I: structured handoff
+  I->>E: validated intake + photos
+  E->>DB: price lookups (tool calls only)
+  DB-->>E: grounded line items
+  E->>E: grounding validator
+  E-->>C: G/B/B quote link + deposit options
+  E-->>R: tradie notified`,
+    pipelineLabel: 'estimation engine\\nRAG + tool-calling',
+    sandboxNote: 'A normal electrical turn answers in seconds; the final quote turn runs the full estimation engine and can take about a minute.',
+  },
+  plumbing: {
+    name: 'Plumbing Receptionist', tint: '#6EC1FF',
+    tagline: 'A leaking hot water system at 7am becomes a priced, bookable quote before the van leaves the driveway.',
+    intro: [
+      'This service answers a plumber’s SMS number like front-desk staff. A Claude-driven dialog gathers the job — fixture, fault, urgency, address, photos — then hands a structured intake to the estimation engine.',
+      'Quotes are drafted with tool calls only: every price is looked up in the tenant’s pricing book and assembly library, then re-checked by a grounding validator. Unquotable jobs route to a paid site inspection rather than a guess.',
+      'The customer gets a Good/Better/Best quote link with Stripe deposit options by SMS; the plumber gets notified with the full scope.',
+    ],
+    capabilities: [
+      { title: 'Natural SMS dialog', body: 'Understands "no hot water since last night" and asks the two questions that matter — system type and access.' },
+      { title: 'Structured intake', body: 'Free text and photos become a validated intake with job type, urgency and property detail.' },
+      { title: 'Grounded pricing', body: 'Tool-calling only; a validator re-derives every line item against the pricing book.' },
+      { title: 'Good/Better/Best quotes', body: 'Repair vs replace vs upgrade tiers, scoped and GST-correct.' },
+      { title: 'Stripe deposits', body: 'Deposit links per tier, pay-first booking from the quote page.' },
+      { title: 'Inspection fallback', body: 'Gas, capacity and compliance edge cases route to a $99 site visit instead of a wrong number.' },
+    ],
+    flowTitle: 'From first text to priced quote',
+    flow: `sequenceDiagram
+  participant C as Customer
+  participant T as Twilio
+  participant R as Receptionist dialog
+  participant I as Intake engine
+  participant E as Estimator
+  participant DB as Pricing book
+  C->>T: "Hot water system is leaking"
+  T->>R: POST /api/sms/inbound
+  R->>C: asks system type, address, access
+  C->>R: answers + photo of the unit
+  R->>I: structured handoff
+  I->>E: validated intake
+  E->>DB: price lookups (tool calls only)
+  DB-->>E: grounded line items
+  E->>E: grounding validator
+  E-->>C: G/B/B quote link + deposit options
+  E-->>R: plumber notified`,
+    pipelineLabel: 'estimation engine\\nRAG + tool-calling',
+    sandboxNote: 'A normal plumbing turn answers in seconds; the final quote turn runs the full estimation engine and can take about a minute.',
+  },
+  roofing: {
+    name: 'Roofing Receptionist', tint: '#FF7A59',
+    tagline: 'Address in, measured roof out — satellite measurement, deterministic pricing, a quote link by SMS.',
+    intro: [
+      'This service quotes roofs without a site visit. The dialog collects the address, verifies it on the map, then gathers intent (re-roof, repair, gutters), material and pitch.',
+      'The measurement engine (Geoscape primary, with satellite fallbacks) measures every structure on the parcel. Pricing is fully deterministic — the language model never emits a price, an area or a structure count; a grounding guard discards any turn that states a figure no tool produced.',
+      'The customer receives their roof photo, picks which building to quote, and gets a priced SMS with a live quote page and PDF. The tradie has a parallel dashboard surface with the same measurement.',
+    ],
+    capabilities: [
+      { title: 'Address verification', body: 'Geocodes and confirms the exact parcel with the customer before anything is measured.' },
+      { title: 'Satellite measurement', body: 'Geoscape-first roof measurement of every structure — areas, facets, edges — no ladder.' },
+      { title: 'Deterministic pricing', body: 'Rate-card maths from measured area, material and pitch. The model never invents a number.' },
+      { title: 'Structure selection', body: 'Sends the roof photo and asks which building(s) to quote — house, shed, garage.' },
+      { title: 'Quote + PDF by SMS', body: 'Priced tiers on a live /q/roof page with a PDF, deposit links included.' },
+      { title: 'LLM front, machine back', body: 'Sonnet handles the conversation; any failure falls back to a pure state machine for that turn.' },
+    ],
+    flowTitle: 'From address to measured, priced roof',
+    flow: `sequenceDiagram
+  participant C as Customer
+  participant T as Twilio
+  participant R as Receptionist dialog
+  participant M as Measurement engine
+  participant P as Deterministic pricer
+  C->>T: "Quote to re-roof 12 Example St Brisbane"
+  T->>R: POST /api/sms/inbound
+  R->>C: confirms the address on the map
+  R->>C: intent, material, pitch
+  R->>M: measureAndPriceRoofs
+  M-->>R: structures + measured areas
+  R->>C: roof photo — "which building?"
+  C->>R: "the house"
+  R->>P: area x material x pitch
+  P-->>C: priced SMS + /q/roof link + PDF
+  Note over R,P: the model never emits a price or an area`,
+    pipelineLabel: 'measure + price\\nGeoscape - rate card',
+    sandboxNote: 'The measure step is real satellite measurement — that turn takes minutes, not seconds. Earlier turns answer quickly.',
+  },
+  painting: {
+    name: 'Painting Receptionist', tint: '#C9A7FF',
+    tagline: 'Gathers the repaint by SMS, prices it deterministically, and holds every quote for the painter’s release.',
+    intro: [
+      'This service gathers a residential painting job over SMS — interior or exterior, rooms or full house, condition — or hands the customer a self-serve form link.',
+      'Wall area comes from a building lookup plus street imagery; pricing is deterministic from the painter’s rates. The customer sees a holding message, never a raw price.',
+      'Every quote is review-required: prices and deposit links only unlock after the painter presses Send. The same LLM-with-deterministic-fallback conversation layer as the other trades drives the dialog.',
+    ],
+    capabilities: [
+      { title: 'SMS or self-serve form', body: 'Gathers question-by-question over SMS, or sends a tokenised form link when that is faster.' },
+      { title: 'Remote wall area', body: 'Building footprint + street imagery estimate wall area without a visit.' },
+      { title: 'Deterministic pricing', body: 'Painter’s own rates drive the estimate. No model-invented figures anywhere.' },
+      { title: 'Review-required release', body: 'The customer sees no price until the painter releases the quote — a hard gate, not a setting.' },
+      { title: 'G/B/B on release', body: 'Released quotes present tiers with scope and deposit links on the live quote page.' },
+      { title: 'LLM front, machine back', body: 'Sonnet conversation with a per-turn deterministic fallback, same as roofing.' },
+    ],
+    flowTitle: 'From enquiry to released quote',
+    flow: `sequenceDiagram
+  participant C as Customer
+  participant T as Twilio
+  participant R as Receptionist dialog
+  participant E as Painting estimator
+  participant P as Painter
+  C->>T: "Quote to repaint the outside of my house"
+  T->>R: POST /api/sms/inbound
+  R->>C: gathers scope, surfaces, condition
+  R->>E: wall area lookup + rate card
+  E-->>R: deterministic estimate (held)
+  R->>C: holding message — no price shown
+  E->>P: quote ready for review
+  P->>E: presses Send
+  E-->>C: released quote link + deposit options`,
+    pipelineLabel: 'painting estimator\\narea x rates, held for release',
+    sandboxNote: 'Painting is review-required: the sandbox reply is a holding message — the priced quote only exists after the painter releases it.',
+  },
+  solar: {
+    name: 'Solar Receptionist', tint: '#7BE495',
+    tagline: 'A receptionist in front of a deterministic solar engine — sizing, rebate and payback with no guesswork.',
+    intro: [
+      'This service pairs the SMS dialog with QuoteMax’s deterministic solar engine. The conversation collects the address and energy goals; the engine does everything numeric.',
+      'Roof facts feed system sizing capped by roof and export limits, annual production is cross-checked against CEC references, and pricing applies the STC rebate by postcode zone. Savings and payback come out as Good/Better/Best systems.',
+      'No language model writes a price anywhere in the chain — the one AI touch, the roof brief, is prompted with zero dollar figures and validated.',
+    ],
+    capabilities: [
+      { title: 'SMS-first solar intake', body: 'Collects address and goals conversationally — the gap that used to make "solar quote please" a dead lead.' },
+      { title: 'Roof-aware sizing', body: 'Panel capacity fitted to the actual roof, capped by the network’s export limit.' },
+      { title: 'Production modelling', body: 'Annual AC output cross-checked against CEC reference data.' },
+      { title: 'STC rebate maths', body: 'Gross price minus the certificate rebate by postcode zone — shown, not hidden.' },
+      { title: 'Payback economics', body: 'Bill offset, savings and payback period per tier.' },
+      { title: 'Guardrailed release', body: 'Clean estimates auto-release; flagged or inspection cases hold for review.' },
+    ],
+    flowTitle: 'From enquiry to sized, priced system',
+    flow: `sequenceDiagram
+  participant C as Customer
+  participant T as Twilio
+  participant R as Receptionist dialog
+  participant S as Solar engine
+  C->>T: "Keen for a solar quote"
+  T->>R: POST /api/sms/inbound
+  R->>C: address + energy goals
+  R->>S: geocode, roof facts
+  S->>S: sizing - production - STC rebate - payback
+  S-->>C: G/B/B systems + quote link
+  Note over S: fully deterministic — no LLM in the numbers`,
+    pipelineLabel: 'solar engine\\nsizing - rebate - payback',
+    sandboxNote: 'Solar answers gather details conversationally; the sizing and pricing chain is deterministic and quick.',
+  },
+}
+
+function webContentTs(trade) {
+  const w = WEB_CONTENT[trade]
+  const obj = {
+    service: `qm-${trade}-receptionist`,
+    name: w.name,
+    trade,
+    tint: w.tint,
+    tagline: w.tagline,
+    intro: w.intro,
+    capabilities: w.capabilities,
+    flowTitle: w.flowTitle,
+    flowMermaid: w.flow,
+    moduleMermaid: moduleMermaid(w.pipelineLabel),
+    endpoints: RECEPTIONIST_ENDPOINTS,
+    sandbox: {
+      mode: 'simulate-poll',
+      path: '/api/receptionist/simulate',
+      keyEnv: 'SIM_API_KEY',
+      keyHeader: 'x-sim-key',
+      enableFlag: 'SMS_SIMULATE_ENABLED',
+      defaultFrom: '+61400000001',
+      note: w.sandboxNote,
+    },
+    keys: RECEPTIONIST_KEYS,
+    authModel: RECEPTIONIST_AUTH,
+  }
+  return `// GENERATED per-trade content — regenerated by scripts/export-receptionist.mjs.\n// Page/auth/sandbox code is shared; this file is the only thing that differs\n// between the six services.\nimport type { WebContent } from './design'\n\nexport const CONTENT: WebContent = ${JSON.stringify(obj, null, 2)}\n`
+}
+
 const ROUTES = [
   { from: 'app/api/sms/inbound/route.ts', to: 'src/receptionist/inbound.route.ts', trim: true },
   { from: 'app/api/intake/structure/route.ts', to: 'src/intake/structure.route.ts', trim: false },
   { from: 'app/api/estimate/draft/route.ts', to: 'src/estimate/draft.route.ts', trim: false },
 ]
+
+// ── engine self-call redirection ─────────────────────────────────────────
+// In the monolith, APP_URL serves BOTH the customer pages and the engine
+// routes, so the route files self-call `${process.env.APP_URL}/api/...`. In a
+// carved service those are different places: APP_URL must stay the public
+// website (it builds every /q/* link a customer receives), while the intake/
+// estimate engines run HERE. Rewrite the two self-call sites to prefer
+// ENGINE_BASE_URL — defaulted to loopback in main.ts — which keeps the
+// CRON_SECRET handshake inside one process and immune to redirects (found
+// live 2026-08-04: www.quotemax.com.au 307-redirects to the apex, and fetch
+// STRIPS the Authorization header on a cross-host redirect, so an engine
+// call via APP_URL=www.… arrives secretless and 401s; the secret itself
+// matches production). Copy-time transform, same policy as denextify: the
+// monorepo file stays untouched upstream.
+function redirectEngineCalls(src) {
+  return src
+    .replaceAll(
+      '${process.env.APP_URL}/api/intake/structure',
+      '${process.env.ENGINE_BASE_URL ?? process.env.APP_URL}/api/intake/structure',
+    )
+    .replaceAll(
+      '${process.env.APP_URL}/api/estimate/draft',
+      '${process.env.ENGINE_BASE_URL ?? process.env.APP_URL}/api/estimate/draft',
+    )
+}
 
 // ── source trimming ──────────────────────────────────────────────────────
 
@@ -440,13 +722,25 @@ const TRADE = '${trade}'
   Object.assign(process.env, platform)
 }
 
-// The receptionist self-calls \`\${APP_URL}/api/intake/structure\`, which THIS
-// app serves. On Railway nobody sets APP_URL by hand on first deploy, and an
-// unset value would make the pipeline call localhost and silently produce no
-// quotes. Railway injects RAILWAY_PUBLIC_DOMAIN — use it as the default.
-// An explicit APP_URL always wins (custom domains, local dev).
+// TWO base URLs, deliberately separate:
+//
+//   APP_URL          — the PUBLIC WEBSITE (quotemax.com.au). Every customer
+//                      link this service texts (\`/q/*\` quote pages, booking,
+//                      payment) is built on it, so it must point where those
+//                      pages are actually served.
+//   ENGINE_BASE_URL  — where the intake/estimate ENGINES run. This service
+//                      serves them itself, so it defaults to ITSELF via
+//                      loopback. Keeping the engines in-service also keeps
+//                      the CRON_SECRET handshake within one process's env —
+//                      no cross-deployment secret alignment to get wrong.
+//
+// 127.0.0.1, not localhost: the app binds 0.0.0.0 (IPv4); in some containers
+// Node resolves localhost to ::1 and the self-call would refuse.
 if (!process.env.APP_URL && process.env.RAILWAY_PUBLIC_DOMAIN) {
   process.env.APP_URL = \`https://\${process.env.RAILWAY_PUBLIC_DOMAIN}\`
+}
+if (!process.env.ENGINE_BASE_URL) {
+  process.env.ENGINE_BASE_URL = \`http://127.0.0.1:\${process.env.PORT ?? ${cfg.port}}\`
 }
 
 async function bootstrap() {
@@ -523,6 +817,7 @@ import { ConfigModule } from '@nestjs/config'
 import { ReceptionistModule } from './receptionist/receptionist.module'
 import { IntakeModule } from './intake/intake.module'
 import { EstimateModule } from './estimate/estimate.module'
+import { WebModule } from './web/web.module'
 import { HealthController } from './health/health.controller'
 
 @Module({
@@ -531,6 +826,9 @@ import { HealthController } from './health/health.controller'
     ReceptionistModule,
     IntakeModule,
     EstimateModule,
+    // The browser-facing surface: home, documentation, API explorer,
+    // sandbox and keys — see src/web/.
+    WebModule,
   ],
   controllers: [HealthController],
 })
@@ -880,6 +1178,7 @@ dist/
 .env*
 !.env.example
 *.tsbuildinfo
+run.log
 .DS_Store
 `,
 
@@ -1087,6 +1386,15 @@ const ENV_GROUPS = [
     vars: {
       SMS_SIMULATE_ENABLED: '1 = enable POST /api/receptionist/simulate.',
       SIM_API_KEY: 'Required x-sim-key header value for that endpoint. SECRET.',
+    },
+  },
+  {
+    title: 'Web surface — operator login for /sandbox and /keys',
+    note: 'The public pages (home, documentation, API explorer) need nothing.\nUnset password ⇒ the operator pages stay locked; boot is unaffected.',
+    vars: {
+      WEB_ADMIN_PASSWORD: 'Operator password for the web login. SECRET.',
+      WEB_SESSION_SECRET: 'Optional HMAC secret for the session cookie. Derived from the password when unset; set it to survive password rotation.',
+      SANDBOX_WAIT_MS: 'How long the web sandbox waits for a pipeline reply before handing back. Default 150000.',
     },
   },
   {
@@ -1319,8 +1627,11 @@ Swagger UI: <http://localhost:${cfg.port}/api/docs>
 | POST | \`/api/estimate/draft\` | Estimation engine. Internal — \`Authorization: Bearer $CRON_SECRET\`. |
 | GET | \`/api/health\` | Liveness + which env vars are present. |
 
-\`APP_URL\` must point at this service: the receptionist self-calls
-\`/api/intake/structure\`, which this app serves itself.
+Two base URLs, deliberately separate: \`APP_URL\` is the **public website**
+(\`https://www.quotemax.com.au\`) — every customer link this service texts is
+built on it. \`ENGINE_BASE_URL\` is where the intake/estimate engines run,
+defaulting to this service itself over loopback — leave it unset unless you
+are deliberately pointing the engines somewhere else.
 
 ## Deploy to Railway
 
@@ -1344,9 +1655,11 @@ paste them in the dashboard. The minimum to run a turn:
 | \`TWILIO_ACCOUNT_SID\`, \`TWILIO_AUTH_TOKEN\` | Inbound signature validation and outbound sends. |
 | \`CRON_SECRET\` | Guards the internal intake/estimate self-calls. **Absent in production ⇒ the pipeline fails closed and no quotes are produced.** |
 
-You do **not** need to set \`PORT\` (Railway injects it) or \`APP_URL\` — \`main.ts\`
-defaults \`APP_URL\` to \`https://$RAILWAY_PUBLIC_DOMAIN\`. Set \`APP_URL\` explicitly
-only when serving from a custom domain.
+You do **not** need to set \`PORT\` (Railway injects it) or \`ENGINE_BASE_URL\`
+(defaults to this service over loopback). **Do** set \`APP_URL\` to the public
+website (\`https://www.quotemax.com.au\`) so the quote links customers receive
+land on the real \`/q/*\` pages — when unset it falls back to
+\`https://$RAILWAY_PUBLIC_DOMAIN\`, which serves no customer pages.
 
 After the first deploy, confirm configuration:
 
@@ -1413,6 +1726,7 @@ function buildTrade(trade, opts) {
       }
       src = stripUnusedImports(src)
     }
+    src = redirectEngineCalls(src)
     // Keep the pre-shim text for closure scanning; shim only on write.
     generated.push({ path: join(SRC_ROOT, r.from), out: r.to, raw: src, text: denextify(src, r.to) })
   }
@@ -1494,6 +1808,12 @@ function buildTrade(trade, opts) {
   write('src/intake/intake.controller.ts', tpl.intakeController())
   write('src/estimate/estimate.module.ts', tpl.estimateModule())
   write('src/estimate/estimate.controller.ts', tpl.estimateController())
+  // Web surface — shared page/auth/sandbox code copied verbatim from
+  // scripts/web-surface/ (edit THERE); only content.ts is per-trade.
+  for (const f of WEB_FILES) {
+    write(`src/web/${f}`, readFileSync(join(HERE, 'web-surface', f), 'utf8'))
+  }
+  write('src/web/content.ts', webContentTs(trade))
   // Scan AFTER the scaffolding above is on disk — main.ts and the
   // controllers read PORT, RAILWAY_PUBLIC_DOMAIN, SIM_API_KEY and friends,
   // which a scan of the copied lib alone would miss.
