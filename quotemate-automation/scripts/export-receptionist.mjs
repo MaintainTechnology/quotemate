@@ -545,10 +545,11 @@ export class ReceptionistModule {}
 `,
 
   receptionistController: (trade) => `import {
-  Body, Controller, ForbiddenException, Headers, Post, Req, Res,
+  BadGatewayException, Body, Controller, ForbiddenException, Headers, Post, Req, Res,
 } from '@nestjs/common'
 import { ApiBody, ApiExcludeEndpoint, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger'
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express'
+import twilio from 'twilio'
 import { POST as inboundRoute } from './inbound.route'
 import { toWebRequest, sendWebResponse } from '../runtime/web-request'
 import { SimulateTurnDto } from './dto/simulate-turn.dto'
@@ -606,16 +607,43 @@ export class ReceptionistController {
       form.set(\`MediaContentType\${i}\`, 'image/jpeg')
     })
 
-    const proto = (req.headers['x-forwarded-proto'] as string) ?? 'http'
-    const host = req.headers.host ?? 'localhost'
-    // SMS_SKIP_SIGNATURE is what the route already checks in dev.
-    const webReq = new Request(\`\${proto}://\${host}/api/sms/inbound\`, {
+    // Chained proxies can comma-join x-forwarded-proto; undici lowercases
+    // the hostname when the Request resolves req.url — match both here or
+    // the signed string differs from what the route validates against.
+    const proto = ((req.headers['x-forwarded-proto'] as string) ?? 'http').split(',')[0].trim()
+    const host = (req.headers.host ?? 'localhost').toLowerCase()
+    // The route validates X-Twilio-Signature unconditionally — there is no
+    // bypass, and adding one would weaken the real webhook. So SIGN the
+    // synthetic request with this service's own auth token; the route then
+    // verifies it exactly as it would a genuine Twilio callback. The route
+    // sees no host/x-forwarded-host header on a synthetic Request, so it
+    // validates against req.url — the same string signed here.
+    const url = \`\${proto}://\${host}/api/sms/inbound\`
+    const signature = twilio.getExpectedTwilioSignature(
+      process.env.TWILIO_AUTH_TOKEN ?? '',
+      url,
+      Object.fromEntries(form.entries()),
+    )
+    const webReq = new Request(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-quotemax-simulated': '1' },
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-twilio-signature': signature,
+        'x-quotemax-simulated': '1',
+      },
       body: form.toString(),
     })
 
-    await inboundRoute(webReq)
+    // Surface a rejection instead of swallowing it: a 403 here means the
+    // signing above disagreed with the route's validation (bad/absent
+    // TWILIO_AUTH_TOKEN), and "accepted" would be a lie.
+    const routeRes = await inboundRoute(webReq)
+    if (routeRes.status < 200 || routeRes.status >= 300) {
+      const detail = await routeRes.text().catch(() => '')
+      throw new BadGatewayException(
+        \`inbound route rejected the synthetic webhook (\${routeRes.status}): \${detail.slice(0, 160)}\`,
+      )
+    }
     return { accepted: true, trade: '${trade}' }
   }
 }
@@ -1233,16 +1261,22 @@ They are **not dead code**. Three real reasons:
 Splitting these is a real refactor, not a delete. Until then they cost
 disk, not correctness.`}
 
-## The thing this architecture does not solve
+## The router in front of all five: qm-front-desk
 
 Twilio points a phone number at exactly **one** URL, and a tenant has one
 SMS number covering every trade they offer. So:
 
 - **Single-trade tenant** → point the number straight at that service. Done.
-- **Multi-trade tenant** → you need a router in front of all five that
-  decides which service gets each inbound message. Splitting the code did
-  not create that decision and does not make it — it still has to be made
-  somewhere, once, before the receptionists see the message.
+- **Multi-trade tenant** → point the number at **qm-front-desk** (\`:3100\`,
+  sibling repo). It identifies tenant + trade from the message and the live
+  conversation state, then forwards the turn to this service over the signed
+  \`/api/receptionist/simulate\` channel.
+
+To accept the Front Desk's forwards, this service needs two variables set:
+\`SMS_SIMULATE_ENABLED=1\` and \`SIM_API_KEY\` equal to the Front Desk's
+\`RECEPTIONIST_SIM_KEY\`. The simulate controller signs the synthetic webhook
+with this service's own \`TWILIO_AUTH_TOKEN\`, so the route's signature
+validation stays fully closed — there is no bypass path.
 `
 }
 
@@ -1334,9 +1368,12 @@ Last, point the tenant's Twilio number's inbound SMS webhook at
    real SMS and writes real rows. Point it at a test tenant, or leave
    \`SMS_SIMULATE_ENABLED=0\`.
 2. **Twilio can only point a number at one URL.** Tenants have one SMS
-   number covering all their trades, so a multi-trade tenant needs a
-   router in front of these five services deciding which one gets the
-   message. Single-trade tenants can point straight here.
+   number covering all their trades, so a multi-trade tenant points the
+   number at **qm-front-desk** (sibling repo, \`:3100\`), which identifies
+   the trade per message and forwards the turn here over the signed
+   \`/simulate\` channel — set \`SMS_SIMULATE_ENABLED=1\` and \`SIM_API_KEY\`
+   equal to its \`RECEPTIONIST_SIM_KEY\`. Single-trade tenants can point
+   straight here.
 
 ## Re-syncing from the monorepo
 
