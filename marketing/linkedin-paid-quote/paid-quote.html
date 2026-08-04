@@ -278,8 +278,19 @@ img[src$="paid-booking.jpg"]{filter:grayscale(.40) saturate(.88) contrast(1.06) 
 
 .stack .photos{position:absolute;left:var(--split);right:0;top:var(--head);bottom:var(--foot);z-index:4;overflow:hidden}
 .stack .cell{position:absolute;left:0;width:540px;height:596px;overflow:hidden}
-.stack .cell.up{top:0;clip-path:polygon(0 0,540px 0,540px 596px,0 508px)}
-.stack .cell.dn{top:508px;clip-path:polygon(0 4px,540px 92px,540px 596px,0 596px)}
+/* The slash ASCENDS left to right on this set, the opposite of the payment-terms
+   set it was copied from. There the lower subject stands centre frame and the
+   direction did not matter. Here she stands hard RIGHT, and a slash that
+   descends left to right put its deepest cut exactly across the top of her
+   head. Ascending puts the deep cut on the left instead, over the window and
+   the empty desk, which nothing is lost to.
+
+   Gap check, 4px of canvas the whole way:
+     x=0    up ends 596, dn starts 508+92=600
+     x=540  up ends 508, dn starts 508+4=512
+   and the lower cell still bottoms out at 508+596=1104. */
+.stack .cell.up{top:0;clip-path:polygon(0 0,540px 0,540px 508px,0 596px)}
+.stack .cell.dn{top:508px;clip-path:polygon(0 92px,540px 4px,540px 596px,0 596px)}
 .stack .cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .stack .cell.up img{filter:grayscale(.10) saturate(.97) contrast(.99) brightness(1.02) sepia(.07)}
 .stack .cell.dn img{filter:grayscale(.10) saturate(.97) contrast(1.07) brightness(1.01) sepia(.07)}
@@ -512,6 +523,41 @@ function render(D){
    "2 IN 3" is arithmetic off the post's own premise, not a survey, and the
    source line on 80 says so in as many words.
    ════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════
+   QUOTING IS WORK, refs 80 to 84.
+
+   The argument: three tradies quote the same job and two of them work for
+   free. Every other profession charges for the assessment. QuoteMax drafts
+   most quotes without a visit at all, and when a visit is genuinely needed the
+   customer pays $99, refundable and credited to the final quote.
+
+   PHOTOGRAPHY. One source, split into two. The supplied frame is a composite:
+   a tradie crammed in a roof cavity above, an operator holding a tablet
+   reading "PAID BOOKING: $99" below. Split at the white band it becomes the
+   whole argument in two pictures, the problem above and the answer below, and
+   it drops straight into the frames this project already uses.
+
+   TWO CONSTRAINTS THE SOURCE IMPOSES, both handled in split.mjs and here:
+     1. The lower panel's tablet interface is AI-garbled ("Search
+        fropdiecales", "40,25 mm" for a roof area). It is never used above
+        622px wide, where it scales to about 43% and reads as interface rather
+        than as words. "PAID BOOKING: $99" is large enough to survive that.
+        It is NEVER used full-bleed. The hero frame uses the roof cavity,
+        which carries no text at all.
+     2. A "RELIA-ROOFING" wall logo was cropped out at x 0.78. It is an
+        invented company and beside QuoteMax claims it would read as a named
+        customer, which there is no basis to imply.
+
+   CLAIMS. Every product claim here is real: the $99 site visit exists, it is
+   credited back off the work, quotes draft in under a minute, roofs measure
+   off satellite imagery, pricing comes from the tradie's own rate book. What
+   is NOT claimed anywhere on these graphics is volume or traction, because
+   the money path is running in test and not collecting at scale. That caveat
+   belongs in the caption, in the poster's own voice, and it is there.
+
+   "2 IN 3" is arithmetic off the post's own premise, not a survey, and the
+   source line on 80 says so in as many words.
+   ════════════════════════════════════════════════════════════════════ */
 const D=[
 
 /* ── 80 · THE HOOK. The flagship, and the one to post. ─────────────
@@ -564,12 +610,17 @@ const D=[
 /* ── 84 · The position, and the question. */
 {n:84,tag:'VIEW',kind:'pair',
  left:{pic:['roof-cavity','center center'],label:'THE OLD DEAL',line:'Free, then silence.'},
- right:{pic:['paid-booking','center center'],label:'THE NEW DEAL',line:'Paid, then booked.'},
+ // 8%, not centre. This cell is the one place the tablet frame gets cropped on
+ // HEIGHT rather than width (622x560 is wider than the source), and a centred
+ // window starts at 0.082 while the top of her head sits at about 0.02. Centre
+ // took the top of her head off. 8% starts the window at 0.013.
+ right:{pic:['paid-booking','center 8%'],label:'THE NEW DEAL',line:'Paid, then booked.'},
  src:'QUOTEMAX <i>&middot; THE SITE VISIT</i>',
  figs:[['$99','REFUNDABLE, CREDITED TO THE QUOTE']],
  claim:'Quoting is work. {Work gets paid for}.',cs:30,
  foot:'WOULD YOU CHARGE FOR A QUOTE'},
 ];
+
 
 
 

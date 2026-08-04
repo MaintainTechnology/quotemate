@@ -85,7 +85,11 @@ const D=[
 /* ── 84 · The position, and the question. */
 {n:84,tag:'VIEW',kind:'pair',
  left:{pic:['roof-cavity','center center'],label:'THE OLD DEAL',line:'Free, then silence.'},
- right:{pic:['paid-booking','center center'],label:'THE NEW DEAL',line:'Paid, then booked.'},
+ // 8%, not centre. This cell is the one place the tablet frame gets cropped on
+ // HEIGHT rather than width (622x560 is wider than the source), and a centred
+ // window starts at 0.082 while the top of her head sits at about 0.02. Centre
+ // took the top of her head off. 8% starts the window at 0.013.
+ right:{pic:['paid-booking','center 8%'],label:'THE NEW DEAL',line:'Paid, then booked.'},
  src:'QUOTEMAX <i>&middot; THE SITE VISIT</i>',
  figs:[['$99','REFUNDABLE, CREDITED TO THE QUOTE']],
  claim:'Quoting is work. {Work gets paid for}.',cs:30,
