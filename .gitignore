@@ -175,3 +175,6 @@ undefined/
 # Rendered marketing output — regenerable from the source HTML + render.mjs
 # beside it. 32MB of PNGs per campaign does not belong in git history.
 marketing/**/out/
+
+# Debugging scratch — probe scripts, one-off audits. Never shipped.
+.scratch-audit/
