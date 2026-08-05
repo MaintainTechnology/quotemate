@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v18 (2026-07-29).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers; v17 makes the roofing + painting SMS receptionists **LLM-driven conversations** (`SMS_LLM_RECEPTIONIST_ENABLED`, now default ON) while keeping the money path deterministic, superseding v10's "zero LLM in the customer-facing flow"; **v18** records that the SMS route does **not** pick a receptionist per message — an active roofing thread captures every turn — and that the intake handoff had no trade guard, so roofing enquiries were minting electrical intakes and charging real $99 electrical inspections. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v18 rationale.
+> **Current iteration: v19 (2026-08-05).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers; v17 makes the roofing + painting SMS receptionists **LLM-driven conversations** (`SMS_LLM_RECEPTIONIST_ENABLED`, now default ON) while keeping the money path deterministic, superseding v10's "zero LLM in the customer-facing flow"; v18 records that the SMS route does **not** pick a receptionist per message — an active roofing thread captures every turn — and that the intake handoff had no trade guard, so roofing enquiries were minting electrical intakes and charging real $99 electrical inspections; **v19** makes the flat **$99 refundable site visit** painting's ONLY customer payment (roofing's model), retiring the 30% tier deposits from every customer surface — v16's pay-first ordering is unchanged; v19 only removes painting from the deposit-tier set it applied to. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v19 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -1302,5 +1302,71 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   when the customer asks for another trade. That changes which receptionist wins
   a turn on the two tenants holding all eight trades, and the eval harness is
   only partially built — it needs its own regression corpus first.
+
+- **v19** (2026-08-05): **painting adopts roofing's model — the flat $99 refundable site visit is the ONLY customer payment; the 30% tier deposits are retired from every customer surface.** Owner decision.
+
+  **What changed:**
+
+  A residential painting customer is never asked for a tier deposit again. Every
+  actionable unpaid quote — prices released by the tradie, or routed to an
+  on-site measure — offers one action: accept and pay the flat $99 refundable
+  site visit, credited toward the final quote, with the booking happening AFTER
+  payment. The Good/Better/Best prices stay visible as pricing information; the
+  final price is confirmed on site. Held-for-review quotes still pay nothing
+  anywhere.
+
+  **Why the previous decision was reversed:**
+
+  This supersedes the "G/B/B handling byte-for-byte unchanged" clause of the
+  painting-funnel-parity spec (2026-08-05), which had extended the funnel with a
+  $99 path for inspection-routed rows only while leaving released rows on the
+  30% deposit. Two payment models on one trade meant two page states, two mint
+  branches and two SMS shapes, and the deposit branch was the one asking a
+  customer to commit thousands of dollars against a price nobody had yet
+  confirmed on site. Roofing has never done that: it sells a visit, then prices
+  the job. Painting now matches, so the funnel copy, the mint gate and the
+  receptionist SMS all promise the same thing.
+
+  **How old links keep working:**
+
+  Every previously-texted deposit link (`/r/paint/<token>/good|better|best`)
+  302s onto `/r/paint/<token>/inspection` rather than 404ing or minting a
+  deposit, and a held row gets a friendly 302 back to the quote page's holding
+  message instead of a bare 400. The 30% Session-creation code
+  (`createPaintingCheckoutSessionForTier`) stays in the codebase, unreachable
+  from the route — retired, not deleted, so a reversal is a routing change
+  rather than a rebuild. ⚠ Draft/edit still mints per-tier Sessions into
+  `painting_measurements.stripe_links` (`lib/painting/quote-dispatch.ts`) as a
+  dormant record; no customer surface links them, and nothing reads them back —
+  a cleanup, not a live path.
+
+  **Asset gap:** the flow SVG's "Customer accepts & pays deposit" box and its
+  $199 inspection figure (`assets/quotemate_flow_with_inspection.svg`) remain the
+  electrical-era funnel — a second unacknowledged deviation on top of the
+  auto-send one logged in v6.
+
+  **Money-path consequences:**
+
+  Painting's only customer charge is now the $99 site visit, which mints through
+  `createPaintingSiteVisitSession` with Connect routing (`transfer_data` +
+  platform `application_fee`) exactly like roofing's. That closes the
+  long-standing "painting deposits bypass Stripe Connect" gap by removing the
+  path that bypassed it — the tradie's connected account receives the visit fee.
+  `canTakePayment()` still gates the mint, the publish gate is untouched, and
+  the Stripe webhook is unchanged (it already records `paid_tier` verbatim, so
+  `'inspection'` lands correctly).
+
+  **What stays unchanged:** painting remains review-required — a customer sees
+  no price until the tradie releases; commercial painting (a separate stack)
+  keeps its own delivery rule; no other trade's pages or mints move.
+
+  **Trigger for the next iteration:**
+
+  - Painters report the $99 visit converting worse than the deposit did, or ask
+    to take a real deposit at the point of acceptance → revisit, using visit
+    bookings per released quote as the control.
+  - Painting deposit volume becomes material again → the retired 30% path is
+    still in the codebase; re-enabling it is a routing change, and this entry
+    is the record of why it was switched off.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

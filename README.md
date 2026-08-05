@@ -102,7 +102,7 @@ What's actually wired today:
 | Image gen | Google Gemini (quote preview + per-tier sample images) |
 | Voice agent | Vapi (Deepgram STT, ElevenLabs TTS) — **live** |
 | SMS / WhatsApp | Twilio (AU long codes), SMS-first with WhatsApp fallback |
-| Payments | Stripe (test mode); per-tier deposit + $99 inspection. Connect Express: planned |
+| Payments | Stripe (test mode), Connect Express wired; per-tier deposit (electrical/plumbing/solar) or the flat $99 site visit (roofing/painting) |
 | Email | Resend |
 | Quote document | Mobile HTML page at `/q/[token]` (no PDF in v1) |
 
