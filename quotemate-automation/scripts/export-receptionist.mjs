@@ -479,6 +479,49 @@ function scopeSlotExtractor(src) {
 //
 // Gate it on the service trade for every non-electrical carve. Left fully
 // intact in the electrical service, where it belongs.
+// The monolith's retirement kill switch must NEVER be carved.
+//
+// app/api/sms/inbound/route.ts is BOTH the monolith's route and this script's
+// source file. When the in-app receptionist was retired (2026-08-05) that guard
+// went in at the top of POST — and the very next export carried it straight
+// into the carved service, which then answered every turn with
+// "RETIRED — in-app receptionist is disabled" and processed nothing.
+//
+// Found in production: the painting service accepted turns (201), wrote no
+// conversation row and sent no reply, because the guard returns before any of
+// the pipeline runs. The guard is correct FOR THE MONOLITH and wrong for a
+// carve — these services ARE the receptionist it points at.
+//
+// Strip it here rather than flag-flipping it, for the same reason the plan
+// estimation block is removed rather than disabled: what we mean is that the
+// concept does not exist in a carved service.
+function stripRetirementGuard(src) {
+  const lines = src.split(/\r?\n/)
+  const banner = lines.findIndex((l) => l.includes('RETIRED 2026-08-05'))
+  if (banner === -1) return src // not present (pre-retirement source) — fine
+  const start = banner - 1 // the ─── rule above the banner
+  const postIdx = lines.findIndex((l, i) => i > banner && l.startsWith('export async function POST(req: Request) {'))
+  if (postIdx === -1) throw new Error('stripRetirementGuard: POST not found after the banner')
+  const guardIdx = lines.findIndex((l, i) => i > postIdx && l.trim() === 'if (!RECEPTIONIST_ENABLED) {')
+  if (guardIdx === -1) throw new Error('stripRetirementGuard: guard opener not found')
+  // Walk to the guard's matching close by brace depth.
+  let depth = 0
+  let closeIdx = -1
+  for (let i = guardIdx; i < lines.length; i++) {
+    for (const ch of lines[i]) {
+      if (ch === '{') depth++
+      else if (ch === '}') depth--
+    }
+    if (depth === 0) { closeIdx = i; break }
+  }
+  if (closeIdx === -1) throw new Error('stripRetirementGuard: guard close not found')
+  return [
+    ...lines.slice(0, start),
+    'export async function POST(req: Request) {',
+    ...lines.slice(closeIdx + 1),
+  ].join('\n')
+}
+
 // REMOVED, not disabled. A `false &&` guard was the first attempt and it broke
 // the build in four services: TypeScript narrows `tenant` to non-null from
 // `tenant?.sms_estimator_enabled`, and short-circuiting ahead of that narrowing
@@ -1965,6 +2008,7 @@ function buildTrade(trade, opts) {
     if (r.trim) {
       // Neither of these touches an import specifier, so both are safe to
       // apply before the closure scan.
+      src = stripRetirementGuard(src)
       src = scopeSlotExtractor(src)
       src = gatePlanEstimation(src, trade)
     }
