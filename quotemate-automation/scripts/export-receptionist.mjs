@@ -39,31 +39,77 @@ const SRC_PKG = JSON.parse(readFileSync(join(SRC_ROOT, 'package.json'), 'utf8'))
 // keeps. electrical/plumbing/solar keep neither: they run the general
 // Sonnet dialog (lib/sms/dialog.ts), which is the spine of the route and
 // is never removed.
+// `dialog` is the TRADE-ISOLATION control, added 2026-08-05 after the audit
+// found every service running the shared electrical/plumbing dialog scoped by
+// tenants.trades[] rather than by the service's own trade.
+//
+//   dialog: 'electrical'  the general dialog RUNS here, hard-scoped to that
+//                         trade — tradeScopeDirective's existing
+//                         "ELECTRICAL jobs ONLY. They do NOT do plumbing"
+//                         branch fires instead of the permissive "BOTH" one.
+//   dialog: null          the general dialog does NOT run. The service's own
+//                         handler owns every turn; anything it declines gets a
+//                         trade-scoped holding reply (see `holding`) and NO
+//                         intake is minted, because a holding decision is
+//                         action:'ask' and sideEffectsAllowed requires 'finish'.
+//
+// Why a holding reply rather than handing the turn back to the Front Desk:
+// the Front Desk would re-decide from identical inputs and could route
+// straight back (a loop needing new "already tried" state), and single-trade
+// tenants are deployed pointing DIRECTLY at their receptionist with no Front
+// Desk in the path at all.
 const TRADES = {
   electrical: {
     handlers: [],
+    dialog: 'electrical',
     port: 3101,
     blurb: 'Electrical SMS AI receptionist — general dialog intake → Opus estimation → G/B/B quote.',
   },
   plumbing: {
     handlers: [],
+    dialog: 'plumbing',
     port: 3102,
     blurb: 'Plumbing SMS AI receptionist — general dialog intake → Opus estimation → G/B/B quote.',
   },
   roofing: {
     handlers: ['roofing'],
+    dialog: null,
+    // Claims only what is TRUE at this point in the turn: the message is
+    // persisted (sms_messages) and visible on the tradie's dashboard. It does
+    // NOT promise an SMS notification — a holding decision is action:'ask',
+    // so no tradie-notify fires. Wiring an out-of-trade notification is a
+    // follow-up, and the copy must not run ahead of it.
+    holding:
+      "Thanks for getting in touch. This number handles roofing quotes — if you'd like a roof done, send me the property address and I'll get started on it. I've saved your message for the team either way.",
     port: 3103,
     blurb: 'Roofing SMS AI receptionist — address → measure → deterministic price → /q/roof quote.',
   },
   painting: {
     handlers: ['painting'],
+    dialog: null,
+    holding:
+      "Thanks for getting in touch. This number handles painting quotes — if you'd like something painted, tell me what needs doing and the address and I'll get started on it. I've saved your message for the team either way.",
     port: 3104,
     blurb: 'Painting SMS AI receptionist — gather → deterministic estimate → tradie-released quote.',
   },
   solar: {
     handlers: [],
+    // Solar has NO SMS gather — not here and not in the monolith, where
+    // "solar quote please" is a documented dead lead. Its intake is the
+    // /solar/[tenantSlug] web form, which collects the address and roof
+    // facts the deterministic engine needs. So the receptionist captures the
+    // lead and hands over the form rather than pretending to quote, and
+    // rather than falling through to the electrical dialog as it does today.
+    dialog: null,
+    // No URL: the solar estimator lives at /solar/<tenant id>, and the dialog
+    // call carries no tenant identity, so a link cannot be built here without
+    // widening the shared signature. Texting an unbuildable or guessed link is
+    // exactly what the grounding validator exists to stop. Threading tenant.id
+    // through and adding the estimator link is the documented follow-up.
+    holding:
+      "Thanks for getting in touch about solar. I've saved your details for the team and they'll sort out a quote for you. If you can tell me the property address, that speeds things up.",
     port: 3105,
-    blurb: 'Solar SMS AI receptionist — general dialog intake, wired to the deterministic solar engine.',
+    blurb: 'Solar SMS AI receptionist — captures the enquiry; quoting is handled by the solar estimator, not by SMS.',
   },
 }
 
@@ -365,6 +411,195 @@ function redirectEngineCalls(src) {
       '${process.env.APP_URL}/api/estimate/draft',
       '${process.env.ENGINE_BASE_URL ?? process.env.APP_URL}/api/estimate/draft',
     )
+}
+
+// ── trade isolation ──────────────────────────────────────────────────────
+// THE PROBLEM (audit, 2026-08-05). Deleting the other trades' HANDLERS was
+// never enough. Underneath them sits the shared electrical/plumbing Sonnet
+// dialog, which is the spine of the route and so is never carved out. It is
+// scoped by `tenantTrades: tenant?.trades` — the TENANT's trade list from the
+// database, not the service's own trade. Consequences measured in the audit:
+//
+//   · the painting service answers "6 downlights please" with the electrical
+//     dialog and mints a priced ELECTRICAL quote with a Stripe link;
+//   · the solar service has no solar SMS flow at all, so 100% of its traffic
+//     is served by that same electrical/plumbing dialog;
+//   · with tenant null (unmapped number) the scope defaults to BOTH trades.
+//
+// THE FIX. Route the single `decideNextTurn` import through a generated,
+// per-service wrapper. One import specifier changes; the 3,900-line route is
+// untouched. The wrapper either hard-scopes the dialog to this service's trade
+// (electrical/plumbing) or refuses to run it at all and returns a holding
+// decision (roofing/painting/solar).
+//
+// Why a wrapper and not surgery on the call site: the call passes 14 args
+// across 40 lines, and a text transform inside that block is exactly the kind
+// of brittle edit that breaks silently on the next monorepo change. Swapping a
+// module specifier is verifiable by grep.
+function scopeDialogToService(src) {
+  return src.replace(
+    "import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'",
+    "import { decideNextTurn, scopeTenantTrades, type ConversationTurn } from '@/lib/sms/service-dialog'",
+  )
+}
+
+// The slot extractor is a SECOND Sonnet call given the same tenant trade list.
+// Its trade-scope hint has NO else-branch (extract-slots.ts): a tenant holding
+// neither 'electrical' nor 'plumbing' falls through to "this tradie covers
+// PLUMBING jobs ONLY", so on a roofing-only tenant the extractor runs as a
+// plumbing receptionist and writes plumbing job_types into conversation_state
+// — which the intake handoff then reads.
+//
+// Both `tenantTrades:` sites are routed through scopeTenantTrades() rather
+// than a literal list, and that indirection is deliberate:
+//
+//   · electrical/plumbing → returns the service's one trade, so the extractor
+//     and the dialog both get the correct "<TRADE> jobs ONLY" branch;
+//   · roofing/painting/solar → DIALOG_TRADES is null, so it PASSES THE TENANT
+//     LIST THROUGH unchanged. Substituting ['roofing'] here would swap one
+//     wrong hint for another (straight into that missing else-branch), and
+//     fixing it properly means adding an else to shared monorepo code the
+//     monolith also runs. The dialog itself is already neutralised by the
+//     wrapper, so nothing is lost by leaving the extractor as it was.
+function scopeSlotExtractor(src) {
+  return src.replaceAll(
+    'tenantTrades: tenant?.trades,',
+    'tenantTrades: scopeTenantTrades(tenant?.trades),',
+  )
+}
+
+// The plan-estimation short-circuit is an ELECTRICAL plan take-off feature —
+// buildPlanUploadSms texts "Upload your electrical plan PDF … every light,
+// power point and data point counted off the drawing". It runs BEFORE the
+// conversation is even loaded, and its only gate is the tenant's
+// `sms_estimator_enabled` column: no trade check anywhere. So on a tenant with
+// that toggle on, "do you do take-offs?" is answered with an electrical
+// upload link by the roofing, painting and solar services alike, and the
+// service's own handler never sees the message.
+//
+// Gate it on the service trade for every non-electrical carve. Left fully
+// intact in the electrical service, where it belongs.
+// REMOVED, not disabled. A `false &&` guard was the first attempt and it broke
+// the build in four services: TypeScript narrows `tenant` to non-null from
+// `tenant?.sms_estimator_enabled`, and short-circuiting ahead of that narrowing
+// left `TenantRow | null` flowing into a `TenantRow` parameter. Deleting the
+// block is both what we mean and what compiles.
+function gatePlanEstimation(src, trade) {
+  if (trade === 'electrical') return src
+  const anchor = 'if (tenant?.sms_estimator_enabled) {'
+  const at = src.indexOf(anchor)
+  if (at === -1) {
+    throw new Error(`gatePlanEstimation: anchor not found — the plan-estimation guard moved (${trade})`)
+  }
+  const open = src.indexOf('{', at)
+  const close = matchBrace(src, open)
+  return (
+    src.slice(0, at) +
+    `// TRADE ISOLATION: the plan-estimation short-circuit is an ELECTRICAL\n` +
+    `  // plan take-off (it texts "upload your electrical plan PDF"). It ran\n` +
+    `  // before this service's own handler and was gated only on the tenant's\n` +
+    `  // sms_estimator_enabled column, with no trade check — so it is removed\n` +
+    `  // from the ${trade} carve entirely.\n` +
+    src.slice(close + 1)
+  )
+}
+
+/** The generated per-service dialog wrapper. */
+function serviceDialogModule(trade, cfg) {
+  const scoped = cfg.dialog
+    ? `[${JSON.stringify(cfg.dialog)}]`
+    : 'null'
+  const holding = JSON.stringify(cfg.holding ?? '')
+  return `// GENERATED by scripts/export-receptionist.mjs — do not hand-edit.
+//
+// TRADE ISOLATION for the ${trade} service. The route's ONE call to
+// decideNextTurn is routed through here instead of straight to
+// lib/sms/dialog.ts, so the shared electrical/plumbing dialog can never run
+// outside the trade this deployment owns.
+
+import { decideNextTurn as generalDialog, type ConversationTurn } from './dialog'
+
+export type { ConversationTurn }
+
+/** The one trade this deployment owns. Cosmetic elsewhere; load-bearing here. */
+export const SERVICE_TRADE = ${JSON.stringify(trade)} as const
+
+/**
+ * Trades the shared electrical/plumbing dialog may quote in this service.
+ *
+ * A one-element list replaces the route's \`tenant?.trades\`, so
+ * tradeScopeDirective picks its "<TRADE> jobs ONLY" branch instead of the
+ * permissive "BOTH electrical AND plumbing" one — and instead of whatever
+ * eight-trade list the tenant row happens to carry.
+ *
+ * \`null\` means the general dialog does not belong in this service at all.
+ */
+const DIALOG_TRADES: readonly string[] | null = ${scoped}
+
+/** Sent when a turn reaches here in a service whose own handler declined it. */
+const HOLDING_REPLY = ${holding}
+
+/**
+ * Scope the trade list handed to the dialog AND to the slot extractor.
+ *
+ * Returns this service's single trade when the general dialog belongs here.
+ * When it does not (DIALOG_TRADES === null) the tenant list PASSES THROUGH
+ * unchanged: the extractor's trade hint has no branch for roofing/painting/
+ * solar and would fall through to its plumbing default, so narrowing it would
+ * trade one wrong hint for another. The dialog is already neutralised by
+ * decideNextTurn below, which is where the customer-facing risk actually was.
+ */
+// Generic so the caller's element type survives: both call sites are typed
+// \`readonly ('electrical'|'plumbing')[] | undefined\`, and returning a bare
+// string[] would not assign.
+export function scopeTenantTrades<T extends string>(
+  tenantTrades: readonly T[] | undefined,
+): readonly T[] | undefined {
+  return (DIALOG_TRADES as readonly T[] | null) ?? tenantTrades
+}
+
+/**
+ * Same signature and return shape as the underlying dialog, so the route is
+ * unchanged.
+ *
+ * When DIALOG_TRADES is null we never call the model.
+ *
+ * The action is \`end_conversation\`, and that choice is load-bearing rather
+ * than cosmetic. \`action: 'ask'\` was the obvious first attempt and it FAILED
+ * a live test: the holding text was generated correctly and then overwritten
+ * downstream by the Rule 5 guard, which rewrites any steering reply that has
+ * not yet collected a first name — so the painting service still answered a
+ * downlights enquiry with "quick one, what's your first name?".
+ *
+ * \`end_conversation\` is the one action the route treats as terminal, and its
+ * own comment states the contract: "Status='done', NO intake handoff, NO
+ * recovery SMS, NO photo SMS". It also clears \`isDialogSteering\`, so the
+ * Rule 5/6 name and suburb guards do not fire, and the readiness gate is
+ * already limited to \`action === 'finish'\`. The reply is dispatched and
+ * recorded; nothing is quoted, in any trade.
+ */
+export async function decideNextTurn(
+  args: Parameters<typeof generalDialog>[0],
+): Promise<Awaited<ReturnType<typeof generalDialog>>> {
+  if (!DIALOG_TRADES) {
+    console.log('[service-dialog] general dialog is disabled in this service — holding reply', {
+      service_trade: SERVICE_TRADE,
+    })
+    return {
+      action: 'end_conversation',
+      job_type_guess: 'unknown',
+      reply_to_send: HOLDING_REPLY,
+      assumptions_made: [],
+      ready_for_intake: false,
+      request_photo_link: false,
+      offer_product_choice: false,
+      reason_for_escalation: null,
+    } as Awaited<ReturnType<typeof generalDialog>>
+  }
+  // Hard-scope: the tenant's trade list never reaches the dialog prompt.
+  return generalDialog({ ...args, tenantTrades: DIALOG_TRADES })
+}
+`
 }
 
 // ── source trimming ──────────────────────────────────────────────────────
@@ -1727,8 +1962,20 @@ function buildTrade(trade, opts) {
       src = stripUnusedImports(src)
     }
     src = redirectEngineCalls(src)
+    if (r.trim) {
+      // Neither of these touches an import specifier, so both are safe to
+      // apply before the closure scan.
+      src = scopeSlotExtractor(src)
+      src = gatePlanEstimation(src, trade)
+    }
+    // The dialog rewrite IS an import-specifier change, and it points at a
+    // module this script GENERATES — which does not exist upstream. Scan the
+    // closure with the original `@/lib/sms/dialog` specifier (the walker must
+    // still pull dialog.ts in, since the wrapper imports it) and apply the
+    // rewrite only to the text actually written, where it resolves.
+    const written = r.trim ? scopeDialogToService(src) : src
     // Keep the pre-shim text for closure scanning; shim only on write.
-    generated.push({ path: join(SRC_ROOT, r.from), out: r.to, raw: src, text: denextify(src, r.to) })
+    generated.push({ path: join(SRC_ROOT, r.from), out: r.to, raw: src, text: denextify(written, r.to) })
   }
 
   // 2. Closure over the trimmed routes + forced trade engines.
@@ -1796,6 +2043,9 @@ function buildTrade(trade, opts) {
     write(rel, f.endsWith('.json') ? text : denextify(text, rel))
   }
   for (const g of generated) write(g.out, g.text)
+
+  // Trade isolation: the per-service dialog wrapper the route now imports.
+  write('src/lib/sms/service-dialog.ts', serviceDialogModule(trade, cfg))
 
   write('src/runtime/after.ts', tpl.after())
   write('src/runtime/web-request.ts', tpl.webRequest())
