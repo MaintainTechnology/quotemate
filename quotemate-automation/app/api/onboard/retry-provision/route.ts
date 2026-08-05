@@ -17,6 +17,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { setTwilioSmsWebhook } from '@/lib/twilio/set-sms-webhook'
+import { smsWebhookUrl } from '@/lib/twilio/provision'
 import { isStubTwilioNumber, isStubVapiId } from '@/lib/onboard/health'
 import { computePreflight } from '@/lib/onboard/preflight-logic'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
@@ -63,25 +64,26 @@ export async function POST(req: Request) {
   // Fast path: already fully provisioned. We still reset the SMS
   // webhook on every hit because Vapi's /phone-number registration has
   // a history of rewriting Twilio's SmsUrl to api.vapi.ai/twilio/sms
-  // (its AI-SMS feature) — and we always want inbound texts to land
-  // at /api/sms/inbound so our tenant lookup + intake structurer run.
-  // Tradies stuck with the wrong webhook can hit Retry and have it
-  // self-heal without re-running Twilio purchase or Vapi assistant
-  // creation.
+  // (its AI-SMS feature). Tradies stuck with the wrong webhook can hit
+  // Retry and have it self-heal without re-running Twilio purchase or
+  // Vapi assistant creation.
+  //
+  // ⚠ Cutover 2026-08-05: this reclaim must target the FRONT DESK, not this
+  // app. It previously rebuilt the URL from APP_URL, which means every Retry
+  // press would have quietly dragged that tenant back off the new system and
+  // onto the now-disabled in-app receptionist — a self-healing path that
+  // healed toward the wrong target. smsWebhookUrl() is the single source of
+  // truth, shared with lib/twilio/provision.ts.
   if (tenant.twilio_sms_number && tenant.vapi_assistant_id) {
-    const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
     let smsWarning: string | undefined
-    if (appUrl) {
+    {
       const smsHook = await setTwilioSmsWebhook({
         phoneNumber: tenant.twilio_sms_number,
-        smsUrl: `${appUrl}/api/sms/inbound`,
+        smsUrl: smsWebhookUrl(),
       })
       if (!smsHook.ok) {
         smsWarning = `SMS webhook reclaim failed: ${smsHook.reason}`
       }
-    } else {
-      smsWarning =
-        'APP_URL / NEXT_PUBLIC_APP_URL not set — cannot reclaim SMS webhook.'
     }
     // A2: even on the fast path, a pre-existing stub number/assistant means
     // the tenant is NOT production-ready — never report it as complete.

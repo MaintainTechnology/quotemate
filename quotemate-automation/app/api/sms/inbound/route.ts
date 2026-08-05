@@ -74,6 +74,7 @@ import {
   shouldEngagePainting,
   expireIdlePaintingState,
   isActivePaintingFlow,
+  paintingTurnIsDeterministic,
   type PaintingConversationState,
 } from '@/lib/sms/painting-receptionist'
 import {
@@ -1052,7 +1053,13 @@ async function handlePaintingTurn(args: {
   // Same conversation layer as the roofing handler: flag OFF ⇒ the
   // deterministic call this route has always made; flag ON ⇒ Sonnet 5 picks
   // the tool and any failure falls back to that same call for this turn.
-  const useLlm = !!args.tenantFacts && llmReceptionistEnabled(tenantId)
+  // Two turns pre-empt the model regardless of the flag (spec 2026-08-05):
+  // the opener (so the form-offer opener with BOTH paths always goes out)
+  // and an explicit "use the form" reply parked at offer_form.
+  const useLlm =
+    !paintingTurnIsDeterministic(prevState, latestInbound) &&
+    !!args.tenantFacts &&
+    llmReceptionistEnabled(tenantId)
   const turn = useLlm
     ? await paintingTurnViaLlm({
         prev: prevState,
@@ -1277,7 +1284,52 @@ async function handlePaintingTurn(args: {
   return false
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// RETIRED 2026-08-05 — the in-app SMS receptionist is OFF.
+//
+// Every tenant-owned number now points at the Front Desk service, which
+// identifies tenant + trade and forwards the turn to that trade's own
+// receptionist (qm-front-desk → qm-<trade>-receptionist on Railway). Verified
+// by real SMS on Ricardos Roofing and Atomic Electrical before this switch.
+//
+// DISABLED BY DEFAULT, deliberately. An env-var-to-disable would have left the
+// old receptionist live until someone set a dashboard variable, so a moment of
+// dual-brain overlap — two systems able to answer the same customer — would
+// have depended on a manual step. Default-off makes the retirement atomic with
+// the deploy.
+//
+// The code is retained, not deleted, because it is the rollback path. To bring
+// it back: set SMS_RECEPTIONIST_ENABLED=1 in Vercel, then repoint the numbers
+// (previous values recorded at cutover). Both steps are needed — the flag alone
+// changes nothing while Twilio is pointed elsewhere.
+//
+// The ack below is a 200 with empty TwiML on purpose. A 4xx/5xx would make
+// Twilio retry every stray inbound on a schedule, and a stray here means a
+// misconfigured number, not a transient fault — retrying cannot fix it. The
+// error-level log is the alarm.
+// ─────────────────────────────────────────────────────────────────────────
+const RECEPTIONIST_ENABLED = process.env.SMS_RECEPTIONIST_ENABLED === '1'
+
+const RETIRED_ACK = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
+
 export async function POST(req: Request) {
+ if (!RECEPTIONIST_ENABLED) {
+   // Read the body only to name the number in the log — nothing is processed,
+   // no reply is sent, no row is written.
+   let to = 'unknown'
+   let from = 'unknown'
+   try {
+     const p = parseTwilioForm(await req.text())
+     to = p.To ?? 'unknown'
+     from = p.From ?? 'unknown'
+   } catch { /* body shape is irrelevant here */ }
+   console.error('[sms/inbound] RETIRED — in-app receptionist is disabled; this number should point at the Front Desk', {
+     to,
+     from: from.slice(0, 8) + '…',
+     expected_webhook: 'https://qm-front-desk-production.up.railway.app/api/sms/inbound',
+   })
+   return new Response(RETIRED_ACK, { status: 200, headers: { 'content-type': 'text/xml' } })
+ }
  try {
   console.log('[sms/inbound] step 1 — reading body')
   // 1. Read raw body (needed for both signature check and field parsing).

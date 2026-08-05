@@ -11,6 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkTradeReadiness } from './trade-readiness'
 import { isStubTwilioNumber, isStubVapiId } from './stub-detect'
+import { smsWebhookUrl } from '@/lib/twilio/provision'
 
 // ── Stub artifact detection ────────────────────────────────────────────
 // The shape detectors now live in one shared module (./stub-detect) so
@@ -251,23 +252,29 @@ export async function checkTenantHealth(
         : undefined,
   })
 
-  // 7. SMS webhook → /api/sms/inbound (best-effort; only when asked + verifiable)
+  // 7. SMS webhook → the Front Desk (best-effort; only when asked + verifiable)
   //    Skip the live Twilio call for an obvious stub number — the shape is used
   //    here only to avoid a pointless API round-trip, never as a verdict.
-  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
+  //    APP_URL is deliberately NOT consulted: since the 2026-08-05 cutover the
+  //    expected target is the Front Desk service, which is unrelated to this
+  //    app's own URL.
   const canCheckWebhook =
     !!opts.checkWebhook &&
     !!tenant.twilio_sms_number &&
     !isStubTwilioNumber(tenant.twilio_sms_number) &&
     !!process.env.TWILIO_ACCOUNT_SID &&
-    !!process.env.TWILIO_AUTH_TOKEN &&
-    !!appUrl
+    !!process.env.TWILIO_AUTH_TOKEN
   if (canCheckWebhook) {
-    const expected = `${appUrl}/api/sms/inbound`
+    // Cutover 2026-08-05: the expected target is the Front Desk service, not
+    // this app. Left comparing against `APP_URL/api/sms/inbound` this check
+    // would report EVERY correctly cut-over tenant as broken, and would pass
+    // only for tenants still stranded on the disabled in-app receptionist —
+    // an inverted health check is worse than none.
+    const expected = smsWebhookUrl()
     const actual = await fetchTwilioSmsUrl(tenant.twilio_sms_number!)
     checks.push({
       key: 'sms_webhook',
-      label: 'Twilio SMS webhook → /api/sms/inbound',
+      label: 'Twilio SMS webhook → Front Desk',
       level: 'required',
       ok: actual === expected,
       detail: actual === expected ? undefined : `SmsUrl is "${actual ?? 'unknown'}", expected "${expected}"`,

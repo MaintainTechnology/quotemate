@@ -30,6 +30,7 @@ import {
 } from '@/lib/vapi/register-number'
 import { sendWelcomeSms, type WelcomeSmsResult } from '@/lib/twilio/welcome-sms'
 import { setTwilioSmsWebhook } from '@/lib/twilio/set-sms-webhook'
+import { smsWebhookUrl } from '@/lib/twilio/provision'
 import { provisionTenantStore } from '@/lib/filestore/tenant-provision'
 import { isStubTwilioNumber, isStubVapiId } from './stub-detect'
 import { after } from 'next/server'
@@ -185,19 +186,23 @@ export async function runProvisioning(
   // ── 3b. Reclaim the SMS webhook from Vapi ────────────────────────
   // When Vapi accepts a Twilio number via /phone-number it ALSO
   // rewrites Twilio's SmsUrl to api.vapi.ai/twilio/sms so it can offer
-  // AI-SMS. We don't use that path — every inbound text must hit our
-  // /api/sms/inbound so the tenant lookup + intake structurer run. So
-  // immediately after registration we POST the SmsUrl back to ours.
+  // AI-SMS. We don't use that path, so immediately after registration we
+  // POST the SmsUrl back to the SMS receptionist.
+  //
+  // ⚠ Cutover 2026-08-05: "ours" is now the FRONT DESK service, not this app.
+  // This used to rebuild the URL from APP_URL, which would have provisioned
+  // every new tenant onto the in-app receptionist that is now disabled —
+  // born broken. smsWebhookUrl() is shared with lib/twilio/provision.ts so
+  // there is one source of truth for where inbound SMS goes.
   //
   // Non-fatal: assistant + number still exist with status=active. If
   // this step fails, inbound voice keeps working; only inbound SMS is
   // misrouted until someone retries provisioning (or fixes it via the
   // Twilio console).
-  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
-  if (appUrl && !stubbedTwilio) {
+  if (!stubbedTwilio) {
     const smsHook = await setTwilioSmsWebhook({
       phoneNumber,
-      smsUrl: `${appUrl}/api/sms/inbound`,
+      smsUrl: smsWebhookUrl(),
     })
     if (!smsHook.ok) {
       const note = `SMS webhook reclaim failed: ${smsHook.reason}`

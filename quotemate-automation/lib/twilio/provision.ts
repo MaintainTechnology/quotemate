@@ -31,6 +31,23 @@ const COUNTRY = 'AU' as const
 // and never changes per-deployment.
 const VAPI_INBOUND_VOICE_URL = 'https://api.vapi.ai/twilio/inbound_call'
 
+/** Where inbound SMS is delivered, for every number this app provisions.
+ *
+ *  Cutover 2026-08-05: the SMS receptionist moved out of this app into the
+ *  Front Desk service, which identifies tenant + trade and forwards to that
+ *  trade's own receptionist. The in-app route is disabled, so a number
+ *  provisioned against `${APP_URL}/api/sms/inbound` would be born dead — this
+ *  is deliberately NOT derived from APP_URL for that reason.
+ *
+ *  Set SMS_WEBHOOK_URL to move it (a Front Desk custom domain, or back to the
+ *  monolith if the cutover is ever reversed). */
+const FRONT_DESK_SMS_WEBHOOK =
+  'https://qm-front-desk-production.up.railway.app/api/sms/inbound'
+
+export function smsWebhookUrl(): string {
+  return process.env.SMS_WEBHOOK_URL || FRONT_DESK_SMS_WEBHOOK
+}
+
 export type NumberCapabilities = {
   voice: boolean
   sms: boolean
@@ -165,8 +182,12 @@ export async function provisionTwilioNumber(opts: {
 
     // ── 2. Attempt to purchase the candidate ───────────────────────
     //
-    //   SmsUrl   → our /api/sms/inbound (Twilio posts inbound SMS here;
-    //              handled in-process by the tenant lookup pipeline)
+    //   SmsUrl   → the SMS receptionist webhook. Since the 2026-08-05 cutover
+    //              this is the Front Desk service, NOT this app: the in-app
+    //              receptionist is disabled (see app/api/sms/inbound/route.ts).
+    //              A newly provisioned number MUST be born on the new system —
+    //              pointing it here would land it on a dead route.
+    //              Override with SMS_WEBHOOK_BASE_URL if the Front Desk moves.
     //   VoiceUrl → Vapi's hosted Twilio inbound endpoint; Vapi looks up
     //              the assistant by destination number after we register
     //              the number with Vapi (lib/vapi/register-number.ts).
@@ -180,7 +201,7 @@ export async function provisionTwilioNumber(opts: {
     if (attempt.numberType === 'Mobile' && bundleSid) {
       purchaseBody.set('BundleSid', bundleSid)
     }
-    purchaseBody.set('SmsUrl', `${appUrl}/api/sms/inbound`)
+    purchaseBody.set('SmsUrl', smsWebhookUrl())
     purchaseBody.set('SmsMethod', 'POST')
     purchaseBody.set('VoiceUrl', VAPI_INBOUND_VOICE_URL)
     purchaseBody.set('VoiceMethod', 'POST')
