@@ -39,6 +39,11 @@
     ".next-codex-roof-overlay/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    // NestJS templates consumed by scripts/export-receptionist.mjs via
+    // readFileSync — never imported here. They target the carved services'
+    // runtime (@nestjs/*), which this monorepo deliberately does not install,
+    // so type-checking them fails the Next build.
+    "scripts/web-surface"
   ]
 }
