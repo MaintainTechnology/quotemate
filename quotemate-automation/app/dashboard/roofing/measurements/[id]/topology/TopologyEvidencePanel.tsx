@@ -107,7 +107,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-text-sec">{disclaimer}</p>
         </div>
-        <span className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
+        <span className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
           Dashboard only
         </span>
       </div>
@@ -150,7 +150,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                 />
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
+                    <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
                       {structure.role === 'primary' ? 'Primary pricing structure' : 'Secondary structure'} · {String(structure.structureIndex).padStart(2, '0')}
                     </div>
                     <div className="mt-1 font-semibold text-text-pri">{structure.label}</div>
@@ -195,7 +195,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                 activeCandidateId={activeCandidateId}
               />
               <figcaption className="border-t border-ink-line bg-ink-card px-5 py-4">
-                <div className="font-mono text-micro font-semibold uppercase tracking-[0.15em] text-text-dim">
+                <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em] text-text-dim">
                   Facet assignment evidence
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-text-sec">
@@ -205,7 +205,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
             </figure>
 
             <aside className="border border-ink-line bg-ink-deep p-5" aria-live="polite">
-              <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">Selected evidence</div>
+              <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Selected evidence</div>
               {activeCandidate ? <CandidateDetail candidate={activeCandidate} /> : (
                 <div className="mt-4 text-sm leading-relaxed text-text-sec">
                   <p>Select a synthetic candidate frame below to inspect its length, confidence, and evidence reasons.</p>
@@ -214,7 +214,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
               )}
               {view.excludedStructures.length > 0 && (
                 <div className="mt-6 border-t border-ink-line pt-5">
-                  <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">Excluded from this preview</div>
+                  <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Excluded from this preview</div>
                   <p className="mt-2 text-sm text-text-sec">{view.excludedStructures.join(', ')}</p>
                 </div>
               )}
@@ -233,7 +233,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   className={`border bg-ink-deep p-4 text-left transition-colors ${selected ? 'border-text-pri' : 'border-ink-line hover:border-text-dim'}`}
                   style={{ borderLeftColor: summary.color, borderLeftWidth: '4px' }}
                 >
-                  <div className="font-mono text-micro font-semibold uppercase tracking-[0.15em]" style={{ color: summary.color }}>
+                  <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em]" style={{ color: summary.color }}>
                     {summary.label}s
                   </div>
                   <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -243,14 +243,14 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   <p className="mt-2 text-xs text-text-sec">
                     Candidate only · {formatMetres(summary.planLengthM)} · review required
                   </p>
-                  {summary.kind === 'eave' && <p className="mt-2 text-micro text-text-dim">Not a gutter quote</p>}
+                  {summary.kind === 'eave' && <p className="mt-2 text-[0.68rem] text-text-dim">Not a gutter quote</p>}
                 </button>
               )
             })}
           </div>
 
           <div className="mt-5 border border-ink-line bg-ink-deep p-4" aria-label="Synthetic candidate evidence frames">
-            <div className="font-mono text-micro font-semibold uppercase tracking-[0.15em] text-text-dim">Synthetic candidate frames</div>
+            <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em] text-text-dim">Synthetic candidate frames</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {view.candidates.map((candidate) => {
                 const selected = activeCandidateId === candidate.id
@@ -268,7 +268,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-mono text-xs font-bold" style={{ color: candidate.color }}>{candidate.tag}</span>
-                      <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">Candidate</span>
+                      <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">Candidate</span>
                     </div>
                     <div className="mt-2 text-sm font-semibold text-text-pri">{candidate.kind} · {formatMetres(candidate.planLengthM)}</div>
                     <div className="mt-1 text-xs text-text-sec">{candidate.confidence}% confidence · review required</div>
@@ -280,7 +280,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
 
           <div className="mt-5 flex flex-wrap gap-2" aria-label="Topology candidate legend">
             {view.legend.map((item) => (
-              <span key={item.kind} className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-sec">
+              <span key={item.kind} className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-text-sec">
                 <span aria-hidden="true" className="mr-2 inline-block h-2.5 w-2.5" style={{ backgroundColor: item.color }} />
                 {item.tagPrefix} · {item.label} · review required
               </span>
@@ -305,7 +305,7 @@ function CandidateDetail({ candidate }: { candidate: TopologyEvidenceDisplayCand
         <DetailMetric label="State" value="Candidate" />
       </div>
       <div className="mt-5">
-        <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">Evidence reasons</div>
+        <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Evidence reasons</div>
         <ul className="mt-2 space-y-1.5 text-sm text-text-sec">
           {candidate.reasons.map((reason) => <li key={reason}>· {reason}</li>)}
         </ul>
@@ -317,7 +317,7 @@ function CandidateDetail({ candidate }: { candidate: TopologyEvidenceDisplayCand
 function DetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-ink-line bg-ink-card p-3">
-      <div className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">{label}</div>
+      <div className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">{label}</div>
       <div className="mt-1 font-mono text-sm font-semibold tabular-nums text-text-pri">{value}</div>
     </div>
   )

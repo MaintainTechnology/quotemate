@@ -282,7 +282,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
   if (!hasPricingBook) {
     return (
       <div className="rounded-card border border-ink-line bg-ink-card p-6">
-        <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-warning">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
           Roof rates · pricing book missing
         </div>
         <p className="mt-2 text-base text-text-sec">
@@ -301,7 +301,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             Roof rates
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
@@ -606,7 +606,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-text-dim">
+    <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
       {children}
     </div>
   )

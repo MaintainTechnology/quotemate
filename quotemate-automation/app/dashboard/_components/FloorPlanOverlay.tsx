@@ -73,7 +73,7 @@ function Marker({
         style={{ width: 14, height: 14, borderColor: colour, backgroundColor: `${colour}40` }}
       />
       <span
-        className="mt-0.5 block whitespace-nowrap px-1 font-mono text-micro font-bold uppercase tracking-wide"
+        className="mt-0.5 block whitespace-nowrap px-1 font-mono text-[0.55rem] font-bold uppercase tracking-wide"
         // Warm-charcoal scrim, not the blue-black this carried before
         // (rgba(10,15,30)) — the Warm-Not-Blue rule applies to a label
         // backing plate as much as to a page canvas. Hardcoded rather than
@@ -152,7 +152,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
   return (
     <div className="rounded-card mt-5 border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center gap-3 border-b border-ink-line px-4 py-2.5">
-        <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
           Indicative design overlay
         </span>
         <div className="flex gap-0 border border-ink-line">
@@ -285,10 +285,10 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
                     backgroundColor: 'rgba(10, 15, 30, 0.78)',
                   }}
                 >
-                  <span className="block font-mono text-micro font-bold uppercase tracking-wide text-white">
+                  <span className="block font-mono text-[0.6rem] font-bold uppercase tracking-wide text-white">
                     {room.name}
                   </span>
-                  <span className="block whitespace-nowrap font-mono text-micro text-white/80">
+                  <span className="block whitespace-nowrap font-mono text-[0.55rem] text-white/80">
                     {load
                       ? `${room.area_m2} m² × ${ceilingHeightM} m = ${load.volume_m3} m³ → ${load.kw} kW`
                       : `${room.area_m2} m²`}
@@ -322,7 +322,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
             {w}
           </p>
         ))}
-        <p className="text-micro leading-snug text-text-dim">
+        <p className="text-[0.68rem] leading-snug text-text-dim">
           Indicative layout drawn by deterministic geometry from the plan read — duct routes, vent
           and head positions are confirmed at the site assessment.
         </p>

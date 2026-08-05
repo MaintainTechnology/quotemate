@@ -255,7 +255,7 @@ export function RoofMap({
 
       {stats && (
         <div className="rounded-card pointer-events-none absolute right-4 top-4 max-w-[18rem] border border-ink-line bg-ink-deep/95 p-4 backdrop-blur">
-          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             {multi ? 'Selected structure' : 'Geoscape measurement'}
           </div>
           <ul className="mt-3 space-y-2 font-mono text-base">
@@ -272,7 +272,7 @@ export function RoofMap({
 
       {multi ? (
         <div className="rounded-card pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
-          <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
             Structure legend
           </div>
           <ul className="mt-2 grid gap-1.5 text-xs text-text-sec">
@@ -285,7 +285,7 @@ export function RoofMap({
       ) : (
         polygon && (
           <div className="rounded-card pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
-            <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
               Edge legend
             </div>
             <ul className="mt-2 grid gap-1.5 text-xs text-text-sec">
@@ -300,7 +300,7 @@ export function RoofMap({
 
       {onRecenter && (
         <div className="rounded-card pointer-events-none absolute bottom-4 right-4 border border-ink-line bg-ink-deep/95 px-3 py-2 backdrop-blur">
-          <span className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
             {multi ? 'Click the map to add / re-measure a building' : 'Click any building to re-measure'}
           </span>
         </div>
@@ -455,7 +455,7 @@ function unionBBox(polygons: Array<GeoJSONPolygon | null>): BBox | null {
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <li className="flex items-baseline justify-between gap-4">
-      <span className="text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</span>
+      <span className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</span>
       <span className="font-bold text-text-pri">{value}</span>
     </li>
   )

@@ -84,7 +84,7 @@ export function SignageNav({ active, brandSlug }: { active: SignageSection; bran
 
 export function Crumbs({ trail }: { trail: Array<{ label: string; href?: string }> }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-3 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
+    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
       {trail.map((c, i) => (
         <span key={c.label} className="flex items-center gap-3">
           {i > 0 && <span className="text-ink-line" aria-hidden="true">/</span>}
@@ -104,7 +104,7 @@ export function Crumbs({ trail }: { trail: Array<{ label: string; href?: string 
 export function SectionHeading({ eyebrow, title, hint }: { eyebrow: string; title: string; hint?: string }) {
   return (
     <div>
-      <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</div>
+      <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</div>
       <h2 className="mt-3 font-extrabold uppercase leading-[1.1] tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)]">{title}</h2>
       {hint && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">{hint}</p>}
     </div>
@@ -132,10 +132,10 @@ export const BTN_GHOST =
   'inline-flex items-center justify-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50'
 
 export const BTN_GHOST_SM =
-  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50'
+  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50'
 
 export const BTN_DANGER_SM =
-  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors hover:border-warning-bright hover:text-warning-bright disabled:cursor-not-allowed disabled:opacity-50'
+  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors hover:border-warning-bright hover:text-warning-bright disabled:cursor-not-allowed disabled:opacity-50'
 
 /* ── Status language — one vocabulary across every signage surface ──── */
 
@@ -212,7 +212,7 @@ export function Tally({ label, value, tone }: { label: string; value: number; to
   return (
     <div className="rounded-card border border-ink-line bg-ink-card p-4 text-center">
       <div className={`font-mono text-3xl font-bold tabular-nums ${TONE_TEXT[tone]}`}>{value}</div>
-      <div className="mt-1 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">{label}</div>
+      <div className="mt-1 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-text-dim">{label}</div>
     </div>
   )
 }
@@ -257,7 +257,7 @@ export function ComplianceBar({
       {legend && (
         <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5" aria-hidden="true">
           {visible.map((s) => (
-            <span key={s.key} className="inline-flex items-center gap-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">
+            <span key={s.key} className="inline-flex items-center gap-2 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
               <span className={`h-2 w-2 ${s.cls}`} />
               {s.label} <span className="tabular-nums text-text-sec">{s.count}</span>
             </span>

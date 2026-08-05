@@ -132,7 +132,7 @@ export default function MarketingPage() {
             <BrandMark className="h-10 w-auto" />
             <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
           </div>
-          <Link href="/dashboard" className="flex items-center gap-2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri">
+          <Link href="/dashboard" className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri">
             <span aria-hidden>←</span> Dashboard
           </Link>
         </div>
@@ -171,7 +171,7 @@ export default function MarketingPage() {
               <button type="button" onClick={saveSlug} disabled={slugSaving} className={GHOST}>
                 {slugSaving ? 'Saving…' : 'Save'}
               </button>
-              {slug && <span className="font-mono text-micro uppercase tracking-[0.14em] text-success">● Live</span>}
+              {slug && <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-success">● Live</span>}
             </div>
             <p className="mt-2.5 text-xs text-text-dim">Auto-set from your business name. This is where the “landing page” QR sends customers.</p>
           </Panel>
@@ -209,7 +209,7 @@ export default function MarketingPage() {
           >
             {customerQrs.map((q) => (
               <tr key={q.id} className="border-b border-ink-line/50 align-top last:border-0">
-                <td className="px-4 py-3.5 text-text-pri">{q.label}<div className="mt-0.5 font-mono text-micro text-text-dim">/s/{q.short_code}</div></td>
+                <td className="px-4 py-3.5 text-text-pri">{q.label}<div className="mt-0.5 font-mono text-[0.62rem] text-text-dim">/s/{q.short_code}</div></td>
                 <td className="px-4 py-3.5 text-text-sec">{q.destination_type === 'sms' ? 'SMS' : 'Landing page'}</td>
                 <td className="px-4 py-3.5"><span className="font-mono text-base font-bold text-accent">{q.scan_count}</span></td>
                 <td className="px-4 py-3.5"><StatusPill status={q.status} /></td>

@@ -345,7 +345,7 @@ function SignageHubPageInner() {
       {authState === 'no-org' && (
         <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 pb-20 sm:px-10">
           <Notice tone="accent">
-            <span className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">No org yet</span>
+            <span className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">No org yet</span>
             <p className="mt-2">
               You&rsquo;re signed in, but no franchisor org is linked to your account. Seed one with{' '}
               <code className="text-text-pri">scripts/seed-signage-demo.mjs your@email</code> then reload.
@@ -387,7 +387,7 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
     <article className={`rounded-card border border-ink-line bg-ink-card p-6 sm:p-7 ${REVEAL}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             Sweep · {sweep.required_shots.length} shot{sweep.required_shots.length === 1 ? '' : 's'}
             {created && <span className="text-text-dim"> · {created}</span>}
           </div>
@@ -426,7 +426,7 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
               {r.assessment_id && (
                 <Link
                   href={withBrand(`/dashboard/signage/queue?a=${r.assessment_id}`, brandSlug)}
-                  className="rounded-ctl inline-flex items-center justify-center bg-accent px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press"
+                  className="rounded-ctl inline-flex items-center justify-center bg-accent px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press"
                 >
                   Review
                 </Link>

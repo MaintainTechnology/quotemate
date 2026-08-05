@@ -38,13 +38,13 @@ const btnAccent = `${btn} border-accent/70 text-accent hover:bg-accent hover:tex
 const btnFill = `${btn} border-accent bg-accent text-accent-ink hover:bg-accent-press hover:border-accent-press`
 const dlLink = 'inline-flex min-h-[44px] items-center font-mono text-xs uppercase tracking-[0.12em] text-accent hover:text-accent-press'
 const btnPlain = `${btn} border-ink-line text-text-sec hover:border-accent hover:text-text-pri`
-const chip = 'inline-block font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim'
+const chip = 'inline-block font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
 
 function StepLabel({ n, label }: { n: string; label: string }) {
   return (
     <div className="flex items-baseline gap-3">
       <span className="font-mono text-2xl font-bold leading-none text-accent">{n}</span>
-      <h3 className="font-mono text-micro font-semibold uppercase tracking-[0.18em] text-text-dim">{label}</h3>
+      <h3 className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-text-dim">{label}</h3>
     </div>
   )
 }
@@ -289,7 +289,7 @@ export default function CanvaStudio({
                       <span className={chip}>{t.category}</span>
                       <span className="font-semibold leading-tight text-text-pri">{t.name}</span>
                       <span className="text-xs leading-relaxed text-text-sec">{t.description}</span>
-                      <span className="mt-auto pt-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-accent group-hover:text-accent-press">
+                      <span className="mt-auto pt-2 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-accent group-hover:text-accent-press">
                         Open in Canva ↗
                       </span>
                     </div>

@@ -79,7 +79,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
     <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             Existing solar
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
@@ -109,7 +109,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
         <div className="mt-6 space-y-5">
           {/* Confidence-aware human-readable line — what the AI saw. */}
           <div className={`flex items-baseline gap-3 ${detection.has_solar || detection.has_skylight ? '' : 'text-teal-glow'}`}>
-            <span className={`font-mono text-meta font-semibold uppercase tracking-[0.16em] ${detection.has_solar || detection.has_skylight ? 'text-accent' : 'text-teal-glow'}`}>
+            <span className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${detection.has_solar || detection.has_skylight ? 'text-accent' : 'text-teal-glow'}`}>
               {detection.has_solar || detection.has_skylight ? '◳ ' : '✓ '}{detection.summary_note}
             </span>
           </div>
@@ -124,7 +124,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
 
               {allowance && (
                 <div className={`rounded-card border ${applies ? 'border-accent/40' : 'border-warning-bright/40'} bg-ink-deep p-5`}>
-                  <div className={`font-mono text-meta font-semibold uppercase tracking-[0.16em] ${applies ? 'text-accent' : 'text-warning'}`}>
+                  <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${applies ? 'text-accent' : 'text-warning'}`}>
                     {applies ? 'Solar detach & reinstate' : 'Solar flagged — confirm on site'}
                   </div>
                   {applies ? (
@@ -155,7 +155,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
               re-flash line manually if needed. */}
           {detection.has_skylight && (
             <div className="rounded-card border border-warning-bright/40 bg-ink-deep p-5">
-              <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-warning">
+              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
                 {detection.skylight_count} skylight{detection.skylight_count === 1 ? '' : 's'} flagged
               </div>
               <p className="mt-1 text-sm text-text-sec">
@@ -188,7 +188,7 @@ function TotalCard({ label, value, sub }: { label: string; value: number; sub: s
     <div className="rounded-card border border-ink-line bg-ink-deep p-5">
       <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-accent">${formatMoney(value)}</div>
-      <div className="mt-1 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">{sub} inc GST</div>
+      <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">{sub} inc GST</div>
     </div>
   )
 }

@@ -352,7 +352,7 @@ function PaintingEstimatePageInner() {
               }}
               placeholder="Start typing — e.g. 28 Greens Rd, Coorparoo"
             />
-            <p className="mt-1.5 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
+            <p className="mt-1.5 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-text-dim">
               Pick a suggestion to auto-fill postcode &amp; state
             </p>
           </div>
@@ -440,7 +440,7 @@ function PaintingEstimatePageInner() {
       {structures.length >= 2 && (
         <section className="relative z-10 mx-auto mt-5 max-w-6xl px-6 sm:px-10">
           <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
-            <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
               Structures at this address
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
@@ -465,7 +465,7 @@ function PaintingEstimatePageInner() {
                       className="mt-1 h-4 w-4 accent-accent"
                     />
                     <span className="min-w-0">
-                      <span className="block font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
+                      <span className="block font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-accent">
                         {s.role === 'primary' ? 'Main dwelling' : 'Secondary structure'}
                       </span>
                       <span className="mt-1 block text-sm font-semibold text-text-pri">{s.label}</span>
@@ -653,7 +653,7 @@ function FrontOfHouse({
   return (
     <section className="relative z-10 mx-auto mt-5 max-w-6xl px-6 sm:px-10">
       <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
-        <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Front of the house · Google Street View
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
@@ -832,7 +832,7 @@ function PaintPreviewSection({
   return (
     <section className="relative z-10 mx-auto mt-8 max-w-6xl px-6 pb-4 sm:px-10">
       <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-8">
-        <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Visual preview · exterior repaint
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
@@ -915,7 +915,7 @@ function PaintPreviewSection({
         {/* Conversational refinement — ask for more changes */}
         {after && (
           <div className="rounded-card mt-6 border border-ink-line bg-ink-deep p-5">
-            <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">Refine the preview</div>
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Refine the preview</div>
             <p className="mt-1 text-sm text-text-sec">
               Ask for changes in plain English — e.g. &ldquo;paint the fence grey too&rdquo;, &ldquo;make the front door black&rdquo;, &ldquo;add a darker trim&rdquo;.
             </p>
@@ -980,7 +980,7 @@ function PaintPreviewSection({
         <div className="mt-6 border-t border-ink-line pt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">Fly around in 3D</div>
+              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Fly around in 3D</div>
               <p className="mt-1 max-w-2xl text-sm text-text-sec">
                 Orbit the property in Google&rsquo;s photorealistic 3D model, tinted to your colour.
                 The walls are auto-detected, so it&rsquo;s approximate — drag to orbit, scroll to zoom.
@@ -1014,7 +1014,7 @@ function ProvenanceNote({ tone, label, children }: { tone: 'warn' | 'accent'; la
   const labelColour = tone === 'warn' ? 'text-warning' : 'text-accent'
   return (
     <div className={`rounded-card mt-4 border ${border} bg-ink-card px-5 py-4`}>
-      <div className={`font-mono text-meta font-semibold uppercase tracking-[0.16em] ${labelColour}`}>{label}</div>
+      <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${labelColour}`}>{label}</div>
       <p className="mt-1 text-sm leading-relaxed text-text-sec">{children}</p>
     </div>
   )
@@ -1022,7 +1022,7 @@ function ProvenanceNote({ tone, label, children }: { tone: 'warn' | 'accent'; la
 
 function Breadcrumb() {
   return (
-    <div className="flex flex-wrap items-center gap-3 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
+    <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
       <Link href="/dashboard" className="transition-colors hover:text-text-pri">Dashboard</Link>
       <span className="text-ink-line">/</span>
       <span className="text-text-pri">Paint estimate</span>
@@ -1086,7 +1086,7 @@ function PaintProgressModal({ open, busy }: { open: boolean; busy: boolean }) {
           id="paint-progress-title"
           role="status"
           aria-live="polite"
-          className="flex items-center gap-3 font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent"
+          className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent"
         >
           {/* Accent (not white) spinner so it stays visible on the white
               ink-card in light mode as well as the dark card in dark mode. */}
@@ -1120,7 +1120,7 @@ function Spinner() {
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <div className="mb-2 font-mono text-meta font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
+  return <div className="mb-2 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
 }
 
 const INPUT =

@@ -69,7 +69,7 @@ export function PaintPreviewPanel({
           Repaint preview
         </h4>
         <span className="h-px flex-1 bg-ink-line" aria-hidden />
-        <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
           AI concept · not a colour spec
         </span>
       </div>
@@ -114,7 +114,7 @@ export function PaintPreviewPanel({
             <figure className="rounded-card border border-ink-line bg-ink-deep">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={before} alt="Site photo before repaint" className="w-full" />
-              <figcaption className="px-3 py-2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
+              <figcaption className="px-3 py-2 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
                 Before · site photo
               </figcaption>
             </figure>
@@ -123,7 +123,7 @@ export function PaintPreviewPanel({
             <figure className="rounded-card border border-ink-line bg-ink-deep">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={after} alt="AI-generated repaint concept" className="w-full" />
-              <figcaption className="px-3 py-2 font-mono text-micro uppercase tracking-[0.14em] text-accent">
+              <figcaption className="px-3 py-2 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-accent">
                 After · AI-generated concept — illustrative only
               </figcaption>
             </figure>

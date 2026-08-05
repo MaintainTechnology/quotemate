@@ -157,7 +157,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
     hint: string
   }) => (
     <label key={args.key} className="block">
-      <span className="mb-2 block font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-sec">
+      <span className="mb-2 block font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec">
         {args.label}
       </span>
       <input
@@ -186,7 +186,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             Solar rates
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
@@ -306,7 +306,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
 
       <div className="mt-6 border-t border-ink-line pt-5">
         <label className="block max-w-sm">
-          <span className="mb-2 block font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-sec">
+          <span className="mb-2 block font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec">
             GST registered
           </span>
           <select

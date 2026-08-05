@@ -230,64 +230,30 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   DASHBOARD TYPE SCALE  (spec dashboard-premium-pass R1.1)
+   DASHBOARD TYPE SCALE — REVERTED, DO NOT REINSTATE WITHOUT A REDESIGN
    ────────────────────────────────────────────────────────────────────
-   The audit found ~700 arbitrary font sizes across ~18 near-identical
-   values — text-[0.6rem]×123, [0.7rem]×114, [0.65rem]×92, [0.62rem]×81,
-   [0.78rem]×68, [0.72rem]×60, [0.55rem]×38 … nine of them between 8.8px
-   and 11.2px. Steps nobody can perceive buy no hierarchy while costing
-   all consistency, which is precisely why the cockpit read as flat and
-   uniform: everything was small and slightly different, so nothing led.
+   A `--text-micro` (11px) / `--text-meta` (13px) / `--text-section` (28px) /
+   `--text-metric` (fluid) scale was added here and applied across 796 sites
+   in app/dashboard. It was reverted on the product owner's call: the cockpit
+   came back visibly heavier and read as shouting.
 
-   ⚠ THIS BLOCK ADDS ONLY THE FOUR STEPS TAILWIND LACKS.
-   An earlier draft of this pass defined a full parallel scale
-   (--text-body at 14px, --text-lede at 16px, --text-title at 20px …). That
-   was wrong: Tailwind's text-sm IS 14px, text-base IS 16px and text-xl IS
-   20px, and those three already equal DESIGN.md's body and title steps. A
-   second name for an identical size is not a design system, it is a rename —
-   529 `text-sm` call sites would have churned for zero visual change while
-   leaving two vocabularies for one size.
+   The cause, for anyone tempted to try again: the scale collapsed nine
+   near-identical sizes between 8.8px and 11.2px into a single 11px step.
+   Individually each jump looked negligible (0.6rem → 11px is +1.4px), but
+   ~265 of the ~430 sub-11px labels moved UP, and because this UI is dense,
+   uppercase and wide-tracked, raising the whole label layer at once made
+   every panel louder. Consolidating a scale is only safe when the new step
+   is at or below the WEIGHTED MEAN of what it absorbs — here it was above it.
 
-   So the cockpit scale is Tailwind's own, with four genuine gaps filled:
+   The original arbitrary sizes (text-[0.6rem] ×123, [0.7rem] ×114,
+   [0.65rem] ×90, [0.62rem] ×81, [0.55rem] ×38 …) are restored exactly, not
+   approximated: every reverted site was mapped back through the codemod's own
+   forward table rather than guessed at.
 
-     text-micro    11px   ← NEW. Tailwind jumps 12px → 0; the dashboard has
-                            ~430 labels between 8.8px and 11.2px that need
-                            somewhere legible to land.
-     text-xs       12px      Tailwind · = DESIGN.md `label`
-     text-meta     13px   ← NEW. The 12→14 gap, where dense metadata lives.
-     text-sm       14px      Tailwind · default cockpit UI text
-     text-base     16px      Tailwind · = DESIGN.md `body`
-     text-lg       18px      Tailwind
-     text-xl       20px      Tailwind · = DESIGN.md `title`
-     text-2xl      24px      Tailwind
-     text-section  28px   ← NEW. Tab headers; Tailwind jumps 24 → 30.
-     text-metric   fluid  ← NEW. The one focal number per tab (R1.3).
-
-   ⚠ DOCUMENTED DEVIATION — text-micro at 11px.
-   DESIGN.md states "12px is the floor" for mono labels. Roughly 430 sub-12px
-   instances exist. Raising every one straight to 12px is a 25-36% increase
-   inside nav labels, count chips and fixed-width table headers, and it would
-   overflow some of them. 11px still retires the genuinely illegible 8.8px and
-   9px labels. To take the layout risk and go to a hard 12px floor instead,
-   change this one value and re-verify the affected cells.
+   If hierarchy is revisited later, the lever is NOT a uniform lift of the
+   label layer. It is making ONE element per tab genuinely large (spec R1.3)
+   and leaving everything else where it is.
    ════════════════════════════════════════════════════════════════════ */
-@theme {
-  --text-micro: 0.6875rem;               /* 11px · dense chips, table heads   */
-  --text-micro--line-height: 1.35;
-
-  --text-meta: 0.8125rem;                /* 13px · secondary sans metadata    */
-  --text-meta--line-height: 1.45;
-
-  --text-section: 1.75rem;               /* 28px · tab headers                */
-  --text-section--line-height: 1.15;
-  --text-section--letter-spacing: -0.03em;
-
-  /* The one focal number per tab (R1.3). Fluid so it leads on a laptop
-     between jobs without wrapping on a phone on site. */
-  --text-metric: clamp(2rem, 3vw, 3rem);
-  --text-metric--line-height: 0.95;
-  --text-metric--letter-spacing: -0.035em;
-}
 
 body {
   background: var(--ink-deep);

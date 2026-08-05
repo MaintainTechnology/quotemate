@@ -179,7 +179,7 @@ export function RoofTilesViewer({ token, address, postcode, state }: Props) {
     <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">Fly around in 3D</div>
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Fly around in 3D</div>
           <p className="mt-1 max-w-2xl text-sm text-text-sec">
             Orbit the property in Google&rsquo;s photorealistic 3D model — see the whole roof, access,
             tree overhang and neighbours. Drag to orbit, scroll to zoom.

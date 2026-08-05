@@ -77,7 +77,7 @@ function RoofingTopologyEvidencePageInner() {
                 </h1>
               </div>
               <div className="border border-ink-line bg-ink-card p-5 text-sm leading-relaxed text-text-sec">
-                <div className="font-mono text-micro font-semibold uppercase tracking-[0.15em] text-text-dim">Measured property</div>
+                <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em] text-text-dim">Measured property</div>
                 <p className="mt-2 font-semibold text-text-pri">{state.payload.measurement.address ?? 'Address unavailable'}</p>
                 <p className="mt-1 font-mono text-xs text-text-dim">{[state.payload.measurement.postcode, state.payload.measurement.state].filter(Boolean).join(' · ')}</p>
               </div>

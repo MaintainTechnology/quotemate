@@ -91,7 +91,7 @@ function GateNotice({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <div className="mx-auto max-w-3xl px-6 pt-20 sm:px-10">
-        <div className="flex flex-wrap items-center gap-3 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
+        <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
           <Link href="/dashboard" className="transition-colors hover:text-text-pri">
             Dashboard
           </Link>

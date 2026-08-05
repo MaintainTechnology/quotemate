@@ -360,7 +360,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
     <WorkspaceShell>
       {/* ── Header ─────────────────────────────────────────────── */}
       <header className="motion-safe:animate-[fade-up_220ms_ease-out_both]">
-        <nav aria-label="Breadcrumb" className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <nav aria-label="Breadcrumb" className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
           <Link href="/dashboard?tab=estimator" className="transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">
             QuoteMax · Estimator
           </Link>
@@ -432,7 +432,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
 
         {run.overall_note && (
           <p className="mt-5 border-t border-ink-line pt-4 text-sm text-text-sec">
-            <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
+            <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
               Model note ·{' '}
             </span>
             {run.overall_note}

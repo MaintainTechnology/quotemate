@@ -257,7 +257,7 @@ export default function SignageQueuePage() {
           <div className="grid items-start gap-8 lg:grid-cols-[1fr_1.4fr]">
             {/* Left: queue + fleet */}
             <div>
-              <h2 className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">Needs your attention</h2>
+              <h2 className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">Needs your attention</h2>
               <div className="mt-4 grid gap-3">
                 {queue.length === 0 ? (
                   <EmptyState
@@ -285,7 +285,7 @@ export default function SignageQueuePage() {
                           <div className="mt-3">
                             <ComplianceBar size="sm" legend={false} pass={q.counts.compliant} fix={q.counts.fix} review={q.counts.review} />
                           </div>
-                          <div className="mt-2 font-mono text-micro uppercase tracking-[0.12em] text-text-dim" aria-hidden="true">
+                          <div className="mt-2 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-text-dim" aria-hidden="true">
                             <span className="tabular-nums">{q.counts.compliant}</span> compliant · <span className="tabular-nums">{q.counts.fix}</span> to fix ·{' '}
                             <span className="tabular-nums">{q.counts.review}</span> review
                           </div>
@@ -296,7 +296,7 @@ export default function SignageQueuePage() {
                 )}
               </div>
 
-              <h2 className="mt-12 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">Fleet</h2>
+              <h2 className="mt-12 font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">Fleet</h2>
               <div className="mt-4 grid gap-2">
                 {fleet.map((f) => (
                   <button
@@ -364,7 +364,7 @@ function DetailPanel({
     <div className={REVEAL}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             {assessment.region ?? 'Studio'}
           </div>
           <h3 className="mt-1 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri">{assessment.studio_name}</h3>
@@ -389,7 +389,7 @@ function DetailPanel({
       )}
 
       {assessment.kb_degraded && (
-        <div className="rounded-card mt-3 border border-warning-bright/40 bg-ink-deep px-3 py-2 font-mono text-micro uppercase tracking-[0.12em] text-warning-bright">
+        <div className="rounded-card mt-3 border border-warning-bright/40 bg-ink-deep px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-warning-bright">
           ⚠ The second-stage brand-standards check did not complete for this assessment — verdicts are Step-1 (database) only.
         </div>
       )}
@@ -413,7 +413,7 @@ function DetailPanel({
                     alt={prettyGroup(p.shot_slot)}
                     className="h-24 w-32 border border-ink-line object-cover transition-[border-color,opacity] group-hover:border-accent group-hover:opacity-90"
                   />
-                  <span className="mt-1 block font-mono text-micro uppercase tracking-[0.12em] text-text-dim group-hover:text-text-sec">
+                  <span className="mt-1 block font-mono text-[0.64rem] uppercase tracking-[0.12em] text-text-dim group-hover:text-text-sec">
                     {p.shot_slot}
                   </span>
                 </button>
@@ -448,7 +448,7 @@ function DetailPanel({
                             {v.kb_citation && <span className="text-text-dim"> · {v.kb_citation}</span>}
                           </p>
                         )}
-                        <div className="mt-1 flex flex-wrap gap-2 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
+                        <div className="mt-1 flex flex-wrap gap-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
                           {v.source_citation && <span>{v.source_citation}</span>}
                           {v.applicability !== 'auto_vision' && <span>· auto-downgraded ({v.applicability.replace(/_/g, ' ')})</span>}
                         </div>
@@ -472,7 +472,7 @@ function DetailPanel({
                   <span className="text-accent" aria-hidden="true">◇</span>
                   <div className="min-w-0">
                     <p className="text-sm text-text-pri">{a.description}</p>
-                    <div className="mt-1 flex flex-wrap gap-2 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
+                    <div className="mt-1 flex flex-wrap gap-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
                       <span>{a.shot}</span>
                       {a.citation && <span>· {a.citation}</span>}
                     </div>
@@ -514,7 +514,7 @@ function DetailPanel({
           Escalate
         </button>
       </div>
-      <p className="mt-3 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
+      <p className="mt-3 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-text-dim">
         The AI flags; HQ decides. Approving does not auto-notify the studio.
       </p>
     </div>

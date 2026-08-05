@@ -107,7 +107,33 @@ outside the ramp definition introduces a non-token hue.
 
 ## Phase 1 — `bolder`
 
-### R1.1 — A type scale exists and is used
+### R1.1 — ~~A type scale exists and is used~~ REVERTED on product-owner call
+
+**Built, shipped, then reverted.** The scale was applied across 796 sites; the
+product owner reviewed the running dashboard and rejected it — the cockpit came
+back visibly heavier and read as shouting. All 697 `text-micro`/`text-meta`/
+`text-section`/`text-metric` sites were mapped back through the codemod's own
+forward table (exact originals restored, not approximated) and the four tokens
+were removed from `globals.css`.
+
+**What went wrong, so it is not repeated:** the scale collapsed nine
+near-identical sizes between 8.8px and 11.2px into one 11px step. Each
+individual jump looked negligible (`0.6rem` → 11px is +1.4px), but ~265 of the
+~430 sub-11px labels moved **up**, and in a dense uppercase wide-tracked UI
+raising the entire label layer at once makes every panel louder. The
+`--text-micro` deviation note below correctly identified the *layout* risk
+(overflow) but missed the *visual weight* risk, which is what actually bit.
+
+**Rule for any future attempt:** a consolidating step must sit at or below the
+**weighted mean** of the sizes it absorbs. 11px was above it. And hierarchy is
+not bought by lifting the label layer — it is bought by making exactly one
+element per tab genuinely large (R1.3) and leaving the rest alone.
+
+Everything below is retained as the record of what was tried.
+
+---
+
+#### Original requirement (superseded)
 
 Audit evidence: ~700 arbitrary sizes across ~18 near-identical values —
 `text-[0.6rem]`×123, `[0.7rem]`×114, `[0.65rem]`×92, `[0.62rem]`×81,

@@ -366,7 +366,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
             </p>
             {answer.citations.length > 0 && (
               <div className="mt-4 border-t border-ink-line pt-4">
-                <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
+                <div className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-text-dim">
                   Sources
                 </div>
                 <ul className="mt-2.5 grid gap-2.5">
@@ -454,7 +454,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       <div className="truncate text-sm font-semibold text-text-pri">
                         {doc.display_name ?? 'Untitled document'}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
                         <span>{doc.source_kind === 'invoice' ? 'Invoice' : 'Quote'}</span>
                         {doc.trade && (
                           <>
@@ -478,7 +478,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     <button
                       type="button"
                       onClick={() => view(doc)}
-                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <Eye size={13} />
                       View
@@ -488,7 +488,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       onClick={() => download(doc)}
                       disabled={downloading === doc.id}
                       aria-busy={downloading === doc.id}
-                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                     >
                       {downloading === doc.id ? (
                         <Loader2 size={13} className="animate-spin" />
@@ -500,7 +500,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     <button
                       type="button"
                       onClick={() => setCommentsDoc(doc)}
-                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <MessageSquare size={13} />
                       Comments{doc.comment_count ? ` (${doc.comment_count})` : ''}
@@ -561,7 +561,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                   onClick={() => download(viewerDoc)}
                   disabled={downloading === viewerDoc.id}
                   aria-busy={downloading === viewerDoc.id}
-                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                 >
                   {downloading === viewerDoc.id ? (
                     <Loader2 size={13} className="animate-spin" />

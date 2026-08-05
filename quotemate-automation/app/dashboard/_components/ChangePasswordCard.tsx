@@ -130,7 +130,7 @@ export function ChangePasswordCard() {
 
           <div className="flex items-center justify-between pt-2">
             {done ? (
-              <span className="font-mono text-micro uppercase tracking-[0.16em] text-success-bright">
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-success-bright">
                 ✓ Password updated
               </span>
             ) : (

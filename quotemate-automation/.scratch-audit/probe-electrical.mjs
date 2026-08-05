@@ -41,7 +41,10 @@ function reply(botText) {
     : /ceiling/.test(t) ? pick('flat plaster')
     : /how many|number of|qty|quantity/.test(t) ? pick('6')
     : /dimmer|switch/.test(t) ? pick('no dimmer, standard switch')
-    : /existing|replacing|already there|old light/.test(t) ? pick('replacing old halogens')
+    // This tenant only offers NEW downlight installs — a like-for-like swap is
+    // refused, so answer in scope or the dialog can never reach an intake.
+    : /new downlight install|gpos|fans|smoke alarms|outdoor lights/.test(t) ? pick('new downlight install')
+    : /existing|replacing|already there|old light|new install/.test(t) ? pick('new install, no fittings there now')
     : /roof space|manhole|access/.test(t) ? pick('yes, easy access through the manhole')
     : /warm white|cool white|colour|color|globe|led/.test(t) ? pick('warm white')
     : /inspection|\$99|book|booking/.test(t) ? pick('yes please, book it')

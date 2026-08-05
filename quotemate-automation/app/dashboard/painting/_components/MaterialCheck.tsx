@@ -68,7 +68,7 @@ export function MaterialCheck({ token, address, postcode, state, yearBuilt }: Pr
       <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
-            <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">Exterior wall material</div>
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Exterior wall material</div>
             <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">What are the walls made of?</h3>
           </div>
           <button
@@ -97,7 +97,7 @@ export function MaterialCheck({ token, address, postcode, state, yearBuilt }: Pr
             </div>
 
             <div className={`rounded-card border ${guidance.inspection ? 'border-warning-bright/40' : 'border-accent/40'} bg-ink-deep p-5`}>
-              <div className={`font-mono text-meta font-semibold uppercase tracking-[0.16em] ${guidance.inspection ? 'text-warning' : 'text-accent'}`}>
+              <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${guidance.inspection ? 'text-warning' : 'text-accent'}`}>
                 {guidance.inspection ? 'Inspection required' : 'Cost implication'}
               </div>
               <p className="mt-2 text-sm text-text-sec">{guidance.inspection ? guidance.inspection_reason : guidance.cost_note}</p>

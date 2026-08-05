@@ -122,10 +122,10 @@ export function usePagination<T>(
 }
 
 const NAV_BTN =
-  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-ink-line bg-ink-card text-text-sec font-mono text-micro uppercase tracking-[0.14em] font-bold transition-colors hover:bg-ink-deep hover:text-text-pri disabled:opacity-40 disabled:pointer-events-none cursor-pointer'
+  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-ink-line bg-ink-card text-text-sec font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors hover:bg-ink-deep hover:text-text-pri disabled:opacity-40 disabled:pointer-events-none cursor-pointer'
 
 const ACTIVE_BTN =
-  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-accent bg-accent text-white font-mono text-micro uppercase tracking-[0.14em] font-bold cursor-default'
+  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-accent bg-accent text-white font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold cursor-default'
 
 /**
  * Numbered pagination control (Prev · 1 … 4 5 6 … 12 · Next) plus an
@@ -159,7 +159,7 @@ export function PaginationControls({
       aria-label="Pagination"
       className={`mt-6 flex flex-col-reverse items-center justify-between gap-3 sm:flex-row ${className}`}
     >
-      <p className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim tabular-nums">
+      <p className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim tabular-nums">
         {total === 0 ? `0 ${unit}` : `${startIndex}–${endIndex} of ${total} ${unit}`}
       </p>
       <div className="flex items-center gap-1.5">
@@ -177,7 +177,7 @@ export function PaginationControls({
             <span
               key={`gap-${i}`}
               aria-hidden="true"
-              className="select-none px-1 font-mono text-micro text-text-dim"
+              className="select-none px-1 font-mono text-[0.7rem] text-text-dim"
             >
               {'…'}
             </span>

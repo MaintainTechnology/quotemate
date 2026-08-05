@@ -89,7 +89,7 @@ export function StatusPill({
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border font-mono font-semibold uppercase tracking-[0.12em] ${
-        compact ? 'px-2.5 py-[3px] text-micro' : 'px-3 py-1.5 text-micro'
+        compact ? 'px-2.5 py-[3px] text-[0.58rem]' : 'px-3 py-1.5 text-[0.64rem]'
       } ${TONE_CHIP[tone]}`}
     >
       {dot && (
@@ -116,7 +116,7 @@ export function SectionLabel({ children, hint }: { children: ReactNode; hint?: R
       </span>
       <span className="h-px flex-1 bg-ink-line" aria-hidden="true" />
       {hint != null && (
-        <span className="whitespace-nowrap font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
+        <span className="whitespace-nowrap font-mono text-[0.66rem] uppercase tracking-[0.1em] text-text-dim">
           {hint}
         </span>
       )}
@@ -141,7 +141,7 @@ export function StatGrid({ stats, cols = 4 }: { stats: StatCell[]; cols?: 2 | 3 
     <dl className={`grid grid-cols-2 gap-px overflow-hidden rounded-card border border-ink-line bg-ink-line ${colCls}`}>
       {stats.map((s, i) => (
         <div key={i} className={`px-5 py-4 ${s.hero ? 'bg-ink' : 'bg-ink-card'}`}>
-          <dt className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
+          <dt className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
             {s.label}
           </dt>
           <dd
@@ -151,7 +151,7 @@ export function StatGrid({ stats, cols = 4 }: { stats: StatCell[]; cols?: 2 | 3 
           >
             {s.value}
           </dd>
-          {s.hint != null && <p className="mt-1.5 font-mono text-micro text-text-dim">{s.hint}</p>}
+          {s.hint != null && <p className="mt-1.5 font-mono text-[0.66rem] text-text-dim">{s.hint}</p>}
         </div>
       ))}
     </dl>
@@ -184,14 +184,14 @@ export function HeroTotal({
     >
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
-          <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
             {eyebrow}
           </div>
           <div className="mt-2 font-mono text-4xl font-bold leading-none tabular-nums text-accent sm:text-5xl">
             {amount}
           </div>
           {caption != null && (
-            <p className="mt-2.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
+            <p className="mt-2.5 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-text-dim">
               {caption}
             </p>
           )}
@@ -219,7 +219,7 @@ export function LedgerRow({
         strong ? 'text-text-pri' : 'text-text-sec'
       }`}
     >
-      <span className="text-meta uppercase tracking-[0.08em] text-text-dim">{label}</span>
+      <span className="text-[0.78rem] uppercase tracking-[0.08em] text-text-dim">{label}</span>
       <span className={strong ? 'text-sm font-semibold' : 'text-sm'}>{value}</span>
     </div>
   )
@@ -242,6 +242,6 @@ export function DataPanel({
   )
 }
 export const THEAD_CELL =
-  'border-b border-ink-line bg-ink-deep/40 px-4 py-2.5 text-left font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim'
+  'border-b border-ink-line bg-ink-deep/40 px-4 py-2.5 text-left font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
 export const TROW = 'border-t border-ink-line/70 transition-colors hover:bg-ink-deep/50'
 export const TCELL = 'px-4 py-3 align-top text-sm'

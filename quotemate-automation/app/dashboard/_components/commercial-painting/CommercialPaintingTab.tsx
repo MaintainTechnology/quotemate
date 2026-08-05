@@ -583,7 +583,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       {/* Run-status banners — a resumed run must explain itself. */}
       {runStatus === 'failed' && !extracting && (
         <div role="alert" className="rounded-card border border-warning-bright/40 bg-ink-card px-4 py-3">
-          <p className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-warning">
+          <p className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning">
             Last takeoff failed
           </p>
           <p className="mt-1 text-sm text-text-sec">
@@ -600,7 +600,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
           <button
             type="button"
             onClick={() => { if (runId) void loadRun(runId) }}
-            className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
+            className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Check now
           </button>
@@ -621,11 +621,11 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">Job name</span>
+                <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Job name</span>
                 <input value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="IGA Swan Street fit-out" className={`mt-1 ${inputClass}`} />
               </label>
               <label className="block">
-                <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">Site address</span>
+                <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Site address</span>
                 <input value={siteAddress} onChange={(e) => setSiteAddress(e.target.value)} placeholder="480 Swan St, Richmond VIC" className={`mt-1 ${inputClass}`} />
               </label>
             </div>
@@ -642,7 +642,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               <span className="text-sm text-text-sec">
                 Drag PDFs or photos here, or <span className="font-semibold text-accent">browse</span>
               </span>
-              <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
+              <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
                 PDF · PNG · JPG · up to 32 MB each
               </span>
               <input
@@ -667,7 +667,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                       value={u.doc_type}
                       onChange={(e) => void setDocType(u.id, e.target.value as PaintDocType)}
                       aria-label={`Document type for ${u.filename}`}
-                      className="rounded-ctl cursor-pointer border border-ink-line bg-ink-card px-2 py-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-sec outline-none focus:border-accent"
+                      className="rounded-ctl cursor-pointer border border-ink-line bg-ink-card px-2 py-1.5 font-mono text-[0.68rem] uppercase tracking-[0.1em] text-text-sec outline-none focus:border-accent"
                     >
                       {DOC_TYPES.map((t) => (
                         <option key={t} value={t}>{DOC_TYPE_LABELS[t]}</option>
@@ -704,7 +704,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
             {viewer && (
               <div className="mt-4">
                 <div className="rounded-card flex items-center gap-3 border border-b-0 border-ink-line bg-ink-deep px-4 py-2.5">
-                  <span className="min-w-0 flex-1 truncate font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
                     Viewing · {viewer.filename}
                   </span>
                   <button
@@ -758,7 +758,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                 <span className="text-sm text-text-dim">A full drawing set takes 2–4 minutes.</span>
               )}
               {runId && !extracting && (
-                <button type="button" onClick={resetRun} className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-sec">
+                <button type="button" onClick={resetRun} className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-sec">
                   <Plus className="h-3.5 w-3.5" aria-hidden /> New run
                 </button>
               )}
@@ -782,7 +782,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                       const planSet = uploads.find((u) => u.doc_type === 'plan_set')
                       if (planSet) void openViewer(planSet)
                     }}
-                    className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
+                    className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
                   >
                     <Eye className="h-3.5 w-3.5" aria-hidden />
                     {viewer ? 'Close plan viewer' : 'View plan set'}
@@ -837,7 +837,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               {/* Customer delivery — text the quote + tender PDF (MMS), the
                   same send path as the electrical/plumbing/solar SMS quotes. */}
               <div className="mt-6 border-t border-ink-line pt-5">
-                <p className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
+                <p className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
                   Text the quote to the customer (optional)
                 </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -885,7 +885,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                   )}
                 </button>
                 {savedQuote && (
-                  <span className="flex flex-wrap items-center gap-4 font-mono text-micro font-semibold uppercase tracking-[0.12em]">
+                  <span className="flex flex-wrap items-center gap-4 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em]">
                     <a href={savedQuote.quoteViewUrl} target="_blank" rel="noreferrer" className="cursor-pointer text-accent transition-colors hover:text-accent-press">
                       Open quote ↗
                     </a>
@@ -933,7 +933,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
             <h3 className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-pri">
               Recent runs
             </h3>
-            <span className="border border-ink-line px-1.5 py-0.5 font-mono text-micro font-semibold leading-none text-text-sec">
+            <span className="border border-ink-line px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold leading-none text-text-sec">
               {recentRuns.length}
             </span>
             <span className="ml-auto hidden text-xs text-text-sec sm:block">
@@ -970,12 +970,12 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                       <span className="flex items-center gap-2">
                         <span className="truncate text-sm font-semibold text-text-pri">{title}</span>
                         {isActive && (
-                          <span className="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
+                          <span className="shrink-0 font-mono text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-accent">
                             Current
                           </span>
                         )}
                       </span>
-                      <span className={`mt-0.5 flex items-center gap-1.5 text-micro ${isActive ? 'text-text-sec' : 'text-text-dim'}`}>
+                      <span className={`mt-0.5 flex items-center gap-1.5 text-[0.7rem] ${isActive ? 'text-text-sec' : 'text-text-dim'}`}>
                         {subAddress && (
                           <>
                             <span className="truncate">{subAddress}</span>
@@ -993,7 +993,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                     </span>
 
                     {/* Open affordance — replaces the old, misleading refresh icon. */}
-                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors group-hover:text-accent">
+                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors group-hover:text-accent">
                       <span className="hidden sm:inline">{isActive ? 'Reload' : 'Open'}</span>
                       <ChevronRight
                         className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
@@ -1011,7 +1011,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                       target="_blank"
                       rel="noreferrer"
                       aria-disabled={extracting || pricing || saving ? 'true' : undefined}
-                      className={`flex shrink-0 items-center border-l border-ink-line px-4 font-mono text-micro font-semibold uppercase tracking-[0.12em] transition-colors hover:text-text-pri ${
+                      className={`flex shrink-0 items-center border-l border-ink-line px-4 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] transition-colors hover:text-text-pri ${
                         isActive ? 'bg-accent/10 text-text-sec' : 'bg-ink-deep text-text-dim'
                       } ${extracting || pricing || saving ? 'pointer-events-none opacity-50' : ''}`}
                     >

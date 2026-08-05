@@ -77,7 +77,7 @@ export default function TierSelect(props: {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
+      <span className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
         Option
       </span>
       <div

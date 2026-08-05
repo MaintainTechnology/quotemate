@@ -377,7 +377,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         </section>
 
         <section>
-          <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">Start a new flyer</h3>
+          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Start a new flyer</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FLYER_TEMPLATES.map((t) => (
               <button
@@ -398,7 +398,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         </section>
 
         <section>
-          <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">My flyers</h3>
+          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">My flyers</h3>
           {loadingList ? (
             <p className="qm-loading mt-4 text-sm text-text-dim">Loading…</p>
           ) : flyers.length === 0 ? (
@@ -471,7 +471,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         {/* Properties + tools */}
         <div className="space-y-5">
           <div className="rounded-card space-y-2 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">Add</p>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Add</p>
             <div className="flex flex-wrap gap-2">
               <button onClick={addText} className={btnPlain}>+ Text</button>
               <label className={`${btnPlain} cursor-pointer`}>
@@ -492,7 +492,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
           {/* QR helper */}
           <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">QR code</p>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">QR code</p>
             {qrAction === 'generate' ? (
               <>
                 <p className="text-sm text-text-sec">You don’t have a customer QR code yet. Generate one and drop it on the flyer — it’s saved to your Marketing tab too.</p>
@@ -521,7 +521,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
           {/* Selected element properties */}
           <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">Selected element</p>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Selected element</p>
             {!selected ? (
               <p className="text-sm text-text-dim">Click an element on the canvas to edit it.</p>
             ) : (

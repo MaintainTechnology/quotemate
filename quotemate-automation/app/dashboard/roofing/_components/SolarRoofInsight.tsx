@@ -70,11 +70,11 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
   return (
     <div className="rounded-card mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Google Solar · aerial roof insight
         </div>
         {state === 'ready' && insight && (
-          <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
+          <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
             imagery {insight.imageryQuality.toLowerCase()}{insight.imageryDate ? ` · ${insight.imageryDate}` : ''}
           </span>
         )}
@@ -115,7 +115,7 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
               )}
             </div>
           </div>
-          <p className="mt-3 text-micro leading-relaxed text-text-dim">
+          <p className="mt-3 text-[0.7rem] leading-relaxed text-text-dim">
             Aerial-derived insight for estimation — confirm on site. The priced area above stays the Geoscape measurement.
           </p>
         </>
