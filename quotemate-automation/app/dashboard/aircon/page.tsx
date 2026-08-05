@@ -106,11 +106,11 @@ const AREA_SOURCE_LABEL: Record<AcResolvedRoom['area_source'], string> = {
 // ── Shared style fragments (Maintain design system) ──────────────────
 
 const FIELD_LABEL =
-  'font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
+  'font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim'
 const FIELD_INPUT =
   'w-full border border-ink-line bg-ink-deep px-4 py-3 text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none'
 const SUMMARY_TOGGLE =
-  'cursor-pointer select-none font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-press'
+  'cursor-pointer select-none font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-press'
 
 export default function AirconRecommendPage() {
   return (
@@ -208,7 +208,7 @@ function AirconRecommendPageInner() {
   if (authState === 'loading') {
     return (
       <main className="min-h-screen bg-ink-deep p-10">
-        <p className="font-mono text-sm uppercase tracking-[0.14em] text-text-dim">Loading…</p>
+        <p className="qm-loading font-mono text-sm uppercase tracking-[0.14em] text-text-dim">Loading…</p>
       </main>
     )
   }
@@ -331,7 +331,7 @@ function AirconRecommendPageInner() {
             />
             <div className="flex flex-wrap items-center gap-4">
               <label className="rounded-ctl inline-flex cursor-pointer items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3 text-sm text-text-sec hover:border-accent">
-                <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
                   {planFile ? 'Change plan' : 'Upload plan'}
                 </span>
                 <input
@@ -364,6 +364,7 @@ function AirconRecommendPageInner() {
           <button
             type="submit"
             disabled={busy}
+            aria-busy={busy}
             className="rounded-ctl mt-9 inline-flex w-full items-center justify-center gap-3 bg-accent px-8 py-4 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:opacity-50 sm:w-auto"
           >
             {busy ? (planFile ? 'Reading plan…' : 'Calculating…') : 'Get recommendation'}
@@ -396,7 +397,7 @@ function FormSectionHeading({ num, title, sub }: { num: string; title: string; s
     <div className="mb-5 flex items-baseline gap-4 border-b border-ink-line pb-3">
       <span className="font-mono text-xl font-bold leading-none text-accent">{num}</span>
       <h2 className="text-sm font-extrabold uppercase tracking-[0.04em]">{title}</h2>
-      <span className="hidden font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim sm:inline">
+      <span className="hidden font-mono text-micro uppercase tracking-[0.12em] text-text-dim sm:inline">
         {sub}
       </span>
     </div>
@@ -414,7 +415,7 @@ function SectionHeader({ num, title, sub }: { num: string; title: string; sub?: 
           {title}
         </h2>
         {sub && (
-          <p className="mt-1 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-text-dim">{sub}</p>
+          <p className="mt-1 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">{sub}</p>
         )}
       </div>
     </div>
@@ -474,7 +475,7 @@ function Result({
 
       <div>
         <SectionHeader num="04" title="Next step" />
-        <div className="rounded-card border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-8">
+        <div className="rounded-card edge-lit border border-ink-line bg-ink-card p-6 sm:p-8">
           <p className="text-lg font-extrabold uppercase tracking-[0.02em]">
             Book a <span className="text-accent">site assessment</span>
           </p>
@@ -546,6 +547,7 @@ function AirconPdfButton({
         type="button"
         onClick={() => void download()}
         disabled={busy}
+        aria-busy={busy}
         className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? 'Preparing PDF…' : 'Download PDF ↓'}
@@ -595,7 +597,7 @@ function LocationPanel({ location, token }: { location: AcLocationEvidence; toke
 function Chip({ label, accent }: { label: string; accent?: boolean }) {
   return (
     <span
-      className={`border px-3 py-1 font-mono text-[0.68rem] uppercase tracking-widest ${
+      className={`border px-3 py-1 font-mono text-micro uppercase tracking-widest ${
         accent ? 'border-accent text-accent' : 'border-ink-line text-text-sec'
       }`}
     >
@@ -643,7 +645,7 @@ function AcStaticMap({
   return (
     <div className="relative h-56 w-full overflow-hidden border-b border-ink-line bg-ink-deep sm:h-full sm:border-b-0 sm:border-r">
       <div className="rounded-card pointer-events-none absolute left-3 top-3 z-10 border border-ink-line bg-ink-deep/95 px-3 py-1.5">
-        <span className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
           Google satellite
         </span>
       </div>
@@ -669,7 +671,7 @@ function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
   return (
     <div className="rounded-card mt-5 border border-ink-line bg-ink-card p-6 sm:p-8">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
           Plan read · {plan.filename}
         </span>
         <Chip label={`page ${plan.page}`} />
@@ -680,7 +682,7 @@ function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
       <div className="mt-4 overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-ink-line font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+            <tr className="border-b border-ink-line font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
               <th className="py-2.5 pr-4 font-semibold">Room</th>
               <th className="py-2.5 pr-4 font-semibold">Type</th>
               <th className="py-2.5 pr-4 font-semibold">Conditioned</th>
@@ -750,7 +752,7 @@ function Stat({
         {value}
         {unit && <span className="ml-1 text-sm font-normal text-text-dim">{unit}</span>}
       </p>
-      <p className="font-mono text-[0.62rem] leading-snug uppercase tracking-[0.14em] text-text-dim">{label}</p>
+      <p className="font-mono text-micro leading-snug uppercase tracking-[0.14em] text-text-dim">{label}</p>
     </div>
   )
 }
@@ -792,7 +794,7 @@ function SizingPanel({
         <div className="mt-4 overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-ink-line font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+              <tr className="border-b border-ink-line font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                 <th className="py-2.5 pr-4 font-semibold">Room</th>
                 <th className="py-2.5 pr-4 font-semibold">Area m²</th>
                 <th className="py-2.5 pr-4 font-semibold">Volume m³</th>
@@ -838,7 +840,7 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
     <div className={`rounded-card flex flex-col border bg-ink-card p-6 sm:p-8 ${o.best_fit ? 'border-accent' : 'border-ink-line'}`}>
       <div className="mb-1 flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+          <p className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
             {o.capacity_kw} kW system
           </p>
           <h3 className="mt-1 text-2xl font-extrabold uppercase tracking-[-0.01em]">{o.system_type}</h3>
@@ -849,21 +851,21 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
       <p className="mt-3 text-3xl font-extrabold leading-none sm:text-4xl">
         {money(o.price.low)} <span className="text-text-dim">–</span> {money(o.price.high)}
       </p>
-      <p className="mt-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-text-dim">
+      <p className="mt-2 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
         inc GST · indicative · point estimate{' '}
         <span className="text-text-sec">{money(p.point_estimate_inc_gst)}</span> ±{p.confidence_band_pct}%
       </p>
 
       <details className="mt-6 border-t border-ink-line pt-4 text-sm">
         <summary className={SUMMARY_TOGGLE}>How this price was calculated</summary>
-        <p className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">{p.formula}</p>
+        <p className="mt-3 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">{p.formula}</p>
         <table className="mt-3 w-full border-collapse text-left text-xs">
           <tbody>
             {p.components.map((c) => (
               <tr key={c.label} className="border-b border-ink-line/40 align-top">
                 <td className="py-2 pr-2">
                   <span className="text-text-pri">{c.label}</span>
-                  {c.note && <div className="mt-0.5 text-[0.68rem] leading-snug text-text-dim">{c.note}</div>}
+                  {c.note && <div className="mt-0.5 text-micro leading-snug text-text-dim">{c.note}</div>}
                 </td>
                 <td className="whitespace-nowrap py-2 pr-2 font-mono text-text-sec">
                   {c.quantity} {c.unit} {c.rate_ex_gst > 0 ? `× ${money(c.rate_ex_gst)}` : ''}
@@ -875,7 +877,7 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
               <tr key={a.label} className="border-b border-ink-line/40 align-top text-text-sec">
                 <td className="py-2 pr-2">
                   {a.label}
-                  {a.note && <div className="mt-0.5 text-[0.68rem] leading-snug text-text-dim">{a.note}</div>}
+                  {a.note && <div className="mt-0.5 text-micro leading-snug text-text-dim">{a.note}</div>}
                 </td>
                 <td className="whitespace-nowrap py-2 pr-2 font-mono">
                   {a.unit === '%' ? `${a.quantity}%` : ''}
@@ -907,7 +909,7 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
       <details className="mt-4 border-t border-ink-line pt-4 text-sm">
         <summary className={SUMMARY_TOGGLE}>Indicative {o.system_type} layout</summary>
         <SystemSchematic system={o.system_type} rooms={rooms} />
-        <p className="mt-2 text-[0.68rem] leading-snug text-text-dim">
+        <p className="mt-2 text-micro leading-snug text-text-dim">
           Schematic only — zone shapes and duct/head positions are confirmed at the site assessment.
         </p>
       </details>

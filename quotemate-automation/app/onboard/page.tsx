@@ -657,6 +657,7 @@ function OnboardWizardInner() {
                 <button
                   type="submit"
                   disabled={submitting}
+                  aria-busy={submitting}
                   className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-7 py-3.5 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
                 >
                   {submitting ? 'Activating…' : 'Activate my QuoteMax'}

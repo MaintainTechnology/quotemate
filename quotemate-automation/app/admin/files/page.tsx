@@ -179,7 +179,7 @@ export default function AdminFilesPage() {
             {selected && !err && (
               <>
                 {docsLoading ? (
-                  <div className="text-sm text-text-dim">Loading documents…</div>
+                  <div className="qm-loading text-sm text-text-dim">Loading documents…</div>
                 ) : docs.length === 0 ? (
                   <div className="border border-ink-line bg-ink-card px-6 py-16 text-center text-text-sec">
                     No documents for this tenant yet.

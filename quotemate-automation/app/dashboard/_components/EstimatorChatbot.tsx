@@ -19,12 +19,14 @@ type ChatMessage = {
   pending?: boolean
 }
 
-const ACCENT = '#FF5F00'
-const PANEL = '#16202b'
-const PANEL_2 = '#0f1722'
-const BORDER = '#243140'
-const TEXT = '#e6ebf0'
-const MUTED = '#94a3b8'
+// Design-system tokens (app/globals.css :root) — theme-aware, flip for light mode.
+const ACCENT = 'var(--accent)'
+const ACCENT_INK = 'var(--accent-ink)' // text/icons ON an accent fill — never white
+const PANEL = 'var(--ink-card)'
+const PANEL_2 = 'var(--ink)'
+const BORDER = 'var(--ink-line)'
+const TEXT = 'var(--text-pri)'
+const MUTED = 'var(--text-dim)'
 // Design-system mono (JetBrains Mono, loaded via next/font on <html>). --font-mono
 // only resolves inside the .qm-quote scope, so dashboard surfaces use the raw var.
 const MONO = 'var(--font-jetbrains-mono), ui-monospace, monospace'
@@ -203,6 +205,7 @@ export default function EstimatorChatbot({
                   type="button"
                   onClick={() => void send(s)}
                   disabled={loading}
+                  aria-busy={loading}
                   style={{
                     fontSize: 12,
                     color: TEXT,
@@ -251,9 +254,10 @@ export default function EstimatorChatbot({
             <button
               type="submit"
               disabled={loading || !input.trim()}
+              aria-busy={loading}
               style={{
                 background: ACCENT,
-                color: '#0b0f14',
+                color: ACCENT_INK,
                 fontWeight: 700,
                 border: 'none',
                 borderRadius: 8,
@@ -279,7 +283,7 @@ function Bubble({ message }: { message: ChatMessage }) {
         <div
           style={{
             background: isUser ? ACCENT : PANEL_2,
-            color: isUser ? '#0b0f14' : TEXT,
+            color: isUser ? ACCENT_INK : TEXT,
             border: isUser ? 'none' : `1px solid ${BORDER}`,
             borderRadius: 10,
             padding: '9px 12px',

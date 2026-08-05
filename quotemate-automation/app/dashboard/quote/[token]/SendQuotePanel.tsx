@@ -110,7 +110,7 @@ export default function SendQuotePanel(props: {
         >
           {/* ─── SMS row ─── */}
           <div className="mb-4">
-            <div className="mb-1 font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+            <div className="mb-1 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
               Text message
             </div>
             {props.customerPhone ? (
@@ -138,7 +138,7 @@ export default function SendQuotePanel(props: {
 
           {/* ─── Email row ─── */}
           <div>
-            <div className="mb-1 font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+            <div className="mb-1 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
               Email (PDF attached)
             </div>
             <input

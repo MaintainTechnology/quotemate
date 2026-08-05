@@ -20,7 +20,7 @@ const DARK = {
   '--text-pri': '#F6F1EA', '--text-sec': '#C3B8AC', '--text-dim': '#A2968A', '--warning-bright': '#F59E0B',
 } as React.CSSProperties
 
-const LABEL = 'font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim'
+const LABEL = 'font-mono text-micro uppercase tracking-[0.16em] text-text-dim'
 const INPUT = 'w-full bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri outline-none focus:border-accent transition-colors'
 const BTN = 'inline-flex items-center gap-2 border border-ink-line hover:border-accent text-text-pri px-4 py-2.5 text-xs font-mono uppercase tracking-[0.12em] transition-colors disabled:opacity-40 disabled:pointer-events-none'
 const BTNFILL = 'inline-flex items-center gap-2 bg-accent text-accent-ink hover:bg-accent-press px-4 py-2.5 text-xs font-mono font-semibold uppercase tracking-[0.12em] transition-colors disabled:opacity-40 disabled:pointer-events-none'
@@ -120,8 +120,8 @@ export default function StudioPage() {
         </div>
         <div className="flex items-center gap-2">
           <button className={BTN} onClick={() => setSlides(DEFAULT_CAROUSEL)}>Reset</button>
-          <button className={BTN} onClick={downloadPNG} disabled={!!busy}>{busy === 'png' ? 'Saving…' : 'Slide PNG'}</button>
-          <button className={BTNFILL} onClick={downloadPDF} disabled={!!busy}>{busy === 'pdf' ? 'Building…' : 'Carousel PDF'}</button>
+          <button className={BTN} onClick={downloadPNG} disabled={!!busy} aria-busy={!!busy}>{busy === 'png' ? 'Saving…' : 'Slide PNG'}</button>
+          <button className={BTNFILL} onClick={downloadPDF} disabled={!!busy} aria-busy={!!busy}>{busy === 'pdf' ? 'Building…' : 'Carousel PDF'}</button>
           <Link href="/dashboard" className={BTN}>Dashboard</Link>
         </div>
       </header>
@@ -137,7 +137,7 @@ export default function StudioPage() {
               className={`flex shrink-0 items-center gap-3 border px-3 py-2.5 text-left transition-colors ${i === sel ? 'border-accent bg-ink-card' : 'border-ink-line hover:border-ink-line/80 hover:bg-ink-card/50'}`}
             >
               <span className="font-mono text-lg font-bold leading-none text-accent">{String(i + 1).padStart(2, '0')}</span>
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-sec">{sl.kind}</span>
+              <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-sec">{sl.kind}</span>
             </button>
           ))}
         </nav>
@@ -153,7 +153,7 @@ export default function StudioPage() {
               className="h-full w-full border border-ink-line object-contain"
             />
             {rendering && (
-              <div className="absolute right-3 top-3 flex items-center gap-2 bg-ink-deep/80 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+              <div className="absolute right-3 top-3 flex items-center gap-2 bg-ink-deep/80 px-3 py-1.5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Rendering
               </div>
             )}
@@ -223,7 +223,7 @@ export default function StudioPage() {
             <>
               <Section label="Quote ({curly} = accent)"><textarea rows={3} className={INPUT} value={cur.quote} onChange={(e) => patch({ quote: e.target.value })} /></Section>
               <Section label="Attribution (one per line)"><textarea rows={2} className={INPUT} value={cur.attrib.join('\n')} onChange={(e) => setArr('attrib', e.target.value)} /></Section>
-              <p className="font-mono text-[0.58rem] uppercase tracking-[0.12em] text-warning-bright">⚠ Replace with a real client quote before posting — the brand bans invented reviews.</p>
+              <p className="font-mono text-micro uppercase tracking-[0.12em] text-warning-bright">⚠ Replace with a real client quote before posting — the brand bans invented reviews.</p>
             </>
           )}
 

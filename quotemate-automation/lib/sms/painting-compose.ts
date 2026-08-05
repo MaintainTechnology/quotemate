@@ -11,8 +11,8 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { PaintingEstimate } from '@/lib/painting/types'
-import type { StripeLinks } from '@/lib/stripe/checkout'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
+import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
 
 export type PaintingReplyContext = {
   estimate: PaintingEstimate
@@ -27,14 +27,12 @@ export type PaintingReplyContext = {
   /** Per-feature tier presentation mode — which tiers the SMS lists.
    *  Omitted ⇒ 'single' (the platform default). */
   tierMode?: QuoteTierMode
-  /** painting_measurements.public_token — needed to build the per-tier
-   *  deposit short-links. */
+  /** painting_measurements.public_token — needed to build the site-visit
+   *  short-link. */
   token?: string
-  /** App base URL for the /r/paint/[token]/[tier] deposit short-links. */
+  /** App base URL for the /r/paint/[token]/inspection site-visit short-link.
+   *  The link is included only when token + appUrl are both set. */
   appUrl?: string
-  /** Which tiers have a Stripe deposit Checkout link. A tier gets a "deposit"
-   *  link only when it appears here (and token + appUrl are set). */
-  stripeLinks?: StripeLinks
 }
 
 // ── small shared helpers (kept local so the module is self-contained) ──
@@ -75,7 +73,10 @@ export function buildPaintingFormOffer(ctx: { firstName?: string | null; formUrl
 
 /**
  * PURE — the quotable estimate message. Lists the inc-GST tier prices
- * exactly from the painting pricer, plus the quote-page link.
+ * exactly from the painting pricer, plus the quote-page link and the ONE
+ * customer payment: the flat $99 refundable site visit (spec
+ * painting-site-visit-first R4 — the per-tier 30% deposit links this message
+ * used to carry are retired; the final price is confirmed on site).
  */
 export function buildPaintingQuoteSms(ctx: PaintingReplyContext): string {
   const tiers = ctx.estimate.price.tiers
@@ -96,12 +97,7 @@ export function buildPaintingQuoteSms(ctx: PaintingReplyContext): string {
       // Honour a tradie's edited tier label (lib/painting/edit.ts) so the SMS
       // matches the customer page + PDF; fall back to the canonical name.
       const label = t.label?.trim() || PAINT_TIER_LABEL_BY_KEY[t.tier]
-      const base = `• ${label}: ${fmtAud(t.inc_gst)}`
-      // Per-tier deposit short-link, only when a Stripe session exists for it.
-      if (ctx.token && ctx.appUrl && ctx.stripeLinks?.[t.tier]) {
-        return `${base} · deposit ${ctx.appUrl}/r/paint/${ctx.token}/${t.tier}`
-      }
-      return base
+      return `• ${label}: ${fmtAud(t.inc_gst)}`
     })
 
   const out = [
@@ -110,6 +106,13 @@ export function buildPaintingQuoteSms(ctx: PaintingReplyContext): string {
     `Full quote: ${ctx.quoteUrl}`,
   ]
   if (ctx.pdfUrl) out.push(`PDF copy: ${ctx.pdfUrl}`)
+  // The one payment: the flat site visit, worded exactly like roofing's
+  // (lib/sms/templates.ts) so the two trades promise the same thing.
+  if (ctx.token && ctx.appUrl) {
+    out.push(
+      `Tap to lock in your site visit ($${INSPECTION_FEE_AUD} refundable, credited toward your final quote): ${ctx.appUrl}/r/paint/${ctx.token}/inspection`,
+    )
+  }
   out.push('Prices inc GST. A painter reviews every quote before we book anything.')
   return out.join('\n')
 }

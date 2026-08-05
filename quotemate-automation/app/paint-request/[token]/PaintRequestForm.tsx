@@ -6,6 +6,7 @@
 // /api/paint-request/[token], which estimates + texts the quote back.
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { AddressAutocomplete } from '@/app/dashboard/roofing/_components/AddressAutocomplete'
 import type { PaintScope } from '@/lib/painting/types'
 
 const STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
@@ -102,7 +103,7 @@ export function PaintRequestForm({ token }: { token: string }) {
     [token, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea],
   )
 
-  if (ctx === 'loading') return <Shell><p className="text-text-sec">Loading…</p></Shell>
+  if (ctx === 'loading') return <Shell><p className="qm-loading text-text-sec">Loading…</p></Shell>
   if (ctx === 'invalid') return <Shell><p className="text-warning">This link is invalid or has expired.</p></Shell>
 
   const business = ctx.businessName
@@ -121,7 +122,24 @@ export function PaintRequestForm({ token }: { token: string }) {
       <form onSubmit={submit} className="mt-8 grid gap-6 border border-ink-line bg-ink-card p-6 sm:p-8 md:grid-cols-2">
         <div className="md:col-span-2">
           <Label>Property address</Label>
-          <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="28 Greens Rd, Coorparoo" className={INPUT} />
+          <AddressAutocomplete
+            accessToken={null}
+            auth={false}
+            endpoint={`/api/paint-request/${token}/suggest-address`}
+            value={address}
+            onChange={setAddress}
+            onSelect={(s) => {
+              setAddress(s.address)
+              // Symmetric guards (same as the dashboard forms): a malformed
+              // provider value is ignored, leaving whatever the customer typed.
+              if (s.postcode && /^\d{4}$/.test(s.postcode)) setPostcode(s.postcode)
+              if (s.state && (STATES as readonly string[]).includes(s.state)) {
+                setStateCode(s.state as (typeof STATES)[number])
+              }
+            }}
+            state={stateCode}
+            placeholder="28 Greens Rd, Coorparoo"
+          />
         </div>
         <div>
           <Label>Postcode</Label>
@@ -181,7 +199,7 @@ export function PaintRequestForm({ token }: { token: string }) {
             <input type="checkbox" checked={colourChange} onChange={(e) => setColourChange(e.target.checked)} className="h-4 w-4 accent-accent" />
             <span className="font-mono text-sm font-semibold uppercase tracking-[0.12em]">Colour change</span>
           </label>
-          <button type="submit" disabled={busy} className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="submit" disabled={busy} aria-busy={busy} className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
             {busy ? 'Sending…' : 'Get my quote →'}
           </button>
         </div>

@@ -92,7 +92,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     tenantId,
     customerPhone,
     request: { address: parsed.data.address, inputs: parsed.data.inputs },
-    appUrl: APP_BASE_URL,
   })
 
   // One-shot: mark the lead submitted regardless of the estimate outcome.

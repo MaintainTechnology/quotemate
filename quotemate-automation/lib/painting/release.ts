@@ -66,8 +66,9 @@ export async function notifyPaintingTradie(args: {
 /**
  * Deliver the full painting quote to the customer — used by the release
  * endpoint after the tradie sends. Reconstructs the dispatch shape from the
- * saved row and reuses composePaintingQuoteDelivery (G/B/B + per-tier Stripe
- * deposit links + quote-page + PDF links + MMS). Never throws.
+ * saved row and reuses composePaintingQuoteDelivery (G/B/B prices +
+ * quote-page + PDF links + the ONE $99 site-visit pay link + MMS). Never
+ * throws.
  */
 export async function sendPaintingQuoteToCustomer(
   supabase: SupabaseClient,
@@ -80,7 +81,7 @@ export async function sendPaintingQuoteToCustomer(
 
     const { data: row } = await supabase
       .from('painting_measurements')
-      .select('public_token, estimate_token, estimate, customer_phone, tenant_id, stripe_links, routing, address')
+      .select('public_token, estimate_token, estimate, customer_phone, tenant_id, routing, address')
       .eq(tokenCol, tokenVal)
       .maybeSingle()
     if (!row || !row.customer_phone || !row.estimate) return { sent: false }
@@ -103,7 +104,6 @@ export async function sendPaintingQuoteToCustomer(
       estimateToken: (row.estimate_token as string | null) ?? '',
       estimate: row.estimate as PaintingEstimate,
       inspection: (row.routing as string | null) === 'inspection_required',
-      stripeLinks: (row.stripe_links as StripeLinks | null) ?? {},
     }
     const { text, mmsUrl } = await composePaintingQuoteDelivery({
       supabase,

@@ -1020,12 +1020,16 @@ export default function DashboardPage() {
               quoteCount={data.quotes.length}
               trades={tenantTradeList(data.tenant)}
             />
-            {/* No key and no per-switch fade here (spec R3): keying by tab
-                forced a full tear-down + remount just to replay the fade
-                (the spec allows dropping it). Tab components still swap via
-                the conditional renders below; their data survives revisits
-                in lib/dashboard/tab-cache. */}
-            <div className="mt-4 lg:mt-0">
+            {/* Still no key (spec R3): keying by tab forced a full tear-down
+                + remount just to replay a fade. `.qm-tab-panel` gets the fade
+                back for free — each tab is a DIFFERENT component, so React
+                inserts fresh DOM on every switch and the CSS animation on
+                `.qm-tab-panel > *` replays by itself. Tab data still survives
+                revisits in lib/dashboard/tab-cache.
+                Deliberately short (240ms, 6px): a tradie hits these tabs
+                dozens of times a shift, so the swap is there to stop content
+                flashing into place, not to be admired. */}
+            <div className="qm-tab-panel mt-4 lg:mt-0">
             {/* Calendar renders its own image-spec header (with Sync / New
                 booking actions), so the generic TabHeader is suppressed for it.
                 Chats is a full-bleed two-pane workspace with its own rail
@@ -1138,7 +1142,7 @@ export default function DashboardPage() {
                     AC
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
                       Air-conditioning recommender
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1170,7 +1174,7 @@ export default function DashboardPage() {
                     QR
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
                       Marketing
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1189,7 +1193,7 @@ export default function DashboardPage() {
                     CRM
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
                       CRM &amp; Email
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1208,7 +1212,7 @@ export default function DashboardPage() {
                     STUDIO
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
                       Brand Studio
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1345,10 +1349,10 @@ function Shell({
               aria-haspopup="dialog"
             >
               <Search size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-text-dim" />
-              <span className="flex-1 truncate text-[0.8rem] text-text-dim">
+              <span className="flex-1 truncate text-meta text-text-dim">
                 Search quotes, customers, jobs
               </span>
-              <kbd className="shrink-0 border border-ink-line rounded-[5px] px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold text-text-dim">
+              <kbd className="shrink-0 border border-ink-line rounded-[5px] px-1.5 py-0.5 font-mono text-micro font-semibold text-text-dim">
                 ⌘K
               </kbd>
             </button>
@@ -1376,7 +1380,7 @@ function Shell({
                 type="button"
                 onClick={() => topbar.setTab('quotes')}
                 aria-label="Review queue"
-                className="inline-flex h-11 md:h-9 items-center gap-2 rounded-ctl bg-accent px-3 sm:px-4 text-[13px] font-bold text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                className="inline-flex h-11 md:h-9 items-center gap-2 rounded-ctl bg-accent px-3 sm:px-4 text-meta font-bold text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
               >
                 <FileText size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0" />
                 <span className="hidden sm:inline">Review queue</span>
@@ -1510,16 +1514,16 @@ function ProfileChip({
             QuoteMax logo so the identity reads as part of the system. */}
         <span
           aria-hidden="true"
-          className="grid h-full w-11 md:w-9 shrink-0 place-items-center bg-accent font-mono text-[0.95rem] font-extrabold text-accent-ink"
+          className="grid h-full w-11 md:w-9 shrink-0 place-items-center bg-accent font-mono text-base font-extrabold text-accent-ink"
         >
           {initial}
         </span>
         <span className="hidden sm:flex min-w-0 flex-col justify-center text-left leading-tight">
-          <span className="truncate text-[0.85rem] font-bold text-text-pri">
+          <span className="truncate text-sm font-bold text-text-pri">
             {firstName}
           </span>
           {subline && (
-            <span className="mt-0.5 truncate font-mono text-[0.55rem] uppercase tracking-[0.13em] text-text-dim">
+            <span className="mt-0.5 truncate font-mono text-micro uppercase tracking-[0.13em] text-text-dim">
               {subline}
             </span>
           )}
@@ -1536,11 +1540,11 @@ function ProfileChip({
       {open && (
         <div className="absolute right-0 top-[calc(100%+10px)] z-40 w-[min(260px,88vw)] overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card shadow-[0_16px_40px_-12px_rgba(11,9,7,0.55)]">
           <div className="border-b border-ink-line px-4 py-3">
-            <div className="truncate text-[0.85rem] font-extrabold uppercase tracking-[0.02em] text-text-pri">
+            <div className="truncate text-sm font-extrabold uppercase tracking-[0.02em] text-text-pri">
               {firstName}
             </div>
             {businessName && (
-              <div className="mt-0.5 truncate font-mono text-[0.58rem] uppercase tracking-[0.12em] text-text-dim">
+              <div className="mt-0.5 truncate font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                 {businessName}
               </div>
             )}
@@ -1554,7 +1558,7 @@ function ProfileChip({
                     }`}
                   />
                 )}
-                <span className="font-mono text-[0.58rem] uppercase tracking-[0.12em] text-text-sec">
+                <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-sec">
                   {[subtitle, status ? (active ? 'Active' : 'Onboarding') : null]
                     .filter(Boolean)
                     .join(' · ')}
@@ -1569,7 +1573,7 @@ function ProfileChip({
                 setOpen(false)
                 onAccount()
               }}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[0.8rem] font-semibold text-text-sec transition-colors cursor-pointer hover:bg-ink-deep/50 hover:text-text-pri"
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-meta font-semibold text-text-sec transition-colors cursor-pointer hover:bg-ink-deep/50 hover:text-text-pri"
             >
               <User size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
               Account settings
@@ -1581,7 +1585,7 @@ function ProfileChip({
               setOpen(false)
               onSignOut()
             }}
-            className="flex w-full items-center gap-2.5 border-t border-ink-line px-4 py-2.5 text-left text-[0.8rem] font-semibold text-text-sec transition-colors cursor-pointer hover:bg-ink-deep/50 hover:text-text-pri"
+            className="flex w-full items-center gap-2.5 border-t border-ink-line px-4 py-2.5 text-left text-meta font-semibold text-text-sec transition-colors cursor-pointer hover:bg-ink-deep/50 hover:text-text-pri"
           >
             <LogOut size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
             Sign out
@@ -1672,10 +1676,10 @@ function NotificationsBell({
       {open && (
         <div className="absolute right-0 top-[calc(100%+10px)] z-40 w-[min(350px,88vw)] overflow-hidden rounded-[14px] border border-ink-line bg-ink-card edge-lit shadow-[0_16px_40px_-12px_rgba(11,9,7,0.55)]">
           <div className="flex items-center justify-between border-b border-ink-line px-4 py-3">
-            <span className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-text-pri">
+            <span className="font-mono text-micro font-bold uppercase tracking-[0.16em] text-text-pri">
               Notifications
             </span>
-            <span className="font-mono text-[0.56rem] uppercase tracking-[0.1em] text-text-dim">
+            <span className="font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
               {pending.length > 0 ? `${pending.length} to review` : 'All clear'}
             </span>
           </div>
@@ -1695,18 +1699,18 @@ function NotificationsBell({
                 className="block w-full border-b border-ink-line px-4 py-3 text-left transition-colors cursor-pointer hover:bg-ink-deep/50"
               >
                 <span className="flex items-center justify-between gap-3">
-                  <span className="truncate text-[0.82rem] font-semibold text-text-pri">
+                  <span className="truncate text-meta font-semibold text-text-pri">
                     {q.customer_full_name || q.customer_first_name || 'Customer'}
                     {' · '}
                     {fmtJobType(q.job_type)}
                   </span>
                   {q.total_inc_gst != null && (
-                    <span className="shrink-0 font-mono text-[0.7rem] font-bold tabular-nums text-text-sec">
+                    <span className="shrink-0 font-mono text-micro font-bold tabular-nums text-text-sec">
                       {fmtAUD(toNum(q.total_inc_gst))}
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block font-mono text-[0.58rem] uppercase tracking-[0.1em] text-text-dim">
+                <span className="mt-0.5 block font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                   Quote drafted · {fmtRelative(q.created_at)}
                 </span>
               </button>
@@ -1718,7 +1722,7 @@ function NotificationsBell({
               setOpen(false)
               onOpenQuotes()
             }}
-            className="block w-full px-4 py-2.5 text-left font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:bg-ink-deep/50"
+            className="block w-full px-4 py-2.5 text-left font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:bg-ink-deep/50"
           >
             View all quotes →
           </button>
@@ -1798,6 +1802,17 @@ function CommandPalette({
     onClose()
   }
 
+  // ⚠ DELIBERATELY NOT ANIMATED. Every other overlay in this app gets
+  // .qm-overlay / .qm-panel; this one does not, and that is the design
+  // decision rather than an omission.
+  //
+  // The palette's primary trigger is ⌘K — a shortcut a heavy user hits
+  // dozens of times a day, often to type two characters and hit Enter. An
+  // entrance animation on a keyboard action puts a delay between the
+  // keystroke and the caret, which reads as the app being slow no matter how
+  // short it is. Raycast, the archetype for this control, has no open/close
+  // animation for exactly this reason. The click trigger inherits the same
+  // treatment because one control cannot have two personalities.
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-ink-deep/60 px-4 pt-[11vh]"
@@ -1822,10 +1837,10 @@ function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search quotes, customers, jobs"
-            className="rounded-ctl min-w-0 flex-1 bg-transparent text-[0.95rem] text-text-pri outline-none placeholder:text-text-dim"
+            className="rounded-ctl min-w-0 flex-1 bg-transparent text-base text-text-pri outline-none placeholder:text-text-dim"
             aria-label="Search quotes, customers, jobs"
           />
-          <kbd className="shrink-0 rounded-[5px] border border-ink-line px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold text-text-dim">
+          <kbd className="shrink-0 rounded-[5px] border border-ink-line px-1.5 py-0.5 font-mono text-micro font-semibold text-text-dim">
             ESC
           </kbd>
         </label>
@@ -1840,7 +1855,7 @@ function CommandPalette({
         <div className="overflow-y-auto">
           {(navHits.length > 0 || showWizard) && (
             <div>
-              <div className="px-4 sm:px-5 pt-3 pb-1.5 font-mono text-[0.56rem] font-bold uppercase tracking-[0.16em] text-text-dim">
+              <div className="px-4 sm:px-5 pt-3 pb-1.5 font-mono text-micro font-bold uppercase tracking-[0.16em] text-text-dim">
                 Go to
               </div>
               {navHits.map((item) => {
@@ -1858,11 +1873,11 @@ function CommandPalette({
                       aria-hidden="true"
                       className="shrink-0 text-text-dim"
                     />
-                    <span className="flex-1 truncate text-[0.84rem] font-semibold text-text-pri">
+                    <span className="flex-1 truncate text-sm font-semibold text-text-pri">
                       {item.label}
                     </span>
                     {typeof item.count === 'number' && item.count > 0 && (
-                      <span className="shrink-0 font-mono text-[0.7rem] font-bold tabular-nums text-text-sec">
+                      <span className="shrink-0 font-mono text-micro font-bold tabular-nums text-text-sec">
                         {item.count}
                       </span>
                     )}
@@ -1881,7 +1896,7 @@ function CommandPalette({
                     aria-hidden="true"
                     className="shrink-0 text-accent"
                   />
-                  <span className="flex-1 truncate text-[0.84rem] font-semibold text-accent">
+                  <span className="flex-1 truncate text-sm font-semibold text-accent">
                     Pricing wizard
                   </span>
                 </Link>
@@ -1896,7 +1911,7 @@ function CommandPalette({
                   : ''
               }
             >
-              <div className="px-4 sm:px-5 pt-3 pb-1.5 font-mono text-[0.56rem] font-bold uppercase tracking-[0.16em] text-text-dim">
+              <div className="px-4 sm:px-5 pt-3 pb-1.5 font-mono text-micro font-bold uppercase tracking-[0.16em] text-text-dim">
                 Quotes
               </div>
               {quoteHits.map((qt) => (
@@ -1907,12 +1922,12 @@ function CommandPalette({
                   className="flex w-full items-center justify-between gap-3 px-4 sm:px-5 py-2.5 text-left transition-colors cursor-pointer hover:bg-ink-deep/50"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-[0.84rem] font-semibold text-text-pri">
+                    <span className="block truncate text-sm font-semibold text-text-pri">
                       {qt.customer_full_name ||
                         qt.customer_first_name ||
                         'Customer'}
                     </span>
-                    <span className="mt-0.5 block truncate font-mono text-[0.58rem] uppercase tracking-[0.1em] text-text-dim">
+                    <span className="mt-0.5 block truncate font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                       {[
                         fmtJobType(qt.job_type),
                         qt.suburb,
@@ -1923,7 +1938,7 @@ function CommandPalette({
                     </span>
                   </span>
                   {qt.total_inc_gst != null && (
-                    <span className="shrink-0 font-mono text-[0.7rem] font-bold tabular-nums text-text-sec">
+                    <span className="shrink-0 font-mono text-micro font-bold tabular-nums text-text-sec">
                       {fmtAUD(toNum(qt.total_inc_gst))}
                     </span>
                   )}
@@ -2121,7 +2136,7 @@ function Sidebar({
             }`}
           >
             {!collapsed && (
-              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-text-dim">
+              <span className="font-mono text-micro font-bold uppercase tracking-[0.18em] text-text-dim">
                 Workspace
               </span>
             )}
@@ -2144,7 +2159,7 @@ function Sidebar({
           <div key={group.label} className={vi > 0 ? 'mt-3' : 'mt-1'}>
             {!collapsed && (
               <div className="px-3 pb-1.5 pt-1">
-                <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-text-dim">
+                <span className="font-mono text-micro font-bold uppercase tracking-[0.16em] text-text-dim">
                   {group.label}
                 </span>
               </div>
@@ -2169,7 +2184,7 @@ function Sidebar({
                             }
                           : undefined
                       }
-                      className={`relative w-full text-left flex items-center rounded-lg border text-[13.5px] transition-colors cursor-pointer ${
+                      className={`relative w-full text-left flex items-center rounded-lg border text-sm transition-colors cursor-pointer ${
                         collapsed
                           ? 'justify-center px-0 py-2.5'
                           : 'justify-between gap-3 px-[11px] py-[9px]'
@@ -2179,11 +2194,15 @@ function Sidebar({
                           : 'border-transparent font-medium text-text-sec hover:bg-ink-card/60 hover:text-text-pri'
                       }`}
                     >
-                      {/* Left accent tick — the reference's active marker. */}
+                      {/* Left accent tick — the reference's active marker.
+                          Always painted, revealed by scaleY from its centre
+                          rather than swapped from transparent, so moving
+                          between tabs reads as one marker growing into place
+                          instead of two ticks blinking. transform-only. */}
                       <span
                         aria-hidden="true"
-                        className="absolute left-0 top-[7px] bottom-[7px] w-[2px]"
-                        style={{ background: active ? 'var(--accent)' : 'transparent' }}
+                        className="absolute left-0 top-[7px] bottom-[7px] w-[2px] origin-center bg-accent motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
+                        style={{ transform: active ? 'scaleY(1)' : 'scaleY(0)' }}
                       />
                       <span
                         className={
@@ -2205,7 +2224,7 @@ function Sidebar({
                       {!collapsed &&
                         typeof item.count === 'number' &&
                         item.count > 0 && (
-                          <span className="rounded-[5px] bg-accent px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-accent-ink shrink-0">
+                          <span className="rounded-[5px] bg-accent px-1.5 py-0.5 font-mono text-micro font-bold tabular-nums text-accent-ink shrink-0">
                             {item.count}
                           </span>
                         )}
@@ -2224,7 +2243,7 @@ function Sidebar({
                     href="/dashboard/pricing-wizard"
                     title="Pricing wizard"
                     aria-label={collapsed ? 'Pricing wizard' : undefined}
-                    className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-[13.5px] font-medium text-accent transition-colors hover:bg-ink-card/60 ${
+                    className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-sm font-medium text-accent transition-colors hover:bg-ink-card/60 ${
                       collapsed
                         ? 'justify-center px-0 py-2.5'
                         : 'gap-2.5 px-[11px] py-[9px]'
@@ -2253,7 +2272,7 @@ function Sidebar({
           <div className="mt-3">
             {!collapsed && (
               <div className="px-3 pb-1.5 pt-1">
-                <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-accent">
+                <span className="font-mono text-micro font-bold uppercase tracking-[0.16em] text-accent">
                   Admin
                 </span>
               </div>
@@ -2264,7 +2283,7 @@ function Sidebar({
                   href="/admin"
                   title="Admin command centre"
                   aria-label={collapsed ? 'Admin command centre' : undefined}
-                  className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-[13.5px] font-medium text-text-sec transition-colors hover:bg-ink-card/60 hover:text-text-pri ${
+                  className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-sm font-medium text-text-sec transition-colors hover:bg-ink-card/60 hover:text-text-pri ${
                     collapsed
                       ? 'justify-center px-0 py-2.5'
                       : 'justify-between gap-3 px-[11px] py-[9px]'
@@ -2326,13 +2345,9 @@ function MobileTabBar({
             key={item.tab}
             type="button"
             onClick={() => setTab(item.tab)}
-            className={`shrink-0 inline-flex items-center gap-2 px-4 py-3 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors cursor-pointer ${
+            className={`relative shrink-0 inline-flex items-center gap-2 px-4 py-3 font-mono text-micro uppercase tracking-[0.14em] font-bold cursor-pointer ${
               i === 0 ? 'pl-4 sm:pl-0' : ''
-            } ${
-              active
-                ? 'text-accent border-b-2 border-accent -mb-px'
-                : 'text-text-dim hover:text-text-pri'
-            }`}
+            } ${active ? 'text-accent' : 'text-text-dim hover:text-text-pri'}`}
             aria-current={active ? 'page' : undefined}
           >
             <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -2340,6 +2355,19 @@ function MobileTabBar({
             {typeof item.count === 'number' && item.count > 0 && (
               <span className="ml-1 text-text-sec">({item.count})</span>
             )}
+            {/* Active rule. Always painted and revealed by scaleX rather than
+                toggled via `border-b-2`, so switching tabs draws one bar out
+                from the centre instead of blinking two. transform-only, so it
+                costs no layout — and it also removes the 1px vertical jiggle
+                the old `border-b-2 … -mb-px` gave the whole strip on every
+                switch. Sits at bottom-0, INSIDE the button: the parent nav is
+                `overflow-x-auto`, which computes overflow-y to auto as well,
+                so a bar hung at -1px would be clipped or spawn a scrollbar. */}
+            <span
+              aria-hidden="true"
+              className="absolute inset-x-0 bottom-0 h-[2px] origin-center bg-accent motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
+              style={{ transform: active ? 'scaleX(1)' : 'scaleX(0)' }}
+            />
           </button>
         )
       })}
@@ -2348,7 +2376,7 @@ function MobileTabBar({
           link (navigates to the wizard page), not a setTab tab. */}
       <Link
         href="/dashboard/pricing-wizard"
-        className="shrink-0 inline-flex items-center gap-2 px-4 py-3 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold text-accent transition-colors hover:text-accent-press"
+        className="shrink-0 inline-flex items-center gap-2 px-4 py-3 font-mono text-micro uppercase tracking-[0.14em] font-bold text-accent transition-colors hover:text-accent-press"
       >
         <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Pricing wizard</span>
@@ -2472,7 +2500,7 @@ function TabHeader({ tab }: { tab: Exclude<Tab, 'overview' | HubTab> }) {
   const meta = TAB_META[tab]
   return (
     <header className="mb-6">
-      <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+      <div className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">
         QuoteMax · Dashboard
       </div>
       <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
@@ -2573,11 +2601,16 @@ function SectionTabs({
     >
       {/* The one moving part: a single accent pill that glides under the active
           tab. transform + width only, so it stays GPU-composited. Reduced-
-          motion drops the transition classes and it snaps instantly. */}
+          motion drops the transition classes and it snaps instantly.
+          260ms, not the 420ms this shipped with: this is a segmented control
+          the tradie flicks between many times a session, and past ~300ms a
+          control that size stops reading as responsive and starts reading as
+          a wait. The label colours cross-fade on the same 260ms so the pill
+          and the text land together. */}
       {pill && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-1 top-1 left-0 rounded-[6px] bg-accent will-change-transform motion-safe:transition-[transform,width] motion-safe:duration-[420ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="pointer-events-none absolute bottom-1 top-1 left-0 rounded-[6px] bg-accent will-change-transform motion-safe:transition-[transform,width] motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
           style={{ width: pill.width, transform: `translateX(${pill.left}px)` }}
         />
       )}
@@ -2599,7 +2632,7 @@ function SectionTabs({
             className={[
               // z-10 keeps the label above the pill; the active label reads as
               // dark-on-yellow, the rest as dim text over the bare plate.
-              'relative z-10 rounded-[6px] px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+              'relative z-10 rounded-[6px] px-4 py-2 font-mono text-micro font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
               on ? 'text-accent-ink' : 'text-text-dim hover:text-text-sec',
             ].join(' ')}
           >
@@ -2892,7 +2925,7 @@ function OverviewTab({
             className="qm-rise bg-ink-card px-5 py-4 sm:px-[22px] sm:py-[18px]"
             style={{ '--i': i } as CSSProperties}
           >
-            <div className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.13em] text-text-dim">
+            <div className="font-mono text-xs font-semibold uppercase tracking-[0.13em] text-text-dim">
               {m.k}
             </div>
             <div
@@ -2901,7 +2934,7 @@ function OverviewTab({
             >
               {m.v}
             </div>
-            <div className="mt-[7px] font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-text-sec">
+            <div className="mt-[7px] font-mono text-micro font-semibold uppercase tracking-[0.1em] text-text-sec">
               {m.sub}
             </div>
           </div>
@@ -2918,35 +2951,35 @@ function OverviewTab({
         <section className="min-w-0 rounded-card edge-lit overflow-hidden bg-ink-card border border-ink-line">
           <header className="flex items-center justify-between border-b border-ink-line px-5 py-3.5">
             <div className="flex items-baseline gap-2.5">
-              <span className="font-mono text-[13px] font-bold text-accent">01</span>
-              <h2 className="font-mono text-[11.5px] font-bold uppercase tracking-[0.16em] text-text-pri">
+              <span className="font-mono text-meta font-bold text-accent">01</span>
+              <h2 className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-text-pri">
                 Recent quotes
               </h2>
             </div>
             <button
               type="button"
               onClick={() => setTab('quotes')}
-              className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+              className="font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
             >
               View all {activeQuotes} →
             </button>
           </header>
           {jobsError && (
             <div className="flex items-center justify-between gap-3 border-b border-ink-line px-5 py-2.5">
-              <span className="font-mono text-[0.6875rem] uppercase tracking-[0.13em] text-warning-bright">
+              <span className="font-mono text-micro uppercase tracking-[0.13em] text-warning-bright">
                 Couldn&rsquo;t load saved trade jobs.
               </span>
               <button
                 type="button"
                 onClick={() => setJobsReload((n) => n + 1)}
-                className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+                className="font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
               >
                 Retry
               </button>
             </div>
           )}
           {recentFeed.length === 0 ? (
-            <div className="px-5 py-8 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
+            <div className="px-5 py-8 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
               {jobsLoading
                 ? 'Loading…'
                 : period === 'all'
@@ -2956,19 +2989,19 @@ function OverviewTab({
           ) : (
             <div>
               <div className="hidden grid-cols-[minmax(94px,1.4fr)_minmax(108px,1.7fr)_46px_76px_116px] gap-3 border-b border-ink-line px-5 py-2.5 sm:grid">
-                <span className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="font-mono text-micro font-bold uppercase tracking-[0.13em] text-text-dim">
                   Customer
                 </span>
-                <span className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="font-mono text-micro font-bold uppercase tracking-[0.13em] text-text-dim">
                   Job
                 </span>
-                <span className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="font-mono text-micro font-bold uppercase tracking-[0.13em] text-text-dim">
                   Ch
                 </span>
-                <span className="text-right font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="text-right font-mono text-micro font-bold uppercase tracking-[0.13em] text-text-dim">
                   Value
                 </span>
-                <span className="text-right font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="text-right font-mono text-micro font-bold uppercase tracking-[0.13em] text-text-dim">
                   Status
                 </span>
               </div>
@@ -2983,21 +3016,21 @@ function OverviewTab({
                   const cells = (
                     <>
                       <div className="min-w-0">
-                        <div className="truncate text-[13.5px] font-bold text-text-pri">
+                        <div className="truncate text-sm font-bold text-text-pri">
                           {v.label}
                         </div>
-                        <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                        <div className="mt-0.5 truncate font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                           Saved job
                         </div>
                       </div>
-                      <span className="hidden min-w-0 truncate text-[12.5px] text-text-sec sm:block">
+                      <span className="hidden min-w-0 truncate text-meta text-text-sec sm:block">
                         {v.tradeLabel}
                       </span>
-                      <span className="hidden font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-text-dim sm:block">
+                      <span className="hidden font-mono text-micro font-bold uppercase tracking-[0.08em] text-text-dim sm:block">
                         Tool
                       </span>
                       <span
-                        className="hidden text-right font-mono text-[13.5px] font-bold tabular-nums sm:block"
+                        className="hidden text-right font-mono text-sm font-bold tabular-nums sm:block"
                         style={{ color: v.value ? 'var(--text-pri)' : 'var(--text-dim)' }}
                       >
                         {v.value ?? '—'}
@@ -3049,23 +3082,23 @@ function OverviewTab({
                     className={rowClass}
                   >
                     <div className="min-w-0">
-                      <div className="truncate text-[13.5px] font-bold text-text-pri">
+                      <div className="truncate text-sm font-bold text-text-pri">
                         {name}
                       </div>
                       {q.suburb && (
-                        <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                        <div className="mt-0.5 truncate font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                           {q.suburb}
                         </div>
                       )}
                     </div>
-                    <span className="hidden min-w-0 truncate text-[12.5px] text-text-sec sm:block">
+                    <span className="hidden min-w-0 truncate text-meta text-text-sec sm:block">
                       {fmtJobType(q.job_type)}
                     </span>
-                    <span className="hidden font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-text-dim sm:block">
+                    <span className="hidden font-mono text-micro font-bold uppercase tracking-[0.08em] text-text-dim sm:block">
                       {q.channel === 'voice' ? 'Voice' : 'SMS'}
                     </span>
                     <span
-                      className="hidden text-right font-mono text-[13.5px] font-bold tabular-nums sm:block"
+                      className="hidden text-right font-mono text-sm font-bold tabular-nums sm:block"
                       style={{ color: val === '—' ? 'var(--text-dim)' : 'var(--text-pri)' }}
                     >
                       {val}
@@ -3086,15 +3119,15 @@ function OverviewTab({
               tradie" block; without a photo it falls back to a generic avatar
               on both the quote page and the PDF. Disappears once one is set. */}
           {!data.tenant.photo_url && (
-            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-ink-line border-l-2 border-l-warning-bright bg-ink-card p-[18px]">
-              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-warning-bright">
+            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-warning-bright/40 bg-ink-card p-[18px]">
+              <div className="flex items-center gap-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-warning-bright">
                 <span
                   aria-hidden="true"
                   className="h-1.5 w-1.5 rounded-full bg-warning-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
                 />
                 Add your photo
               </div>
-              <p className="mt-2 text-[12.5px] leading-normal text-text-dim">
+              <p className="mt-2 text-meta leading-normal text-text-dim">
                 Your quotes show a generic avatar in the &ldquo;Your tradie&rdquo;
                 section. Add a photo once and customers see your face on every
                 quote page and PDF.
@@ -3102,7 +3135,7 @@ function OverviewTab({
               <button
                 type="button"
                 onClick={() => setTab('account')}
-                className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
               >
                 Add your photo →
               </button>
@@ -3111,8 +3144,8 @@ function OverviewTab({
 
           {/* Needs your attention — the top review quote (or an all-clear). */}
           {attnQuote ? (
-            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-ink-line border-l-2 border-l-warning-bright bg-ink-card p-[18px]">
-              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-warning-bright">
+            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-warning-bright/40 bg-ink-card p-[18px]">
+              <div className="flex items-center gap-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-warning-bright">
                 <span
                   aria-hidden="true"
                   className="h-1.5 w-1.5 rounded-full bg-warning-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
@@ -3120,25 +3153,25 @@ function OverviewTab({
                 Needs your attention
               </div>
               <div className="mt-3 flex items-center justify-between gap-2.5">
-                <span className="truncate text-[15px] font-bold text-text-pri">
+                <span className="truncate text-sm font-bold text-text-pri">
                   {attnQuote.customer_full_name ||
                     attnQuote.customer_first_name ||
                     'Customer'}
                   {attnQuote.suburb ? ` · ${attnQuote.suburb}` : ''}
                 </span>
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                <span className="shrink-0 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                   {attnQuote.channel === 'voice' ? 'Voice' : 'SMS'} ·{' '}
                   {fmtRelative(attnQuote.created_at)}
                 </span>
               </div>
-              <p className="mt-1.5 text-[12.5px] leading-normal text-text-dim">
+              <p className="mt-1.5 text-meta leading-normal text-text-dim">
                 QuoteMax drafted this one. It needs a couple of details before
                 you can send.
               </p>
               <button
                 type="button"
                 onClick={() => openQuote(attnQuote)}
-                className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
               >
                 Review quote →
               </button>
@@ -3147,8 +3180,8 @@ function OverviewTab({
             // Measure-tool fallback (spec T3): no pipeline quote needs review,
             // but a saved trade job is still in draft — surface it here so
             // trade-tab work gets the same attention treatment.
-            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-ink-line border-l-2 border-l-warning-bright bg-ink-card p-[18px]">
-              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-warning-bright">
+            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-warning-bright/40 bg-ink-card p-[18px]">
+              <div className="flex items-center gap-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-warning-bright">
                 <span
                   aria-hidden="true"
                   className="h-1.5 w-1.5 rounded-full bg-warning-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
@@ -3156,15 +3189,15 @@ function OverviewTab({
                 Needs your attention
               </div>
               <div className="mt-3 flex items-center justify-between gap-2.5">
-                <span className="truncate text-[15px] font-bold text-text-pri">
+                <span className="truncate text-sm font-bold text-text-pri">
                   {attnJobView!.label}
                 </span>
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                <span className="shrink-0 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                   {attnJobView!.tradeLabel}
                   {attnJob.createdAt ? ` · ${fmtRelative(attnJob.createdAt)}` : ''}
                 </span>
               </div>
-              <p className="mt-1.5 text-[12.5px] leading-normal text-text-dim">
+              <p className="mt-1.5 text-meta leading-normal text-text-dim">
                 You measured this one in the{' '}
                 {attnJobView!.tradeLabel.toLowerCase()} tool. It is still a
                 draft — review and send it.
@@ -3174,7 +3207,7 @@ function OverviewTab({
                   href={attnJob.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                  className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
                 >
                   Review job →
                 </a>
@@ -3182,7 +3215,7 @@ function OverviewTab({
                 <button
                   type="button"
                   onClick={() => setTab('quotes')}
-                  className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                  className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
                 >
                   Review job →
                 </button>
@@ -3190,14 +3223,14 @@ function OverviewTab({
             </section>
           ) : (
             <section className="rounded-card edge-lit overflow-hidden border border-ink-line bg-ink-card p-[18px]">
-              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-success-bright">
+              <div className="flex items-center gap-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-success-bright">
                 <span
                   aria-hidden="true"
                   className="h-1.5 w-1.5 rounded-full bg-success-bright"
                 />
                 All clear
               </div>
-              <p className="mt-2 text-[12.5px] leading-normal text-text-dim">
+              <p className="mt-2 text-meta leading-normal text-text-dim">
                 No quotes need your review right now. New ones land here the
                 moment they are drafted.
               </p>
@@ -3206,13 +3239,13 @@ function OverviewTab({
 
           {/* Your QuoteMax number — number + copy + SMS / Voice / AI chips. */}
           <section className="rounded-card edge-lit overflow-hidden border border-ink-line bg-ink-card p-[18px]">
-            <div className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
               Your QuoteMax number
             </div>
             {smsNumber ? (
               <>
                 <div className="mt-2.5 flex items-center justify-between gap-2.5">
-                  <span className="break-all font-mono text-[18px] font-bold tracking-[-0.01em] text-text-pri">
+                  <span className="break-all font-mono text-lg font-bold tracking-[-0.01em] text-text-pri">
                     {formatAuMobile(smsNumber)}
                   </span>
                   <CopyNumberButton value={smsNumber} />
@@ -3228,7 +3261,7 @@ function OverviewTab({
               </>
             ) : (
               <>
-                <p className="mt-2 text-[12.5px] leading-normal text-warning-bright">
+                <p className="mt-2 text-meta leading-normal text-warning-bright">
                   Provisioning didn&rsquo;t finish on activate. Hit retry — your
                   account and pricing book are saved.
                 </p>
@@ -3240,13 +3273,13 @@ function OverviewTab({
           {/* Recent chats */}
           <section className="rounded-card edge-lit overflow-hidden border border-ink-line bg-ink-card">
             <header className="flex items-center justify-between border-b border-ink-line px-4 py-3">
-              <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-text-pri">
+              <h2 className="font-mono text-micro font-bold uppercase tracking-[0.16em] text-text-pri">
                 Recent chats
               </h2>
               <button
                 type="button"
                 onClick={() => setTab('chats')}
-                className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+                className="font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
               >
                 Open →
               </button>
@@ -3257,20 +3290,20 @@ function OverviewTab({
               const state = widgetState(chatsLoading, chatsError, latestChats.length)
               if (state === 'loading')
                 return (
-                  <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                  <div className="qm-loading px-4 py-8 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                     Loading…
                   </div>
                 )
               if (state === 'error')
                 return (
                   <div className="flex items-center justify-between gap-3 px-4 py-8">
-                    <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-warning-bright">
+                    <span className="font-mono text-micro uppercase tracking-[0.14em] text-warning-bright">
                       Couldn&rsquo;t load chats.
                     </span>
                     <button
                       type="button"
                       onClick={() => setChatsReload((n) => n + 1)}
-                      className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+                      className="font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
                     >
                       Retry
                     </button>
@@ -3278,7 +3311,7 @@ function OverviewTab({
                 )
               if (state === 'empty')
                 return (
-                  <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                  <div className="px-4 py-8 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                     No conversations yet.
                   </div>
                 )
@@ -3338,7 +3371,7 @@ function OverviewHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
       <div className="min-w-0">
-        <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+        <div className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">
           QuoteMax · Overview
         </div>
         <h1 className="mt-2 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.8rem,2.6vw,2.7rem)] leading-none">
@@ -3354,7 +3387,7 @@ function OverviewHeader({
         <button
           type="button"
           onClick={onNewQuote}
-          className="inline-flex items-center gap-2 rounded-ctl bg-accent px-4 py-2.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.1em] text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+          className="inline-flex items-center gap-2 rounded-ctl bg-accent px-4 py-2.5 font-mono text-micro font-bold uppercase tracking-[0.1em] text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
         >
           <FileText size={15} strokeWidth={2.25} aria-hidden="true" />
           Review queue
@@ -3408,7 +3441,7 @@ function PeriodPicker({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Reporting period: ${periodLabel(period)}`}
-        className="inline-flex items-center gap-2 rounded-ctl border border-ink-line px-3.5 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.13em] text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:text-text-pri"
+        className="inline-flex items-center gap-2 rounded-ctl border border-ink-line px-3.5 py-2 font-mono text-micro font-bold uppercase tracking-[0.13em] text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:text-text-pri"
       >
         <CalendarDays
           size={14}
@@ -3442,7 +3475,7 @@ function PeriodPicker({
                   setOpen(false)
                   btnRef.current?.focus()
                 }}
-                className={`flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left font-mono text-[0.62rem] font-bold uppercase tracking-[0.12em] transition-colors ${
+                className={`flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left font-mono text-micro font-bold uppercase tracking-[0.12em] transition-colors ${
                   active
                     ? 'text-accent'
                     : 'text-text-sec hover:bg-ink-deep/40 hover:text-text-pri'
@@ -3476,7 +3509,7 @@ function CopyNumberButton({ value }: { value: string }) {
     <button
       type="button"
       onClick={copy}
-      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1.5 font-mono text-[0.58rem] font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri cursor-pointer"
+      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1.5 font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri cursor-pointer"
       aria-label={copied ? 'Number copied' : 'Copy number'}
     >
       {copied ? (
@@ -3513,7 +3546,7 @@ function PipelineStat({
   const valueTone = tone === 'ok' ? 'text-success-bright' : 'text-accent'
   return (
     <div className="bg-ink-card p-5">
-      <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+      <div className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">
         {label}
       </div>
       <div
@@ -3522,7 +3555,7 @@ function PipelineStat({
         {value}
       </div>
       {hint && (
-        <div className="mt-2 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-text-sec">
+        <div className="mt-2 font-mono text-micro uppercase tracking-[0.14em] text-text-sec">
           {hint}
         </div>
       )}
@@ -3562,6 +3595,7 @@ function RetryProvisionButton() {
         type="button"
         onClick={handleClick}
         disabled={busy}
+        aria-busy={busy}
         className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
       >
         {busy ? 'Retrying…' : 'Retry provisioning'}
@@ -3603,7 +3637,7 @@ function Kpi({
 }) {
   return (
     <div className="rounded-card bg-ink-card border border-ink-line p-5">
-      <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+      <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
         {label}
       </div>
       <div
@@ -3682,7 +3716,7 @@ function KpiTile({
       className="rounded-card bg-ink-card border border-ink-line p-5 md:p-6 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
       style={delay > 0 ? { animationDelay: `${delay}ms` } : undefined}
     >
-      <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+      <div className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">
         {label}
       </div>
       <div
@@ -3691,7 +3725,7 @@ function KpiTile({
         {display}
       </div>
       {hint && (
-        <div className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-sec">
+        <div className="mt-2 font-mono text-micro uppercase tracking-[0.14em] text-text-sec">
           {hint}
         </div>
       )}
@@ -3739,7 +3773,7 @@ function LatestQuoteRow({
           </span>
           {q.channel && <ChannelBadge channel={q.channel} />}
         </div>
-        <div className="mt-1 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+        <div className="mt-1 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
           {q.job_type ? formatJobType(q.job_type) : 'Unclassified'}
           {q.suburb ? ` · ${q.suburb}` : ''}
         </div>
@@ -3779,16 +3813,16 @@ function LatestChatRow({
           <span className="font-semibold text-text-pri truncate">{who}</span>
           <ChannelBadge channel={chat.channel} />
         </div>
-        <div className="mt-1 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+        <div className="mt-1 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
           {chat.job_type ? formatJobType(chat.job_type) : 'Unclassified'}
           {chat.suburb ? ` · ${chat.suburb}` : ''}
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+        <div className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           {formatDate(when)}
         </div>
-        <div className="mt-0.5 font-mono text-[0.6rem] text-text-sec">
+        <div className="mt-0.5 font-mono text-micro text-text-sec">
           {formatTime(when)}
         </div>
       </div>
@@ -3853,6 +3887,7 @@ function SmsEstimatorCard({
           aria-checked={enabled ? 'true' : 'false'}
           onClick={toggle}
           disabled={busy}
+          aria-busy={busy}
           className={`rounded-ctl inline-flex items-center gap-2 border px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${
             enabled
               ? 'border-accent bg-success-bright/10 text-success-bright'
@@ -3934,7 +3969,7 @@ function BrandImageCard({
               className={`h-full w-full ${fit === 'cover' ? 'object-cover' : 'object-contain'}`}
             />
           ) : (
-            <span className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-text-dim">
+            <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
               No {noun}
             </span>
           )}
@@ -3950,7 +3985,7 @@ function BrandImageCard({
             />
             {uploading ? 'Uploading…' : currentUrl ? `Change ${noun}` : `Upload ${noun}`}
           </label>
-          <p className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+          <p className="mt-2 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
             PNG, JPG, WEBP or SVG · max 2 MB
           </p>
           {error && (
@@ -4020,6 +4055,7 @@ function DefaultScheduleCard({
           type="button"
           onClick={save}
           disabled={busy || !valid}
+          aria-busy={busy}
           className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-5 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? 'Saving…' : 'Save availability'}
@@ -4207,6 +4243,7 @@ function AccountTab({
           <button
             type="submit"
             disabled={submitting}
+            aria-busy={submitting}
             className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Save account'}
@@ -4414,6 +4451,7 @@ function PayoutsTab({
                 type="button"
                 onClick={startOnboarding}
                 disabled={busy}
+                aria-busy={busy}
                 className="rounded-ctl inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 {busy ? 'Opening Stripe…' : 'Update payout details'}
@@ -4423,6 +4461,7 @@ function PayoutsTab({
                 type="button"
                 onClick={startOnboarding}
                 disabled={busy}
+                aria-busy={busy}
                 className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 <Banknote size={16} strokeWidth={2} aria-hidden="true" />
@@ -4440,6 +4479,7 @@ function PayoutsTab({
                 type="button"
                 onClick={() => void syncStatus(false)}
                 disabled={syncing}
+                aria-busy={syncing}
                 className="rounded-ctl inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 {syncing ? 'Checking…' : 'Refresh status'}
@@ -4706,7 +4746,7 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
           <p className="mb-4 text-sm leading-relaxed text-text-sec">{actionMsg}</p>
         )}
         {jobs === null && !loadErr ? (
-          <p className="text-sm text-text-dim">Loading…</p>
+          <p className="qm-loading text-sm text-text-dim">Loading…</p>
         ) : awaiting.length === 0 ? (
           <p className="text-sm leading-relaxed text-text-sec">
             No payments waiting on you. When a customer pays a deposit, it
@@ -4734,6 +4774,7 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
                   type="button"
                   onClick={() => releaseJob(j.quote_id)}
                   disabled={busyId !== null || j.release_state === 'in_flight'}
+                  aria-busy={busyId !== null}
                   className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
                 >
                   {busyId === j.quote_id
@@ -4849,7 +4890,7 @@ function PayoutOverview({
                   ? `${bank.bank_name ?? 'Bank account'}${bank.last4 ? ` ···· ${bank.last4}` : ''}`
                   : 'Bank account on file with Stripe'}
               </p>
-              <p className="mt-0.5 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+              <p className="mt-0.5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                 {payoutScheduleLabel(account?.payout_schedule ?? null)}
               </p>
             </div>
@@ -4862,7 +4903,7 @@ function PayoutOverview({
                 <p className="font-mono text-sm tabular-nums text-text-pri">
                   {fmtAudCents(balance.available_cents)} available
                 </p>
-                <p className="mt-0.5 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+                <p className="mt-0.5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                   {fmtAudCents(balance.pending_cents)} still settling
                 </p>
               </div>
@@ -4882,7 +4923,7 @@ function PayoutOverview({
       )}
 
       {truncated && (
-        <p className="mt-4 text-[0.7rem] text-text-dim">
+        <p className="mt-4 text-micro text-text-dim">
           Totals cover your 200 most recent paid jobs.
         </p>
       )}
@@ -4903,7 +4944,7 @@ function Figure({
 }) {
   return (
     <div>
-      <dt className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+      <dt className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
         {label}
       </dt>
       <dd
@@ -4913,7 +4954,7 @@ function Figure({
       >
         {value}
       </dd>
-      {sub && <dd className="mt-0.5 text-[0.7rem] text-text-dim">{sub}</dd>}
+      {sub && <dd className="mt-0.5 text-micro text-text-dim">{sub}</dd>}
     </div>
   )
 }
@@ -5029,7 +5070,7 @@ function LicencesCard({
           return (
             <div key={l.trade} className="space-y-4">
               {isMulti && (
-                <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold">
+                <h3 className="font-mono text-micro uppercase tracking-[0.16em] text-accent font-bold">
                   {tradeLabel(l.trade)}
                 </h3>
               )}
@@ -5087,6 +5128,7 @@ function LicencesCard({
           <button
             type="submit"
             disabled={submitting}
+            aria-busy={submitting}
             className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : isMulti ? 'Save licences' : 'Save licence'}
@@ -5215,7 +5257,7 @@ function TradesCard({
       {loadError && <ErrorBanner>{loadError}</ErrorBanner>}
 
       {!loadError && manageable === null && (
-        <p className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+        <p className="qm-loading font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
           Loading trades…
         </p>
       )}
@@ -5235,6 +5277,7 @@ function TradesCard({
                   type="button"
                   onClick={() => toggle(t.name)}
                   disabled={busy}
+                  aria-busy={busy}
                   className={`rounded-card px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border ${
                     selected
                       ? 'border-accent bg-accent text-white'
@@ -5259,13 +5302,14 @@ function TradesCard({
           )}
 
           <div className="mt-5 flex items-center justify-between">
-            <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+            <p className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
               Current: {owned.map(labelFor).join(' + ') || '—'}
             </p>
             <button
               type="button"
               onClick={handleSave}
               disabled={!dirty || busy}
+              aria-busy={busy}
               className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {busy ? 'Saving…' : 'Save trades'}
@@ -5302,9 +5346,12 @@ function ConfirmRemoveTrade({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-deep/80 backdrop-blur-sm px-4"
+      className="qm-overlay fixed inset-0 z-50 flex items-center justify-center bg-ink-deep/80 backdrop-blur-sm px-4"
     >
-      <div className="rounded-card w-full max-w-md bg-ink-card border border-ink-line p-6 space-y-4">
+      {/* Scrim fades, panel scales up from 0.96 — never from 0, because
+          nothing in the real world appears out of a zero-size point. Origin
+          stays centre: a modal is not anchored to a trigger. */}
+      <div className="qm-panel rounded-card w-full max-w-md bg-ink-card border border-ink-line p-6 space-y-4">
         <h3 className="font-extrabold uppercase text-lg tracking-[-0.02em]">
           Remove {list}?
         </h3>
@@ -5323,6 +5370,7 @@ function ConfirmRemoveTrade({
             type="button"
             onClick={onCancel}
             disabled={busy}
+            aria-busy={busy}
             className="text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri px-4 py-2 disabled:opacity-50"
           >
             Cancel
@@ -5331,6 +5379,7 @@ function ConfirmRemoveTrade({
             type="button"
             onClick={onConfirm}
             disabled={busy}
+            aria-busy={busy}
             className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {busy ? 'Removing…' : `Remove ${list}`}
@@ -5422,7 +5471,7 @@ function ActivateTradeCard({
       {loadError && <ErrorBanner>{loadError}</ErrorBanner>}
 
       {!loadError && available === null && (
-        <p className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+        <p className="qm-loading font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
           Loading available trades…
         </p>
       )}
@@ -5784,12 +5833,13 @@ function ReviewPolicyCard({
           <button
             type="submit"
             disabled={submitting || !dirty}
-            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-busy={submitting}
+            className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Saving…' : 'Save policy'}
           </button>
           {savedAt && Date.now() - savedAt < 4000 && (
-            <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+            <span className="font-mono text-micro uppercase tracking-[0.14em] text-accent">
               ✓ Saved
             </span>
           )}
@@ -5882,12 +5932,13 @@ function Followup2hCard({
           <button
             type="submit"
             disabled={submitting || !dirty}
-            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-busy={submitting}
+            className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Saving…' : 'Save'}
           </button>
           {savedAt && Date.now() - savedAt < 4000 && (
-            <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+            <span className="font-mono text-micro uppercase tracking-[0.14em] text-accent">
               ✓ Saved
             </span>
           )}
@@ -6033,12 +6084,13 @@ function QuoteTierModeCard({
           <button
             type="submit"
             disabled={submitting || !dirty}
-            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-busy={submitting}
+            className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Saving…' : 'Save'}
           </button>
           {savedAt && Date.now() - savedAt < 4000 && (
-            <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+            <span className="font-mono text-micro uppercase tracking-[0.14em] text-accent">
               ✓ Saved
             </span>
           )}
@@ -6146,12 +6198,13 @@ function QuoteDisplayCard({
           <button
             type="submit"
             disabled={submitting || mode === current}
-            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-busy={submitting}
+            className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Saving…' : 'Save layout'}
           </button>
           {savedAt && Date.now() - savedAt < 4000 && (
-            <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+            <span className="font-mono text-micro uppercase tracking-[0.14em] text-accent">
               ✓ Saved
             </span>
           )}
@@ -6401,7 +6454,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
 
       <div className="rounded-card mb-4 border border-dashed border-ink-line bg-ink-card p-4">
         <label className="block">
-          <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim block mb-2">
+          <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim block mb-2">
             Upload invoice (JPG / PNG / WEBP / HEIC / PDF)
           </span>
           <input
@@ -6413,26 +6466,26 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
               if (f) void onFile(f)
               e.target.value = ''
             }}
-            className="text-sm text-text-pri file:mr-3 file:py-2 file:px-3 file:border file:border-accent/50 file:text-accent file:bg-transparent file:font-mono file:text-[0.65rem] file:uppercase file:tracking-[0.14em] file:font-bold file:cursor-pointer hover:file:bg-accent/10"
+            className="text-sm text-text-pri file:mr-3 file:py-2 file:px-3 file:border file:border-accent/50 file:text-accent file:bg-transparent file:font-mono file:text-micro file:uppercase file:tracking-[0.14em] file:font-bold file:cursor-pointer hover:file:bg-accent/10"
           />
         </label>
         {uploading && (
           <p className="mt-2 text-xs text-text-dim">Extracting via Gemini vision…</p>
         )}
         {msg && (
-          <p className="mt-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+          <p className="mt-2 font-mono text-micro uppercase tracking-[0.14em] text-accent">
             {msg}
           </p>
         )}
       </div>
 
       {loading && (
-        <p className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+        <p className="qm-loading font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           Loading calibration report…
         </p>
       )}
       {err && (
-        <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-warning">
+        <p className="font-mono text-micro uppercase tracking-[0.14em] text-warning">
           Couldn&apos;t load calibration: {err}
         </p>
       )}
@@ -6450,7 +6503,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
               <div key={trade} className="rounded-card border border-ink-line bg-ink-card">
                 <div className="px-4 py-3 border-b border-ink-line flex items-baseline justify-between flex-wrap gap-2">
                   <h4 className="font-semibold text-text-pri">{tradeLabel}</h4>
-                  <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+                  <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                     {r.invoices_matched} matched · {r.invoices_skipped} skipped · {r.invoices_total} total
                   </span>
                 </div>
@@ -6463,11 +6516,11 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
                   {s && (
                     <>
                       <p className="text-text-pri text-sm">{s.reason}</p>
-                      <div className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                      <div className="mt-3 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                         Range: {s.diff_pct_min.toFixed(1)}% to {s.diff_pct_max.toFixed(1)}% (median {s.diff_pct_median.toFixed(1)}%) · invoices_used={s.invoices_used} · trust={s.trust}
                       </div>
                       {s.trust === 'reject' ? (
-                        <p className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-warning">
+                        <p className="mt-3 font-mono text-micro uppercase tracking-[0.14em] text-warning">
                           Rejected by trust gate: {s.reject_reason}
                         </p>
                       ) : (
@@ -6476,7 +6529,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
                             type="button"
                             disabled={busyAction === trade}
                             onClick={() => void actOnSuggestion(trade, true)}
-                            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors disabled:opacity-50 cursor-pointer"
+                            className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors disabled:opacity-50 cursor-pointer"
                           >
                             {busyAction === trade ? 'Applying…' : `Accept · raise hourly to $${s.suggested_value}`}
                           </button>
@@ -6484,7 +6537,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
                             type="button"
                             disabled={busyAction === trade}
                             onClick={() => void actOnSuggestion(trade, false)}
-                            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] px-3 py-2 border border-ink-line text-text-dim hover:text-text-pri hover:border-text-dim transition-colors disabled:opacity-50 cursor-pointer"
+                            className="font-mono text-micro uppercase tracking-[0.14em] px-3 py-2 border border-ink-line text-text-dim hover:text-text-pri hover:border-text-dim transition-colors disabled:opacity-50 cursor-pointer"
                           >
                             Reject
                           </button>
@@ -6498,17 +6551,17 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
           })}
           {report.uploads.length > 0 && (
             <details className="rounded-card border border-ink-line bg-ink-card">
-              <summary className="px-4 py-3 cursor-pointer font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-pri">
+              <summary className="px-4 py-3 cursor-pointer font-mono text-micro uppercase tracking-[0.14em] text-text-dim hover:text-text-pri">
                 ▸ Uploaded invoices ({report.uploads.length})
               </summary>
               <ul className="divide-y divide-ink-line">
                 {report.uploads.map((u) => (
                   <li key={u.id} className="px-4 py-2 flex items-center justify-between text-xs">
-                    <span className="font-mono text-[0.65rem] text-text-pri">
+                    <span className="font-mono text-micro text-text-pri">
                       {u.id.slice(0, 8)}…
                     </span>
                     <span
-                      className={`font-mono text-[0.6rem] uppercase tracking-[0.14em] ${
+                      className={`font-mono text-micro uppercase tracking-[0.14em] ${
                         u.status === 'extracted'
                           ? 'text-accent'
                           : u.status === 'failed'
@@ -6653,6 +6706,7 @@ function EarlyBirdCard({
           <button
             type="submit"
             disabled={submitting}
+            aria-busy={submitting}
             className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Save discount'}
@@ -6758,7 +6812,7 @@ function PricingBookCard({
               className={INPUT}
             />
             {minLabourDollars != null && (
-              <div className="mt-1.5 font-mono text-[0.65rem] uppercase tracking-[0.1em] text-text-dim">
+              <div className="mt-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                 ≈ ${minLabourDollars} min labour at ${hourlyRateRounded}/hr
               </div>
             )}
@@ -6865,6 +6919,7 @@ function PricingBookCard({
           <button
             type="submit"
             disabled={submitting}
+            aria-busy={submitting}
             className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Save pricing'}
@@ -7073,8 +7128,8 @@ function ServicesTab({
          the (possibly trade-scoped) list is empty so it can't claim a
          catalogue is loaded when nothing is. */}
       {visibleServices.length > 0 && (
-      <div className="border-l-2 border-l-accent/60 bg-ink-card/60 px-4 py-3">
-        <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent mb-1">
+      <div className="rounded-ctl border border-accent/30 bg-ink-card/60 px-4 py-3">
+        <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent mb-1">
           Catalogue · pre-populated
         </div>
         <div className="text-sm text-text-sec">
@@ -7093,7 +7148,7 @@ function ServicesTab({
             handles both create and edit; opening it from here defaults
             to create-mode (no existing row pre-filled). */}
         <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-          <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+          <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
             {visibleServices.filter((s) => s.is_custom).length} custom service
             {visibleServices.filter((s) => s.is_custom).length === 1 ? '' : 's'} ·{' '}
             {visibleServices.filter((s) => !s.is_custom).length} catalogue
@@ -7107,7 +7162,7 @@ function ServicesTab({
                   : { mode: 'create', trade: tenantTrades[0] ?? 'electrical' },
               )
             }
-            className="rounded-ctl inline-flex items-center gap-2 border border-accent/60 text-accent hover:bg-accent/10 font-mono font-bold uppercase tracking-[0.14em] text-[0.7rem] px-3.5 py-2 transition-colors"
+            className="rounded-ctl inline-flex items-center gap-2 border border-accent/60 text-accent hover:bg-accent/10 font-mono font-bold uppercase tracking-[0.14em] text-micro px-3.5 py-2 transition-colors"
           >
             {formState ? '× Cancel' : '+ Add custom service'}
           </button>
@@ -7185,7 +7240,7 @@ function ServicesTab({
               .map(({ trade: groupTrade, rows }) => (
               <div key={groupTrade || 'all'} className="space-y-2">
                 {showGrouped && (
-                  <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pt-3 pb-1">
+                  <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent font-bold pt-3 pb-1">
                     {tradeLabel(groupTrade as 'electrical' | 'plumbing')}
                   </div>
                 )}
@@ -7267,7 +7322,7 @@ function ServicesTab({
                             catalogue rows a neutral one. */}
                         {cv.collides && cv.tag && (
                           <span
-                            className={`font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-0.5 border shrink-0 ${
+                            className={`font-mono text-micro uppercase tracking-[0.18em] px-2 py-0.5 border shrink-0 ${
                               cv.source === 'custom'
                                 ? 'border-accent/50 text-accent'
                                 : 'border-ink-line text-text-dim'
@@ -7279,7 +7334,7 @@ function ServicesTab({
                         )}
                         {isPending && (
                           <span
-                            className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-accent shrink-0"
+                            className="font-mono text-micro uppercase tracking-[0.18em] text-accent shrink-0"
                             title="Unsaved change"
                           >
                             • unsaved
@@ -7291,7 +7346,7 @@ function ServicesTab({
                           {svc.description}
                         </div>
                       )}
-                      <div className="ml-5 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <div className="ml-5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                         {price !== null && (
                           <span>
                             ${price.toFixed(2)} {svc.default_unit ? `/ ${svc.default_unit}` : ''}
@@ -7305,7 +7360,7 @@ function ServicesTab({
                             existing always_inspection flag. */}
                         {svc.always_inspection && (
                           <span
-                            className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-0.5 border border-ink-line text-text-dim"
+                            className="font-mono text-micro uppercase tracking-[0.18em] px-2 py-0.5 border border-ink-line text-text-dim"
                             title="Always books a $99 paid inspection. Turning this on does NOT auto-price it — the AI tells the customer a site visit is needed."
                           >
                             inspection only
@@ -7353,7 +7408,7 @@ function ServicesTab({
                         />
                       </span>
                       <span
-                        className={`font-mono text-[0.65rem] uppercase tracking-[0.18em] font-bold transition-colors w-7 ${
+                        className={`font-mono text-micro uppercase tracking-[0.18em] font-bold transition-colors w-7 ${
                           live ? 'text-accent' : 'text-text-dim group-hover:text-text-sec'
                         }`}
                       >
@@ -7368,7 +7423,7 @@ function ServicesTab({
                     <div className="border-t border-ink-line/70 px-4 py-4 ml-5 mr-4 bg-ink/30 space-y-4 text-xs">
                       {svc.description && (
                         <div>
-                          <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim mb-1">
+                          <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim mb-1">
                             What&rsquo;s included
                           </div>
                           <p className="text-sm text-text-sec leading-relaxed">
@@ -7379,7 +7434,7 @@ function ServicesTab({
 
                       {svc.default_exclusions && (
                         <div>
-                          <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-warning mb-1">
+                          <div className="font-mono text-micro uppercase tracking-[0.16em] text-warning mb-1">
                             Excludes
                           </div>
                           <p className="text-sm text-text-sec leading-relaxed">
@@ -7390,7 +7445,7 @@ function ServicesTab({
 
                       {(price !== null || labourCost !== null) && (
                         <div>
-                          <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim mb-2">
+                          <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim mb-2">
                             Base cost breakdown (ex-GST)
                           </div>
                           <table className="w-full text-sm">
@@ -7443,7 +7498,7 @@ function ServicesTab({
                               )}
                             </tbody>
                           </table>
-                          <p className="mt-2 text-[0.65rem] text-text-dim leading-snug">
+                          <p className="mt-2 text-micro text-text-dim leading-snug">
                             Materials and product cost are added on top by the AI when it
                             picks a tier-appropriate SKU. Markup
                             {data.pricing
@@ -7455,16 +7510,16 @@ function ServicesTab({
                       )}
 
                       <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border border-ink-line text-text-dim">
+                        <span className="font-mono text-micro uppercase tracking-[0.18em] px-2 py-1 border border-ink-line text-text-dim">
                           {svc.trade}
                         </span>
                         {svc.default_unit && (
-                          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border border-ink-line text-text-dim">
+                          <span className="font-mono text-micro uppercase tracking-[0.18em] px-2 py-1 border border-ink-line text-text-dim">
                             per {svc.default_unit}
                           </span>
                         )}
                         {svc.is_custom && (
-                          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border border-ink-line text-text-dim">
+                          <span className="font-mono text-micro uppercase tracking-[0.18em] px-2 py-1 border border-ink-line text-text-dim">
                             custom
                           </span>
                         )}
@@ -7508,7 +7563,7 @@ function ServicesTab({
                                 category: svc.category ?? '',
                               })
                             }
-                            className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line text-text-sec hover:border-accent/60 hover:text-accent font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
+                            className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line text-text-sec hover:border-accent/60 hover:text-accent font-mono font-bold uppercase tracking-[0.14em] text-micro px-3 py-1.5 transition-colors"
                           >
                             ✎ Edit
                           </button>
@@ -7528,7 +7583,7 @@ function ServicesTab({
                                 setError(err?.message ?? 'Delete failed')
                               }
                             }}
-                            className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line text-text-dim hover:border-warning/60 hover:text-warning font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
+                            className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line text-text-dim hover:border-warning/60 hover:text-warning font-mono font-bold uppercase tracking-[0.14em] text-micro px-3 py-1.5 transition-colors"
                           >
                             ⌫ Delete
                           </button>
@@ -7562,6 +7617,7 @@ function ServicesTab({
             type="button"
             onClick={saveAll}
             disabled={busy || !dirty}
+            aria-busy={busy}
             className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy
@@ -7740,7 +7796,7 @@ function PreferredBrandsCard({
           return (
             <div key={trade} className="space-y-2">
               {showGrouped && (
-                <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pt-1 pb-1">
+                <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent font-bold pt-1 pb-1">
                   {tradeLabel(trade as 'electrical' | 'plumbing')}
                 </div>
               )}
@@ -7795,6 +7851,7 @@ function PreferredBrandsCard({
           type="button"
           onClick={saveAll}
           disabled={busy || !dirty}
+          aria-busy={busy}
           className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {busy
@@ -7935,7 +7992,7 @@ function CustomServiceForm({
       className="border border-accent/40 bg-accent/[0.04] p-5 space-y-4"
     >
       <div className="flex items-center justify-between gap-3 border-b border-ink-line/60 pb-3">
-        <div className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-accent font-bold">
+        <div className="font-mono text-micro uppercase tracking-[0.18em] text-accent font-bold">
           {isEditing ? 'Edit custom service' : 'New custom service'}
         </div>
         {canChangeTrade ? (
@@ -7952,7 +8009,7 @@ function CustomServiceForm({
             ))}
           </select>
         ) : (
-          <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+          <span className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
             {trade}
           </span>
         )}
@@ -8072,13 +8129,14 @@ function CustomServiceForm({
         <button
           type="button"
           onClick={onCancel}
-          className="border border-ink-line text-text-sec hover:text-text-pri font-mono font-bold uppercase tracking-[0.14em] text-[0.7rem] px-4 py-2 transition-colors"
+          className="border border-ink-line text-text-sec hover:text-text-pri font-mono font-bold uppercase tracking-[0.14em] text-micro px-4 py-2 transition-colors"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={busy}
+          aria-busy={busy}
           className="bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {busy ? 'Saving…' : isEditing ? 'Save changes' : 'Add service'}
@@ -8101,13 +8159,13 @@ function FormField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+      <span className="mb-1.5 block font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-sec">
         {label}
         {required && <span className="ml-1 text-accent">*</span>}
       </span>
       {children}
       {hint && (
-        <span className="mt-1 block text-[0.7rem] leading-snug text-text-dim">
+        <span className="mt-1 block text-micro leading-snug text-text-dim">
           {hint}
         </span>
       )}
@@ -8394,7 +8452,7 @@ function QuotesTab({
               key={f.key}
               type="button"
               onClick={() => setFilter(f.key)}
-              className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+              className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-micro font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
                 active
                   ? 'border-accent bg-accent/10 text-accent'
                   : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
@@ -8408,12 +8466,12 @@ function QuotesTab({
             </button>
           )
         })}
-        <label className="ml-auto flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+        <label className="ml-auto flex items-center gap-2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           Sort
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as QuoteSort)}
-            className="rounded-ctl cursor-pointer border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-pri focus:border-accent focus:outline-none"
+            className="rounded-ctl cursor-pointer border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-pri focus:border-accent focus:outline-none"
           >
             {QUOTE_SORTS.map((s) => (
               <option key={s.key} value={s.key}>
@@ -8429,7 +8487,7 @@ function QuotesTab({
           when the tenant actually has quotes in more than one trade. */}
       {showTradeChips && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
+          <span className="mr-1 font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
             Trade
           </span>
           {['all', ...tradeOptions].map((t) => {
@@ -8444,7 +8502,7 @@ function QuotesTab({
                 key={t}
                 type="button"
                 onClick={() => setTradeSel(t)}
-                className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+                className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-micro font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
                   active
                     ? 'border-accent bg-accent/10 text-accent'
                     : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
@@ -8470,34 +8528,34 @@ function QuotesTab({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, suburb, job, code…"
-            className="rounded-ctl w-full border border-ink-line bg-ink-card px-3 py-2 font-mono text-[0.72rem] text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+            className="rounded-ctl w-full border border-ink-line bg-ink-card px-3 py-2 font-mono text-xs text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
           />
         </label>
-        <label className="flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+        <label className="flex items-center gap-2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           From
           <input
             type="date"
             value={dateFrom}
             max={dateTo || undefined}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-ctl border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.72rem] text-text-pri focus:border-accent focus:outline-none"
+            className="rounded-ctl border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-xs text-text-pri focus:border-accent focus:outline-none"
           />
         </label>
-        <label className="flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+        <label className="flex items-center gap-2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           To
           <input
             type="date"
             value={dateTo}
             min={dateFrom || undefined}
             onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-ctl border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.72rem] text-text-pri focus:border-accent focus:outline-none"
+            className="rounded-ctl border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-xs text-text-pri focus:border-accent focus:outline-none"
           />
         </label>
         {filtersActive && (
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card px-3 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-dim transition-colors cursor-pointer hover:border-accent hover:text-accent"
+            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card px-3 py-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-dim transition-colors cursor-pointer hover:border-accent hover:text-accent"
           >
             Clear filters
           </button>
@@ -8520,7 +8578,7 @@ function QuotesTab({
           <button
             type="button"
             onClick={() => setJobsTick((n) => n + 1)}
-            className="rounded-ctl inline-flex items-center border border-ink-line px-3 py-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-pri transition-colors cursor-pointer hover:border-accent hover:text-accent"
+            className="rounded-ctl inline-flex items-center border border-ink-line px-3 py-1.5 font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-pri transition-colors cursor-pointer hover:border-accent hover:text-accent"
           >
             Retry
           </button>
@@ -8545,7 +8603,7 @@ function QuotesTab({
               <button
                 type="button"
                 onClick={clearFilters}
-                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card px-3 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-dim transition-colors cursor-pointer hover:border-accent hover:text-accent"
+                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card px-3 py-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-dim transition-colors cursor-pointer hover:border-accent hover:text-accent"
               >
                 Clear filters
               </button>
@@ -8561,10 +8619,10 @@ function QuotesTab({
             }`}
           >
             <div className="sticky top-0 z-[5] flex items-center justify-between gap-3 border-b border-ink-line bg-ink-deep px-[18px] py-[15px]">
-              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-text-sec">
+              <span className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-sec">
                 Quote queue · {total}
               </span>
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
+              <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                 {sortLabel}
               </span>
             </div>
@@ -8606,7 +8664,7 @@ function QuotesTab({
             <button
               type="button"
               onClick={() => setMobileDetailOpen(false)}
-              className="flex items-center gap-2 border-b border-ink-line px-4 py-3 text-left font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent lg:hidden"
+              className="flex items-center gap-2 border-b border-ink-line px-4 py-3 text-left font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent lg:hidden"
             >
               ← Back to queue
             </button>
@@ -8711,6 +8769,7 @@ function DeleteQuoteButton({
           type="button"
           onClick={() => void doDelete()}
           disabled={busy}
+          aria-busy={busy}
           className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 border border-danger/60 bg-danger/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50 sm:flex-none"
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : null}
@@ -8720,6 +8779,7 @@ function DeleteQuoteButton({
           type="button"
           onClick={() => setConfirming(false)}
           disabled={busy}
+          aria-busy={busy}
           className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50 sm:flex-none"
         >
           Cancel
@@ -8732,7 +8792,7 @@ function DeleteQuoteButton({
       {err && (
         <span
           role="alert"
-          className="self-center font-mono text-[0.62rem] uppercase tracking-[0.12em] text-danger"
+          className="self-center font-mono text-micro uppercase tracking-[0.12em] text-danger"
         >
           {err}
         </span>
@@ -8863,21 +8923,21 @@ function QuoteQueueRow({
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[14.5px] font-bold text-text-pri">{customerLabel}</span>
+          <span className="truncate text-sm font-bold text-text-pri">{customerLabel}</span>
           {q.channel && <ChannelBadge channel={q.channel} />}
         </div>
-        <div className="mt-1 truncate text-[13px] text-text-sec">
+        <div className="mt-1 truncate text-meta text-text-sec">
           {formatJobType(q.job_type)}
         </div>
         {meta && (
-          <div className="mt-1.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+          <div className="mt-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
             {meta}
           </div>
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-[9px]">
         <span
-          className={`font-mono text-[15px] font-bold tabular-nums ${
+          className={`font-mono text-sm font-bold tabular-nums ${
             value !== null ? 'text-text-pri' : 'text-text-dim'
           }`}
         >
@@ -8942,15 +9002,15 @@ function JobQueueRow({
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[14.5px] font-bold text-text-pri">
+          <span className="truncate text-sm font-bold text-text-pri">
             {job.address ?? 'No address'}
           </span>
         </div>
-        <div className="mt-1 truncate text-[13px] text-text-sec">
+        <div className="mt-1 truncate text-meta text-text-sec">
           {job.headline ?? `${tradeLabel} estimate`}
         </div>
         {meta && (
-          <div className="mt-1.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+          <div className="mt-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
             {meta}
           </div>
         )}
@@ -9027,7 +9087,7 @@ function JobQueueDetail({
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-ink-line px-5 py-5 sm:px-6">
           <div className="min-w-0">
-            <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-accent">
               {tradeLabel} · Measure-tool estimate
               {job.createdAt ? ` · ${formatDate(job.createdAt)}` : ''}
             </div>
@@ -9039,7 +9099,7 @@ function JobQueueDetail({
                 href={job.href}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2 inline-flex font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
+                className="mt-2 inline-flex font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
               >
                 Customer page →
               </a>
@@ -9051,10 +9111,10 @@ function JobQueueDetail({
         {/* Estimate headline — same visual weight as a tier-card price */}
         {job.headline && (
           <div className="border-b border-ink-line px-5 py-5 sm:px-6">
-            <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
               Estimate
             </div>
-            <div className="mt-[9px] font-mono text-[22px] font-bold tabular-nums text-text-pri">
+            <div className="mt-[9px] font-mono text-xl font-bold tabular-nums text-text-pri">
               {job.headline}
             </div>
           </div>
@@ -9062,7 +9122,7 @@ function JobQueueDetail({
 
         {/* Details */}
         <div className="border-b border-ink-line px-5 py-5 sm:px-6">
-          <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
             Details
           </div>
           <p className="mt-2 text-sm leading-relaxed text-text-sec">
@@ -9080,7 +9140,7 @@ function JobQueueDetail({
               href={job.tradieHref}
               target="_blank"
               rel="noreferrer"
-              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap bg-accent px-5 py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press"
+              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap bg-accent px-5 py-[13px] text-meta font-semibold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press"
             >
               {jobTradieCtaLabel(job)} →
             </Link>
@@ -9090,7 +9150,7 @@ function JobQueueDetail({
               href={job.href}
               target="_blank"
               rel="noreferrer"
-              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-meta font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
             >
               View customer page →
             </Link>
@@ -9098,7 +9158,7 @@ function JobQueueDetail({
           {err && (
             <span
               role="alert"
-              className="self-center font-mono text-[0.62rem] uppercase tracking-[0.12em] text-danger"
+              className="self-center font-mono text-micro uppercase tracking-[0.12em] text-danger"
             >
               {err}
             </span>
@@ -9109,6 +9169,7 @@ function JobQueueDetail({
                 type="button"
                 onClick={() => void doDelete()}
                 disabled={busy}
+                aria-busy={busy}
                 className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-danger/60 bg-danger/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
               >
                 {busy ? <Loader2 size={13} className="animate-spin" /> : null}
@@ -9118,6 +9179,7 @@ function JobQueueDetail({
                 type="button"
                 onClick={() => setConfirming(false)}
                 disabled={busy}
+                aria-busy={busy}
                 className="rounded-ctl inline-flex min-h-[44px] items-center justify-center border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
               >
                 Cancel
@@ -9204,7 +9266,7 @@ function QuoteDetail({
   // once the customer has committed, same convention as the Delete button.
   const sendCta = confirmSendCta(q.status, q.deposit_paid)
   const sectionLabel =
-    'font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim'
+    'font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim'
 
   // Tier whose line-item breakdown the pane previews — starts on the tradie-
   // selected ("recommended") tier, else the first tier that has a price.
@@ -9238,7 +9300,7 @@ function QuoteDetail({
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-ink-line px-5 py-5 sm:px-6">
           <div className="min-w-0">
-            <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-accent">
               Drafted · {formatDate(q.created_at)}
               {q.channel ? ` · ${q.channel === 'voice' ? 'Voice' : 'SMS'}` : ''}
             </div>
@@ -9255,7 +9317,7 @@ function QuoteDetail({
                 href={url}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2 inline-flex font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
+                className="mt-2 inline-flex font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
               >
                 Customer page →
               </a>
@@ -9294,18 +9356,18 @@ function QuoteDetail({
                     }`}
                   >
                     {isSel && (
-                      <span className="absolute left-0 top-[-1px] bg-accent px-[9px] py-1 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-accent-ink">
+                      <span className="absolute left-0 top-[-1px] bg-accent px-[9px] py-1 font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent-ink">
                         Recommended
                       </span>
                     )}
-                    <div className={`${isSel ? 'mt-3.5' : ''} font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent`}>
+                    <div className={`${isSel ? 'mt-3.5' : ''} font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent`}>
                       {tierLabels[t]}
                     </div>
-                    <div className="mt-[9px] font-mono text-[22px] font-bold tabular-nums text-text-pri">
+                    <div className="mt-[9px] font-mono text-xl font-bold tabular-nums text-text-pri">
                       ${formatMoney(tierTotals[t] as number)}
                     </div>
                     {q[t]?.timeframe && (
-                      <div className="mt-[3px] text-[12px] text-text-dim">{q[t]?.timeframe}</div>
+                      <div className="mt-[3px] text-xs text-text-dim">{q[t]?.timeframe}</div>
                     )}
                   </button>
                 )
@@ -9324,21 +9386,21 @@ function QuoteDetail({
                   key={i}
                   className="grid grid-cols-[1fr_auto_auto] items-center gap-3.5 border-b border-ink-line px-[15px] py-[11px] last:border-b-0"
                 >
-                  <span className="text-[13px] text-text-sec">{li.description}</span>
-                  <span className="font-mono text-[11px] text-text-dim">
+                  <span className="text-meta text-text-sec">{li.description}</span>
+                  <span className="font-mono text-micro text-text-dim">
                     {li.quantity} × ${formatMoney(li.unit_price_ex_gst)}
                     {li.unit ? ` /${li.unit}` : ''}
                   </span>
-                  <span className="min-w-[64px] text-right font-mono text-[13px] tabular-nums text-text-pri">
+                  <span className="min-w-[64px] text-right font-mono text-meta tabular-nums text-text-pri">
                     ${formatMoney(+(li.quantity * li.unit_price_ex_gst * gstRatio).toFixed(2))}
                   </span>
                 </div>
               ))}
               <div className="flex items-center justify-between bg-ink px-[15px] py-3">
-                <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
                   Total inc GST
                 </span>
-                <span className="font-mono text-[17px] font-bold tabular-nums text-accent">
+                <span className="font-mono text-base font-bold tabular-nums text-accent">
                   ${formatMoney(tierTotals[activeTier] as number)}
                 </span>
               </div>
@@ -9401,9 +9463,9 @@ function QuoteDetail({
                     )}
                   </div>
                   <div className="min-w-0 pb-4">
-                    <div className="text-[0.82rem] font-semibold text-text-pri">{ev.label}</div>
+                    <div className="text-meta font-semibold text-text-pri">{ev.label}</div>
                     {ev.sub && (
-                      <div className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                      <div className="mt-0.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                         {ev.sub}
                       </div>
                     )}
@@ -9442,7 +9504,7 @@ function QuoteDetail({
             <Link
               href={url}
               target="_blank"
-              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap bg-accent px-5 py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press"
+              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap bg-accent px-5 py-[13px] text-meta font-semibold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press"
             >
               View customer page →
             </Link>
@@ -9457,7 +9519,7 @@ function QuoteDetail({
               href={q.measure_href}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-meta font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
             >
               Measurement results →
             </Link>
@@ -9471,7 +9533,7 @@ function QuoteDetail({
           {url && !isInspection && q.share_token && (
             <Link
               href={`/dashboard/quote/${q.share_token}`}
-              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-meta font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
             >
               View PDF · Edit
             </Link>
@@ -9482,7 +9544,7 @@ function QuoteDetail({
               href={`/api/q/${q.share_token}/pdf`}
               target="_blank"
               rel="noreferrer"
-              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-meta font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
             >
               Download PDF ↓
             </a>
@@ -9620,8 +9682,9 @@ function QuoteDisplayModeToggle({
         type="button"
         title={title}
         disabled={submitting}
+        aria-busy={submitting}
         onClick={() => void save(mode)}
-        className={`font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2.5 py-1.5 border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+        className={`font-mono text-micro uppercase tracking-[0.14em] font-bold px-2.5 py-1.5 border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
           selected
             ? 'border-accent bg-accent/15 text-accent'
             : 'border-ink-line text-text-dim hover:border-accent/40 hover:text-text-pri'
@@ -9634,7 +9697,7 @@ function QuoteDisplayModeToggle({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+      <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
         Layout for this quote:
       </span>
       <div className="flex flex-wrap items-center gap-1">
@@ -9643,17 +9706,17 @@ function QuoteDisplayModeToggle({
         <Btn label="Summary" mode="summary" title="Force the rolled-up summary for this quote only." />
       </div>
       {submitting && (
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+        <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           Saving…
         </span>
       )}
       {!submitting && savedAt && Date.now() - savedAt < 3000 && (
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent">
+        <span className="font-mono text-micro uppercase tracking-[0.14em] text-accent">
           ✓ Saved
         </span>
       )}
       {error && (
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning">
+        <span className="font-mono text-micro uppercase tracking-[0.14em] text-warning">
           {error}
         </span>
       )}
@@ -9671,7 +9734,7 @@ function ChannelBadge({ channel }: { channel: 'sms' | 'voice' }) {
   // fills sat outside the Maintain palette and were the loudest source of the
   // "colourful filler" look.
   return (
-    <span className="rounded-ctl inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-text-dim">
+    <span className="rounded-ctl inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-[0.16em] text-text-dim">
       {channel === 'voice' ? 'Voice' : 'SMS'}
     </span>
   )
@@ -9693,7 +9756,7 @@ function Transcript({
     channel === 'voice' ? 'Voice call transcript' : 'SMS conversation'
   return (
     <div>
-      <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2 flex items-center justify-between">
+      <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim font-bold mb-2 flex items-center justify-between">
         <span>{headerLabel}</span>
         <span className="text-text-dim font-normal normal-case tracking-normal">
           {messages.length} {messages.length === 1 ? 'message' : 'messages'}
@@ -9715,7 +9778,7 @@ function Transcript({
                 }`}
               >
                 <div className="whitespace-pre-wrap break-words">{m.body}</div>
-                <div className="mt-1 font-mono text-[0.55rem] uppercase tracking-[0.12em] text-text-dim">
+                <div className="mt-1 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                   {isInbound ? 'Customer' : 'AI'} · {formatTime(m.created_at)}
                 </div>
               </div>
@@ -9952,14 +10015,14 @@ function SupplierCsvUpload({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold text-text-pri hover:text-accent transition-colors cursor-pointer"
+          className="font-mono text-micro uppercase tracking-[0.14em] font-bold text-text-pri hover:text-accent transition-colors cursor-pointer"
         >
           {open ? '▲' : '▼'} Upload products via CSV
         </button>
         <a
           href="/docs/supplier-catalogue-template.csv"
           download
-          className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim hover:text-accent transition-colors"
+          className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim hover:text-accent transition-colors"
         >
           ↓ Download CSV template
         </a>
@@ -9978,7 +10041,7 @@ function SupplierCsvUpload({
           </p>
 
           <div>
-            <label className="rounded-ctl inline-flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors cursor-pointer">
+            <label className="rounded-ctl inline-flex items-center gap-2 font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors cursor-pointer">
               {busy && !report ? 'Reading…' : 'Choose CSV file'}
               <input
                 type="file"
@@ -9994,12 +10057,12 @@ function SupplierCsvUpload({
           </div>
 
           {err && (
-            <div className="bg-ink-card border-l-2 border-l-warning border-y border-r border-ink-line px-3 py-2 text-sm text-text-sec">
+            <div className="rounded-ctl border border-warning-bright/40 bg-ink-card px-3 py-2 text-sm text-text-sec">
               {err}
             </div>
           )}
           {msg && (
-            <div className="bg-ink-card border-l-2 border-l-accent border-y border-r border-ink-line px-3 py-2 text-sm text-accent">
+            <div className="rounded-ctl border border-accent/40 bg-ink-card px-3 py-2 text-sm text-accent">
               {msg}
             </div>
           )}
@@ -10007,7 +10070,7 @@ function SupplierCsvUpload({
           {report && (
             <div className="space-y-3">
               {/* Dry-run summary. */}
-              <div className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-[0.65rem] uppercase tracking-[0.14em]">
+              <div className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-micro uppercase tracking-[0.14em]">
                 <span className="text-accent">{report.summary.toInsert} new</span>
                 <span className="text-text-dim">
                   {report.summary.alreadyInLibrary} already in library
@@ -10057,20 +10120,21 @@ function SupplierCsvUpload({
                   type="button"
                   disabled={!canCommit}
                   onClick={() => void onCommit()}
-                  className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {busy ? 'Importing…' : `Confirm import (${report.summary.toInsert} new)`}
                 </button>
                 <button
                   type="button"
                   disabled={busy}
+                  aria-busy={busy}
                   onClick={reset}
-                  className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-pri transition-colors cursor-pointer disabled:opacity-40"
+                  className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim hover:text-text-pri transition-colors cursor-pointer disabled:opacity-40"
                 >
                   Cancel
                 </button>
                 {report.summary.toInsert === 0 && (
-                  <span className="font-mono text-[0.6rem] uppercase tracking-[0.13em] text-text-dim">
+                  <span className="font-mono text-micro uppercase tracking-[0.13em] text-text-dim">
                     no new products — all rows already in the library
                   </span>
                 )}
@@ -10175,7 +10239,7 @@ function CoveragePanel({
 
   if (loading) {
     return (
-      <div className="rounded-card mb-6 border border-ink-line bg-ink-card p-4 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+      <div className="qm-loading rounded-card mb-6 border border-ink-line bg-ink-card p-4 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
         Loading coverage…
       </div>
     )
@@ -10183,7 +10247,7 @@ function CoveragePanel({
   if (err) {
     return (
       <div className="mb-6 border border-warning/50 bg-ink-card p-4">
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-1">
+        <div className="font-mono text-micro uppercase tracking-[0.15em] text-warning mb-1">
           Couldn&apos;t load coverage
         </div>
         <p className="text-xs text-text-sec">{err}</p>
@@ -10198,10 +10262,10 @@ function CoveragePanel({
   return (
     <div className="rounded-card mb-6 border border-ink-line bg-ink-card">
       <div className="px-4 py-3 border-b border-ink-line flex items-baseline justify-between gap-3 flex-wrap">
-        <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-extrabold">
+        <h3 className="font-mono text-micro uppercase tracking-[0.16em] text-accent font-extrabold">
           Coverage
         </h3>
-        <p className="text-[0.65rem] text-text-dim font-mono uppercase tracking-[0.14em]">
+        <p className="text-micro text-text-dim font-mono uppercase tracking-[0.14em]">
           Shared catalogue rows you have vs you don&apos;t
         </p>
       </div>
@@ -10226,17 +10290,17 @@ function CoveragePanel({
                 className="w-full flex items-center justify-between gap-4 px-4 py-3 hover:bg-ink-deep transition-colors cursor-pointer text-left"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-text-dim font-mono text-[0.65rem]">
+                  <span className="text-text-dim font-mono text-micro">
                     {isOpen ? '▾' : '▸'}
                   </span>
                   <span className="font-semibold text-text-pri text-sm">{tradeLabel}</span>
-                  <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                  <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                     {t.covered_categories} of {t.total_shared_categories} categories
                   </span>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   {t.missing_rows_total > 0 && (
-                    <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning">
+                    <span className="font-mono text-micro uppercase tracking-[0.14em] text-warning">
                       {t.missing_rows_total} shared row{t.missing_rows_total === 1 ? '' : 's'} missing
                     </span>
                   )}
@@ -10274,11 +10338,11 @@ function CoveragePanel({
                                 }`}
                                 aria-label={c.covered ? 'covered' : 'not covered'}
                               />
-                              <span className="font-mono text-[0.7rem] text-text-pri uppercase tracking-[0.06em]">
+                              <span className="font-mono text-micro text-text-pri uppercase tracking-[0.06em]">
                                 {c.category}
                               </span>
                             </div>
-                            <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim shrink-0">
+                            <div className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim shrink-0">
                               {c.tenant_count} of {c.shared_count}
                               {c.missing_count > 0 && (
                                 <span className="ml-2 text-warning">
@@ -10293,7 +10357,7 @@ function CoveragePanel({
                         <button
                           type="button"
                           onClick={onJumpToBrowse}
-                          className="font-mono text-[0.65rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/50 text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+                          className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/50 text-accent hover:bg-accent/10 transition-colors cursor-pointer"
                         >
                           + Browse supplier catalogue
                         </button>
@@ -10493,15 +10557,15 @@ function BrowseSupplierPanel({
 
   if (loading) {
     return (
-      <div className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim py-10">
+      <div className="qm-loading font-mono text-micro uppercase tracking-[0.14em] text-text-dim py-10">
         Loading supplier catalogue…
       </div>
     )
   }
   if (err) {
     return (
-      <div className="mt-4 bg-ink-card border-l-2 border-l-warning border-y border-r border-ink-line p-6">
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-2">
+      <div className="rounded-card mt-4 border border-warning-bright/40 bg-ink-card p-6">
+        <div className="font-mono text-micro uppercase tracking-[0.15em] text-warning mb-2">
           Couldn&apos;t load supplier catalogue
         </div>
         <p className="text-sm text-text-sec">{err}</p>
@@ -10534,7 +10598,7 @@ function BrowseSupplierPanel({
       <SupplierCsvUpload accessToken={accessToken} onImported={() => void load()} />
 
       {/* Filter chips. */}
-      <div className="flex flex-wrap items-center gap-2 text-[0.65rem] font-mono uppercase tracking-[0.14em]">
+      <div className="flex flex-wrap items-center gap-2 text-micro font-mono uppercase tracking-[0.14em]">
         {trades.length > 1 && (
           <>
             <span className="text-text-dim">Trade:</span>
@@ -10643,7 +10707,7 @@ function BrowseSupplierPanel({
 
         <div className="flex items-center gap-3">
           {addMsg && (
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent">
+            <span className="font-mono text-micro uppercase tracking-[0.14em] text-accent">
               {addMsg}
             </span>
           )}
@@ -10651,7 +10715,7 @@ function BrowseSupplierPanel({
             type="button"
             disabled={selected.size === 0 || adding}
             onClick={() => void addSelected()}
-            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             {adding ? 'Adding…' : `+ Add ${selected.size || ''} to my catalogue`}
           </button>
@@ -10722,17 +10786,17 @@ function BrowseSupplierPanel({
                     <div className="flex items-baseline gap-2 flex-wrap">
                       <span className="text-sm text-text-pri font-medium">{r.name}</span>
                       {r.tier_hint && (
-                        <span className="font-mono text-[0.55rem] uppercase tracking-[0.15em] text-text-dim border border-ink-line px-1.5 py-0.5">
+                        <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim border border-ink-line px-1.5 py-0.5">
                           {r.tier_hint}
                         </span>
                       )}
                       {stocked && (
-                        <span className="font-mono text-[0.55rem] uppercase tracking-[0.15em] text-accent border border-accent/40 px-1.5 py-0.5">
+                        <span className="font-mono text-micro uppercase tracking-[0.15em] text-accent border border-accent/40 px-1.5 py-0.5">
                           ✓ in your catalogue
                         </span>
                       )}
                     </div>
-                    <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim mt-1">
+                    <div className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim mt-1">
                       {r.brand}
                       {r.range_series ? ` · ${r.range_series}` : ''} · {r.category} ·
                       {r.supplier_label ? ` ${r.supplier_label} · ` : ' '}
@@ -10745,7 +10809,7 @@ function BrowseSupplierPanel({
                   onClick={() => toggleExpand(r.id)}
                   aria-expanded={isExpanded}
                   aria-label={isExpanded ? `Hide details for ${r.name}` : `Show details for ${r.name}`}
-                  className="shrink-0 mt-0.5 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-accent transition-colors cursor-pointer px-2 py-1"
+                  className="shrink-0 mt-0.5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim hover:text-accent transition-colors cursor-pointer px-2 py-1"
                 >
                   {isExpanded ? '▲ Hide' : '▼ Details'}
                 </button>
@@ -10771,7 +10835,7 @@ function BrowseSupplierPanel({
                           className="w-full h-full object-contain"
                         />
                       ) : (
-                        <span className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-text-dim text-center px-2">
+                        <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim text-center px-2">
                           no photo
                           <br />
                           on file
@@ -10794,7 +10858,7 @@ function BrowseSupplierPanel({
                   </div>
                   {r.description && (
                     <div className="mt-3">
-                      <div className="font-mono text-[0.55rem] uppercase tracking-[0.15em] text-text-dim mb-1">
+                      <div className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim mb-1">
                         Description
                       </div>
                       <div className="text-sm text-text-sec leading-snug">{r.description}</div>
@@ -10805,7 +10869,7 @@ function BrowseSupplierPanel({
                      the tradie wondering "where's the cost price?" — it's
                      a field they fill in once the row lands in My Catalogue. */}
                   <div className="mt-4 border-l-2 border-l-accent/40 pl-3 py-1">
-                    <div className="font-mono text-[0.55rem] uppercase tracking-[0.15em] text-accent mb-1">
+                    <div className="font-mono text-micro uppercase tracking-[0.15em] text-accent mb-1">
                       You&rsquo;ll set after &ldquo;Add to my catalogue&rdquo;
                     </div>
                     <div className="text-xs text-text-sec leading-snug">
@@ -10839,11 +10903,11 @@ function SupplierField({
   const shown = value !== null && value !== undefined && String(value).trim() !== ''
   return (
     <div className="min-w-0">
-      <div className="font-mono text-[0.55rem] uppercase tracking-[0.15em] text-text-dim mb-0.5">
+      <div className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim mb-0.5">
         {label}
       </div>
       <div
-        className={`${mono ? 'font-mono text-[0.75rem]' : 'text-sm'} text-text-pri leading-snug truncate`}
+        className={`${mono ? 'font-mono text-xs' : 'text-sm'} text-text-pri leading-snug truncate`}
         title={shown ? String(value) : undefined}
       >
         {shown ? String(value) : <span className="text-text-dim/60">—</span>}
@@ -10970,15 +11034,15 @@ function TierLadderPanel({
 
   if (loading) {
     return (
-      <div className="mt-4 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim py-6">
+      <div className="qm-loading mt-4 font-mono text-micro uppercase tracking-[0.14em] text-text-dim py-6">
         Loading tier ladder…
       </div>
     )
   }
   if (err) {
     return (
-      <div className="mt-4 bg-ink-card border-l-2 border-l-warning border-y border-r border-ink-line p-6">
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-2">
+      <div className="rounded-card mt-4 border border-warning-bright/40 bg-ink-card p-6">
+        <div className="font-mono text-micro uppercase tracking-[0.15em] text-warning mb-2">
           Couldn&apos;t load tier ladder
         </div>
         <p className="text-sm text-text-sec">{err}</p>
@@ -11016,8 +11080,8 @@ function TierLadderPanel({
 
   return (
     <div className="mt-4 space-y-4">
-      <div className="border-l-2 border-l-accent/60 bg-ink-card/40 px-4 py-3">
-        <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent mb-1">
+      <div className="rounded-ctl border border-accent/30 bg-ink-card/40 px-4 py-3">
+        <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent mb-1">
           Good / Better / Best — your ladder
         </div>
         <div className="text-sm text-text-sec">
@@ -11032,7 +11096,7 @@ function TierLadderPanel({
           const products = catalogueByCategory[cat] ?? []
           return (
             <div key={cat} className="border border-ink-line p-4">
-              <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-pri font-bold mb-3">
+              <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-pri font-bold mb-3">
                 {cat} <span className="text-text-dim font-normal">({products.length} stocked)</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -11041,7 +11105,7 @@ function TierLadderPanel({
                   const current = slotsByKey.get(key)?.catalogue_id ?? ''
                   return (
                     <label key={tier} className="flex flex-col gap-1">
-                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                      <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
                         {tier}
                       </span>
                       <select
@@ -11427,7 +11491,7 @@ function CatalogueTab({
   if (loading) {
     return (
       <Card>
-        <p className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+        <p className="qm-loading font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           Loading catalogue…
         </p>
       </Card>
@@ -11436,7 +11500,7 @@ function CatalogueTab({
   if (error) {
     return (
       <Card>
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-2">
+        <div className="font-mono text-micro uppercase tracking-[0.15em] text-warning mb-2">
           Couldn&apos;t load catalogue
         </div>
         <p className="text-sm text-text-sec">{error}</p>
@@ -11562,7 +11626,7 @@ function CatalogueTab({
                 setFormErr(null)
               }
             }}
-            className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/50 text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+            className="shrink-0 font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/50 text-accent hover:bg-accent/10 transition-colors cursor-pointer"
           >
             {showForm ? '× Cancel' : '+ Add product'}
           </button>
@@ -11576,7 +11640,7 @@ function CatalogueTab({
         <button
           type="button"
           onClick={() => setViewMode('mine')}
-          className={`font-mono text-[0.65rem] uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
+          className={`font-mono text-micro uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
             viewMode === 'mine'
               ? 'border-accent text-accent'
               : 'border-transparent text-text-dim hover:text-text-pri'
@@ -11587,7 +11651,7 @@ function CatalogueTab({
         <button
           type="button"
           onClick={() => setViewMode('browse')}
-          className={`font-mono text-[0.65rem] uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
+          className={`font-mono text-micro uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
             viewMode === 'browse'
               ? 'border-accent text-accent'
               : 'border-transparent text-text-dim hover:text-text-pri'
@@ -11598,7 +11662,7 @@ function CatalogueTab({
         <button
           type="button"
           onClick={() => setViewMode('ladder')}
-          className={`font-mono text-[0.65rem] uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
+          className={`font-mono text-micro uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
             viewMode === 'ladder'
               ? 'border-accent text-accent'
               : 'border-transparent text-text-dim hover:text-text-pri'
@@ -11639,7 +11703,7 @@ function CatalogueTab({
         >
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="min-w-0">
-              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent mb-1">
+              <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent mb-1">
                 {list.length === 0 ? 'Get started in one click' : 'Quick start'}
               </div>
               <div className="text-sm text-text-sec">
@@ -11648,7 +11712,7 @@ function CatalogueTab({
                   : 'Stock common products in one click — covers the most-quoted categories with one good-tier SKU each. Already-stocked items are skipped.'}
               </div>
               {essentialsMsg && (
-                <div className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+                <div className="mt-1 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                   {essentialsMsg}
                 </div>
               )}
@@ -11657,7 +11721,7 @@ function CatalogueTab({
               type="button"
               onClick={() => void stockEssentials()}
               disabled={essentialsBusy}
-              className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="shrink-0 font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               {essentialsBusy ? 'Stocking…' : 'Stock the essentials'}
             </button>
@@ -11674,12 +11738,12 @@ function CatalogueTab({
           className="rounded-card mt-5 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
         >
           {editingId && (
-            <div className="sm:col-span-2 font-mono text-[0.65rem] uppercase tracking-[0.15em] text-accent">
+            <div className="sm:col-span-2 font-mono text-micro uppercase tracking-[0.15em] text-accent">
               Editing “{form.name || 'product'}” — change anything and save
             </div>
           )}
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Trade</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Trade</span>
             <select
               value={form.trade}
               onChange={(e) => set('trade', e.target.value)}
@@ -11699,7 +11763,7 @@ function CatalogueTab({
             </select>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Category</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Category</span>
             <select
               value={form.category}
               onChange={(e) => set('category', e.target.value)}
@@ -11718,13 +11782,13 @@ function CatalogueTab({
                 </option>
               ))}
             </select>
-            <span className="text-[0.65rem] text-text-dim leading-snug">
+            <span className="text-micro text-text-dim leading-snug">
               What this product actually is. The AI matches it to the same category on your
               Recipes, so a job that needs this part prices from your product and your price.
             </span>
           </label>
           <label className="flex flex-col gap-1 sm:col-span-2">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Product name</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Product name</span>
             <input
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
@@ -11733,7 +11797,7 @@ function CatalogueTab({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Brand</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Brand</span>
             <input
               value={form.brand}
               onChange={(e) => set('brand', e.target.value)}
@@ -11742,7 +11806,7 @@ function CatalogueTab({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Range / series</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Range / series</span>
             <input
               value={form.range_series}
               onChange={(e) => set('range_series', e.target.value)}
@@ -11751,7 +11815,7 @@ function CatalogueTab({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Supplier</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Supplier</span>
             <input
               value={form.supplier}
               onChange={(e) => set('supplier', e.target.value)}
@@ -11760,7 +11824,7 @@ function CatalogueTab({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Unit</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Unit</span>
             <select
               value={form.unit}
               onChange={(e) => set('unit', e.target.value)}
@@ -11773,12 +11837,12 @@ function CatalogueTab({
               <option value="pair">per pair</option>
               <option value="hr">per hour (hr)</option>
             </select>
-            <span className="text-[0.65rem] text-text-dim leading-snug">
+            <span className="text-micro text-text-dim leading-snug">
               How the price below is measured — &ldquo;each&rdquo; for fittings, &ldquo;per metre&rdquo; for cable/pipe.
             </span>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Price ex-GST</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Price ex-GST</span>
             <input
               value={form.unit_price_ex_gst}
               onChange={(e) => set('unit_price_ex_gst', e.target.value)}
@@ -11788,7 +11852,7 @@ function CatalogueTab({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
               Customer-supply price ex-GST (optional)
             </span>
             <input
@@ -11800,7 +11864,7 @@ function CatalogueTab({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
               Cost price ex-GST (optional)
             </span>
             <input
@@ -11812,7 +11876,7 @@ function CatalogueTab({
             />
           </label>
           <label className="flex flex-col gap-1 sm:col-span-2">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
               Product description (optional)
             </span>
             <input
@@ -11831,7 +11895,7 @@ function CatalogueTab({
             This is my go-to product for its category (preferred)
           </label>
           <div className="flex flex-col gap-1 sm:col-span-2">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
               What this product is
             </span>
             <label className="flex items-center gap-2 text-sm text-text-sec">
@@ -11858,13 +11922,13 @@ function CatalogueTab({
               />
               Driver built in (no separate driver needed)
             </label>
-            <span className="text-[0.65rem] text-text-dim leading-snug">
+            <span className="text-micro text-text-dim leading-snug">
               The AI uses these to pick the right product and to work out which other parts the
               job needs.
             </span>
           </div>
           <div className="flex flex-col gap-1 sm:col-span-2">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
               Product photo (optional)
             </span>
             <div className="flex flex-wrap items-start gap-3">
@@ -11884,7 +11948,7 @@ function CatalogueTab({
                   className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
                 />
                 <div className="flex items-center gap-3">
-                  <label className="font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-ink-line text-text-sec hover:border-accent/50 hover:text-text-pri transition-colors cursor-pointer">
+                  <label className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-ink-line text-text-sec hover:border-accent/50 hover:text-text-pri transition-colors cursor-pointer">
                     {uploading ? 'Uploading…' : '⬆ Upload a photo'}
                     <input
                       type="file"
@@ -11902,13 +11966,13 @@ function CatalogueTab({
                     <button
                       type="button"
                       onClick={() => set('image_path', '')}
-                      className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer"
+                      className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer"
                     >
                       Clear
                     </button>
                   )}
                 </div>
-                <span className="text-[0.65rem] text-text-dim leading-snug">
+                <span className="text-micro text-text-dim leading-snug">
                   Paste a link, or upload a JPG/PNG/WebP (max 8&nbsp;MB). Shown to the
                   customer and used by the AI image preview.
                 </span>
@@ -11916,7 +11980,7 @@ function CatalogueTab({
             </div>
           </div>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Tier (optional)</span>
+            <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Tier (optional)</span>
             <select
               value={form.tier_hint}
               onChange={(e) => set('tier_hint', e.target.value)}
@@ -11935,7 +11999,8 @@ function CatalogueTab({
             <button
               type="submit"
               disabled={saving}
-              className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
+              aria-busy={saving}
+              className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
             >
               {saving
                 ? 'Saving…'
@@ -11976,13 +12041,13 @@ function CatalogueTab({
 
       {list.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim mr-1">
+          <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim mr-1">
             Filter
           </span>
           <button
             type="button"
             onClick={() => setCategoryFilter('all')}
-            className={`font-mono text-[0.65rem] uppercase tracking-[0.14em] px-2.5 py-1 border transition-colors cursor-pointer ${
+            className={`font-mono text-micro uppercase tracking-[0.14em] px-2.5 py-1 border transition-colors cursor-pointer ${
               categoryFilter === 'all'
                 ? 'border-accent bg-accent/10 text-accent'
                 : 'border-ink-line text-text-dim hover:border-accent/50 hover:text-text-pri'
@@ -11995,7 +12060,7 @@ function CatalogueTab({
               key={c.value}
               type="button"
               onClick={() => setCategoryFilter(c.value)}
-              className={`font-mono text-[0.65rem] uppercase tracking-[0.14em] px-2.5 py-1 border transition-colors cursor-pointer ${
+              className={`font-mono text-micro uppercase tracking-[0.14em] px-2.5 py-1 border transition-colors cursor-pointer ${
                 categoryFilter === c.value
                   ? 'border-accent bg-accent/10 text-accent'
                   : 'border-ink-line text-text-dim hover:border-accent/50 hover:text-text-pri'
@@ -12036,7 +12101,7 @@ function CatalogueTab({
               setCategoryFilter('all')
               setSearch('')
             }}
-            className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent hover:underline cursor-pointer"
+            className="font-mono text-micro uppercase tracking-[0.14em] text-accent hover:underline cursor-pointer"
           >
             {catSearch ? 'Clear search' : 'Show all'}
           </button>
@@ -12045,7 +12110,7 @@ function CatalogueTab({
         <div className="mt-6 space-y-5">
           {groups.map((g) => (
             <div key={`${g.trade}·${g.category}`}>
-              <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-1 flex items-baseline gap-2">
+              <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent font-bold pb-1 flex items-baseline gap-2">
                 <span>
                   {g.trade} · {categoryLabel(g.category)}
                 </span>
@@ -12074,7 +12139,7 @@ function CatalogueTab({
                         <div className={`font-semibold text-sm ${r.active ? 'text-text-pri' : 'text-text-sec'}`}>
                           {r.name}
                         </div>
-                        <div className="mt-1 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <div className="mt-1 font-mono text-micro uppercase tracking-[0.14em] text-text-dim flex flex-wrap items-center gap-x-3 gap-y-1">
                           {money(r.unit_price_ex_gst) && (
                             <span>
                               {money(r.unit_price_ex_gst)}
@@ -12146,7 +12211,8 @@ function CatalogueTab({
                         type="button"
                         onClick={() => beginEdit(r)}
                         disabled={busyId === r.id}
-                        className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-50"
+                        aria-busy={busyId === r.id}
+                        className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-50"
                       >
                         Edit
                       </button>
@@ -12154,7 +12220,8 @@ function CatalogueTab({
                         type="button"
                         onClick={() => remove(r)}
                         disabled={busyId === r.id}
-                        className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
+                        aria-busy={busyId === r.id}
+                        className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
                       >
                         Delete
                       </button>
@@ -12618,7 +12685,7 @@ function RecipesTab({
   if (loading) {
     return (
       <Card>
-        <p className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+        <p className="qm-loading font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           Loading recipes…
         </p>
       </Card>
@@ -12627,7 +12694,7 @@ function RecipesTab({
   if (error) {
     return (
       <Card>
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-2">
+        <div className="font-mono text-micro uppercase tracking-[0.15em] text-warning mb-2">
           Couldn&apos;t load recipes
         </div>
         <p className="text-sm text-text-sec">{error}</p>
@@ -12646,7 +12713,7 @@ function RecipesTab({
       </p>
 
       <div className="mt-5 flex max-w-md flex-col gap-1.5">
-        <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-sec">
           Job
         </span>
         <div className="relative">
@@ -12690,7 +12757,7 @@ function RecipesTab({
           ))}
         </select>
         {jobQuery.trim() && tradeAssemblies.length > 0 && (
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
             {jobPickerList.length} of {tradeAssemblies.length} jobs
           </span>
         )}
@@ -12698,7 +12765,7 @@ function RecipesTab({
 
       {selectedAsm && (
         <div className="mt-6">
-          <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-2">
+          <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent font-bold pb-2">
             {selectedAsm.name} — recipe
           </div>
 
@@ -12711,7 +12778,7 @@ function RecipesTab({
               Steps carry no price and no hours — nothing here is read by
               the estimator. */}
           <div data-testid="steps-panel" className="mt-4 border-b border-ink-line pb-6">
-            <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-2">
+            <div className="font-mono text-micro uppercase tracking-[0.16em] text-accent font-bold pb-2">
               {selectedAsm.name} — steps
             </div>
             <p className="text-xs text-text-dim leading-snug max-w-2xl">
@@ -12746,12 +12813,12 @@ function RecipesTab({
                             <div className="text-xs text-text-dim mt-0.5">{b.notes}</div>
                           )}
                           <div className="mt-1.5">
-                            <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                            <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.15em]">
                               shared baseline
                             </span>
                           </div>
                         </div>
-                        <span className="font-mono text-[0.55rem] uppercase tracking-[0.15em] px-2 py-1 border border-ink-line text-text-dim shrink-0">
+                        <span className="font-mono text-micro uppercase tracking-[0.15em] px-2 py-1 border border-ink-line text-text-dim shrink-0">
                           {b.required ? 'required' : 'optional'}
                         </span>
                       </div>
@@ -12762,11 +12829,11 @@ function RecipesTab({
                       type="button"
                       onClick={() => void forkTaskBaseline()}
                       disabled={taskForking}
-                      className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
+                      className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
                     >
                       {taskForking ? 'Copying steps…' : 'Customise these steps'}
                     </button>
-                    <span className="text-[0.65rem] text-text-dim leading-snug">
+                    <span className="text-micro text-text-dim leading-snug">
                       Copies these {jobTaskBaseline.length} step
                       {jobTaskBaseline.length === 1 ? '' : 's'} into your checklist so you can
                       reword, reorder, or add your own.
@@ -12790,7 +12857,7 @@ function RecipesTab({
                       className="rounded-card border border-ink-line bg-ink-deep px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
                     >
                       <div className="min-w-0 flex-1 flex items-start gap-3">
-                        <span className="font-mono text-[0.7rem] text-text-dim pt-2 shrink-0">
+                        <span className="font-mono text-micro text-text-dim pt-2 shrink-0">
                           {idx + 1}.
                         </span>
                         <div className="min-w-0 flex-1 flex flex-col gap-1.5">
@@ -12834,7 +12901,7 @@ function RecipesTab({
                             onClick={() => void moveTask(t.id, -1)}
                             disabled={idx === 0 || taskBusyId !== null}
                             aria-label={`Move step ${idx + 1} up`}
-                            className="font-mono text-[0.7rem] leading-none px-1.5 py-1 text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                            className="font-mono text-micro leading-none px-1.5 py-1 text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
                           >
                             ▲
                           </button>
@@ -12843,7 +12910,7 @@ function RecipesTab({
                             onClick={() => void moveTask(t.id, 1)}
                             disabled={idx === jobTasks.length - 1 || taskBusyId !== null}
                             aria-label={`Move step ${idx + 1} down`}
-                            className="font-mono text-[0.7rem] leading-none px-1.5 py-1 text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                            className="font-mono text-micro leading-none px-1.5 py-1 text-text-dim hover:text-accent transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
                           >
                             ▼
                           </button>
@@ -12852,7 +12919,7 @@ function RecipesTab({
                           type="button"
                           onClick={() => patchTask(t.id, { required: !t.required })}
                           disabled={taskBusyId === t.id}
-                          className={`font-mono text-[0.55rem] uppercase tracking-[0.15em] px-2 py-1 border transition-colors cursor-pointer disabled:opacity-50 ${
+                          className={`font-mono text-micro uppercase tracking-[0.15em] px-2 py-1 border transition-colors cursor-pointer disabled:opacity-50 ${
                             t.required
                               ? 'border-accent/40 text-accent'
                               : 'border-ink-line text-text-dim'
@@ -12864,7 +12931,7 @@ function RecipesTab({
                           type="button"
                           onClick={() => deleteTask(t.id)}
                           disabled={taskBusyId === t.id}
-                          className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
+                          className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
                         >
                           Remove
                         </button>
@@ -12883,7 +12950,7 @@ function RecipesTab({
               className="rounded-card mt-4 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
             >
               <label className="flex flex-col gap-1 sm:col-span-2">
-                <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
                   Step
                 </span>
                 <input
@@ -12894,7 +12961,7 @@ function RecipesTab({
                 />
               </label>
               <label className="flex flex-col gap-1 sm:col-span-2">
-                <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
                   Note (optional)
                 </span>
                 <input
@@ -12917,7 +12984,7 @@ function RecipesTab({
                 <button
                   type="submit"
                   disabled={taskSaving || !taskForm.title.trim()}
-                  className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
+                  className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
                 >
                   {taskSaving ? 'Adding…' : '+ Add step to this job'}
                 </button>
@@ -12928,7 +12995,7 @@ function RecipesTab({
           {/* The parts half keeps its own label now that the steps panel sits
               above it — otherwise these rows read as unlabelled under the
               card-level "— recipe" heading. */}
-          <div className="mt-6 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-2">
+          <div className="mt-6 font-mono text-micro uppercase tracking-[0.16em] text-accent font-bold pb-2">
             {selectedAsm.name} — parts
           </div>
 
@@ -12938,7 +13005,7 @@ function RecipesTab({
               callouts below pinpoint each one. */}
           {forkGaps && (forkGaps.count > 0 || forkGaps.detectionFailed) && (
             <div className="mb-3 border border-warning/50 bg-warning/5 px-4 py-3">
-              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-warning mb-1">
+              <div className="font-mono text-micro uppercase tracking-[0.16em] text-warning mb-1">
                 {forkGaps.detectionFailed
                   ? 'Catalogue check skipped'
                   : `${forkGaps.count} line${forkGaps.count === 1 ? '' : 's'} need a catalogue product`}
@@ -12978,16 +13045,16 @@ function RecipesTab({
                           <div className="text-xs text-text-dim mt-0.5">{b.description}</div>
                         )}
                         <div className="mt-1.5">
-                          <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                          <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.15em]">
                             shared baseline
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0 text-text-dim">
-                        <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em]">
+                        <span className="font-mono text-micro uppercase tracking-[0.14em]">
                           qty {Number(b.quantity)}
                         </span>
-                        <span className="font-mono text-[0.55rem] uppercase tracking-[0.15em] px-2 py-1 border border-ink-line">
+                        <span className="font-mono text-micro uppercase tracking-[0.15em] px-2 py-1 border border-ink-line">
                           {b.required ? 'required' : 'optional'}
                         </span>
                       </div>
@@ -12999,11 +13066,11 @@ function RecipesTab({
                     type="button"
                     onClick={() => void forkBaseline()}
                     disabled={forking}
-                    className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
+                    className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
                   >
                     {forking ? 'Forking baseline…' : 'Customise this recipe'}
                   </button>
-                  <span className="text-[0.65rem] text-text-dim leading-snug">
+                  <span className="text-micro text-text-dim leading-snug">
                     Copies these {jobBaseline.length} line{jobBaseline.length === 1 ? '' : 's'} into your recipe so you can edit qty, toggle required/optional, or add more parts.
                   </span>
                 </div>
@@ -13049,12 +13116,12 @@ function RecipesTab({
                       )}
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         {priced ? (
-                          <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                          <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.15em]">
                             {badgeLabel('catalogue', 'long')}
                           </span>
                         ) : (
                           <span
-                            className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]"
+                            className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.15em]"
                             title="No active Catalogue product in this category. The AI will fall back to a generic price (or inspection). Add a Catalogue product with this exact category to use your real product + price."
                           >
                             {badgeLabel('generic', 'long')}
@@ -13066,7 +13133,7 @@ function RecipesTab({
                             matching catalogue product yet. */}
                         {forkGapHere && (
                           <span
-                            className="inline-block px-1.5 py-0.5 border border-warning/60 bg-warning/10 text-warning font-mono text-[0.55rem] uppercase tracking-[0.15em]"
+                            className="inline-block px-1.5 py-0.5 border border-warning/60 bg-warning/10 text-warning font-mono text-micro uppercase tracking-[0.15em]"
                             title="This line was copied from the baseline but you have no catalogue product in its category — add one so the AI uses your real product + price instead of a generic one."
                           >
                             ⚠ add a product for this line
@@ -13075,7 +13142,7 @@ function RecipesTab({
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <label className="flex items-center gap-1.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+                      <label className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                         qty
                         <input
                           value={qv}
@@ -13094,7 +13161,8 @@ function RecipesTab({
                         type="button"
                         onClick={() => patchLine(l.id, { required: !l.required })}
                         disabled={busyId === l.id}
-                        className={`font-mono text-[0.55rem] uppercase tracking-[0.15em] px-2 py-1 border transition-colors cursor-pointer disabled:opacity-50 ${
+                        aria-busy={busyId === l.id}
+                        className={`font-mono text-micro uppercase tracking-[0.15em] px-2 py-1 border transition-colors cursor-pointer disabled:opacity-50 ${
                           l.required
                             ? 'border-accent/40 text-accent'
                             : 'border-ink-line text-text-dim'
@@ -13106,7 +13174,8 @@ function RecipesTab({
                         type="button"
                         onClick={() => deleteLine(l.id)}
                         disabled={busyId === l.id}
-                        className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
+                        aria-busy={busyId === l.id}
+                        className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
                       >
                         Remove
                       </button>
@@ -13125,7 +13194,7 @@ function RecipesTab({
             className="rounded-card mt-4 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
           >
             <label className="flex flex-col gap-1">
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Material category</span>
+              <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Material category</span>
               <select
                 value={form.material_category}
                 onChange={(e) => setForm((f) => ({ ...f, material_category: e.target.value }))}
@@ -13145,13 +13214,13 @@ function RecipesTab({
                   problem: it told tradies to copy a value from a list that was
                   itself wrong. Both lists now come from the same source, so the
                   advice is no longer needed. */}
-              <span className="text-[0.65rem] text-text-dim leading-snug">
+              <span className="text-micro text-text-dim leading-snug">
                 What part the job needs. Add a product in this category under Catalogue and the
                 AI uses your product and your price; otherwise it falls back to a generic price.
               </span>
             </label>
             <label className="flex flex-col gap-1">
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Quantity</span>
+              <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Quantity</span>
               <input
                 value={form.quantity}
                 inputMode="decimal"
@@ -13160,7 +13229,7 @@ function RecipesTab({
               />
             </label>
             <label className="flex flex-col gap-1 sm:col-span-2">
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Description (optional)</span>
+              <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">Description (optional)</span>
               <input
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -13181,7 +13250,8 @@ function RecipesTab({
               <button
                 type="submit"
                 disabled={saving}
-                className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
+                aria-busy={saving}
+                className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2.5 bg-accent text-white hover:bg-accent-press transition-colors cursor-pointer disabled:opacity-60"
               >
                 {saving ? 'Adding…' : '+ Add part to this recipe'}
               </button>
@@ -13230,11 +13300,11 @@ type EstimationJob = {
 
 function SourceBadge({ source }: { source: 'local' | 'global' }) {
   return source === 'local' ? (
-    <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+    <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-micro uppercase tracking-[0.15em]">
       your override
     </span>
   ) : (
-    <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+    <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.15em]">
       global default
     </span>
   )
@@ -13405,7 +13475,7 @@ function EstimatingTab({
   if (loading) {
     return (
       <Card>
-        <p className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+        <p className="qm-loading font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           Loading estimation breakdown…
         </p>
       </Card>
@@ -13414,7 +13484,7 @@ function EstimatingTab({
   if (error) {
     return (
       <Card>
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-2">
+        <div className="font-mono text-micro uppercase tracking-[0.15em] text-warning mb-2">
           Couldn&apos;t load estimation breakdown
         </div>
         <p className="text-sm text-text-sec">{error}</p>
@@ -13451,15 +13521,15 @@ function EstimatingTab({
                 <div className="font-semibold text-sm text-text-pri">{j.name}</div>
                 <div className="flex items-center gap-2">
                   {j.recipe_source === 'tenant' ? (
-                    <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                    <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-micro uppercase tracking-[0.15em]">
                       your recipe
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                    <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.15em]">
                       standard recipe
                     </span>
                   )}
-                  <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim/80">
+                  <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim/80">
                     {j.trade}
                     {!j.enabled && ' · disabled for you'}
                   </span>
@@ -13467,7 +13537,7 @@ function EstimatingTab({
               </div>
 
               <div className="mt-3">
-                <div className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim mb-1">
+                <div className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim mb-1">
                   Bill of materials
                 </div>
                 <ul className="text-sm text-text-sec space-y-1">
@@ -13484,12 +13554,12 @@ function EstimatingTab({
                           {b.required ? '' : ' (optional)'}
                         </span>
                         {priced ? (
-                          <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.5rem] uppercase tracking-[0.14em]">
+                          <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.14em]">
                             {badgeLabel('catalogue', 'short')}
                           </span>
                         ) : (
                           <span
-                            className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.5rem] uppercase tracking-[0.14em]"
+                            className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-micro uppercase tracking-[0.14em]"
                             title="No active Catalogue product in this category — the AI uses a generic price. Add a Catalogue product with this exact category to use your real product + price."
                           >
                             {badgeLabel('generic', 'short')}
@@ -13509,7 +13579,7 @@ function EstimatingTab({
                   </span>
                   <SourceBadge source={j.effective.labour_hours.source} />
                   {j.hourly_rate != null && (
-                    <span className="text-text-dim/70 font-mono text-[0.65rem]">
+                    <span className="text-text-dim/70 font-mono text-micro">
                       @ ${j.hourly_rate}/hr
                     </span>
                   )}
@@ -13531,7 +13601,7 @@ function EstimatingTab({
                   <button
                     type="button"
                     onClick={() => startEdit(j)}
-                    className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-accent hover:text-accent/80 transition-colors cursor-pointer"
+                    className="font-mono text-micro uppercase tracking-[0.15em] text-accent hover:text-accent/80 transition-colors cursor-pointer"
                   >
                     Edit overrides
                   </button>
@@ -13542,7 +13612,8 @@ function EstimatingTab({
                     type="button"
                     onClick={() => void resetOverride(j)}
                     disabled={savingId === j.assembly_id}
-                    className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
+                    aria-busy={savingId === j.assembly_id}
+                    className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
                   >
                     Reset to default
                   </button>
@@ -13553,7 +13624,7 @@ function EstimatingTab({
                 <div className="mt-3 border border-accent/40 bg-accent/5 p-3">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <label className="flex flex-col gap-1">
-                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                      <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
                         Labour hours (global: {j.effective.global_labour_hours})
                       </span>
                       <input
@@ -13570,7 +13641,7 @@ function EstimatingTab({
                       />
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                      <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
                         Markup % (global: {j.effective.global_markup_pct}%)
                       </span>
                       <input
@@ -13601,13 +13672,13 @@ function EstimatingTab({
                       Number.isFinite(markup) && gMu > 0 && (markup >= gMu * 2 || markup <= gMu * 0.5)
                     if (!labourWild && !markupWild) return null
                     return (
-                      <div className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning">
+                      <div className="mt-2 font-mono text-micro uppercase tracking-[0.14em] text-warning">
                         ⚠ This is a big shift from the global default — double-check before saving.
                       </div>
                     )
                   })()}
                   {saveErr && (
-                    <div className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning">
+                    <div className="mt-2 font-mono text-micro uppercase tracking-[0.14em] text-warning">
                       {saveErr}
                     </div>
                   )}
@@ -13615,15 +13686,16 @@ function EstimatingTab({
                     <button
                       type="button"
                       disabled={savingId === j.assembly_id}
+                      aria-busy={savingId === j.assembly_id}
                       onClick={() => void saveEdit(j)}
-                      className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 cursor-pointer"
+                      className="font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 cursor-pointer"
                     >
                       {savingId === j.assembly_id ? 'Saving…' : 'Save overrides'}
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-pri transition-colors cursor-pointer"
+                      className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim hover:text-text-pri transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -13918,7 +13990,7 @@ function FollowupsTab({
   if (loading) {
     return (
       <Card>
-        <p className="text-sm text-text-dim">Loading the follow-up queue…</p>
+        <p className="qm-loading text-sm text-text-dim">Loading the follow-up queue…</p>
       </Card>
     )
   }
@@ -13929,7 +14001,7 @@ function FollowupsTab({
         <button
           type="button"
           onClick={() => void load()}
-          className="rounded-ctl mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold px-5 py-3 min-h-[44px] transition-colors cursor-pointer"
+          className="rounded-ctl mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-micro uppercase tracking-[0.16em] font-bold px-5 py-3 min-h-[44px] transition-colors cursor-pointer"
         >
           Retry
         </button>
@@ -13971,7 +14043,7 @@ function FollowupsTab({
           </span>{' '}
           waiting on a visit time — a quote leaves this list once it&apos;s paid.
         </span>
-        <span className="whitespace-nowrap font-mono text-[0.62rem] uppercase tracking-[0.16em] text-teal-glow">
+        <span className="whitespace-nowrap font-mono text-micro uppercase tracking-[0.16em] text-teal-glow">
           Calendar →
         </span>
       </button>
@@ -14039,7 +14111,7 @@ function FollowupsTab({
         </select>
       </div>
       {filtersActive && (
-        <p className="mb-3 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+        <p className="mb-3 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           Showing {ordered.length} of {list.length}
           <button
             type="button"
@@ -14089,7 +14161,7 @@ function FollowupsTab({
             showChaseHeader ? (
               <p
                 key={`${rowId}-h`}
-                className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-text-dim"
+                className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim"
               >
                 To chase ({toChase.length})
               </p>
@@ -14097,7 +14169,7 @@ function FollowupsTab({
             showContactedHeader ? (
               <p
                 key={`${rowId}-h`}
-                className="mt-6 border-t border-ink-line pt-4 font-mono text-[0.62rem] uppercase tracking-[0.18em] text-text-dim"
+                className="mt-6 border-t border-ink-line pt-4 font-mono text-micro uppercase tracking-[0.18em] text-text-dim"
               >
                 Contacted ({done.length}) · still no payment
               </p>
@@ -14122,12 +14194,12 @@ function FollowupsTab({
                       compact
                     />
                     {isLead && (
-                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border border-ink-line text-text-dim">
+                      <span className="font-mono text-micro uppercase tracking-[0.16em] font-bold px-2 py-0.5 border border-ink-line text-text-dim">
                         SMS lead
                       </span>
                     )}
                     {f.needs_inspection && (
-                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border border-ink-line text-text-dim">
+                      <span className="font-mono text-micro uppercase tracking-[0.16em] font-bold px-2 py-0.5 border border-ink-line text-text-dim">
                         Inspection
                       </span>
                     )}
@@ -14145,7 +14217,7 @@ function FollowupsTab({
                       ' · SMS enquiry, no quote yet'
                     )}
                   </p>
-                  <p className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+                  <p className="mt-1 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                     Last activity {fmtAgeHours(f.age_hours)}
                   </p>
                 </div>
@@ -14155,7 +14227,7 @@ function FollowupsTab({
                       type="button"
                       disabled={!hasPhone || calling}
                       onClick={() => void startCall(f)}
-                      className="rounded-ctl inline-flex items-center justify-center gap-1.5 bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-ctl inline-flex items-center justify-center gap-1.5 bg-accent hover:bg-accent-press text-white font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {calling ? 'Ringing…' : 'Call'}
                     </button>
@@ -14166,13 +14238,13 @@ function FollowupsTab({
                         clearRowMsg(rowId)
                         setComposeFor(f)
                       }}
-                      className="rounded-ctl inline-flex items-center justify-center gap-1.5 border border-accent/60 text-accent hover:bg-accent/10 font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-ctl inline-flex items-center justify-center gap-1.5 border border-accent/60 text-accent hover:bg-accent/10 font-mono text-micro uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Text
                     </button>
                   </div>
                   {!hasPhone && (
-                    <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning-bright">
+                    <span className="font-mono text-micro uppercase tracking-[0.14em] text-warning-bright">
                       No phone on file
                     </span>
                   )}
@@ -14183,7 +14255,7 @@ function FollowupsTab({
                   )}
                   {act && (
                     <span
-                      className={`text-center font-mono text-[0.6rem] uppercase tracking-[0.12em] leading-relaxed ${
+                      className={`text-center font-mono text-micro uppercase tracking-[0.12em] leading-relaxed ${
                         act.kind === 'ok'
                           ? 'text-success-bright'
                           : 'text-warning-bright'
@@ -14199,7 +14271,7 @@ function FollowupsTab({
                   <Link
                     href={`/q/${f.share_token}`}
                     target="_blank"
-                    className="font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold text-accent hover:text-accent-press"
+                    className="font-mono text-micro uppercase tracking-[0.14em] font-bold text-accent hover:text-accent-press"
                   >
                     Open quote ↗
                   </Link>
@@ -14212,7 +14284,7 @@ function FollowupsTab({
                       [rowId]: !s[rowId],
                     }))
                   }
-                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
+                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-micro uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
                 >
                   {threadOpen[rowId] ? 'Hide messages ▾' : 'Messages ▸'}
                 </button>
@@ -14225,7 +14297,7 @@ function FollowupsTab({
                         [rowId]: !s[rowId],
                       }))
                     }
-                    className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
+                    className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-micro uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
                   >
                     {historyOpen[rowId] ? 'Hide history ▾' : 'History ▸'}
                   </button>
@@ -14234,8 +14306,9 @@ function FollowupsTab({
                   <button
                     type="button"
                     disabled={busyId === rowId}
+                    aria-busy={busyId === rowId}
                     onClick={() => void reopen(f.quote_id as string)}
-                    className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
+                    className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-micro uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {busyId === rowId ? 'Saving…' : 'Reopen ↩'}
                   </button>
@@ -14249,7 +14322,7 @@ function FollowupsTab({
                         [rowId]: !s[rowId],
                       }))
                     }
-                    className={`rounded-ctl ml-auto inline-flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer ${
+                    className={`rounded-ctl ml-auto inline-flex items-center gap-2 font-mono text-micro uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer ${
                       logFor[rowId]
                         ? 'border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri'
                         : 'border border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
@@ -14448,7 +14521,7 @@ function FollowupLogForm({
 
   return (
     <div className="mt-3 border-t border-ink-line pt-3">
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim mb-2">
+      <p className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim mb-2">
         Log touch — what happened?
       </p>
       <div className="grid gap-1.5 sm:grid-cols-2">
@@ -14474,7 +14547,7 @@ function FollowupLogForm({
         ))}
       </div>
       <label className="mt-3 flex flex-col gap-1">
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+        <span className="font-mono text-micro uppercase tracking-[0.15em] text-text-dim">
           Note (optional, up to 500 chars)
         </span>
         <textarea
@@ -14490,8 +14563,9 @@ function FollowupLogForm({
         <button
           type="button"
           disabled={saving}
+          aria-busy={saving}
           onClick={() => void save()}
-          className="bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
+          className="bg-accent hover:bg-accent-press text-white font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
         >
           {saving ? 'Saving…' : 'Save touch'}
         </button>
@@ -14499,7 +14573,8 @@ function FollowupLogForm({
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="rounded-card border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
+          aria-busy={saving}
+          className="rounded-card border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-micro uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
         >
           Cancel
         </button>
@@ -14563,7 +14638,7 @@ function FollowupHistory({
 
   if (loading) {
     return (
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+      <p className="qm-loading font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
         Loading history…
       </p>
     )
@@ -14573,7 +14648,7 @@ function FollowupHistory({
   }
   if (!events || events.length === 0) {
     return (
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+      <p className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
         No touches logged yet. Calls, texts, and notes you log will appear here.
       </p>
     )
@@ -14587,7 +14662,7 @@ function FollowupHistory({
         >
           <div className="flex flex-wrap items-baseline gap-2">
             <span
-              className={`font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-1.5 py-0.5 border ${
+              className={`font-mono text-micro uppercase tracking-[0.16em] font-bold px-1.5 py-0.5 border ${
                 e.kind === 'note'
                   ? 'border-accent/60 text-accent'
                   : 'border-ink-line text-text-dim'
@@ -14600,7 +14675,7 @@ function FollowupHistory({
                 e.summary ||
                 'Touch logged'}
             </span>
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim ml-auto">
+            <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim ml-auto">
               {fmtRelative(e.created_at)}
             </span>
           </div>
@@ -14719,13 +14794,13 @@ function FollowupTextModal({
   // so the FULL text thread is reachable and the modal never overflows.
   const overlay = (
     <div
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
+      className="qm-overlay fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className="rounded-card flex max-h-[92dvh] w-full flex-col bg-ink border border-ink-line sm:max-w-xl"
+        className="qm-panel rounded-card flex max-h-[92dvh] w-full flex-col bg-ink border border-ink-line sm:max-w-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — pinned */}
@@ -14734,7 +14809,7 @@ function FollowupTextModal({
             <h3 className="font-extrabold uppercase tracking-tight text-text-pri">
               Text {item.customer.full_name || 'customer'}
             </h3>
-            <p className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+            <p className="mt-1 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
               From your QuoteMax number · {item.customer.phone ?? 'no number'}
             </p>
           </div>
@@ -14758,7 +14833,7 @@ function FollowupTextModal({
             </div>
           )}
           <div className="rounded-card border border-ink-line bg-ink-deep p-3">
-            <p className="mb-2 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
+            <p className="mb-2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
               Conversation
             </p>
             <FollowupThread
@@ -14784,7 +14859,7 @@ function FollowupTextModal({
             placeholder="Type your follow-up message…"
             className="rounded-ctl w-full bg-ink-deep border border-ink-line text-text-pri text-sm p-3 outline-none focus:border-accent/60 disabled:opacity-60"
           />
-          <p className="mt-1.5 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
+          <p className="mt-1.5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
             {trimmed.length}/640 chars · ~{segments} SMS{' '}
             {segments === 1 ? 'segment' : 'segments'}
           </p>
@@ -14794,7 +14869,8 @@ function FollowupTextModal({
               type="button"
               onClick={onClose}
               disabled={sending}
-              className="rounded-card border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50"
+              aria-busy={sending}
+              className="rounded-card border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-micro uppercase tracking-[0.16em] font-bold px-4 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
@@ -14802,7 +14878,8 @@ function FollowupTextModal({
               type="button"
               onClick={() => void send()}
               disabled={sending || trimmed.length === 0}
-              className="bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-5 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-busy={sending}
+              className="bg-accent hover:bg-accent-press text-white font-mono text-micro uppercase tracking-[0.16em] font-bold px-5 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sending ? 'Sending…' : 'Send text'}
             </button>
@@ -14923,7 +15000,7 @@ function FollowupThread({
   }, [quoteId, conversationId, accessToken])
 
   if (state.phase === 'loading') {
-    return <p className="text-xs text-text-dim">Loading messages…</p>
+    return <p className="qm-loading text-xs text-text-dim">Loading messages…</p>
   }
   if (state.phase === 'error') {
     return <p className="text-xs text-warning-bright">{state.msg}</p>
@@ -14945,7 +15022,7 @@ function FollowupThread({
   return (
     <div>
       {customerRepliedLast && (
-        <p className="mb-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-success-bright">
+        <p className="mb-2 font-mono text-micro uppercase tracking-[0.14em] text-success-bright">
           Customer replied — awaiting your response
         </p>
       )}
@@ -14970,7 +15047,7 @@ function FollowupThread({
               >
                 <p className="whitespace-pre-wrap break-words">{m.body}</p>
                 <p
-                  className={`mt-1 font-mono text-[0.55rem] uppercase tracking-[0.12em] ${
+                  className={`mt-1 font-mono text-micro uppercase tracking-[0.12em] ${
                     mine ? 'text-accent/80' : 'text-text-dim'
                   }`}
                 >
@@ -15108,7 +15185,7 @@ function ChatsTab({
   // so its loading / error / empty states sit directly on the page too.
   if (loading) {
     return (
-      <p className="border-t border-ink-line p-6 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+      <p className="qm-loading border-t border-ink-line p-6 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
         Loading conversations…
       </p>
     )
@@ -15146,7 +15223,7 @@ function ChatsTab({
           <button
             type="button"
             onClick={() => setChatsTick((n) => n + 1)}
-            className="rounded-ctl inline-flex items-center border border-ink-line px-3 py-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-pri transition-colors cursor-pointer hover:border-accent hover:text-accent"
+            className="rounded-ctl inline-flex items-center border border-ink-line px-3 py-1.5 font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-pri transition-colors cursor-pointer hover:border-accent hover:text-accent"
           >
             Retry
           </button>
@@ -15247,7 +15324,7 @@ function ChatsSplitView({
         className={`${mobileThreadOpen ? 'hidden md:block' : ''} md:min-h-0 md:overflow-y-auto md:border-r md:border-ink-line`}
       >
         <div className="sticky top-[61px] z-[5] flex items-center justify-between gap-3 border-b border-ink-line bg-ink-deep px-[18px] py-[15px] md:top-0">
-          <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-text-sec">
+          <span className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-sec">
             Conversations · {shown.length}
           </span>
           {/* All / Went-cold filter — lives in the reference's "All
@@ -15330,7 +15407,7 @@ function ChatsSplitView({
             onBack={() => setSelectedId(null)}
           />
         ) : (
-          <p className="p-6 font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
+          <p className="p-6 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
             Select a conversation
           </p>
         )}
@@ -15358,7 +15435,7 @@ function RailFilterButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`relative cursor-pointer font-mono text-[10px] font-bold uppercase tracking-[0.14em] transition-colors after:absolute after:-inset-x-1.5 after:-inset-y-[15px] focus-visible:outline-2 focus-visible:outline-accent ${
+      className={`relative cursor-pointer font-mono text-micro font-bold uppercase tracking-[0.14em] transition-colors after:absolute after:-inset-x-1.5 after:-inset-y-[15px] focus-visible:outline-2 focus-visible:outline-accent ${
         active ? 'text-accent' : 'text-text-dim hover:text-text-pri'
       }`}
     >
@@ -15424,7 +15501,7 @@ function ChatRailRow({
       <div className="flex items-center gap-[11px]">
         <span
           aria-hidden="true"
-          className={`inline-grid h-[34px] w-[34px] shrink-0 place-items-center border font-mono text-[13px] font-bold ${
+          className={`inline-grid h-[34px] w-[34px] shrink-0 place-items-center border font-mono text-meta font-bold ${
             active
               ? 'border-transparent bg-accent text-accent-ink'
               : fallbackActive
@@ -15439,16 +15516,16 @@ function ChatRailRow({
             <span className="truncate text-sm font-bold text-text-pri">
               {who}
             </span>
-            <span className="shrink-0 font-mono text-[9.5px] text-text-dim">
+            <span className="shrink-0 font-mono text-micro text-text-dim">
               {relTime(chat.last_message_at ?? chat.created_at)}
             </span>
           </div>
-          <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+          <div className="mt-0.5 truncate font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
             {meta}
           </div>
         </div>
       </div>
-      <div className="mt-2 truncate text-[12.5px] text-text-dim">
+      <div className="mt-2 truncate text-meta text-text-dim">
         {preview}
       </div>
     </button>
@@ -15580,7 +15657,7 @@ function ChatThread({
               <path d="M15 6l-6 6 6 6" />
             </svg>
           </button>
-          <span className="truncate font-mono text-[10.5px] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <span className="truncate font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
             {who} · {headerMeta}
           </span>
         </div>
@@ -15591,7 +15668,7 @@ function ChatThread({
             <button
               type="button"
               onClick={onGoToQuotes}
-              className="relative inline-flex cursor-pointer items-center gap-[7px] border border-ink-line bg-transparent px-3 py-[7px] font-mono text-[9.5px] font-bold uppercase tracking-[0.12em] text-text-pri transition-colors after:absolute after:-inset-x-1 after:-inset-y-[11px] hover:border-accent focus-visible:outline-2 focus-visible:outline-accent"
+              className="relative inline-flex cursor-pointer items-center gap-[7px] border border-ink-line bg-transparent px-3 py-[7px] font-mono text-micro font-bold uppercase tracking-[0.12em] text-text-pri transition-colors after:absolute after:-inset-x-1 after:-inset-y-[11px] hover:border-accent focus-visible:outline-2 focus-visible:outline-accent"
             >
               Open quote →
             </button>
@@ -15602,7 +15679,7 @@ function ChatThread({
 
       <div className="grid w-full max-w-[880px] gap-3 px-5 py-[26px] md:px-[30px]">
         {messages.length === 0 ? (
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
+          <p className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
             No messages recorded on this conversation.
           </p>
         ) : (
@@ -15618,14 +15695,14 @@ function ChatThread({
               >
                 <div
                   title={`${formatDate(m.created_at)} ${formatTime(m.created_at)}`}
-                  className={`max-w-[86%] whitespace-pre-wrap break-words px-[13px] py-2.5 text-[13.5px] leading-[1.45] ${
+                  className={`max-w-[86%] whitespace-pre-wrap break-words px-[13px] py-2.5 text-sm leading-[1.45] ${
                     inbound
                       ? 'border border-ink-line bg-ink-deep text-text-sec'
                       : 'border border-accent/35 bg-accent/10 text-text-pri'
                   }`}
                 >
                   {!inbound && (
-                    <span className="mb-1 block font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-accent">
+                    <span className="mb-1 block font-mono text-micro font-bold uppercase tracking-[0.16em] text-accent">
                       {mine ? 'You' : 'QuoteMax'}
                     </span>
                   )}
@@ -15647,24 +15724,25 @@ function ChatThread({
                 placeholder="Reply by SMS"
                 aria-label="Reply by SMS"
                 disabled={sending}
-                className="h-11 min-w-0 flex-1 border border-ink-line bg-ink px-3.5 text-[13.5px] text-text-pri outline-none transition-colors placeholder:text-text-dim focus:border-accent disabled:opacity-60"
+                className="h-11 min-w-0 flex-1 border border-ink-line bg-ink px-3.5 text-sm text-text-pri outline-none transition-colors placeholder:text-text-dim focus:border-accent disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={sending || !draft.trim()}
+                aria-busy={sending}
                 className="inline-flex h-11 cursor-pointer items-center gap-2 bg-accent px-[18px] text-xs font-bold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {sending ? 'Sending…' : 'Send'}
               </button>
             </form>
             {sendError && (
-              <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-danger-bright">
+              <p className="mt-2 font-mono text-micro uppercase tracking-[0.12em] text-danger-bright">
                 Send failed — {sendError}
               </p>
             )}
           </>
         ) : (
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
+          <p className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
             Voice call — no SMS thread
           </p>
         )}
@@ -15701,7 +15779,7 @@ function MetaCell({
 }) {
   return (
     <div className="bg-ink-card px-3 py-2">
-      <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+      <div className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
         {label}
       </div>
       <div
@@ -15712,7 +15790,7 @@ function MetaCell({
         {value}
       </div>
       {sub && (
-        <div className="font-mono text-[0.65rem] text-text-dim mt-0.5">{sub}</div>
+        <div className="font-mono text-micro text-text-dim mt-0.5">{sub}</div>
       )}
     </div>
   )
@@ -15738,7 +15816,7 @@ function Pagination({
 }) {
   if (pageCount <= 1) return null
   const btn =
-    'inline-flex items-center gap-1.5 border border-ink-line bg-ink-card px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer'
+    'inline-flex items-center gap-1.5 border border-ink-line bg-ink-card px-3.5 py-2 font-mono text-micro font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer'
   return (
     <div className="mt-5 flex items-center justify-center gap-3 border-t border-ink-line pt-5">
       <button
@@ -15750,7 +15828,7 @@ function Pagination({
       >
         ← Prev
       </button>
-      <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim tabular-nums">
+      <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim tabular-nums">
         Page {page + 1} of {pageCount}
       </span>
       <button
@@ -15829,7 +15907,7 @@ function SaveHint({ savedAt }: { savedAt: number | null }) {
   }, [savedAt])
   if (!show) return <span />
   return (
-    <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-success-bright">
+    <span className="font-mono text-micro uppercase tracking-[0.16em] text-success-bright">
       ✓ Saved
     </span>
   )
@@ -16074,7 +16152,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
         >
           <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">01</span>
           <div className="flex-1">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+            <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
               Compliance sweep
             </div>
             <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
@@ -16096,7 +16174,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
         >
           <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">02</span>
           <div className="flex-1">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+            <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
               Human review
             </div>
             <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
@@ -16118,7 +16196,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
           live; click through to review an assessed studio. */}
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">
             Recent requests{recent.length ? ` · ${recent.length}` : ''}
           </div>
           <button
@@ -16130,7 +16208,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
           </button>
         </div>
 
-        {loading && <p className="mt-4 text-base text-text-dim">Loading recent requests…</p>}
+        {loading && <p className="qm-loading mt-4 text-base text-text-dim">Loading recent requests…</p>}
         {err && !loading && <p className="mt-4 text-base text-warning">{err}</p>}
         {!loading && !err && recentTop.length === 0 && (
           <p className="mt-4 text-base text-text-sec">
@@ -16150,7 +16228,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
                   <SgChip state={r.state} overall={r.overall} />
                   <div>
                     <div className="font-mono text-sm text-text-pri">{r.studio_name}</div>
-                    <div className="font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
+                    <div className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                       {r.sweep_name}
                     </div>
                   </div>
@@ -16160,14 +16238,14 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
                     href={r.link}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent"
+                    className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent"
                   >
                     Open <span aria-hidden="true">&#8599;</span>
                   </a>
                   {r.assessment_id && (
                     <Link
                       href={`/dashboard/signage/queue?a=${r.assessment_id}`}
-                      className="bg-accent px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
+                      className="bg-accent px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
                     >
                       Review
                     </Link>
@@ -16187,7 +16265,7 @@ function SgStat({ label, value, tone }: { label: string; value: number; tone?: '
     tone === 'good' ? 'text-teal-glow' : tone === 'warn' ? 'text-warning' : tone === 'accent' ? 'text-accent' : 'text-text-pri'
   return (
     <div className="rounded-card border border-ink-line bg-ink-card p-4">
-      <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</div>
+      <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</div>
       <div className={`mt-1.5 font-mono text-2xl font-bold tabular-nums ${colour}`}>{value}</div>
     </div>
   )
@@ -16300,10 +16378,10 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
           01
         </span>
         <div className="flex-1">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
             Address estimate
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
             Estimate a paint job
           </h3>
           <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -16320,7 +16398,7 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
       {/* Saved paint jobs — history of every "Save job", scoped to this tenant. */}
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">
             Saved paint jobs{jobs ? ` · ${jobs.length}` : ''}
           </div>
           <button
@@ -16332,7 +16410,7 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
           </button>
         </div>
 
-        {loadingJobs && <p className="mt-4 text-base text-text-dim">Loading saved jobs…</p>}
+        {loadingJobs && <p className="qm-loading mt-4 text-base text-text-dim">Loading saved jobs…</p>}
         {jobsError && !loadingJobs && (
           <p className="mt-4 text-base text-warning">Couldn&apos;t load saved jobs: {jobsError}</p>
         )}
@@ -16512,10 +16590,10 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
           01
         </span>
         <div className="flex-1">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
             Address measurement
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
             Measure a roof
           </h3>
           <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -16535,7 +16613,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
           customer quote page (/q/roof/[token]). */}
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">
             Saved roofing jobs{jobs ? ` · ${jobs.length}` : ''}
           </div>
           <button
@@ -16548,7 +16626,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
         </div>
 
         {loadingJobs && (
-          <p className="mt-4 text-base text-text-dim">Loading saved jobs…</p>
+          <p className="qm-loading mt-4 text-base text-text-dim">Loading saved jobs…</p>
         )}
         {jobsError && !loadingJobs && (
           <p className="mt-4 text-base text-warning">Couldn&apos;t load saved jobs: {jobsError}</p>
@@ -16586,7 +16664,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                       synthetic topology-evidence preview. */}
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-card border border-ink-line bg-ink-card p-4">
-                      <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
+                      <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-accent">
                         Saved roofing job
                       </div>
                       <p className="mt-1 text-xs text-text-dim">
@@ -16623,7 +16701,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                     </div>
 
                     <div className="rounded-card border border-ink-line bg-ink-card p-4">
-                      <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
+                      <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-teal-glow">
                         Measurement results
                       </div>
                       <p className="mt-1 text-xs text-text-dim">
@@ -16648,7 +16726,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                     </div>
 
                     <div className="rounded-card border border-ink-line bg-ink-card p-4">
-                      <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-[#FF375F]">
+                      <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-accent">
                         Topology evidence
                       </div>
                       <p className="mt-1 text-xs text-text-dim">
@@ -16682,7 +16760,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
       </div>
 
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+        <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">
           What's live in Phase 1
         </div>
         <ul className="mt-4 space-y-2 text-base leading-relaxed text-text-sec">
@@ -16779,7 +16857,7 @@ function JobQuoterCard({ trade }: { trade: 'electrical' | 'plumbing' }) {
         {trade === 'electrical' ? 'EL' : 'PL'}
       </span>
       <div className="flex-1">
-        <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+        <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
           Quote {trade === 'electrical' ? 'an' : 'a'} {trade} job
         </h3>
         <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -16837,7 +16915,7 @@ function TradeHub({
       aria-labelledby={`trade-hub-title-${trade}`}
     >
       <header className="border-b border-ink-line bg-ink-deep px-4 pt-6 sm:px-6 sm:pt-7 lg:px-8 lg:pt-8 xl:px-10">
-        <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+        <div className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">
           QuoteMax · Dashboard · Trades
         </div>
         <h1
@@ -16902,7 +16980,7 @@ function TradeHub({
                 <span>{HUB_SECTION_LABELS[s]}</span>
                 {s === 'quotes' && quoteCount > 0 && (
                   <span
-                    className={`border px-1.5 py-0.5 font-mono text-[0.65rem] tabular-nums ${
+                    className={`border px-1.5 py-0.5 font-mono text-micro tabular-nums ${
                       active
                         ? 'border-accent-ink/35 text-accent-ink'
                         : 'border-ink-line text-text-pri'
@@ -16966,7 +17044,7 @@ function TradeHub({
                 AC
               </span>
               <div className="flex-1">
-                <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-section">
                   Air-conditioning recommender
                 </h3>
                 <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -16997,7 +17075,7 @@ function TradeHub({
             >
               <Sparkles size={18} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-accent" />
               <span className="flex-1 text-sm text-text-sec">
-                <span className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] text-accent">
+                <span className="font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent">
                   Pricing wizard
                 </span>
                 <span className="block mt-0.5">

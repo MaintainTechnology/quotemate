@@ -32,8 +32,15 @@ type SuggestResponse =
   | { ok: false; error: string }
 
 type Props = {
-  /** Bearer access token for the API route. */
+  /** Bearer access token for the API route. Irrelevant when `auth` is false. */
   accessToken: string | null
+  /** API route to POST { query, state } to. Defaults to the tradie-authed
+   *  roofing proxy; public callers point it at a token-gated route. */
+  endpoint?: string
+  /** When false, no Authorization header is sent and getAuthToken() is never
+   *  called — for PUBLIC token-gated endpoints where the URL is the
+   *  capability. Default true (the existing tradie-authed behaviour). */
+  auth?: boolean
   /** Current input value (controlled by the parent so the form state
    *  stays in one place). */
   value: string
@@ -52,6 +59,8 @@ type Props = {
 
 export function AddressAutocomplete({
   accessToken,
+  endpoint = '/api/roofing/suggest-address',
+  auth = true,
   value,
   onChange,
   onSelect,
@@ -70,7 +79,7 @@ export function AddressAutocomplete({
 
   const fetchSuggestions = useCallback(
     async (q: string) => {
-      if (!accessToken) return
+      if (auth && !accessToken) return
       if (q.trim().length < 3) {
         setItems([])
         return
@@ -80,18 +89,19 @@ export function AddressAutocomplete({
       reqRef.current = ctrl
       setBusy(true)
       try {
-        // Dual-auth: mint a FRESH token per request. The `accessToken` prop is
-        // captured once at the parent's mount and a Clerk session token expires
-        // ~60s later, so reusing it on later keystrokes 401s. Fall back to the
-        // captured prop if getAuthToken() transiently returns null.
-        const token = (await getAuthToken()) ?? accessToken
-        const res = await fetch('/api/roofing/suggest-address', {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (auth) {
+          // Dual-auth: mint a FRESH token per request. The `accessToken` prop is
+          // captured once at the parent's mount and a Clerk session token expires
+          // ~60s later, so reusing it on later keystrokes 401s. Fall back to the
+          // captured prop if getAuthToken() transiently returns null.
+          const token = (await getAuthToken()) ?? accessToken
+          headers.Authorization = `Bearer ${token}`
+        }
+        const res = await fetch(endpoint, {
           method: 'POST',
           signal: ctrl.signal,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({ query: q, state }),
         })
         const json = (await res.json()) as SuggestResponse
@@ -111,7 +121,7 @@ export function AddressAutocomplete({
         setBusy(false)
       }
     },
-    [accessToken, state],
+    [accessToken, auth, endpoint, state],
   )
 
   // Debounced trigger on `value` change.
@@ -177,7 +187,7 @@ export function AddressAutocomplete({
         className="rounded-ctl w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
       />
       {busy && (
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           …
         </span>
       )}
@@ -199,7 +209,7 @@ export function AddressAutocomplete({
             >
               <div>{s.address}</div>
               {(s.state || s.postcode) && (
-                <div className="mt-0.5 text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+                <div className="mt-0.5 text-micro uppercase tracking-[0.14em] text-text-dim">
                   {[s.state, s.postcode].filter(Boolean).join(' · ')}
                 </div>
               )}

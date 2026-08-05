@@ -171,8 +171,53 @@
   --color-danger:       var(--danger);
   --color-danger-bright: var(--danger-bright);
 
+  /* Categorical ramp → `bg-viz-1`, `text-viz-2`, `border-viz-3` … so a legend
+     swatch in markup and the WebGL/canvas layer it labels can never drift.
+     Values + rationale live with the --viz-* block above. */
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
+  --color-viz-4: var(--viz-4);
+  --color-viz-5: var(--viz-5);
+  --color-viz-6: var(--viz-6);
+  --color-viz-7: var(--viz-7);
+  --color-viz-8: var(--viz-8);
+
   --font-sans: var(--font-manrope);
   --font-mono: var(--font-jetbrains-mono);
+
+  /* ─── CATEGORICAL DATA-VIZ RAMP (spec dashboard-premium-pass R0.3) ─
+     The One Signal Rule says yellow is the only accent. Encoding eight
+     room types, roof-edge kinds or plan-pin categories in one yellow is
+     not possible, so categorical data viz is the single sanctioned
+     exception — and it gets ONE shared ramp rather than a different
+     rainbow per component. Before this, RoofMap, FloorPlanOverlay and
+     PlanOverlay each invented their own (#3a86ff, #8338ec, #ef476f,
+     #2ec4b6 …): generic bright hues that fight a warm charcoal canvas.
+
+     Rules this ramp obeys:
+     · Warm-biased, so it belongs to the canvas. viz-4 is the single
+       permitted cool value — with eight categories you need one cool
+       anchor or the warm hues collapse into each other.
+     · Every value measured ≥3:1 against --ink-card (#2B2422, relative
+       luminance 0.018), the threshold for non-text graphical objects
+       under WCAG 1.4.11. Lowest here is viz-7 clay at 0.223 ≈ 4.0:1.
+     · Ordered for maximum adjacent separation, because categories
+       usually land next to their neighbours in a legend.
+     · CHROME MUST NOT USE THESE. They mean "this is a data category".
+       A panel that is merely important uses .edge-lit; a warning uses
+       --warning-bright. Reaching for --viz-* as decoration re-breaks the
+       One Signal Rule through the back door.
+     These are theme-independent on purpose: a category's identity cannot
+     change meaning when the tradie flips to the light theme. */
+  --viz-1: #FFC400;   /* accent yellow — category one anchors on brand */
+  --viz-2: #8FA3B8;   /* muted slate — the one permitted cool value     */
+  --viz-3: #F0816B;   /* coral                                          */
+  --viz-4: #34D27B;   /* green                                          */
+  --viz-5: #D98E4A;   /* ochre                                          */
+  --viz-6: #C3B8AC;   /* bone                                           */
+  --viz-7: #A8785F;   /* clay                                           */
+  --viz-8: #E8B4A0;   /* blush                                          */
 
   /* ─── DASHBOARD CORNER RADII ─────────────────────────────────────
      The tradie dashboard surface adopts the soft rounded corners of the
@@ -182,6 +227,66 @@
      `rounded-card` / `rounded-ctl` Tailwind utilities. */
   --radius-card: 14px;
   --radius-ctl: 9px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   DASHBOARD TYPE SCALE  (spec dashboard-premium-pass R1.1)
+   ────────────────────────────────────────────────────────────────────
+   The audit found ~700 arbitrary font sizes across ~18 near-identical
+   values — text-[0.6rem]×123, [0.7rem]×114, [0.65rem]×92, [0.62rem]×81,
+   [0.78rem]×68, [0.72rem]×60, [0.55rem]×38 … nine of them between 8.8px
+   and 11.2px. Steps nobody can perceive buy no hierarchy while costing
+   all consistency, which is precisely why the cockpit read as flat and
+   uniform: everything was small and slightly different, so nothing led.
+
+   ⚠ THIS BLOCK ADDS ONLY THE FOUR STEPS TAILWIND LACKS.
+   An earlier draft of this pass defined a full parallel scale
+   (--text-body at 14px, --text-lede at 16px, --text-title at 20px …). That
+   was wrong: Tailwind's text-sm IS 14px, text-base IS 16px and text-xl IS
+   20px, and those three already equal DESIGN.md's body and title steps. A
+   second name for an identical size is not a design system, it is a rename —
+   529 `text-sm` call sites would have churned for zero visual change while
+   leaving two vocabularies for one size.
+
+   So the cockpit scale is Tailwind's own, with four genuine gaps filled:
+
+     text-micro    11px   ← NEW. Tailwind jumps 12px → 0; the dashboard has
+                            ~430 labels between 8.8px and 11.2px that need
+                            somewhere legible to land.
+     text-xs       12px      Tailwind · = DESIGN.md `label`
+     text-meta     13px   ← NEW. The 12→14 gap, where dense metadata lives.
+     text-sm       14px      Tailwind · default cockpit UI text
+     text-base     16px      Tailwind · = DESIGN.md `body`
+     text-lg       18px      Tailwind
+     text-xl       20px      Tailwind · = DESIGN.md `title`
+     text-2xl      24px      Tailwind
+     text-section  28px   ← NEW. Tab headers; Tailwind jumps 24 → 30.
+     text-metric   fluid  ← NEW. The one focal number per tab (R1.3).
+
+   ⚠ DOCUMENTED DEVIATION — text-micro at 11px.
+   DESIGN.md states "12px is the floor" for mono labels. Roughly 430 sub-12px
+   instances exist. Raising every one straight to 12px is a 25-36% increase
+   inside nav labels, count chips and fixed-width table headers, and it would
+   overflow some of them. 11px still retires the genuinely illegible 8.8px and
+   9px labels. To take the layout risk and go to a hard 12px floor instead,
+   change this one value and re-verify the affected cells.
+   ════════════════════════════════════════════════════════════════════ */
+@theme {
+  --text-micro: 0.6875rem;               /* 11px · dense chips, table heads   */
+  --text-micro--line-height: 1.35;
+
+  --text-meta: 0.8125rem;                /* 13px · secondary sans metadata    */
+  --text-meta--line-height: 1.45;
+
+  --text-section: 1.75rem;               /* 28px · tab headers                */
+  --text-section--line-height: 1.15;
+  --text-section--letter-spacing: -0.03em;
+
+  /* The one focal number per tab (R1.3). Fluid so it leads on a laptop
+     between jobs without wrapping on a phone on site. */
+  --text-metric: clamp(2rem, 3vw, 3rem);
+  --text-metric--line-height: 0.95;
+  --text-metric--letter-spacing: -0.035em;
 }
 
 body {
@@ -857,6 +962,138 @@ html {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   MOTION SYSTEM
+   ────────────────────────────────────────────────────────────────────
+   Design-engineering rules this layer encodes (Emil Kowalski, animations.dev):
+
+   1. EASING. The built-in CSS easings are too weak to read as intentional,
+      so every curve here is a named custom cubic-bezier. `ease-in` is never
+      used on UI: it delays the first frame — exactly the moment the user is
+      watching — so it FEELS slower than an ease-out of the same duration.
+   2. DURATION. UI motion stays under 300ms. Press 90-140ms, hover 180ms,
+      popovers/dropdowns 200ms, dialogs 220-300ms. Anything longer is
+      marketing choreography, not interface feedback.
+   3. NOTHING APPEARS FROM NOTHING. Entrances start at scale(0.96), never
+      scale(0) — nothing in the real world pops out of a zero-size point.
+   4. PURPOSE. Motion here does one of four jobs: feedback (a press lands),
+      state (busy vs idle), spatial continuity (a panel swaps), or
+      preventing a jarring change. "It looks cool" is not on the list —
+      see the deliberate NON-animation on the ⌘K palette in
+      app/dashboard/page.tsx.
+   5. GPU ONLY. transform, opacity, box-shadow and clip-path. No width,
+      height, margin or padding animations anywhere in this file.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Strong ease-out — entrances, presses, anything the user triggered and
+     is waiting on. Starts fast so the interface feels instantly responsive. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* Strong ease-in-out — on-screen movement that starts AND ends in view. */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* The house expo-out already used across the marketing surface. Softer
+     landing than --ease-out; kept as a token so callers stop re-typing it. */
+  --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
+  /* iOS drawer curve (Ionic) — sheets and anything dragged from an edge. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --dur-press: 140ms;   /* release; press-down is faster, see :active */
+  --dur-hover: 180ms;
+  --dur-pop: 200ms;     /* dropdowns, popovers, tooltips */
+  --dur-panel: 240ms;   /* tab swaps, dialog panels */
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   APP-WIDE PRESS FEEDBACK
+   Every one of the ~460 <button>s in this app gets the same physical
+   response to a click, from one rule, with no per-component utility.
+
+   `:root :is(...)` resolves to (0,2,0), which is what it takes to beat a
+   single Tailwind utility such as `transition-colors` — that utility would
+   otherwise pin transition-property back to colour and silently drop the
+   transform. This is the same specificity trick the .qm-dash layer below
+   already relies on; :where() is deliberately NOT used here.
+
+   The colour timings are re-listed so nothing loses its existing fade, but
+   they drop 320ms → 180ms: 320ms is right for a whole-page theme cross-fade
+   and much too slow for a hover, where it reads as lag.
+   ════════════════════════════════════════════════════════════════════ */
+:root :is(button, [role="button"], a.rounded-ctl, summary) {
+  transition:
+    background-color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out),
+    color var(--dur-hover) var(--ease-out),
+    fill var(--dur-hover) var(--ease-out),
+    stroke var(--dur-hover) var(--ease-out),
+    opacity var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+/* The press itself. Subtle (0.97, not 0.9) and asymmetric: the squash lands
+   in 90ms because that is the system responding, and releases over the full
+   140ms because that is the system settling. A button that does not move
+   under the finger reads as one that did not hear the click. */
+:root :is(button, [role="button"], a.rounded-ctl):active:not(
+    :disabled,
+    [aria-disabled="true"],
+    [aria-busy="true"]
+  ) {
+  transform: scale(0.97);
+  transition-duration: 90ms;
+}
+
+/* Disabled is a look, not a motion. :where() keeps this at zero specificity
+   so any component that already ships its own `disabled:opacity-*` wins. */
+:where(button, [role="button"]):disabled,
+:where(button, [role="button"])[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* ── BUSY ────────────────────────────────────────────────────────────
+   A disabled button says "you can't press this". A busy button has to say
+   "I heard you, I'm working" — a different message that needs motion, not
+   just a greyed fill. Driven by aria-busy, so the accessibility tree and
+   the pixels tell the same story.
+
+   The sheen is currentColor at 22%, which means it adapts automatically:
+   dark ink over the yellow CTA, bone over the charcoal ghost button. A
+   hardcoded white would vanish on one and glare on the other.
+
+   The 22% is applied as `opacity` on the pseudo-element, NOT as
+   color-mix(currentColor 22%, transparent) inside the gradient. Both render
+   identically, but the color-mix version makes Lightning CSS emit a
+   no-color-mix fallback of bare `currentcolor` — i.e. a FULLY OPAQUE bar
+   sweeping across the button and blanking its label on any engine without
+   color-mix. Plain opacity has no fallback to get wrong. */
+:root :is(button, [role="button"])[aria-busy="true"] {
+  position: relative;
+  overflow: hidden;
+  cursor: progress;
+}
+:root :is(button, [role="button"])[aria-busy="true"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translateX(-100%);
+  opacity: 0.22;
+  background: linear-gradient(90deg, transparent 0%, currentColor 50%, transparent 100%);
+  animation: qm-sheen 1.05s var(--ease-in-out) infinite;
+}
+@keyframes qm-sheen {
+  to { transform: translateX(100%); }
+}
+
+/* ── SPINNERS ────────────────────────────────────────────────────────
+   Pure perceived performance: the same wait feels shorter behind a faster
+   spinner. Tailwind ships `animate-spin` at 1s, which reads as "stalled" on
+   a request that takes two seconds. 0.65s reads as "working". Duration only
+   — the keyframes and the linear timing stay Tailwind's. */
+:root .animate-spin {
+  animation-duration: 0.65s;
+}
+
+/* ════════════════════════════════════════════════════════════════════
    DASHBOARD INTERACTION LAYER
    Scoped to .qm-dash (app/dashboard/layout.tsx) — one block instead of a
    hover/active utility on each of the ~250 controls and cards.
@@ -866,27 +1103,30 @@ html {
    utilities, which this never touches. Both properties are GPU-composited,
    so the whole layer costs no layout or paint.
 
-   Hover is gated behind (hover: hover) so a tap on a touch screen cannot
-   leave a card stuck in its lifted state.
+   Hover is gated behind (hover: hover) AND (pointer: fine). Coarse pointers
+   synthesise a hover on tap, which without the second condition leaves a
+   card stuck in its lifted state after the finger lifts.
    ════════════════════════════════════════════════════════════════════ */
 
-/* Opt the interactive surfaces into transform + shadow transitions. The
-   global :where(*) rule above animates colour only, and a `transition-
-   colors` utility would otherwise pin transition-property back to colour
-   — hence a real class selector here rather than :where(). The colour
-   timing is re-declared verbatim so nothing loses its existing fade. */
-.qm-dash :is(button, a, [role="button"], .rounded-card) {
+.qm-dash :is(.rounded-card, [role="tab"], tr) {
   transition:
-    background-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    color 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    fill 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    stroke 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 140ms cubic-bezier(0.4, 0, 0.2, 1);
+    background-color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out),
+    color var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
 }
 
-@media (hover: hover) {
+/* Form controls need the same courtesy as buttons — a border that snaps to
+   accent on focus reads as a glitch; one that warms into it reads as focus. */
+.qm-dash :is(input, select, textarea) {
+  transition:
+    background-color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out),
+    color var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
   /* Trade-hub cards (.rounded-card.group) lift off the canvas and cast a
      warm accent-tinted glow. var(--lift) is composed back in so .edge-lit
      cards keep their 1px top highlight while hovered. */
@@ -897,39 +1137,104 @@ html {
       0 10px 26px -14px color-mix(in srgb, var(--accent) 40%, transparent);
   }
 
-  /* Buttons and button-shaped links rise 1px — enough to read as live. */
+  /* Buttons and button-shaped links rise 1px — enough to read as live.
+     Suppressed while busy: a button that lifts under the cursor while it is
+     mid-request invites a second click on a request already in flight. */
   :where(.qm-dash button, .qm-dash a.rounded-ctl):hover:not(
       :disabled,
-      [aria-disabled="true"]
+      [aria-disabled="true"],
+      [aria-busy="true"]
     ) {
     transform: translateY(-1px);
   }
-}
-
-/* Press. Declared after the hover block so it wins on a hovered click. */
-:where(.qm-dash button, .qm-dash a.rounded-ctl, .qm-dash [role="button"]):active:not(
-    :disabled,
-    [aria-disabled="true"]
-  ) {
-  transform: scale(0.97);
 }
 
 /* The cards press too, but softer — they are large, so a 3% squash reads
    as a slam. */
 :where(.qm-dash .rounded-card.group):active {
   transform: scale(0.995);
+  transition-duration: 90ms;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .qm-dash :is(button, a, [role="button"], .rounded-card):hover,
-  .qm-dash :is(button, a, [role="button"], .rounded-card):active {
-    transform: none;
-  }
+/* ════════════════════════════════════════════════════════════════════
+   OVERLAYS — dialogs, sheets, drawers
+   Two classes, applied at each dialog site:
+     .qm-overlay  the scrim (opacity only — a scrim that moves is a bug)
+     .qm-panel    the dialog itself
+
+   Panels scale from 0.96, never 0. transform-origin stays `center`: a modal
+   is not anchored to a trigger, so it has no edge to grow from. (Popovers
+   and dropdowns are the opposite case — those get .qm-pop below, which
+   grows from wherever their trigger sits.)
+
+   Exit animations are deliberately absent. Every one of these dialogs
+   unmounts on a state flip, so there is no frame in which to run one; the
+   honest choice is to leave the close instant rather than fake it with a
+   timeout that can desync from React.
+   ════════════════════════════════════════════════════════════════════ */
+.qm-overlay {
+  animation: qm-fade-in 160ms var(--ease-out);
+}
+.qm-panel {
+  animation: qm-panel-in var(--dur-panel) var(--ease-out);
+}
+/* Bottom sheet (mobile). Travels by its own height, so it works at any
+   content size, and uses the iOS drawer curve rather than the UI ease-out. */
+.qm-sheet-in {
+  animation: qm-sheet-in 300ms var(--ease-drawer);
+}
+/* Edge drawer. Travels in from the edge it is anchored to, by 100% of its own
+   width, so it works at any panel size without a hardcoded pixel value. */
+.qm-drawer-right {
+  animation: qm-drawer-right var(--dur-panel) var(--ease-drawer);
+}
+/* Origin-aware popover/dropdown. The call site sets --qm-origin (e.g.
+   `top left`) so the panel grows out of its trigger instead of its middle. */
+.qm-pop {
+  transform-origin: var(--qm-origin, top center);
+  animation: qm-pop-in var(--dur-pop) var(--ease-out);
+}
+
+@keyframes qm-fade-in {
+  from { opacity: 0; }
+}
+@keyframes qm-panel-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+}
+@keyframes qm-sheet-in {
+  from { transform: translateY(100%); }
+}
+@keyframes qm-drawer-right {
+  from { transform: translateX(100%); }
+}
+@keyframes qm-pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   TAB PANEL SWAP
+   Each dashboard tab renders a DIFFERENT component, so switching tabs
+   inserts fresh DOM and this animation replays on its own — no React `key`,
+   which specs/dashboard-performance.md R3 removed on purpose to avoid a
+   full tear-down + remount just to replay a fade.
+
+   No fill-mode: once it ends the element reverts to its own styles, so no
+   residual `transform` is left on a tall container (a filled transform would
+   become a containing block and break `position: fixed` descendants).
+
+   6px and 240ms. The swap exists to stop content flashing into place, not
+   to be noticed — a tradie hits these tabs dozens of times a shift.
+   ════════════════════════════════════════════════════════════════════ */
+.qm-tab-panel > * {
+  animation: qm-panel-swap var(--dur-panel) var(--ease-out);
+}
+@keyframes qm-panel-swap {
+  from { opacity: 0; transform: translateY(6px); }
 }
 
 /* ════════════════════════════════════════════════════════════════════
    DASHBOARD PREMIUM MOTION PRIMITIVES
-   Two reusable, GPU-only building blocks the cockpit composes with.
+   Reusable, GPU-only building blocks the cockpit composes with.
 
    `.qm-rise` — a staggered entrance. Each element lifts + fades on a
    delay read from its own `--i` custom property, so a row/grid of items
@@ -937,10 +1242,17 @@ html {
    rather than a per-item animation-delay literal. Cap the index at the
    call site (6 KPI cells ⇒ ~270ms total) so the cascade stays snappy.
 
+   `.qm-stagger` — the same cascade with no per-item plumbing: drop it on a
+   grid or list and the children sequence themselves via :nth-child. Delays
+   are 45ms apart and hard-capped at the 7th child, because a stagger that
+   keeps growing turns a 12-card grid into a half-second wait. Stagger is
+   decorative — it never gates interaction, so a card is clickable the
+   instant it paints.
+
    `.qm-shimmer` — a premium skeleton. A warm bone sheen sweeps across a
    loading plate instead of the flat opacity pulse; reads engineered, not
    dead. Neutral highlight (never the yellow signal — loading isn't the
-   one thing that matters next). Both collapse to instant under
+   one thing that matters next). All collapse to instant under
    prefers-reduced-motion.
    ════════════════════════════════════════════════════════════════════ */
 
@@ -955,8 +1267,31 @@ html {
   }
 }
 .qm-rise {
-  animation: qm-rise 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: qm-rise 460ms var(--ease-brand) both;
   animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+.qm-stagger > * {
+  animation: qm-rise 420ms var(--ease-brand) both;
+}
+.qm-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.qm-stagger > *:nth-child(2) { animation-delay: 45ms; }
+.qm-stagger > *:nth-child(3) { animation-delay: 90ms; }
+.qm-stagger > *:nth-child(4) { animation-delay: 135ms; }
+.qm-stagger > *:nth-child(5) { animation-delay: 180ms; }
+.qm-stagger > *:nth-child(6) { animation-delay: 225ms; }
+.qm-stagger > *:nth-child(n + 7) { animation-delay: 270ms; }
+
+/* A bare "Loading…" line is the one place left in the app where nothing moves
+   while something IS happening — the label claims work is in progress and the
+   pixels say otherwise. A slow opacity breathe is the minimum honest signal:
+   no layout, no transform, and it degrades to a static label under reduced
+   motion rather than to movement. Reuses the pulse-soft keyframe the nav's
+   live-account indicator already runs on, so the two read as one language.
+   Use .qm-shimmer instead wherever the shape of the incoming content is
+   known — a skeleton beats a word. */
+.qm-loading {
+  animation: pulse-soft 1.4s var(--ease-in-out) infinite;
 }
 
 .qm-shimmer {
@@ -983,8 +1318,36 @@ html {
   }
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   Reduced motion means fewer and gentler animations, not zero. The global
+   block further up already collapses every duration to ~0, which handles
+   fades and sweeps. What it cannot handle is a TRANSFORM: with a 0.001ms
+   duration a hover lift or press squash still applies — it just jumps
+   there, which is the one thing a motion-sensitive user must not get.
+   So position-based motion is removed outright while opacity and colour,
+   which carry comprehension rather than movement, survive.
+   ════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
-  .qm-rise {
+  /* !important is load-bearing, not lazy. The press rule carries a `:not(…)`
+     tail that lifts it to (0,4,1); this selector is (0,3,1) and would LOSE
+     the cascade, leaving motion-sensitive users with the scale still applied
+     — just snapped instead of eased, which is the worse of the two. Same
+     reason it repeats on the quote-surface rule further down. */
+  :root :is(button, [role="button"], a.rounded-ctl, .rounded-card):hover,
+  :root :is(button, [role="button"], a.rounded-ctl, .rounded-card):active {
+    transform: none !important;
+  }
+  :root :is(button, [role="button"])[aria-busy="true"]::after {
+    animation: none;
+  }
+  .qm-rise,
+  .qm-stagger > *,
+  .qm-tab-panel > *,
+  .qm-panel,
+  .qm-sheet-in,
+  .qm-drawer-right,
+  .qm-pop {
     animation: none;
   }
   .qm-shimmer::after {
@@ -1142,15 +1505,77 @@ html {
   pointer-events: none;
 }
 
-/* Interaction states (mirrors the mockup's hover rules). */
-.qm-tier { transition: border-color 0.15s ease, background-color 0.2s ease; border-radius: var(--qm-r-card); overflow: hidden; }
-.qm-tier:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--ink-line)); }
-.qm-cta { transition: background-color 0.15s ease; border-radius: var(--qm-r-ctl); }
-.qm-cta:hover { background: var(--accent-press); }
-.qm-ghost { transition: border-color 0.15s ease, color 0.15s ease; }
-.qm-ghost:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--ink-line)); color: var(--accent); }
-.qm-seg { transition: color 0.15s ease, background-color 0.15s ease; }
-.qm-seg:hover { color: var(--text-pri); }
+/* Interaction states (mirrors the mockup's hover rules).
+   These four are the entire customer-facing money path — pick a tier, press
+   the deposit CTA — so they get the same physical feedback as the cockpit.
+   .qm-cta and .qm-tier are often <a> elements, which the app-wide press rule
+   deliberately does not cover (it would scale inline text links), so they are
+   named explicitly here. */
+.qm-tier {
+  transition:
+    border-color var(--dur-hover) var(--ease-out),
+    background-color var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+  border-radius: var(--qm-r-card);
+  overflow: hidden;
+}
+.qm-cta {
+  transition:
+    background-color var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+  border-radius: var(--qm-r-ctl);
+}
+.qm-ghost {
+  transition:
+    border-color var(--dur-hover) var(--ease-out),
+    color var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.qm-seg {
+  transition:
+    color var(--dur-hover) var(--ease-out),
+    background-color var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* The tier a customer is considering lifts toward them. This is the one
+     decision on the page, so it is the one element allowed a real lift. */
+  .qm-tier:hover {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--ink-line));
+    transform: translateY(-3px);
+    box-shadow:
+      var(--lift),
+      0 16px 34px -20px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .qm-cta:hover { background: var(--accent-press); }
+  .qm-ghost:hover {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--ink-line));
+    color: var(--accent);
+  }
+  .qm-seg:hover { color: var(--text-pri); }
+}
+
+/* Coarse pointers get the colour change on tap but no lift to get stuck in. */
+@media not all and (pointer: fine) {
+  .qm-tier:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--ink-line)); }
+  .qm-cta:hover { background: var(--accent-press); }
+}
+
+.qm-quote :is(.qm-cta, .qm-ghost, .qm-tier, .qm-seg):active:not([aria-disabled="true"]) {
+  transform: scale(0.985);
+  transition-duration: 90ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* !important for the same specificity reason as the app-wide block: the
+     :active rule's `:not([aria-disabled])` tail outranks this selector. */
+  .qm-tier:hover,
+  .qm-quote :is(.qm-cta, .qm-ghost, .qm-tier, .qm-seg):active {
+    transform: none !important;
+  }
+}
 
 /* Scroll region — thin brand scrollbar. */
 .qm-scroll::-webkit-scrollbar { width: 10px; }

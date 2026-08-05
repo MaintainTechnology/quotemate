@@ -19,7 +19,7 @@ import { fieldsForJobType } from '@/lib/quote/job-fields'
 
 const INPUT =
   'w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none'
-const LABEL = 'block font-mono text-[0.78rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
+const LABEL = 'block font-mono text-meta font-semibold uppercase tracking-[0.14em] text-text-dim'
 
 const JOB_TYPES = IntakeSchema.shape.job_type.options as readonly string[]
 
@@ -306,7 +306,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <div className="mx-auto max-w-3xl px-6 py-12 sm:px-10">
-        <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+        <div className="flex flex-wrap items-center gap-3 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
           <Link href="/dashboard" className="transition-colors hover:text-text-pri">
             Dashboard
           </Link>
@@ -415,7 +415,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                         className="h-16 w-16 flex-shrink-0 border border-ink-line object-cover"
                       />
                     ) : (
-                      <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center border border-ink-line font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                      <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center border border-ink-line font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                         No photo
                       </span>
                     )}
@@ -546,7 +546,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
             {error && (
               <p
                 role="alert"
-                className="border-l-2 border-l-accent bg-ink-deep px-4 py-3 text-sm leading-relaxed text-text-pri"
+                className="rounded-ctl border border-accent/30 bg-ink-deep px-4 py-3 text-sm leading-relaxed text-text-pri"
               >
                 {error}
               </p>
@@ -559,7 +559,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                 is what actually prevents the double-fire. */}
             <button
               type="submit"
-              aria-disabled={busy}
+              aria-disabled={busy} aria-busy={busy}
               className="w-full bg-accent px-6 py-4 font-mono text-sm font-bold uppercase tracking-[0.14em] text-ink-deep transition-colors hover:bg-accent-press aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
             >
               {busy ? 'Drafting the quote…' : 'Draft the quote'}

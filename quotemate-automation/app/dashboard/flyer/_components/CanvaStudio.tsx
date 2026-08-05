@@ -38,13 +38,13 @@ const btnAccent = `${btn} border-accent/70 text-accent hover:bg-accent hover:tex
 const btnFill = `${btn} border-accent bg-accent text-accent-ink hover:bg-accent-press hover:border-accent-press`
 const dlLink = 'inline-flex min-h-[44px] items-center font-mono text-xs uppercase tracking-[0.12em] text-accent hover:text-accent-press'
 const btnPlain = `${btn} border-ink-line text-text-sec hover:border-accent hover:text-text-pri`
-const chip = 'inline-block font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
+const chip = 'inline-block font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim'
 
 function StepLabel({ n, label }: { n: string; label: string }) {
   return (
     <div className="flex items-baseline gap-3">
       <span className="font-mono text-2xl font-bold leading-none text-accent">{n}</span>
-      <h3 className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-text-dim">{label}</h3>
+      <h3 className="font-mono text-micro font-semibold uppercase tracking-[0.18em] text-text-dim">{label}</h3>
     </div>
   )
 }
@@ -249,7 +249,7 @@ export default function CanvaStudio({
                   <span className="h-2 w-2 bg-accent" aria-hidden="true" />
                   Canva account connected
                 </span>
-                <button onClick={disconnect} disabled={busy} className={`${btnPlain} ml-auto`}>
+                <button onClick={disconnect} disabled={busy} aria-busy={busy} className={`${btnPlain} ml-auto`}>
                   Disconnect
                 </button>
               </div>
@@ -259,7 +259,7 @@ export default function CanvaStudio({
                   Connect your Canva account to design without leaving QuoteMax. A Canva window opens for you to
                   approve access.
                 </p>
-                <button onClick={connect} disabled={busy} className={btnFill}>
+                <button onClick={connect} disabled={busy} aria-busy={busy} className={btnFill}>
                   {busy ? 'Opening Canva…' : 'Connect Canva'}
                 </button>
               </div>
@@ -289,7 +289,7 @@ export default function CanvaStudio({
                       <span className={chip}>{t.category}</span>
                       <span className="font-semibold leading-tight text-text-pri">{t.name}</span>
                       <span className="text-xs leading-relaxed text-text-sec">{t.description}</span>
-                      <span className="mt-auto pt-2 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-accent group-hover:text-accent-press">
+                      <span className="mt-auto pt-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-accent group-hover:text-accent-press">
                         Open in Canva ↗
                       </span>
                     </div>
@@ -313,7 +313,7 @@ export default function CanvaStudio({
                   <p className="min-w-0 flex-1 text-sm text-text-sec">
                     Start a blank Canva flyer linked to QuoteMax, design it, then import the PNG &amp; PDF back here.
                   </p>
-                  <button onClick={createDesign} disabled={busy} className={btnFill}>
+                  <button onClick={createDesign} disabled={busy} aria-busy={busy} className={btnFill}>
                     {busy ? 'Working…' : '+ New Canva flyer'}
                   </button>
                 </div>
@@ -337,6 +337,7 @@ export default function CanvaStudio({
                             <button
                               onClick={() => deleteDesign(d.id)}
                               disabled={busy}
+                              aria-busy={busy}
                               className={btnPlain}
                               aria-label={`Delete ${d.title || 'flyer'}`}
                             >

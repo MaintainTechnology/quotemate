@@ -39,7 +39,7 @@ export function TakeoffTable({ rows, onRowsChange, selectedIdx, onSelect, disabl
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-ink-line font-mono text-[0.64rem] uppercase tracking-[0.14em] text-text-dim">
+            <tr className="border-b border-ink-line font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
               <th scope="col" className="w-10 py-2.5 pr-2 font-semibold">
                 #
               </th>
@@ -121,7 +121,7 @@ export function TakeoffTable({ rows, onRowsChange, selectedIdx, onSelect, disabl
                           disabled={disabled}
                           aria-pressed={selected ? 'true' : 'false'}
                           title={`Highlight ${r.locations.length} pin${r.locations.length === 1 ? '' : 's'} on the plan`}
-                          className={`border px-2 py-1 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.1em] transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${
+                          className={`border px-2 py-1 font-mono text-micro font-semibold uppercase tracking-[0.1em] transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${
                             selected
                               ? 'border-accent bg-accent/10 text-accent'
                               : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
@@ -130,7 +130,7 @@ export function TakeoffTable({ rows, onRowsChange, selectedIdx, onSelect, disabl
                           {r.locations.length} pins
                         </button>
                       ) : (
-                        <span className="px-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim/60">—</span>
+                        <span className="px-2 font-mono text-micro uppercase tracking-[0.1em] text-text-dim/60">—</span>
                       )}
                       <button
                         type="button"

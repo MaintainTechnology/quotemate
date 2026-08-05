@@ -1115,6 +1115,7 @@ export default function AdminLoaderPage() {
             <button
               type="button"
               disabled={busy}
+              aria-busy={busy}
               onClick={handleUpload}
               className={`mt-6 ${BTN_PRIMARY}`}
             >
@@ -1235,7 +1236,7 @@ export default function AdminLoaderPage() {
                     Pick or create a store first.
                   </p>
                 ) : tbLoadingDocs ? (
-                  <p className="mt-3 text-xs text-text-dim">Loading documents…</p>
+                  <p className="qm-loading mt-3 text-xs text-text-dim">Loading documents…</p>
                 ) : tbDocuments === null ? (
                   <p className="mt-3 text-xs text-text-dim">—</p>
                 ) : tbDocuments.length === 0 ? (
@@ -1528,6 +1529,7 @@ export default function AdminLoaderPage() {
                 <button
                   type="button"
                   disabled={busy || totalStaged === 0}
+                  aria-busy={busy}
                   onClick={handleApprove}
                   className={BTN_PRIMARY}
                 >
@@ -1538,6 +1540,7 @@ export default function AdminLoaderPage() {
                 <button
                   type="button"
                   disabled={busy}
+                  aria-busy={busy}
                   onClick={handleRollback}
                   className={BTN_DANGER}
                 >
@@ -1547,6 +1550,7 @@ export default function AdminLoaderPage() {
               <button
                 type="button"
                 disabled={busy}
+                aria-busy={busy}
                 onClick={resetAll}
                 className={BTN_GHOST}
               >

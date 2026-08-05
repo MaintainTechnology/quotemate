@@ -90,6 +90,7 @@ export function ApproveAction({
         type="button"
         onClick={approve}
         disabled={busy || !sessionReady}
+        aria-busy={busy}
         className="inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-mono text-xs uppercase tracking-[0.15em] font-bold px-5 py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {busy ? 'Sending…' : !sessionReady ? 'Loading…' : 'Send now →'}

@@ -27,8 +27,12 @@ type Props = {
   requirePins?: boolean
 }
 
-// Distinct, plan-friendly pin colours (cycled by item index).
-const PIN_COLOURS = ['#ff6b35', '#2ec4b6', '#e71d73', '#3a86ff', '#ffbe0b', '#8338ec', '#06d6a0', '#ef476f']
+import { vizAt } from '@/lib/dashboard/viz-palette'
+
+// Pin colours cycle by item index off the shared categorical ramp
+// (lib/dashboard/viz-palette.ts). The previous set — #3a86ff, #8338ec,
+// #e71d73, #ef476f — was a generic bright rainbow that belonged to no design
+// system and fought the warm charcoal canvas it sits on.
 
 export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = true }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -120,7 +124,7 @@ export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = 
   return (
     <div className="rounded-card mt-5 border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center gap-3 border-b border-ink-line px-4 py-2.5">
-        <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
           Plan viewer
         </span>
         <label className="flex items-center gap-2 font-mono text-xs text-text-dim">
@@ -159,7 +163,7 @@ export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = 
         <div className="relative inline-block">
           <canvas ref={canvasRef} className="block max-w-none bg-white" aria-label="Plan sheet" />
           {pinsOnPage.map((pin, i) => {
-            const colour = PIN_COLOURS[pin.idx % PIN_COLOURS.length]
+            const colour = vizAt(pin.idx)
             const dimmed = selectedIdx !== null && pin.idx !== selectedIdx
             return (
               <button

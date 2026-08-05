@@ -9,7 +9,7 @@ import pg from 'pg'
 
 const FROM = '+61489083371'
 const TO = process.env.SCENARIO_TO || '+61468048422' // Sparky
-const ENDPOINT = 'https://quote-mate-rho.vercel.app/api/sms/inbound'
+const ENDPOINT = process.env.SMS_ENDPOINT || 'https://quote-mate-rho.vercel.app/api/sms/inbound'
 const TOKEN = process.env.TWILIO_AUTH_TOKEN
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? 'ACtest'
 
@@ -35,7 +35,10 @@ function reply(botText) {
   const pick = (v) => (v === last ? null : v)
   const answer =
     // specific electrical questions first, so a generic word never wins
-    /ceiling/.test(t) ? pick('flat plaster')
+    /reply 1 or 2|take your pick|options in our catalogue|you pick|reply "yes" to confirm/.test(String(botText).toLowerCase()) ? pick('standard quote')
+    : /storey|storeys|how many levels|one level|two levels|single.?level/.test(t) ? pick('single storey')
+    : /switchboard|circuit|breaker|fuse|rcd/.test(t) ? pick('modern switchboard with RCDs')
+    : /ceiling/.test(t) ? pick('flat plaster')
     : /how many|number of|qty|quantity/.test(t) ? pick('6')
     : /dimmer|switch/.test(t) ? pick('no dimmer, standard switch')
     : /existing|replacing|already there|old light/.test(t) ? pick('replacing old halogens')

@@ -48,7 +48,7 @@ type Preview = {
 
 const PROVIDER_LABEL: Record<string, string> = { hubspot: 'HubSpot', zoho: 'Zoho' }
 
-const EYEBROW = 'font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim'
+const EYEBROW = 'font-mono text-micro uppercase tracking-[0.16em] text-text-dim'
 const PRIMARY =
   'inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-xs uppercase tracking-[0.12em] transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 const GHOST =
@@ -228,7 +228,7 @@ export default function CrmPage() {
           </div>
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+            className="flex items-center gap-2 font-mono text-micro uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
           >
             <span aria-hidden>←</span> Dashboard
           </Link>
@@ -241,7 +241,7 @@ export default function CrmPage() {
           <div className="flex flex-wrap items-center gap-3">
             <span className={EYEBROW}>CRM &amp; Email</span>
             {isConnected && (
-              <span className="rounded-ctl inline-flex items-center gap-1.5 border border-success/40 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-success">
+              <span className="rounded-ctl inline-flex items-center gap-1.5 border border-success/40 px-2 py-0.5 font-mono text-micro uppercase tracking-[0.14em] text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" /> Connected
               </span>
             )}
@@ -266,7 +266,7 @@ export default function CrmPage() {
 
         {loading ? (
           <div className="rounded-card mt-12 border border-ink-line bg-ink-card p-6">
-            <p className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">Loading…</p>
+            <p className="qm-loading font-mono text-xs uppercase tracking-[0.14em] text-text-dim">Loading…</p>
           </div>
         ) : isConnected ? (
           <>
@@ -293,16 +293,16 @@ export default function CrmPage() {
                             <span className="font-extrabold uppercase tracking-tight">{PROVIDER_LABEL[c.provider]}</span>
                             <StatusPill status={c.status} />
                           </div>
-                          <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
+                          <div className="mt-1 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                             Linked {fmtDate(c.connected_at)} · Last sync {fmtDate(c.last_synced_at)}
                           </div>
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button type="button" disabled={busy === `sync:${c.provider}`} onClick={() => sync(c.provider)} className={GHOST}>
+                        <button type="button" disabled={busy === `sync:${c.provider}`} aria-busy={busy === `sync:${c.provider}`} onClick={() => sync(c.provider)} className={GHOST}>
                           {busy === `sync:${c.provider}` ? 'Syncing…' : 'Sync'}
                         </button>
-                        <button type="button" disabled={busy === `disconnect:${c.provider}`} onClick={() => disconnect(c.provider)} className={GHOST}>
+                        <button type="button" disabled={busy === `disconnect:${c.provider}`} aria-busy={busy === `disconnect:${c.provider}`} onClick={() => disconnect(c.provider)} className={GHOST}>
                           Disconnect
                         </button>
                       </div>
@@ -319,7 +319,7 @@ export default function CrmPage() {
                   <div className="flex flex-wrap items-center gap-3 border border-dashed border-ink-line px-5 py-4">
                     <span className="text-sm text-text-dim">Connect another:</span>
                     {connectable.map((p) => (
-                      <button key={p} type="button" disabled={busy === `connect:${p}`} onClick={() => connect(p)} className={GHOST}>
+                      <button key={p} type="button" disabled={busy === `connect:${p}`} aria-busy={busy === `connect:${p}`} onClick={() => connect(p)} className={GHOST}>
                         {busy === `connect:${p}` ? 'Opening…' : `Connect ${PROVIDER_LABEL[p]}`}
                       </button>
                     ))}
@@ -358,7 +358,7 @@ export default function CrmPage() {
                       <option value="all" className="bg-ink-deep">Everyone (re-send)</option>
                     </select>
                   </label>
-                  <button type="button" disabled={busy === 'preview'} onClick={runPreview} className={GHOST}>
+                  <button type="button" disabled={busy === 'preview'} aria-busy={busy === 'preview'} onClick={runPreview} className={GHOST}>
                     {busy === 'preview' ? 'Checking…' : 'Preview recipients'}
                   </button>
                 </div>
@@ -371,7 +371,7 @@ export default function CrmPage() {
                         <br />
                         recipient(s) will receive the announcement.
                       </p>
-                      <ul className="mt-4 space-y-1.5 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-text-dim">
+                      <ul className="mt-4 space-y-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                         <li>{preview.total_contacts} total contacts</li>
                         <li>− {preview.duplicates_removed} duplicates</li>
                         <li>− {preview.suppressed_unsubscribed} unsubscribed</li>
@@ -381,6 +381,7 @@ export default function CrmPage() {
                       <button
                         type="button"
                         disabled={busy === 'send' || preview.recipient_count === 0}
+                        aria-busy={busy === 'send'}
                         onClick={send}
                         className={`mt-6 ${PRIMARY}`}
                       >
@@ -414,7 +415,7 @@ export default function CrmPage() {
                 )}
 
                 {campaign?.last_sent_at && !preview && !result && (
-                  <p className="mt-5 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
+                  <p className="mt-5 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                     Last sent {fmtDate(campaign.last_sent_at)} · {campaign.sent_count} delivered
                   </p>
                 )}
@@ -478,6 +479,7 @@ export default function CrmPage() {
                     <button
                       type="button"
                       disabled={busy === `connect:${p}`}
+                      aria-busy={busy === `connect:${p}`}
                       onClick={() => connect(p)}
                       className={`mt-5 ${PRIMARY}`}
                     >
@@ -511,7 +513,7 @@ function Kpi({ n, label, accent }: { n: number; label: string; accent?: boolean 
       <div className={`font-mono text-3xl font-bold leading-none md:text-4xl ${accent ? 'text-accent' : 'text-text-pri'}`}>
         {n}
       </div>
-      <div className="mt-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim">{label}</div>
+      <div className="mt-2 font-mono text-micro uppercase tracking-[0.16em] text-text-dim">{label}</div>
     </div>
   )
 }
@@ -522,7 +524,7 @@ function Section({ num, title, blurb, children }: { num: string; title: string; 
       <div className="flex items-start gap-5 md:gap-7">
         <span className="shrink-0 font-mono text-5xl font-bold leading-none text-accent md:text-6xl">{num}</span>
         <div className="pt-1">
-          <h2 className="font-extrabold uppercase leading-none tracking-[-0.02em] text-2xl md:text-[1.7rem]">{title}</h2>
+          <h2 className="font-extrabold uppercase leading-none tracking-[-0.02em] text-2xl md:text-section">{title}</h2>
           <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-text-sec">{blurb}</p>
         </div>
       </div>
@@ -539,7 +541,7 @@ function StatusPill({ status }: { status: string }) {
         ? 'text-danger border-danger/40'
         : 'text-text-dim border-ink-line'
   return (
-    <span className={`rounded-ctl inline-flex border px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em] ${tone}`}>
+    <span className={`rounded-ctl inline-flex border px-2 py-0.5 font-mono text-micro uppercase tracking-[0.12em] ${tone}`}>
       {status}
     </span>
   )

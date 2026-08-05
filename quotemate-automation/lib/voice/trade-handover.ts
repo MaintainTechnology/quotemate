@@ -179,6 +179,12 @@ export function mapVoiceAnswersToPaintingSlots(
   if (a.ceiling_height) slots = applyPaintingAnswer(slots, 'ceiling_height', a.ceiling_height)
   if (a.storeys) slots = applyPaintingAnswer(slots, 'storeys', a.storeys)
   if (a.colour_change) slots = applyPaintingAnswer(slots, 'colour_change', a.colour_change)
+  // The VOICE script never asks the floor area (the SMS gather's optional
+  // floor_area step, 2026-08-05). Record it as asked-and-skipped (null) so a
+  // complete call still estimates immediately — the address lookup supplies
+  // the area, exactly as before SMS gained the question. Same reasoning as
+  // the metal-profile default in the roofing mapper above.
+  slots.manual_floor_area_m2 = null
   slots.address_confirmed = false
   return slots
 }

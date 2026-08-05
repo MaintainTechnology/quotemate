@@ -28,13 +28,20 @@ type Props = {
   ceilingHeightM: number
 }
 
+import { VIZ } from '@/lib/dashboard/viz-palette'
+
+// Zones and markers are a categorical encoding, so they draw from the shared
+// ramp (lib/dashboard/viz-palette.ts). The old values — #ff6b35 orange and
+// #2ec4b6 teal — were a second and third accent, and the orange was within a
+// few degrees of the retired "Maintain" identity this system replaced.
+// `29` is 16% alpha in hex (0.16 × 255 ≈ 0x29), preserving the original wash.
 const ZONE_FILL: Record<'living' | 'bedroom', string> = {
-  living: 'rgba(255, 107, 53, 0.16)', // accent-ish
-  bedroom: 'rgba(46, 196, 182, 0.16)', // teal
+  living: `${VIZ[0]}29`,
+  bedroom: `${VIZ[1]}29`,
 }
 const ZONE_STROKE: Record<'living' | 'bedroom', string> = {
-  living: '#ff6b35',
-  bedroom: '#2ec4b6',
+  living: VIZ[0],
+  bedroom: VIZ[1],
 }
 
 function pointsAttr(polygon: AcResolvedRoom['polygon']): string {
@@ -66,8 +73,13 @@ function Marker({
         style={{ width: 14, height: 14, borderColor: colour, backgroundColor: `${colour}40` }}
       />
       <span
-        className="mt-0.5 block whitespace-nowrap px-1 font-mono text-[0.55rem] font-bold uppercase tracking-wide"
-        style={{ color: colour, backgroundColor: 'rgba(10, 15, 30, 0.75)' }}
+        className="mt-0.5 block whitespace-nowrap px-1 font-mono text-micro font-bold uppercase tracking-wide"
+        // Warm-charcoal scrim, not the blue-black this carried before
+        // (rgba(10,15,30)) — the Warm-Not-Blue rule applies to a label
+        // backing plate as much as to a page canvas. Hardcoded rather than
+        // tokenised because it sits over a user-uploaded plan of unknown
+        // brightness, so it must stay dark in BOTH themes.
+        style={{ color: colour, backgroundColor: 'rgba(22, 18, 15, 0.78)' }}
       >
         {label}
       </span>
@@ -140,7 +152,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
   return (
     <div className="rounded-card mt-5 border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center gap-3 border-b border-ink-line px-4 py-2.5">
-        <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
           Indicative design overlay
         </span>
         <div className="flex gap-0 border border-ink-line">
@@ -190,7 +202,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
                   key={room.name}
                   points={pointsAttr(room.polygon)}
                   fill={zone ? ZONE_FILL[zone] : 'transparent'}
-                  stroke={zone ? ZONE_STROKE[zone] : 'rgba(120,130,150,0.6)'}
+                  stroke={zone ? ZONE_STROKE[zone] : 'rgba(162,150,138,0.6)'}
                   strokeWidth={zone ? 1.5 : 1}
                   strokeDasharray={zone ? undefined : '3 3'}
                   vectorEffect="non-scaling-stroke"
@@ -205,7 +217,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
                   y1={run.from.y}
                   x2={run.to.x}
                   y2={run.to.y}
-                  stroke="#ff6b35"
+                  stroke={VIZ[0]}
                   strokeWidth={2}
                   strokeDasharray="6 4"
                   vectorEffect="non-scaling-stroke"
@@ -218,40 +230,40 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
           {system === 'ducted' ? (
             <>
               {design.ducted.outlets.map((o) => (
-                <Marker key={`out-${o.room}`} x={o.at.x} y={o.at.y} label="vent" colour="#ff6b35" />
+                <Marker key={`out-${o.room}`} x={o.at.x} y={o.at.y} label="vent" colour={VIZ[0]} />
               ))}
               <Marker
                 x={design.ducted.unit.x}
                 y={design.ducted.unit.y}
                 label="roof unit"
-                colour="#ffbe0b"
+                colour={VIZ[4]}
                 square
               />
               <Marker
                 x={design.ducted.return_air.x}
                 y={design.ducted.return_air.y}
                 label="return air"
-                colour="#3a86ff"
+                colour={VIZ[1]}
                 square
               />
               <Marker
                 x={design.ducted.outdoor.x}
                 y={design.ducted.outdoor.y}
                 label="outdoor"
-                colour="#06d6a0"
+                colour={VIZ[3]}
                 square
               />
             </>
           ) : (
             <>
               {design.split.heads.map((h) => (
-                <Marker key={`head-${h.room}`} x={h.at.x} y={h.at.y} label={`${h.kw} kW`} colour="#2ec4b6" square />
+                <Marker key={`head-${h.room}`} x={h.at.x} y={h.at.y} label={`${h.kw} kW`} colour={VIZ[2]} square />
               ))}
               <Marker
                 x={design.split.outdoor.x}
                 y={design.split.outdoor.y}
                 label="outdoor"
-                colour="#06d6a0"
+                colour={VIZ[3]}
                 square
               />
             </>
@@ -273,10 +285,10 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
                     backgroundColor: 'rgba(10, 15, 30, 0.78)',
                   }}
                 >
-                  <span className="block font-mono text-[0.6rem] font-bold uppercase tracking-wide text-white">
+                  <span className="block font-mono text-micro font-bold uppercase tracking-wide text-white">
                     {room.name}
                   </span>
-                  <span className="block whitespace-nowrap font-mono text-[0.55rem] text-white/80">
+                  <span className="block whitespace-nowrap font-mono text-micro text-white/80">
                     {load
                       ? `${room.area_m2} m² × ${ceilingHeightM} m = ${load.volume_m3} m³ → ${load.kw} kW`
                       : `${room.area_m2} m²`}
@@ -310,7 +322,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
             {w}
           </p>
         ))}
-        <p className="text-[0.68rem] leading-snug text-text-dim">
+        <p className="text-micro leading-snug text-text-dim">
           Indicative layout drawn by deterministic geometry from the plan read — duct routes, vent
           and head positions are confirmed at the site assessment.
         </p>

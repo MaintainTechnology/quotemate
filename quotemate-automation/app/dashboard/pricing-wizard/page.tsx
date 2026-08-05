@@ -455,7 +455,7 @@ export default function PricingWizardPage() {
   if (!loaded) {
     return (
       <Layout>
-        <p className="mt-10 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+        <p className="qm-loading mt-10 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
           Loading your current setup…
         </p>
       </Layout>
@@ -465,7 +465,7 @@ export default function PricingWizardPage() {
   return (
     <Layout>
       <header>
-        <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-text-dim">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.2em] text-text-dim">
           QuoteMax · {loaded.tenant.business_name ?? 'Tradie'}
         </span>
         <h1 className="mt-4 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.25rem,5vw,3.5rem)]">
@@ -477,7 +477,7 @@ export default function PricingWizardPage() {
           AI will use them straight away when customers text you.
         </p>
         {tradeScope && (
-          <p className="mt-3 font-mono text-[0.65rem] font-bold uppercase tracking-[0.16em] text-accent">
+          <p className="mt-3 font-mono text-micro font-bold uppercase tracking-[0.16em] text-accent">
             Scoped to your {tradeScope.replace(/_/g, ' ')} trade only
           </p>
         )}
@@ -569,7 +569,7 @@ export default function PricingWizardPage() {
                     <span className="block text-sm font-semibold text-text-pri">
                       {a.name}
                     </span>
-                    <span className="mt-0.5 block font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+                    <span className="mt-0.5 block font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                       {a.trade}{a.category ? ` · ${a.category}` : ''}
                     </span>
                   </span>
@@ -609,7 +609,7 @@ export default function PricingWizardPage() {
             <>
               {quickFillBrands.length > 0 && (
                 <div className="rounded-card mt-5 flex flex-wrap items-center gap-2 border border-ink-line bg-ink-deep px-4 py-3">
-                  <span className="mr-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+                  <span className="mr-2 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                     Fill all with
                   </span>
                   {quickFillBrands.map((brand) => (
@@ -654,7 +654,7 @@ export default function PricingWizardPage() {
             <button type="button" onClick={() => setStep(1)} className={BTN_GHOST}>
               ← Back
             </button>
-            <button type="button" onClick={handleFinish} disabled={saving} className={BTN_PRIMARY}>
+            <button type="button" onClick={handleFinish} disabled={saving} aria-busy={saving} className={BTN_PRIMARY}>
               {saving ? 'Saving…' : 'Save & finish'}
             </button>
           </div>
@@ -681,7 +681,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </a>
           <a
             href="/dashboard"
-            className="shrink-0 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:text-text-pri"
+            className="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:text-text-pri"
           >
             ← Dashboard
           </a>
@@ -713,14 +713,14 @@ function StepRail({ current }: { current: StepIndex }) {
                 {String(i + 1).padStart(2, '0')}
               </span>
               <span
-                className={`font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] ${
+                className={`font-mono text-micro font-bold uppercase tracking-[0.14em] ${
                   state === 'upcoming' ? 'text-text-dim' : 'text-text-pri'
                 }`}
               >
                 {label}
               </span>
             </div>
-            <div className="mt-1.5 font-mono text-[0.56rem] uppercase tracking-[0.16em] text-text-dim">
+            <div className="mt-1.5 font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
               {state === 'done' ? '✓ Done' : state === 'current' ? 'In progress' : 'Upcoming'}
             </div>
           </li>
@@ -757,7 +757,7 @@ function StepCard({
 function Banner({ tone, children }: { tone: 'danger' | 'info'; children: React.ReactNode }) {
   const cls =
     tone === 'danger'
-      ? 'border-[#B91C1C]/55 bg-[#B91C1C]/12 text-[#FCA5A5]'
+      ? 'border-danger/55 bg-danger/12 text-danger-bright'
       : 'border-teal-glow/45 bg-teal-glow/10 text-teal-glow'
   return (
     <div className={`mt-6 border px-4 py-3 text-sm leading-relaxed ${cls}`}>
@@ -791,7 +791,7 @@ function NumberInput({
         className="rounded-ctl mt-1 block w-full border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
       />
       {hint && (
-        <span className="mt-1 block font-mono text-[0.65rem] text-text-dim">
+        <span className="mt-1 block font-mono text-micro text-text-dim">
           {hint}
         </span>
       )}

@@ -199,6 +199,7 @@ export function LeadForm({
       <button
         type="submit"
         disabled={submitting}
+        aria-busy={submitting}
         className="w-full py-3.5 text-sm font-bold uppercase tracking-[0.08em] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         style={{ background: accent }}
       >

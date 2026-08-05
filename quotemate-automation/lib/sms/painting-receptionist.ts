@@ -69,6 +69,7 @@ const ANSWERABLE_STEPS: ReadonlySet<PaintingStep> = new Set<PaintingStep>([
   'condition',
   'ceiling_height',
   'storeys',
+  'floor_area',
   'colour_change',
 ])
 
@@ -106,6 +107,22 @@ export function customerWantsForm(text: string): boolean {
   if (!t.trim()) return false
   if (FORM_NO.test(t)) return false
   return FORM_YES.test(t)
+}
+
+/** PURE — must this turn run the DETERMINISTIC machine even when the LLM
+ *  receptionist flag is on? Two turns are pre-empted (spec 2026-08-05):
+ *    • the opener (no active painting flow) — the form-offer opener
+ *      (buildPaintingFormOffer: form link + "or just reply here") must go
+ *      out on both paths, so the two layers open identically;
+ *    • an explicit "use the form" reply parked at offer_form — it must
+ *      resolve to await_form with the standard acknowledgement.
+ *  Everything else stays with whichever layer the flag picks. */
+export function paintingTurnIsDeterministic(
+  prev: PaintingConversationState | null | undefined,
+  inbound: string,
+): boolean {
+  if (!isActivePaintingFlow(prev)) return true
+  return prev?.last_step === 'offer_form' && customerWantsForm(inbound)
 }
 
 /** PURE — opportunistically capture an address from a message that wasn't

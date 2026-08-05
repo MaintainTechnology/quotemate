@@ -109,6 +109,7 @@ export function AcceptBlock({
               type="button"
               onClick={accept}
               disabled={busy}
+              aria-busy={busy}
               style={{
                 display: 'block',
                 width: '100%',

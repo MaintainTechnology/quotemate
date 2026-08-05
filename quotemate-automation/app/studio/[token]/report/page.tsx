@@ -11,7 +11,7 @@ import {
   ComplianceBar,
   delay,
   Notice,
-  railFor,
+  severityBorder,
   REVEAL,
   StateGlyph,
   Tally,
@@ -168,7 +168,7 @@ export default function StudioReportPage() {
                     {[...g.items]
                       .sort((a, b) => rank(a.state) - rank(b.state))
                       .map((it) => (
-                        <div key={it.rule_key} className={`border border-ink-line bg-ink-card px-4 py-3 ${railFor(it.state)}`}>
+                        <div key={it.rule_key} className={`border bg-ink-card px-4 py-3 ${severityBorder(it.state)}`}>
                           <div className="flex items-start gap-3">
                             <StateGlyph state={it.state} />
                             <div className="min-w-0">
@@ -202,14 +202,17 @@ export default function StudioReportPage() {
 /** The headline verdict, derived from the counts: fixes outrank reviews,
  *  reviews outrank a clean sheet. */
 function VerdictBanner({ counts, summary }: { counts: Report['counts']; summary: string }) {
+  // The status is already stated in words by `label`, so a thick coloured
+  // rail alongside it was the same fact twice — and the side-tab is the
+  // pattern this pass is retiring. The hairline carries the tint instead.
   const v =
     counts.fix > 0
-      ? { label: 'Action needed', rail: 'border-l-warning-bright', text: 'text-warning-bright' }
+      ? { label: 'Action needed', edge: 'border-warning-bright/40', text: 'text-warning-bright' }
       : counts.review > 0
-        ? { label: 'Pending HQ review', rail: 'border-l-accent', text: 'text-accent' }
-        : { label: 'All clear', rail: 'border-l-teal-glow', text: 'text-teal-glow' }
+        ? { label: 'Pending HQ review', edge: 'border-accent/40', text: 'text-accent' }
+        : { label: 'All clear', edge: 'border-ink-line', text: 'text-teal-glow' }
   return (
-    <div className={`mt-7 border border-ink-line border-l-4 ${v.rail} bg-ink-card p-6 ${REVEAL}`} style={delay(120)}>
+    <div className={`mt-7 border ${v.edge} bg-ink-card p-6 ${REVEAL}`} style={delay(120)}>
       <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] ${v.text}`}>{v.label}</div>
       {summary && <p className="mt-2.5 text-sm leading-relaxed text-text-sec">{summary}</p>}
     </div>

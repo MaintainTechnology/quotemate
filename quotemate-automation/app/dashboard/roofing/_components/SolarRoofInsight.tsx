@@ -70,11 +70,11 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
   return (
     <div className="rounded-card mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+        <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
           Google Solar · aerial roof insight
         </div>
         {state === 'ready' && insight && (
-          <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+          <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
             imagery {insight.imageryQuality.toLowerCase()}{insight.imageryDate ? ` · ${insight.imageryDate}` : ''}
           </span>
         )}
@@ -96,7 +96,7 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
           </div>
 
           <div className="mt-5">
-            <div className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <div className="mb-2 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
               Roof planes ({insight.segments.length})
             </div>
             <div className="grid gap-1.5">
@@ -115,7 +115,7 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
               )}
             </div>
           </div>
-          <p className="mt-3 text-[0.7rem] leading-relaxed text-text-dim">
+          <p className="mt-3 text-micro leading-relaxed text-text-dim">
             Aerial-derived insight for estimation — confirm on site. The priced area above stays the Geoscape measurement.
           </p>
         </>
@@ -127,7 +127,7 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-card border border-ink-line bg-ink-deep p-4">
-      <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
+      <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-accent">{value}</div>
       {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}
     </div>

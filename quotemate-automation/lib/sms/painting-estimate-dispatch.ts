@@ -45,7 +45,6 @@ export async function estimateAndDispatchPainting(args: {
     customerPhone: args.customerPhone,
     customerName: args.firstName,
     request,
-    appUrl: args.baseUrl,
   })
   if (!disp.ok) return { ok: false, reason: 'painting estimate failed' }
 

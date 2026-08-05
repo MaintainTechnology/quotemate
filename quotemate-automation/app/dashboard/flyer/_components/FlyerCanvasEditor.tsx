@@ -11,6 +11,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Konva from 'konva'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer } from 'react-konva'
 import type { FlyerDocument, FlyerElement } from '@/lib/flyer/schema'
+// Konva renders to a 2D canvas, which cannot read CSS custom properties, so
+// the warm hairline comes from the TS mirror of the design tokens.
+import { CANVAS_HAIRLINE, CANVAS_SURFACE } from '@/lib/dashboard/viz-palette'
 
 function useLoadedImage(src: string | null): HTMLImageElement | null {
   const [img, setImg] = useState<HTMLImageElement | null>(null)
@@ -64,8 +67,8 @@ function CanvasImage({
         width={el.width}
         height={el.height}
         rotation={el.rotation ?? 0}
-        fill="#1B2536"
-        stroke="#33415A"
+        fill={CANVAS_SURFACE}
+        stroke={CANVAS_HAIRLINE}
         strokeWidth={1}
         dash={[6, 6]}
         draggable={draggable}
@@ -184,7 +187,7 @@ export default function FlyerCanvasEditor({
         onTouchStart={(e) => {
           if (e.target === e.target.getStage()) onSelect(null)
         }}
-        style={{ background: document.background, border: '1px solid #33415A' }}
+        style={{ background: document.background, border: `1px solid ${CANVAS_HAIRLINE}` }}
       >
         <Layer>
           <Rect x={0} y={0} width={document.width} height={document.height} fill={document.background} listening={false} />

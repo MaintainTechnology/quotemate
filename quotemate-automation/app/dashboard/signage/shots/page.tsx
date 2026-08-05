@@ -197,7 +197,7 @@ export default function SignageShotsPage() {
             <button type="button" onClick={addShot} className={BTN_GHOST}>
               + Add shot
             </button>
-            <button type="button" onClick={save} disabled={busy || shots.length === 0} className={BTN_PRIMARY}>
+            <button type="button" onClick={save} disabled={busy || shots.length === 0} aria-busy={busy} className={BTN_PRIMARY}>
               {busy ? 'Saving…' : 'Save shots'}
             </button>
             {msg && (

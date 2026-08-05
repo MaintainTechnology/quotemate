@@ -53,11 +53,11 @@ describe('buildPaintingQuoteSms', () => {
     expect(msg).toMatch(/~120 m²/)
     expect(msg).toMatch(/inc GST/i)
   })
-  it('omits deposit links when no Stripe links are present', () => {
+  it('omits the pay link when token/appUrl are absent', () => {
     const msg = buildPaintingQuoteSms({ estimate: estimate(), address: '5 Smith St', quoteUrl: 'https://x.test/q/paint/tok' })
     expect(msg).not.toContain('/r/paint/')
   })
-  it('lists all three tiers with per-tier Stripe deposit links + the PDF link under good_better_best mode', () => {
+  it('lists all three tiers + the PDF link under good_better_best mode', () => {
     const msg = buildPaintingQuoteSms({
       estimate: estimate(),
       address: '5 Smith St',
@@ -66,17 +66,13 @@ describe('buildPaintingQuoteSms', () => {
       tierMode: 'good_better_best',
       token: 'tok',
       appUrl: 'https://x.test',
-      stripeLinks: { good: 'u', better: 'u', best: 'u' },
     })
     expect(msg).toContain('$3,000')
     expect(msg).toContain('$5,000')
     expect(msg).toContain('$7,000')
-    expect(msg).toContain('https://x.test/r/paint/tok/good')
-    expect(msg).toContain('https://x.test/r/paint/tok/better')
-    expect(msg).toContain('https://x.test/r/paint/tok/best')
     expect(msg).toContain('https://x.test/api/q/paint/tok/pdf')
   })
-  it('only links the tier that actually has a Stripe session', () => {
+  it('offers ONLY the $99 site visit — never a per-tier deposit link (spec painting-site-visit-first R4)', () => {
     const msg = buildPaintingQuoteSms({
       estimate: estimate(),
       address: '5 Smith St',
@@ -84,11 +80,13 @@ describe('buildPaintingQuoteSms', () => {
       tierMode: 'good_better_best',
       token: 'tok',
       appUrl: 'https://x.test',
-      stripeLinks: { better: 'u' },
     })
-    expect(msg).toContain('https://x.test/r/paint/tok/better')
+    expect(msg).toContain('https://x.test/r/paint/tok/inspection')
+    expect(msg).toContain('$99 refundable')
     expect(msg).not.toContain('/r/paint/tok/good')
+    expect(msg).not.toContain('/r/paint/tok/better')
     expect(msg).not.toContain('/r/paint/tok/best')
+    expect(msg).not.toMatch(/deposit/i)
   })
 })
 

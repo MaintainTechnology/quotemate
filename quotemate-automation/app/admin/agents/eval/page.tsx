@@ -163,6 +163,7 @@ export default function EvalAgentPage() {
           type="button"
           onClick={triggerRun}
           disabled={busy || !token}
+          aria-busy={busy}
           className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.16em] border border-accent bg-accent/10 px-4 py-2 text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? 'Running…' : 'Run a pass now'}

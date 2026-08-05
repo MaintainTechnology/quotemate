@@ -42,7 +42,7 @@ export function BootBanner() {
             letterboxes it (see BrandMark's SIZING note). */}
         <BrandMark className="h-20 w-auto" />
       </div>
-      <span className="font-sans text-[26px] font-extrabold uppercase leading-none tracking-[-0.02em] text-[#241E1B] motion-safe:animate-[boot-breathe_1.6s_ease-in-out_infinite]">
+      <span className="font-sans text-2xl font-extrabold uppercase leading-none tracking-[-0.02em] text-[#241E1B] motion-safe:animate-[boot-breathe_1.6s_ease-in-out_infinite]">
         QuoteMax
       </span>
       {/* Carries the "still working" signal that the removed "Loading dashboard"

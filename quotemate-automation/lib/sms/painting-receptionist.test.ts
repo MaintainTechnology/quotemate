@@ -7,6 +7,7 @@ import {
   expireIdlePaintingState,
   isActivePaintingFlow,
   nextPaintingConversationState,
+  paintingTurnIsDeterministic,
   shouldEngagePainting,
   type PaintingConversationState,
   type PaintingTurnDecision,
@@ -82,6 +83,7 @@ describe('advancePainting — full Q&A path to an estimate', () => {
       'already painted',
       'standard',
       'single storey',
+      'about 180', // the optional floor-area ask (form parity)
       'no',
     ])
     const steps = decisions.map((d) => d.action)
@@ -92,8 +94,24 @@ describe('advancePainting — full Q&A path to an estimate', () => {
       const req = toPaintingRequest(last.slots)
       expect(req).not.toBeNull()
       expect(req!.inputs.scopes).toEqual(['walls', 'ceilings'])
+      expect(req!.inputs.manual_floor_area_m2).toBe(180)
     }
     expect(finalState.last_step).toBe('quoted')
+  })
+
+  it('a skipped floor area ("not sure") still reaches the estimate, area from the lookup', () => {
+    const d = advancePainting(
+      {
+        slots: {
+          address: '1 A St', address_confirmed: true, postcode: '4000', state: 'QLD',
+          scopes: ['walls'], coats: 2, condition: 'sound', ceiling_height: 'standard', storeys: 1,
+        },
+        last_step: 'floor_area',
+      },
+      'not sure',
+    )
+    expect(d).toMatchObject({ action: 'ask', step: 'colour_change' })
+    expect(d.slots.manual_floor_area_m2).toBeNull()
   })
 })
 
@@ -223,6 +241,7 @@ describe('advancePainting — cross-step intent (adaptive mid-flow)', () => {
     slots: {
       address: '1 A St', address_confirmed: true, postcode: '4000', state: 'QLD',
       scopes: ['walls'], coats: 2, condition: 'sound', ceiling_height: 'standard', storeys: 1,
+      manual_floor_area_m2: null,
     },
     last_step: 'colour_change',
   }
@@ -270,6 +289,32 @@ describe('customerWantsForm', () => {
     expect(customerWantsForm('no thanks')).toBe(false)
     expect(customerWantsForm('yes')).toBe(false)
     expect(customerWantsForm('')).toBe(false)
+  })
+})
+
+// R1/R2 (spec 2026-08-05): the route pre-empts the LLM receptionist on these
+// turns so the opener always offers BOTH paths (form link + reply-here) and an
+// explicit "use the form" reply always resolves to await_form.
+describe('paintingTurnIsDeterministic', () => {
+  it('true on the opener (no active painting flow), including closed/absent state', () => {
+    expect(paintingTurnIsDeterministic(null, 'paint my house')).toBe(true)
+    expect(paintingTurnIsDeterministic({ slots: {}, last_step: null }, 'paint my house')).toBe(true)
+    expect(paintingTurnIsDeterministic({ slots: {}, last_step: 'closed' }, 'repaint the deck')).toBe(true)
+  })
+  it('true when the customer explicitly chooses the form after the offer', () => {
+    const offered: PaintingConversationState = { slots: {}, last_step: 'offer_form' }
+    expect(paintingTurnIsDeterministic(offered, 'send me the form')).toBe(true)
+    expect(paintingTurnIsDeterministic(offered, 'the link please')).toBe(true)
+  })
+  it('false on a non-form reply to the offer (Q&A may run on either path)', () => {
+    const offered: PaintingConversationState = { slots: {}, last_step: 'offer_form' }
+    expect(paintingTurnIsDeterministic(offered, 'just ask me here')).toBe(false)
+    expect(paintingTurnIsDeterministic(offered, "it's 5 Smith St, Bondi NSW 2026")).toBe(false)
+  })
+  it('false mid-gather and on warm threads (the flag decides the layer)', () => {
+    expect(paintingTurnIsDeterministic({ slots: {}, last_step: 'scopes' }, '180 sqm')).toBe(false)
+    expect(paintingTurnIsDeterministic({ slots: {}, last_step: 'quoted' }, 'thanks')).toBe(false)
+    expect(paintingTurnIsDeterministic({ slots: {}, last_step: 'await_form' }, 'send me the form')).toBe(false)
   })
 })
 

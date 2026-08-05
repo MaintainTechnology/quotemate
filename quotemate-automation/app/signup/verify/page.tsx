@@ -275,6 +275,7 @@ function VerifyOtpInner() {
         <button
           type="submit"
           disabled={submitting || digits.join('').length !== 6}
+          aria-busy={submitting}
           className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
         >
           {submitting ? 'Verifying…' : 'Verify + continue'}

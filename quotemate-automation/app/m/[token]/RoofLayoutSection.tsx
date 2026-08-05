@@ -137,6 +137,7 @@ export function RoofLayoutSection({
             type="button"
             onClick={generate}
             disabled={busy}
+            aria-busy={busy}
             className="mt-4 inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press disabled:opacity-60"
           >
             {busy ? 'Analysing the roof…' : 'Generate layout map'}

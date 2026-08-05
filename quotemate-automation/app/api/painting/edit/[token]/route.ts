@@ -14,7 +14,9 @@
 // (jsonb) + the denormalised better_inc_gst column. Both the customer page
 // (/q/paint/[public_token]) and the customer SMS read estimate.price.tiers
 // straight from the jsonb, so the edit flows through immediately; a price
-// change re-mints the per-tier Stripe deposit sessions below.
+// change expires (and drops) any legacy per-tier Stripe deposit session left
+// on the row — nothing re-mints them, since the customer's only payment is
+// the flat $99 site visit (spec painting-site-visit-first).
 //
 // Refuses to edit an inspection-routed job (no priced tiers).
 // Next 16: params is a Promise.
@@ -24,16 +26,12 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { applyTierEdits, type PaintingTierEdit } from '@/lib/painting/edit'
 import type { PaintingEstimate } from '@/lib/painting/types'
-import { createPaintingCheckoutSessions } from '@/lib/stripe/painting-checkout'
-import { expireCheckoutSession, type StripeLinks } from '@/lib/stripe/checkout'
+import { PAINT_INSPECTION_TIER } from '@/lib/painting/pay-redirect'
+import { expireCheckoutSession } from '@/lib/stripe/checkout'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60 // a priced edit re-mints per-tier Stripe sessions
-
-const APP_BASE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.quotemax.com.au'
-).replace(/\/$/, '')
+export const maxDuration = 60 // a priced edit expires stale Stripe sessions
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,16 +80,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   if (!row.estimate) {
     return Response.json({ ok: false, error: 'no_estimate' }, { status: 409 })
   }
-  // Transacted prices are immutable: once a deposit is paid the tiers are the
-  // record of what the customer paid against. (The old released_at gate used
-  // to block this incidentally; post-release editing made an explicit paid
-  // guard necessary.)
+  // Transacted prices are immutable: once the customer has paid, the tiers are
+  // the record of what they accepted. (The old released_at gate used to block
+  // this incidentally; post-release editing made an explicit paid guard
+  // necessary.)
   if ((row.paid_at as string | null) != null) {
     return Response.json(
       {
         ok: false,
         error: 'cannot_edit_paid_quote',
-        hint: 'The customer has already paid a deposit against these prices.',
+        hint: 'The customer has already paid against these prices.',
       },
       { status: 409 },
     )
@@ -121,37 +119,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     better_inc_gst: betterIncGst,
   }
 
-  // A price change invalidates the per-tier Stripe deposit sessions (their
-  // unit_amount was baked from the OLD inc-GST). On a released quote the
-  // customer already HOLDS the old links (SMS /r short-links), so besides
-  // regenerating we must EXPIRE the replaced sessions — an open Checkout tab
-  // must never complete at a price the tradie just changed. A Stripe miss
-  // clears the links (the customer page falls back to the "contact to book"
-  // placeholder) rather than ever leaving a stale payable amount.
+  // A price change invalidates any per-tier Stripe deposit session left on the
+  // row (their unit_amount was baked from the OLD inc-GST), and on a released
+  // quote the customer may still HOLD those links. Nothing re-mints them —
+  // since spec painting-site-visit-first the customer's only payment is the
+  // flat $99 site visit — so we DROP them and EXPIRE them, and an open
+  // Checkout tab from the deposit era can never complete at a price the tradie
+  // just changed. stripe_links.inspection is preserved untouched: the $99 fee
+  // does not move with the tier prices.
   if (priceChanged) {
-    let freshLinks: StripeLinks = {}
-    try {
-      freshLinks = await createPaintingCheckoutSessions({
-        estimate: nextEstimate,
-        token: row.public_token as string,
-        address: (row.address as string | null) ?? 'your property',
-        appUrl: APP_BASE_URL,
-      })
-    } catch (e) {
-      console.warn(
-        '[painting/edit] deposit session regen failed — links cleared',
-        e instanceof Error ? e.message : e,
-      )
-      freshLinks = {}
+    const oldLinks = (row.stripe_links ?? {}) as Record<string, string | undefined>
+    const kept: Record<string, string> = {}
+    const stale: string[] = []
+    for (const [tier, url] of Object.entries(oldLinks)) {
+      if (!url) continue
+      if (tier === PAINT_INSPECTION_TIER) kept[tier] = url
+      else stale.push(url)
     }
-    updateBody.stripe_links = freshLinks
-
-    const oldLinks = (row.stripe_links ?? {}) as StripeLinks
-    const replaced = Object.entries(oldLinks)
-      .filter(([tier, url]) => typeof url === 'string' && url && url !== freshLinks[tier as keyof StripeLinks])
-      .map(([, url]) => url as string)
+    updateBody.stripe_links = kept
     // Best-effort (expireCheckoutSession tolerates already-expired/paid).
-    await Promise.allSettled(replaced.map((url) => expireCheckoutSession(url)))
+    await Promise.allSettled(stale.map((url) => expireCheckoutSession(url)))
   }
 
   const { error: updErr } = await supabase

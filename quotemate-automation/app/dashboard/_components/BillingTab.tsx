@@ -255,7 +255,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
 
       {/* Current subscription */}
       {loading ? (
-        <div className="mt-8 text-sm text-text-dim">Loading…</div>
+        <div className="qm-loading mt-8 text-sm text-text-dim">Loading…</div>
       ) : hasActive && status ? (
         <div className="rounded-card mt-8 border border-ink-line bg-ink-card p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -282,6 +282,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
               type="button"
               onClick={openPortal}
               disabled={busy === 'portal'}
+              aria-busy={busy === 'portal'}
               className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
             >
               {busy === 'portal' ? 'Opening…' : 'Manage billing'}
@@ -303,6 +304,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
               type="button"
               onClick={openPortal}
               disabled={busy === 'portal'}
+              aria-busy={busy === 'portal'}
               className="rounded-ctl mt-4 inline-flex items-center gap-2 border border-ink-line px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim disabled:opacity-50"
             >
               {busy === 'portal' ? 'Opening…' : 'View billing history'}
@@ -345,7 +347,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
             Annual
           </ToggleButton>
         </div>
-        <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
           Save ~17% — 2 months free
         </span>
       </div>
@@ -372,7 +374,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
                   {plan.name}
                 </h3>
                 {plan.featured && (
-                  <span className="bg-accent px-2 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.12em] text-white">
+                  <span className="bg-accent px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-[0.12em] text-white">
                     Popular
                   </span>
                 )}
@@ -385,7 +387,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
                 >
                   {aud(perMonth)}
                 </span>
-                <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                   / mo
                 </span>
               </div>
@@ -399,6 +401,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
                 type="button"
                 onClick={() => startCheckout(plan)}
                 disabled={busy === plan.id || isCurrent}
+                aria-busy={busy === plan.id}
                 className={`rounded-ctl mt-5 inline-flex items-center justify-center px-5 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 ${
                   plan.featured
                     ? 'bg-accent text-white hover:bg-accent-press'
@@ -463,7 +466,7 @@ function UsageBar({
   return (
     <div className="rounded-card border border-ink-line bg-ink-card p-4">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+        <span className="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">
           {label}
         </span>
         <span className="font-mono text-sm tabular-nums text-text-pri">
@@ -477,11 +480,11 @@ function UsageBar({
         />
       </div>
       {disabled ? (
-        <p className="mt-2 text-[0.7rem] text-text-dim">
+        <p className="mt-2 text-micro text-text-dim">
           Voice isn&rsquo;t included on this plan.
         </p>
       ) : note ? (
-        <p className="mt-2 text-[0.7rem] text-text-dim">{note}</p>
+        <p className="mt-2 text-micro text-text-dim">{note}</p>
       ) : null}
     </div>
   )
@@ -504,7 +507,7 @@ function StatusPill({ status }: { status: string | null }) {
         : 'Inactive'
   return (
     <span
-      className={`border px-2 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${tone}`}
+      className={`border px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-[0.12em] ${tone}`}
     >
       {label}
     </span>

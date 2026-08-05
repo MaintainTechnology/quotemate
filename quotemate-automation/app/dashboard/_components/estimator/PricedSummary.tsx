@@ -43,7 +43,7 @@ const ELECTRICAL_CATEGORY_VALUES = new Set<string>([
 const CATEGORY_OPTIONS = CATEGORIES.filter((c) => ELECTRICAL_CATEGORY_VALUES.has(c.value))
 
 const NUM_TH =
-  'px-4 py-2.5 text-right font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
+  'px-4 py-2.5 text-right font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim'
 const NUM_TD = 'px-4 py-3.5 text-right font-mono text-sm tabular-nums text-text-sec'
 
 export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) {
@@ -54,7 +54,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
     <section aria-label="Indicative estimate" className="motion-safe:animate-[fade-up_220ms_ease-out_both]">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-accent">
             Indicative estimate
           </div>
           <h3 className="mt-1.5 text-xl font-extrabold uppercase tracking-tight text-text-pri sm:text-2xl">
@@ -62,7 +62,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
           </h3>
         </div>
         {pricedAt && (
-          <span className="font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
+          <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
             Priced {new Date(pricedAt).toLocaleString('en-AU')}
           </span>
         )}
@@ -116,7 +116,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
               <table className="w-full border-collapse text-left">
                 <thead>
                   <tr className="bg-ink-deep/40">
-                    <th scope="col" className="px-4 py-2.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                    <th scope="col" className="px-4 py-2.5 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
                       Item → assembly
                     </th>
                     <th scope="col" className={NUM_TH}>Qty</th>
@@ -170,7 +170,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
                       {openTrace === i && (
                         <tr id={`${traceId}-trace-${i}`} className="bg-ink-deep">
                           <td colSpan={6} className="border-t border-ink-line/60 px-4 py-5">
-                            <div className="mb-3 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                            <div className="mb-3 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-accent">
                               How this line was priced
                             </div>
                             <TraceGrid line={l} />
@@ -187,8 +187,8 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
       )}
 
       {bom.unmatched.length > 0 && (
-        <div className="rounded-card mt-6 border border-ink-line border-l-4 border-l-warning-bright bg-ink-deep px-4 py-3.5">
-          <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">
+        <div className="rounded-card mt-6 border border-warning-bright/40 bg-ink-deep px-4 py-3.5">
+          <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-warning-bright">
             Not priced — not in your catalogue ({bom.unmatched.length})
           </div>
           {onAddToCatalogue ? (
@@ -221,7 +221,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
       )}
 
       {info && (
-        <p className="mt-4 text-right font-mono text-[0.66rem] text-text-dim">
+        <p className="mt-4 text-right font-mono text-micro text-text-dim">
           catalogue: {info.catalogueSize} assemblies · pricing book: {info.source}
         </p>
       )}
@@ -283,7 +283,7 @@ function UnmatchedItem({
           {item.count}× {item.type}
         </span>
         {added ? (
-          <span className="font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-teal-glow">
+          <span className="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-teal-glow">
             ✓ added
           </span>
         ) : (
@@ -295,7 +295,7 @@ function UnmatchedItem({
             }}
             aria-expanded={open}
             aria-controls={`${fid}-form`}
-            className="font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-accent transition-colors hover:text-accent-press focus-visible:outline-2 focus-visible:outline-accent"
+            className="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-accent transition-colors hover:text-accent-press focus-visible:outline-2 focus-visible:outline-accent"
           >
             {open ? 'Cancel' : '+ Add to catalogue'}
           </button>
@@ -306,7 +306,7 @@ function UnmatchedItem({
         <form id={`${fid}-form`} onSubmit={submit} className="border-t border-ink-line px-3 py-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
-              <span className="block font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+              <span className="block font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">
                 Unit price ex GST
               </span>
               <div className="rounded-card mt-1 flex items-center border border-ink-line bg-ink-deep focus-within:border-accent">
@@ -326,7 +326,7 @@ function UnmatchedItem({
               </div>
             </label>
             <label className="block">
-              <span className="block font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+              <span className="block font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">
                 Labour hrs / unit
               </span>
               <input
@@ -342,7 +342,7 @@ function UnmatchedItem({
               />
             </label>
             <label className="block">
-              <span className="block font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+              <span className="block font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">
                 Category <span className="normal-case text-text-dim/70">(optional)</span>
               </span>
               <select
@@ -371,11 +371,11 @@ function UnmatchedItem({
             <button
               type="submit"
               disabled={!canSubmit}
-              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? 'Saving…' : 'Save to catalogue & re-price'}
             </button>
-            <span className="font-mono text-[0.58rem] text-text-dim">
+            <span className="font-mono text-micro text-text-dim">
               Re-prices now from your pricing book and remembers it for next time.
             </span>
           </div>

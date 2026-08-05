@@ -459,6 +459,7 @@ function AgentCard({
           type="button"
           onClick={onRun}
           disabled={running}
+          aria-busy={running}
           className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {running ? (

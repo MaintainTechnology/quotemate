@@ -364,7 +364,7 @@ function SignUpInner() {
               />
             </Field>
             {error && <ErrorBanner>{error}</ErrorBanner>}
-            <button type="submit" disabled={submitting} className={PRIMARY_BTN}>
+            <button type="submit" disabled={submitting} aria-busy={submitting} className={PRIMARY_BTN}>
               {submitting ? 'Verifying…' : 'Verify & continue'}
               {!submitting && <Arrow />}
             </button>
@@ -488,7 +488,7 @@ function SignUpInner() {
               Must exist in the DOM before the sign-up call runs. */}
           <div id="clerk-captcha" />
 
-          <button type="submit" disabled={submitting || !signUp} className={PRIMARY_BTN}>
+          <button type="submit" disabled={submitting || !signUp} aria-busy={submitting} className={PRIMARY_BTN}>
             {submitting ? 'Creating your account…' : 'Continue'}
             {!submitting && <Arrow />}
           </button>

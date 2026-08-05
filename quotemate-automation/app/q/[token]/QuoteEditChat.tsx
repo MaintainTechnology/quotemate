@@ -269,6 +269,7 @@ export default function QuoteEditChat({
                   type="button"
                   onClick={() => void send(s)}
                   disabled={loading}
+                  aria-busy={loading}
                   style={{
                     fontSize: 12,
                     color: TEXT,
@@ -311,6 +312,7 @@ export default function QuoteEditChat({
             <button
               type="submit"
               disabled={loading || !input.trim()}
+              aria-busy={loading}
               style={{
                 background: ACCENT,
                 color: 'var(--accent-ink)',
@@ -411,6 +413,7 @@ function ProposalCard({
             type="button"
             onClick={onApply}
             disabled={loading}
+            aria-busy={loading}
             style={{
               background: ACCENT,
               color: 'var(--accent-ink)',

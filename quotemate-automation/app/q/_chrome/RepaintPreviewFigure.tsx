@@ -118,6 +118,7 @@ export function RepaintPreviewFigure({ publicToken, address, initialReady }: Pro
               key={c}
               type="button"
               disabled={busy}
+              aria-busy={busy}
               onClick={() => void repaint(c)}
               className="cursor-pointer border border-ink-line px-2.5 py-1.5 font-mono text-[0.62rem] uppercase tracking-[0.08em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
             >

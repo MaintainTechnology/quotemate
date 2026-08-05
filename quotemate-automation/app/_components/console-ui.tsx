@@ -68,7 +68,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 export function TableShell({ loading, empty, emptyText, head, children }: { loading: boolean; empty: boolean; emptyText: string; head: ReactNode; children: ReactNode }) {
   return (
     <div className="border border-ink-line bg-ink-card">
-      {loading ? <p className="p-6 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">Loading…</p>
+      {loading ? <p className="qm-loading p-6 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">Loading…</p>
         : empty ? <p className="p-6 text-sm text-text-dim">{emptyText}</p>
         : (
           <div className="overflow-x-auto">

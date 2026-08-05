@@ -17,6 +17,7 @@ import {
   paintingReadiness,
   parseAuState,
   parseCeilingMetres,
+  parseFloorAreaM2,
   parsePostcode,
   toPaintingRequest,
   type PaintingSlots,
@@ -238,6 +239,24 @@ describe('mapStoreys', () => {
   })
 })
 
+describe('parseFloorAreaM2', () => {
+  it('reads a stated area with or without a unit', () => {
+    expect(parseFloorAreaM2('180')).toBe(180)
+    expect(parseFloorAreaM2('180m2')).toBe(180)
+    expect(parseFloorAreaM2('180 sqm')).toBe(180)
+    expect(parseFloorAreaM2('about 180')).toBe(180)
+    expect(parseFloorAreaM2('roughly 220 square metres')).toBe(220)
+    expect(parseFloorAreaM2('95.5')).toBe(95.5)
+  })
+  it('returns null on "not sure", gibberish, empty, and out-of-band numbers', () => {
+    expect(parseFloorAreaM2('not sure')).toBeNull()
+    expect(parseFloorAreaM2('no idea sorry')).toBeNull()
+    expect(parseFloorAreaM2('')).toBeNull()
+    expect(parseFloorAreaM2('2500')).toBeNull() // above the 2000 m² band
+    expect(parseFloorAreaM2('0')).toBeNull()
+  })
+})
+
 describe('mapColourChange', () => {
   it('reads yes/no and synonyms, defaulting ambiguous to false', () => {
     expect(mapColourChange('yes, going darker')).toBe(true)
@@ -277,7 +296,7 @@ function freshThrough(messages: Array<string>): PaintingSlots {
 }
 
 describe('nextPaintingStep — gathering order', () => {
-  it('asks address → confirm → scopes → coats → condition → ceiling → storeys → colour → ready', () => {
+  it('asks address → confirm → scopes → coats → condition → ceiling → storeys → floor area → colour → ready', () => {
     let slots: PaintingSlots = {}
     expect(nextPaintingStep(slots).step).toBe('address')
 
@@ -301,6 +320,28 @@ describe('nextPaintingStep — gathering order', () => {
     expect(nextPaintingStep(slots).step).toBe('storeys')
 
     slots = applyPaintingAnswer(slots, 'storeys', 'single storey')
+    expect(nextPaintingStep(slots).step).toBe('floor_area')
+    expect(nextPaintingStep(slots).question).toMatch(/not sure/i)
+
+    slots = applyPaintingAnswer(slots, 'floor_area', 'about 180')
+    expect(slots.manual_floor_area_m2).toBe(180)
+    // colour_change stays LAST, so its "Last one —" wording stays true.
+    expect(nextPaintingStep(slots).step).toBe('colour_change')
+
+    slots = applyPaintingAnswer(slots, 'colour_change', 'no')
+    expect(nextPaintingStep(slots).step).toBe('ready')
+  })
+
+  // The floor-area ask is optional and asked exactly once: a skip records
+  // null (the address lookup supplies the area) and the step never re-asks.
+  it('floor_area: "not sure" skips (null) and moves on to colour_change, never re-asked', () => {
+    let slots: PaintingSlots = {
+      address: '1 A St', address_confirmed: true, postcode: '4000', state: 'QLD',
+      scopes: ['walls'], coats: 2, condition: 'sound', ceiling_height: 'standard', storeys: 1,
+    }
+    expect(nextPaintingStep(slots).step).toBe('floor_area')
+    slots = applyPaintingAnswer(slots, 'floor_area', 'not sure')
+    expect(slots.manual_floor_area_m2).toBeNull()
     expect(nextPaintingStep(slots).step).toBe('colour_change')
 
     slots = applyPaintingAnswer(slots, 'colour_change', 'no')
@@ -360,7 +401,7 @@ describe('paintingReadiness + inspection fallback', () => {
   const base: PaintingSlots = {
     address: '1 A St', address_confirmed: true, postcode: '4000', state: 'QLD',
     scopes: ['walls', 'ceilings'], coats: 2, condition: 'sound',
-    ceiling_height: 'standard', storeys: 1, colour_change: false,
+    ceiling_height: 'standard', storeys: 1, manual_floor_area_m2: null, colour_change: false,
   }
   it('ready on a clean job', () => {
     expect(paintingReadiness(base)).toBe('ready')
@@ -384,6 +425,13 @@ describe('paintingReadiness + inspection fallback', () => {
   it('need_more until the colour-change question is answered', () => {
     expect(paintingReadiness({ ...base, colour_change: undefined })).toBe('need_more')
   })
+  // Tri-state on the optional floor area: undefined = not asked yet
+  // (need_more), null = asked and skipped (complete), number = provided.
+  it('need_more until the floor-area question has been ASKED; skipped or stated are both complete', () => {
+    expect(paintingReadiness({ ...base, manual_floor_area_m2: undefined })).toBe('need_more')
+    expect(paintingReadiness({ ...base, manual_floor_area_m2: null })).toBe('ready')
+    expect(paintingReadiness({ ...base, manual_floor_area_m2: 180 })).toBe('ready')
+  })
 })
 
 describe('toPaintingRequest', () => {
@@ -396,6 +444,7 @@ describe('toPaintingRequest', () => {
       'already painted',
       'standard',
       'single storey',
+      'not sure', // floor area skipped → the address lookup supplies it
       'no',
     ])
     const req = toPaintingRequest(slots)
@@ -410,6 +459,20 @@ describe('toPaintingRequest', () => {
       storeys: 1,
       manual_floor_area_m2: null,
     })
+  })
+  it('passes a customer-stated floor area through to the request', () => {
+    const slots = freshThrough([
+      '5 Smith St, Bondi NSW 2026',
+      'yes',
+      'walls and ceilings',
+      '2 coats',
+      'already painted',
+      'standard',
+      'single storey',
+      '180 sqm',
+      'no',
+    ])
+    expect(toPaintingRequest(slots)!.inputs.manual_floor_area_m2).toBe(180)
   })
   it('returns null when not enough is gathered', () => {
     expect(toPaintingRequest({ address: '1 A St' })).toBeNull()

@@ -300,7 +300,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
     return (
       <div className="max-w-[80rem]">
         <header className="mb-7">
-          <div className="flex items-center gap-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-accent">
+          <div className="flex items-center gap-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-accent">
             <Clapperboard size={15} strokeWidth={1.8} aria-hidden="true" />
             QuoteMax · Video Studio
           </div>
@@ -362,20 +362,20 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
 
       <header className="mb-7 flex flex-col gap-5 motion-safe:animate-[fade-up_260ms_ease-out_both] sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-accent">
+          <div className="flex items-center gap-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-accent">
             <Clapperboard size={15} strokeWidth={1.8} aria-hidden="true" />
             QuoteMax · Video Studio
           </div>
           <h1 className="mt-3 text-balance text-[clamp(1.75rem,3vw,2.4rem)] font-extrabold leading-[1.08] tracking-[-0.035em] text-text-pri">
             Customer Video Studio
           </h1>
-          <p className="mt-3 max-w-[65ch] text-pretty text-sm leading-relaxed text-text-sec sm:text-[0.95rem]">
+          <p className="mt-3 max-w-[65ch] text-pretty text-sm leading-relaxed text-text-sec sm:text-base">
             Create the two branded scenes customers see while they review and book your quote.
             Set the shared direction once, then generate either scene.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
-          <div className="inline-flex min-h-11 items-center gap-2 rounded-ctl border border-ink-line bg-ink-card px-3.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.1em] text-text-sec">
+          <div className="inline-flex min-h-11 items-center gap-2 rounded-ctl border border-ink-line bg-ink-card px-3.5 font-mono text-micro font-semibold uppercase tracking-[0.1em] text-text-sec">
             <span
               className={`h-2 w-2 rounded-full ${studioBusy ? 'bg-accent motion-safe:animate-pulse' : 'bg-success-bright'}`}
               aria-hidden="true"
@@ -471,7 +471,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
             </div>
           </div>
           <dl className="rounded-ctl border border-ink-line bg-ink-deep px-3.5 py-2">
-            <dt className="font-mono text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
+            <dt className="font-mono text-micro font-semibold uppercase tracking-[0.1em] text-text-dim">
               Business
             </dt>
             <dd className="mt-0.5 break-words text-sm font-bold text-text-pri" translate="no">
@@ -550,7 +550,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-pri">
                 {ownerPhotoName ?? 'Choose Portrait'}
               </span>
-              <span className="shrink-0 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
+              <span className="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.08em] text-text-dim">
                 {ownerPhotoName ? '1 Selected' : 'Browse'}
               </span>
             </label>
@@ -589,7 +589,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-pri">
                 {extraImagesLabel}
               </span>
-              <span className="shrink-0 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
+              <span className="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.08em] text-text-dim">
                 {extraImageNames.length > 0 ? `${extraImageNames.length} Selected` : 'Browse'}
               </span>
             </label>
@@ -635,7 +635,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
               <header className="border-b border-ink-line px-4 py-4 sm:px-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-accent">
+                    <div className="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-accent">
                       {meta.scene}
                     </div>
                     <h3
@@ -656,7 +656,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
                     <span className="text-text-dim"> · {meta.where}</span>
                   </div>
                 </div>
-                <div className="mt-2 flex items-center gap-2 font-mono text-[0.62rem] tabular-nums text-text-dim">
+                <div className="mt-2 flex items-center gap-2 font-mono text-micro tabular-nums text-text-dim">
                   <Clock3 size={13} aria-hidden="true" />
                   {updatedAt ? (
                     <time dateTime={slot.state.updated_at}>Updated {updatedAt}</time>
@@ -730,7 +730,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
                     </label>
                     <span
                       id={`${key}-script-count`}
-                      className={`font-mono text-[0.64rem] tabular-nums ${counterWarning ? 'text-accent' : 'text-text-dim'}`}
+                      className={`font-mono text-micro tabular-nums ${counterWarning ? 'text-accent' : 'text-text-dim'}`}
                     >
                       {scripts[key].length} / {MAX_SCRIPT_CHARS}
                     </span>

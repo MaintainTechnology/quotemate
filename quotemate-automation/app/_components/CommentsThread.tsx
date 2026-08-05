@@ -196,6 +196,7 @@ export function CommentsThread({
             type="button"
             onClick={toggleResolved}
             disabled={busy}
+            aria-busy={busy}
             className="inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1 text-[0.6rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
           >
             {data.resolved ? <RotateCcw size={12} /> : <Check size={12} />}
@@ -250,6 +251,7 @@ export function CommentsThread({
                         aria-label="Delete comment"
                         onClick={() => remove(c.id)}
                         disabled={busy}
+                        aria-busy={busy}
                         className="text-text-dim transition-colors hover:text-danger disabled:opacity-50"
                       >
                         <Trash2 size={13} />
@@ -271,6 +273,7 @@ export function CommentsThread({
                         type="button"
                         onClick={() => saveEdit(c.id)}
                         disabled={busy || !editDraft.trim()}
+                        aria-busy={busy}
                         className="inline-flex items-center gap-1.5 bg-accent px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
                       >
                         {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}

@@ -22,6 +22,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { GeoJSONPolygon, RoofForm, RoofMetrics } from '@/lib/roofing/types'
+import { VIZ } from '@/lib/dashboard/viz-palette'
 import { edgesFromGeometry } from '@/lib/roofing/geometry-edges'
 import {
   classifyEdges,
@@ -38,27 +39,42 @@ import { resolveGoogleSatelliteSource } from '@/lib/roofing/google-tiles'
 const FILL_COLOUR = '#FFC400' // accent
 const FILL_OPACITY = 0.18
 const OUTLINE_COLOUR = '#FFC400'
+// Edge kinds are a categorical encoding, so they draw from the shared viz
+// ramp (lib/dashboard/viz-palette.ts) rather than this file's own hues. The
+// teal valley (#14B8A6) and slate unknown (#7A8699) that used to live here
+// were a second and third accent on a one-accent system.
+//
+// These are MapLibre GL paint values, so they must be literal strings — a
+// `var(--viz-2)` never resolves inside a WebGL paint expression.
+//
+// Assignment is deliberate, not ramp order: eave/ridge/hip are the three the
+// tradie checks most, so they keep the high-visibility warm end, and valley
+// takes the cool anchor because it is the one that must not be mistaken for a
+// ridge on a dark aerial photo.
 const EDGE_COLOURS: Record<EdgeKind, string> = {
-  eave: '#FFFFFF',
-  ridge: '#FFD23D',
-  hip: '#FFC400',
-  valley: '#14B8A6',
-  unknown: '#7A8699',
+  eave: VIZ[5], // bone
+  ridge: VIZ[4], // ochre
+  hip: VIZ[0], // accent yellow
+  valley: VIZ[1], // slate — the cool anchor
+  unknown: VIZ[6], // clay
 }
 
+// Legend swatches. Tailwind utilities generated from the SAME tokens
+// (--color-viz-* in globals.css), so a legend can never disagree with the map.
 const EDGE_SWATCH_CLASS: Record<EdgeKind, string> = {
-  eave: 'bg-white',
-  ridge: 'bg-accent-soft',
-  hip: 'bg-accent',
-  valley: 'bg-teal-glow',
-  unknown: 'bg-text-dim',
+  eave: 'bg-viz-6',
+  ridge: 'bg-viz-5',
+  hip: 'bg-viz-1',
+  valley: 'bg-viz-2',
+  unknown: 'bg-viz-7',
 }
 
-// Per-building fill/outline colours in MULTI mode.
-const SELECTED_FILL = '#FFC400'
-const PRIMARY_FILL = '#14B8A6'
-const SECONDARY_FILL = '#FFD23D'
-const EXCLUDED_FILL = '#7A8699'
+// Per-building fill/outline colours in MULTI mode. Selection is a STATE, not a
+// category, so it keeps the accent; the rest are categories off the ramp.
+const SELECTED_FILL = VIZ[0]
+const PRIMARY_FILL = VIZ[1]
+const SECONDARY_FILL = VIZ[4]
+const EXCLUDED_FILL = VIZ[6]
 
 const ESRI_TILE_URL =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
@@ -239,7 +255,7 @@ export function RoofMap({
 
       {stats && (
         <div className="rounded-card pointer-events-none absolute right-4 top-4 max-w-[18rem] border border-ink-line bg-ink-deep/95 p-4 backdrop-blur">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
             {multi ? 'Selected structure' : 'Geoscape measurement'}
           </div>
           <ul className="mt-3 space-y-2 font-mono text-base">
@@ -256,7 +272,7 @@ export function RoofMap({
 
       {multi ? (
         <div className="rounded-card pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
-          <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
             Structure legend
           </div>
           <ul className="mt-2 grid gap-1.5 text-xs text-text-sec">
@@ -269,7 +285,7 @@ export function RoofMap({
       ) : (
         polygon && (
           <div className="rounded-card pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
-            <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
               Edge legend
             </div>
             <ul className="mt-2 grid gap-1.5 text-xs text-text-sec">
@@ -284,7 +300,7 @@ export function RoofMap({
 
       {onRecenter && (
         <div className="rounded-card pointer-events-none absolute bottom-4 right-4 border border-ink-line bg-ink-deep/95 px-3 py-2 backdrop-blur">
-          <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <span className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
             {multi ? 'Click the map to add / re-measure a building' : 'Click any building to re-measure'}
           </span>
         </div>
@@ -439,7 +455,7 @@ function unionBBox(polygons: Array<GeoJSONPolygon | null>): BBox | null {
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <li className="flex items-baseline justify-between gap-4">
-      <span className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</span>
+      <span className="text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</span>
       <span className="font-bold text-text-pri">{value}</span>
     </li>
   )

@@ -109,6 +109,7 @@ export function ChoiceCards({
               key={o.catalogue_id}
               type="button"
               disabled={declined || !!chosenId || busy === o.catalogue_id}
+              aria-busy={busy === o.catalogue_id}
               onClick={() => choose(o.catalogue_id)}
               className={`text-left border p-4 transition-colors cursor-pointer disabled:cursor-default ${
                 isChosen
@@ -162,6 +163,7 @@ export function ChoiceCards({
         <button
           type="button"
           disabled={!!busy}
+          aria-busy={!!busy}
           onClick={chooseDefer}
           className="mt-4 w-full text-center border border-ink-line bg-ink-card px-4 py-3 text-sm text-text-sec hover:border-accent/50 hover:text-text-pri transition-colors cursor-pointer disabled:opacity-50"
         >

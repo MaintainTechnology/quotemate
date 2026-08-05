@@ -153,7 +153,7 @@ export function PhotoVerify({ accessToken, address }: Props) {
     <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-accent">
             AI photo verification
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
@@ -239,7 +239,7 @@ function VerdictPanel({
   if (stage === 'error') {
     return (
       <div className="space-y-2 font-mono text-sm">
-        <div className="text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+        <div className="text-meta font-semibold uppercase tracking-[0.16em] text-warning">
           Verification failed
         </div>
         <p className="text-base text-text-sec">{errMsg ?? 'Unknown error.'}</p>
@@ -277,7 +277,7 @@ function VerdictPanel({
           <p className="mt-1 text-base text-text-sec">{verdict.reason}</p>
         </div>
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-text-dim">
             Roof material · {verdict.materialConfidence} confidence
           </div>
           <div className="mt-1 font-mono text-lg font-semibold text-text-pri">
@@ -286,7 +286,7 @@ function VerdictPanel({
         </div>
         {verdict.redFlags.length > 0 && (
           <div>
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+            <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-warning">
               Flags Claude raised
             </div>
             <ul className="mt-1 space-y-1 text-base text-text-sec">

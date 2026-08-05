@@ -330,6 +330,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
           <button
             type="submit"
             disabled={uploading}
+            aria-busy={uploading}
             className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
           >
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
@@ -361,7 +362,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
               <button
                 type="button"
                 onClick={() => setAllStatus('confirmed')}
-                className="border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent"
+                className="border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent"
               >
                 Confirm all
               </button>
@@ -369,7 +370,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
                 type="button"
                 onClick={saveReview}
                 disabled={savingReview}
-                className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-white hover:bg-accent-press disabled:opacity-50"
+                className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-1.5 text-micro font-semibold uppercase tracking-wider text-white hover:bg-accent-press disabled:opacity-50"
               >
                 {savingReview ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                 Save review
@@ -385,7 +386,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
               <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm text-text-pri">{r.raw_description ?? '(no description)'}</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                     <span>{money(r.price_inc_gst)} inc GST</span>
                     {r.job_type_confidence ? <span>· {r.job_type_confidence} confidence</span> : null}
                     {r.gst_basis === 'unknown' ? (
@@ -452,7 +453,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
           <div className="mt-6 overflow-x-auto border border-ink-line">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-ink-deep font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+                <tr className="bg-ink-deep font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                   <th className="px-3 py-2 text-left">Job</th>
                   <th className="px-3 py-2 text-right">Jobs</th>
                   <th className="px-3 py-2 text-right">Avg (inc GST)</th>
@@ -492,7 +493,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
             type="button"
             onClick={previewCalibration}
             disabled={calibrating}
-            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent disabled:opacity-50"
           >
             {calibrating ? <Loader2 size={12} className="animate-spin" /> : <SlidersHorizontal size={12} />}
             Preview
@@ -532,7 +533,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm text-text-pri">{p.name}</div>
-                      <div className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                      <div className="font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                         {p.sample_count} jobs · {p.is_new ? 'new entry' : `was ${money(p.existing_price_ex_gst)} ex GST`}
                       </div>
                     </div>
@@ -593,7 +594,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
               <li key={q.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-text-pri">{q.raw_description ?? '(no description)'}</div>
-                  <div className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                  <div className="mt-0.5 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                     {jobLabel(q.job_type)}
                     {q.quoted_at ? ` · ${q.quoted_at}` : ''}
                   </div>

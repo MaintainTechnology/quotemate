@@ -680,6 +680,7 @@ export default function TradieEditor({
                 type="button"
                 onClick={() => setOpen(false)}
                 disabled={submitting}
+                aria-busy={submitting}
                 className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-sec hover:text-text-pri px-4 py-2 disabled:opacity-50"
               >
                 Cancel
@@ -688,6 +689,7 @@ export default function TradieEditor({
                 type="button"
                 onClick={openSaveConfirm}
                 disabled={submitting}
+                aria-busy={submitting}
                 className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 {submitting ? 'Saving…' : 'Save · Re-issue links'}
@@ -736,6 +738,7 @@ export default function TradieEditor({
                     type="button"
                     onClick={() => handleSave(pendingNotify, true)}
                     disabled={submitting}
+                    aria-busy={submitting}
                     className="w-full inline-flex items-center justify-center bg-warning/90 hover:bg-warning text-ink-deep font-bold px-4 py-3 text-xs uppercase tracking-[0.14em] transition-colors disabled:opacity-50"
                   >
                     {submitting ? 'Saving…' : 'Save anyway · ungrounded'}
@@ -744,6 +747,7 @@ export default function TradieEditor({
                     type="button"
                     onClick={() => setGroundingFailures(null)}
                     disabled={submitting}
+                    aria-busy={submitting}
                     className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-sec mt-1 disabled:opacity-50"
                   >
                     Back to fix the prices
@@ -776,6 +780,7 @@ export default function TradieEditor({
                     type="button"
                     onClick={() => handleSave(true)}
                     disabled={submitting}
+                    aria-busy={submitting}
                     className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-bold px-4 py-3 text-xs uppercase tracking-[0.14em] transition-colors disabled:opacity-50"
                   >
                     {submitting ? 'Sending…' : 'Send update · full quote SMS'}
@@ -784,6 +789,7 @@ export default function TradieEditor({
                     type="button"
                     onClick={() => handleSave(false)}
                     disabled={submitting}
+                    aria-busy={submitting}
                     className="w-full inline-flex items-center justify-center bg-transparent border border-ink-line hover:border-text-sec text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.14em] px-4 py-3 transition-colors disabled:opacity-50"
                   >
                     Save quietly · no SMS
@@ -792,6 +798,7 @@ export default function TradieEditor({
                     type="button"
                     onClick={() => setConfirmOpen(false)}
                     disabled={submitting}
+                    aria-busy={submitting}
                     className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-sec mt-1 disabled:opacity-50"
                   >
                     Back to edits

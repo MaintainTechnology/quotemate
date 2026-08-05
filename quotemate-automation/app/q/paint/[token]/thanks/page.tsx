@@ -11,10 +11,10 @@
 // webhook-race guard the booking page carries: a customer who beats the async
 // Stripe webhook must still land on a confirmation, not a redirect loop.
 //
-// Painting differs from roofing in what "pay" means: roofing charges a flat $99
-// site visit, painting charges a per-tier DEPOSIT, so the pay short-link needs
-// a tier (/r/paint/<token>/<tier>) and the amount shown comes from the recorded
-// Stripe charge, never a constant.
+// Painting now pays exactly what roofing pays (spec painting-site-visit-first):
+// the flat $99 refundable site visit — an unpaid visitor is sent to
+// /r/paint/<token>/inspection. The amount shown still comes from the recorded
+// Stripe charge, never a constant (legacy rows paid a per-tier deposit).
 //
 // Next 16: params AND searchParams are Promises (await them).
 
@@ -30,7 +30,11 @@ import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { thanksPageTarget, bookingRef } from '@/lib/quote/thanks'
 import { resolvePaidAmount, formatPaidAmount } from '@/lib/quote/paid-amount'
-import { VALID_PAINT_TIERS } from '@/lib/painting/pay-redirect'
+import {
+  PAINT_INSPECTION_TIER,
+  paintPayRedirectTier,
+  VALID_PAINT_TIERS,
+} from '@/lib/painting/pay-redirect'
 import { tzForState } from '@/lib/quote/availability'
 import { getStripe } from '@/lib/stripe/client'
 
@@ -57,14 +61,6 @@ const GHOST_LINK: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
   textDecoration: 'none',
-}
-
-/** Which tier the pay short-link charges when a visitor lands here unpaid.
- *  There is no flat fee to fall back on, and paid_tier is null by definition
- *  while unpaid — so honour an explicit ?tier= the short-link accepts, else the
- *  Better baseline the quote page features (app/q/paint/[token]/page.tsx). */
-function payTier(requested: string | null | undefined): string {
-  return requested && VALID_PAINT_TIERS.has(requested) ? requested : 'better'
 }
 
 export default async function PaintThanksPage(props: {
@@ -97,8 +93,11 @@ export default async function PaintThanksPage(props: {
       const session = await getStripe().checkout.sessions.retrieve(sp.session_id)
       if (session.payment_status === 'paid' && session.metadata?.painting_token === token) {
         const tier = session.metadata?.tier ?? null
-        // Deposit tier off the Session, validated — never a hardcoded tier.
-        const claimedTier = tier && VALID_PAINT_TIERS.has(tier) ? tier : null
+        // Tier off the Session, validated — never hardcoded. 'inspection' is
+        // the $99 site visit (the same value the webhook and book page record);
+        // G/B/B only ever arrives from a legacy deposit Session.
+        const claimedTier =
+          tier && (VALID_PAINT_TIERS.has(tier) || tier === PAINT_INSPECTION_TIER) ? tier : null
         await supabase
           .from('painting_measurements')
           .update({
@@ -124,7 +123,9 @@ export default async function PaintThanksPage(props: {
   const scheduledWindow = (row.scheduled_window as string | null) ?? null
 
   const target = thanksPageTarget({ paid: !!paidAt, scheduledAt })
-  if (target === 'pay') redirect(`/r/paint/${token}/${payTier(sp.tier)}`)
+  // Unpaid → the $99 site-visit mint, the only customer payment (the legacy
+  // ?tier= param no longer affects payment routing).
+  if (target === 'pay') redirect(`/r/paint/${token}/${paintPayRedirectTier()}`)
   if (target === 'book') redirect(`/q/paint/${token}/book`)
 
   const identity = await loadTenantIdentity(supabase, (row.tenant_id as string | null) ?? null)

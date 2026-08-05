@@ -42,27 +42,27 @@ const GATE_COPY: Record<TopologyPreviewGate, { label: string; detail: string; to
   feature_disabled: {
     label: 'Live analysis is locked',
     detail: 'The source-analysis flag is off. This screen is a synthetic UI preview only.',
-    tone: 'border-l-text-dim',
+    tone: 'border-ink-line',
   },
   source_setup_required: {
     label: 'Source storage requires setup',
     detail: 'Topology approval storage is not available yet. Apply migration 172 and record the source terms before a live run.',
-    tone: 'border-l-warning',
+    tone: 'border-warning-bright/40',
   },
   source_approval_required: {
     label: 'Written source approval required',
     detail: 'A Maps key or enabled API is not a topology approval. Record an active, derivative-geometry approval before a live run.',
-    tone: 'border-l-warning',
+    tone: 'border-warning-bright/40',
   },
   source_approval_expired: {
     label: 'Source approval has expired',
     detail: 'Renew or replace the source approval before generating any candidate evidence.',
-    tone: 'border-l-danger',
+    tone: 'border-danger-bright/40',
   },
   source_approval_recorded: {
     label: 'Source approval record found',
     detail: 'No source has been selected or called here. A future live action must validate a specific approval, retention terms, and the selected dwelling before it can run.',
-    tone: 'border-l-teal-glow',
+    tone: 'border-ink-line',
   },
 }
 
@@ -99,7 +99,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
     <section className="mt-10 border border-ink-line bg-ink-card p-6 sm:p-8" aria-labelledby="topology-evidence-title">
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-accent">
             Roof topology evidence · synthetic benchmark
           </div>
           <h2 id="topology-evidence-title" className="mt-2 font-extrabold uppercase tracking-[-0.03em] text-2xl text-text-pri sm:text-3xl">
@@ -107,18 +107,18 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-text-sec">{disclaimer}</p>
         </div>
-        <span className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+        <span className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
           Dashboard only
         </span>
       </div>
 
-      <div className={`mt-6 border border-ink-line border-l-4 bg-ink-deep px-5 py-4 ${gateCopy.tone}`} role="status">
-        <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.15em] text-text-pri">{gateCopy.label}</div>
+      <div className={`mt-6 border bg-ink-deep px-5 py-4 ${gateCopy.tone}`} role="status">
+        <div className="font-mono text-xs font-semibold uppercase tracking-[0.15em] text-text-pri">{gateCopy.label}</div>
         <p className="mt-1 text-sm leading-relaxed text-text-sec">{gateCopy.detail}</p>
       </div>
 
       <fieldset className="mt-8 border border-ink-line bg-ink-deep p-5" aria-describedby="dwelling-selection-help">
-        <legend className="px-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <legend className="px-2 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
           01 · Select main dwelling
         </legend>
         <p id="dwelling-selection-help" className="text-sm leading-relaxed text-text-sec">
@@ -150,7 +150,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                 />
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                    <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">
                       {structure.role === 'primary' ? 'Primary pricing structure' : 'Secondary structure'} · {String(structure.structureIndex).padStart(2, '0')}
                     </div>
                     <div className="mt-1 font-semibold text-text-pri">{structure.label}</div>
@@ -179,7 +179,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
 
       {!view && (
         <div className="mt-6 border border-dashed border-ink-line bg-ink-deep px-6 py-12 text-center">
-          <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Awaiting dwelling confirmation</div>
+          <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">Awaiting dwelling confirmation</div>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-text-sec">
             Choose and confirm the main dwelling to open the neutral synthetic benchmark. It will not use satellite imagery, property geometry, or call a provider.
           </p>
@@ -189,13 +189,13 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
       {view && (
         <>
           <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
-            <figure className="overflow-hidden border border-ink-line bg-[#0A1628]">
+            <figure className="overflow-hidden border border-ink-line bg-ink-deep">
               <TopologyEvidenceSvg
                 view={view}
                 activeCandidateId={activeCandidateId}
               />
               <figcaption className="border-t border-ink-line bg-ink-card px-5 py-4">
-                <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em] text-text-dim">
+                <div className="font-mono text-micro font-semibold uppercase tracking-[0.15em] text-text-dim">
                   Facet assignment evidence
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-text-sec">
@@ -205,7 +205,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
             </figure>
 
             <aside className="border border-ink-line bg-ink-deep p-5" aria-live="polite">
-              <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Selected evidence</div>
+              <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">Selected evidence</div>
               {activeCandidate ? <CandidateDetail candidate={activeCandidate} /> : (
                 <div className="mt-4 text-sm leading-relaxed text-text-sec">
                   <p>Select a synthetic candidate frame below to inspect its length, confidence, and evidence reasons.</p>
@@ -214,7 +214,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
               )}
               {view.excludedStructures.length > 0 && (
                 <div className="mt-6 border-t border-ink-line pt-5">
-                  <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Excluded from this preview</div>
+                  <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">Excluded from this preview</div>
                   <p className="mt-2 text-sm text-text-sec">{view.excludedStructures.join(', ')}</p>
                 </div>
               )}
@@ -233,7 +233,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   className={`border bg-ink-deep p-4 text-left transition-colors ${selected ? 'border-text-pri' : 'border-ink-line hover:border-text-dim'}`}
                   style={{ borderLeftColor: summary.color, borderLeftWidth: '4px' }}
                 >
-                  <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em]" style={{ color: summary.color }}>
+                  <div className="font-mono text-micro font-semibold uppercase tracking-[0.15em]" style={{ color: summary.color }}>
                     {summary.label}s
                   </div>
                   <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -243,14 +243,14 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   <p className="mt-2 text-xs text-text-sec">
                     Candidate only · {formatMetres(summary.planLengthM)} · review required
                   </p>
-                  {summary.kind === 'eave' && <p className="mt-2 text-[0.68rem] text-text-dim">Not a gutter quote</p>}
+                  {summary.kind === 'eave' && <p className="mt-2 text-micro text-text-dim">Not a gutter quote</p>}
                 </button>
               )
             })}
           </div>
 
           <div className="mt-5 border border-ink-line bg-ink-deep p-4" aria-label="Synthetic candidate evidence frames">
-            <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em] text-text-dim">Synthetic candidate frames</div>
+            <div className="font-mono text-micro font-semibold uppercase tracking-[0.15em] text-text-dim">Synthetic candidate frames</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {view.candidates.map((candidate) => {
                 const selected = activeCandidateId === candidate.id
@@ -268,7 +268,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-mono text-xs font-bold" style={{ color: candidate.color }}>{candidate.tag}</span>
-                      <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">Candidate</span>
+                      <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">Candidate</span>
                     </div>
                     <div className="mt-2 text-sm font-semibold text-text-pri">{candidate.kind} · {formatMetres(candidate.planLengthM)}</div>
                     <div className="mt-1 text-xs text-text-sec">{candidate.confidence}% confidence · review required</div>
@@ -280,14 +280,14 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
 
           <div className="mt-5 flex flex-wrap gap-2" aria-label="Topology candidate legend">
             {view.legend.map((item) => (
-              <span key={item.kind} className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-text-sec">
+              <span key={item.kind} className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-sec">
                 <span aria-hidden="true" className="mr-2 inline-block h-2.5 w-2.5" style={{ backgroundColor: item.color }} />
                 {item.tagPrefix} · {item.label} · review required
               </span>
             ))}
           </div>
 
-          <p className="mt-4 border-l-2 border-[#30D158] pl-3 text-xs leading-relaxed text-text-sec">{view.eaveNotice}</p>
+          <p className="mt-4 border-l-2 border-success-bright pl-3 text-xs leading-relaxed text-text-sec">{view.eaveNotice}</p>
         </>
       )}
     </section>
@@ -305,7 +305,7 @@ function CandidateDetail({ candidate }: { candidate: TopologyEvidenceDisplayCand
         <DetailMetric label="State" value="Candidate" />
       </div>
       <div className="mt-5">
-        <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Evidence reasons</div>
+        <div className="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">Evidence reasons</div>
         <ul className="mt-2 space-y-1.5 text-sm text-text-sec">
           {candidate.reasons.map((reason) => <li key={reason}>· {reason}</li>)}
         </ul>
@@ -317,7 +317,7 @@ function CandidateDetail({ candidate }: { candidate: TopologyEvidenceDisplayCand
 function DetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-ink-line bg-ink-card p-3">
-      <div className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">{label}</div>
+      <div className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">{label}</div>
       <div className="mt-1 font-mono text-sm font-semibold tabular-nums text-text-pri">{value}</div>
     </div>
   )
@@ -345,14 +345,18 @@ function TopologyEvidenceSvg({
       <defs>
         <clipPath id={`roof-clip-${clipId}`}><polygon points={roofPoints} /></clipPath>
       </defs>
-      <rect width="100" height="100" fill="#0A1628" />
+      <rect width="100" height="100" fill="var(--ink-deep)" />
       <g clipPath={`url(#roof-clip-${clipId})`}>
-        <rect x="6" y="8" width="25" height="84" fill="#0A84FF" opacity="0.28" />
-        <rect x="31" y="8" width="24" height="84" fill="#FF9F0A" opacity="0.24" />
-        <rect x="55" y="8" width="20" height="84" fill="#14B8A6" opacity="0.27" />
-        <rect x="75" y="8" width="20" height="84" fill="#BF5AF2" opacity="0.22" />
+        {/* Four synthetic roof bands — a categorical encoding, so they come
+            off the shared viz ramp. These were the iOS system palette
+            (#0A84FF, #FF9F0A, #14B8A6, #BF5AF2): four accents from another
+            product's design system on a one-accent warm canvas. */}
+        <rect x="6" y="8" width="25" height="84" fill="var(--viz-2)" opacity="0.28" />
+        <rect x="31" y="8" width="24" height="84" fill="var(--viz-5)" opacity="0.24" />
+        <rect x="55" y="8" width="20" height="84" fill="var(--viz-4)" opacity="0.27" />
+        <rect x="75" y="8" width="20" height="84" fill="var(--viz-7)" opacity="0.22" />
       </g>
-      <polygon points={roofPoints} fill="none" stroke="#B8C2D1" strokeWidth="0.75" strokeDasharray="2 1.5" />
+      <polygon points={roofPoints} fill="none" stroke="var(--text-sec)" strokeWidth="0.75" strokeDasharray="2 1.5" />
       <SyntheticFacetBadges />
       {view.candidates.map((candidate) => (
         <CandidateLine
@@ -361,7 +365,7 @@ function TopologyEvidenceSvg({
           active={candidate.id === activeCandidateId}
         />
       ))}
-      <text x="4" y="96" fill="#7A8699" fontSize="2.6" fontFamily="ui-monospace, monospace" letterSpacing="0.4">SYNTHETIC · NOT PROPERTY IMAGERY</text>
+      <text x="4" y="96" fill="var(--text-dim)" fontSize="2.6" fontFamily="ui-monospace, monospace" letterSpacing="0.4">SYNTHETIC · NOT PROPERTY IMAGERY</text>
     </svg>
   )
 }
@@ -377,7 +381,7 @@ function SyntheticFacetBadges() {
     <g aria-hidden="true">
       {badges.map(([x, y, label]) => (
         <g key={label} transform={`translate(${x} ${y})`}>
-          <rect x="-4.5" y="-3.5" width="9" height="7" rx="0.8" fill="#0A1628" stroke="#FFFFFF" strokeOpacity="0.8" strokeWidth="0.5" />
+          <rect x="-4.5" y="-3.5" width="9" height="7" rx="0.8" fill="var(--ink-deep)" stroke="#FFFFFF" strokeOpacity="0.8" strokeWidth="0.5" />
           <text textAnchor="middle" dominantBaseline="central" fill="#FFFFFF" fontSize="2.5" fontFamily="ui-monospace, monospace">{label}</text>
         </g>
       ))}
@@ -400,11 +404,11 @@ function CandidateLine({
 
   return (
     <g aria-hidden="true">
-      <polyline points={points} fill="none" stroke="#030712" strokeWidth={outlineWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points={points} fill="none" stroke="var(--ink-deep)" strokeWidth={outlineWidth} strokeLinecap="round" strokeLinejoin="round" />
       <polyline points={points} fill="none" stroke="#FFFFFF" strokeOpacity="0.9" strokeWidth={outlineWidth - 1.4} strokeLinecap="round" strokeLinejoin="round" />
       <polyline points={points} fill="none" stroke={candidate.color} strokeWidth={colorWidth} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={candidate.dashArray} />
       <g transform={`translate(${labelPoint[0]} ${labelPoint[1] - 3.2})`}>
-        <rect x="-10" y="-3" width="20" height="6" rx="0.8" fill="#0A1628" stroke={candidate.color} strokeWidth={active ? 0.85 : 0.55} />
+        <rect x="-10" y="-3" width="20" height="6" rx="0.8" fill="var(--ink-deep)" stroke={candidate.color} strokeWidth={active ? 0.85 : 0.55} />
         <text textAnchor="middle" dominantBaseline="central" fill="#FFFFFF" fontSize="2.05" fontFamily="ui-monospace, monospace">{label}</text>
       </g>
     </g>

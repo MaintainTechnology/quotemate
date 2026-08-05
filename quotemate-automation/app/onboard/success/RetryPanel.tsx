@@ -61,6 +61,7 @@ export function RetryPanel({ warning }: { warning: string | null }) {
         type="button"
         onClick={handleRetry}
         disabled={busy}
+        aria-busy={busy}
         className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
       >
         {busy ? 'Retrying provisioning…' : 'Retry provisioning'}

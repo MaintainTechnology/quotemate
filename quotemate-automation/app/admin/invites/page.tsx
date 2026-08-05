@@ -231,7 +231,7 @@ export default function AdminInvitesPage() {
               </Field>
             </div>
             <p className="mt-2.5 text-xs text-text-dim">Leave Custom code blank to auto-generate a unique code, or set your own memorable one (e.g. MATE2026) to print on flyers.</p>
-            <button type="button" onClick={generate} disabled={generating} className={`mt-5 ${PRIMARY}`}>
+            <button type="button" onClick={generate} disabled={generating} aria-busy={generating} className={`mt-5 ${PRIMARY}`}>
               {generating ? 'Generating…' : 'Generate code'} <span aria-hidden>→</span>
             </button>
             {justMade && (

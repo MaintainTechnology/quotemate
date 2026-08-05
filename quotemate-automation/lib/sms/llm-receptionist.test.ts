@@ -1039,6 +1039,22 @@ describe('paintingTurnViaLlm', () => {
   })
 
   it('AC6 price_painting hands the gathered slots to the deterministic estimator', async () => {
+    // The volunteered floor area ("about 180 sqm") lands via the
+    // manual_floor_area_m2 patch field; without it the machine would ask the
+    // optional floor_area question before pricing.
+    const { decide } = scripted({
+      tool: 'price_painting',
+      slots: { scopes: ['walls', 'ceilings'], coats: 2, condition: 'sound', ceiling_height: 'standard', storeys: 1, colour_change: false, manual_floor_area_m2: 180 },
+    })
+    const r = await paintingTurnViaLlm({
+      prev: { slots: { address: '12 Smith St', postcode: '2026', state: 'NSW', address_confirmed: true }, last_step: 'scopes' },
+      inbound: 'walls and ceilings, two coats, about 180 sqm', history: history('walls and ceilings, two coats, about 180 sqm'), facts: FACTS, decide,
+    })
+    expect(r.decision.action).toBe('estimate')
+    expect(r.decision.slots).toMatchObject({ scopes: ['walls', 'ceilings'], coats: 2, address: '12 Smith St', manual_floor_area_m2: 180 })
+  })
+
+  it('AC6b price_painting without the optional floor area asks the floor_area question first', async () => {
     const { decide } = scripted({
       tool: 'price_painting',
       slots: { scopes: ['walls', 'ceilings'], coats: 2, condition: 'sound', ceiling_height: 'standard', storeys: 1, colour_change: false },
@@ -1047,8 +1063,78 @@ describe('paintingTurnViaLlm', () => {
       prev: { slots: { address: '12 Smith St', postcode: '2026', state: 'NSW', address_confirmed: true }, last_step: 'scopes' },
       inbound: 'walls and ceilings, two coats', history: history('walls and ceilings, two coats'), facts: FACTS, decide,
     })
-    expect(r.decision.action).toBe('estimate')
-    expect(r.decision.slots).toMatchObject({ scopes: ['walls', 'ceilings'], coats: 2, address: '12 Smith St' })
+    expect(r.decision.action).toBe('ask')
+    expect(r.decision.action === 'ask' && r.decision.step).toBe('floor_area')
+  })
+
+  // The model cannot record the floor-area skip itself: applyPatch drops
+  // null patch values ("null = unchanged"), so without the code-side fold a
+  // "not sure" at the floor_area ask left the slot undefined and the
+  // question re-asked forever (R3 review finding, 2026-08-05).
+  const AT_FLOOR_AREA: PaintingConversationState = {
+    slots: {
+      address: '12 Smith St', postcode: '2026', state: 'NSW', address_confirmed: true,
+      scopes: ['walls'], coats: 2, condition: 'sound', ceiling_height: 'standard', storeys: 1,
+    },
+    last_step: 'floor_area',
+  }
+
+  it('"not sure" at floor_area records the skip (null) and advances to colour_change', async () => {
+    const { decide } = scripted({
+      tool: 'ask_for_detail',
+      reply_to_send: 'No worries. Are you changing the colour? Reply yes or no.',
+    })
+    const r = await paintingTurnViaLlm({
+      prev: AT_FLOOR_AREA, inbound: 'not sure', history: history('not sure'), facts: FACTS, decide,
+    })
+    expect(r.decision.action).toBe('ask')
+    expect(r.decision.action === 'ask' && r.decision.step).toBe('colour_change')
+    expect(r.decision.slots.manual_floor_area_m2).toBeNull()
+  })
+
+  it('a number at floor_area reaches the slots even when the model omits it from the patch', async () => {
+    const { decide } = scripted({
+      tool: 'ask_for_detail',
+      reply_to_send: 'Got it. Are you changing the colour? Reply yes or no.',
+    })
+    const r = await paintingTurnViaLlm({
+      prev: AT_FLOOR_AREA, inbound: 'about 180', history: history('about 180'), facts: FACTS, decide,
+    })
+    expect(r.decision.action).toBe('ask')
+    expect(r.decision.action === 'ask' && r.decision.step).toBe('colour_change')
+    expect(r.decision.slots.manual_floor_area_m2).toBe(180)
+  })
+
+  it('an address correction at floor_area re-confirms the address and does NOT fold its street number as the area', async () => {
+    // "actually it's 45 Smith Street" → verify_address. Folding here would
+    // read the street number (45) as a plausible floor area, persist it
+    // (no longer undefined ⇒ never re-asked), and silently override the
+    // footprint lookup at estimate time. The deterministic machine avoids
+    // this via its "address anywhere wins BEFORE the parse" ordering.
+    const { decide } = scripted({
+      tool: 'verify_address',
+      slots: { address: '45 Smith Street' },
+    })
+    const r = await paintingTurnViaLlm({
+      prev: AT_FLOOR_AREA, inbound: "actually it's 45 Smith Street", history: history("actually it's 45 Smith Street"), facts: FACTS, decide,
+    })
+    expect(r.decision.action).toBe('ask')
+    expect(r.decision.action === 'ask' && r.decision.step).toBe('confirm_address')
+    expect(r.decision.slots.address).toMatch(/45 Smith/)
+    expect(r.decision.slots.manual_floor_area_m2).toBeUndefined()
+  })
+
+  it('a QUESTION at floor_area stays parked — no fold on the conversational tools', async () => {
+    const { decide } = scripted({
+      tool: 'answer_business_question',
+      reply_to_send: 'The floor area just helps me price it. A rough guess is fine.',
+    })
+    const r = await paintingTurnViaLlm({
+      prev: AT_FLOOR_AREA, inbound: 'why do you need that?', history: history('why do you need that?'), facts: FACTS, decide,
+    })
+    expect(r.decision.action).toBe('ask')
+    expect(r.decision.action === 'ask' && r.decision.step).toBe('floor_area')
+    expect(r.decision.slots.manual_floor_area_m2).toBeUndefined()
   })
 
   it('AC7 painting falls open to the deterministic decision when the model throws', async () => {

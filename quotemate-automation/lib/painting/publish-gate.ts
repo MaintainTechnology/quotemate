@@ -2,14 +2,18 @@
 // Painting — the tradie-release gate (mirrors lib/solar/publish.ts).
 //
 // A painting quote requested over SMS / the self-serve form is DRAFTED and
-// held: the customer never sees the price or the deposit links until the
-// tradie reviews it and clicks "Send to customer" (which stamps released_at).
+// held: the customer never sees the price or a payable link until the tradie
+// reviews it and clicks "Send to customer" (which stamps released_at).
 // A dashboard-initiated save is tradie-authored already, so it is released
 // at save time and shows immediately.
 //
-// canShowPaintingPrices gates the /q/paint/[token] page; paintingDepositLocked
-// gates the /r/paint/[token]/[tier] deposit short-link; paintingRelease
+// canShowPaintingPrices gates the /q/paint/[token] page; paintingRelease
 // Eligibility makes the release idempotent (a second Send is a no-op).
+// ⚠ paintingDepositLocked is now UNUSED BY /r/paint — since spec
+// painting-site-visit-first the route's release gate is resolvePaintMintTier
+// (lib/painting/pay-redirect.ts), which admits the $99 site visit on a
+// released ∨ inspection-routed row and 302s a held one back to the quote
+// page. The helper is kept for its remaining callers/tests.
 //
 // PURE — no I/O. Fully unit-testable.
 // ════════════════════════════════════════════════════════════════════
@@ -20,15 +24,15 @@ export type PaintingPublishGateInput = {
 }
 
 export type PaintingPublishGateResult = {
-  /** Whether the customer page may render tier prices + the deposit CTA. */
+  /** Whether the customer page may render tier prices + the pay CTA. */
   showPrices: boolean
   /** Customer-facing reason when withheld; null when prices show. */
   reason: string | null
 }
 
 /**
- * PURE — may /q/paint/[token] reveal prices + unlock the deposit links? Only
- * once the tradie has released the quote. Until then the customer sees a
+ * PURE — may /q/paint/[token] reveal prices + the payable $99 site visit?
+ * Only once the tradie has released the quote. Until then the customer sees a
  * holding message, not a number.
  */
 export function canShowPaintingPrices(input: PaintingPublishGateInput): PaintingPublishGateResult {
@@ -43,9 +47,10 @@ export function canShowPaintingPrices(input: PaintingPublishGateInput): Painting
 }
 
 /**
- * PURE — is the deposit short-link locked? The /r/paint redirect must not
- * resolve to Stripe before the tradie releases the quote (else a customer
- * could pay against an unreviewed price).
+ * PURE — is a per-tier deposit short-link locked? No customer surface mints a
+ * tier deposit any more (spec painting-site-visit-first), so /r/paint no
+ * longer consults this; the invariant it encodes — nothing resolves to Stripe
+ * before the tradie releases — now lives in resolvePaintMintTier.
  */
 export function paintingDepositLocked(releasedAt: string | null | undefined): boolean {
   return !releasedAt

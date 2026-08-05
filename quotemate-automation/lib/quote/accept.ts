@@ -72,8 +72,10 @@ export type ResolveAcceptInput = {
   /** Site-visit fee copy. Defaults "$99". */
   siteVisitFee?: string
   /** Override the deposit short-link. Surfaces NOT backed by public.quotes
-   *  (e.g. residential painting → /r/paint/<token>/<tier>) pass their own
-   *  route here. Defaults to the generic /r/<token>/<tier>. */
+   *  pass their own route here; defaults to the generic /r/<token>/<tier>.
+   *  ⚠ Residential painting no longer passes one — it pins pricesVisible
+   *  false so every actionable row takes the $99 site-visit branch (spec
+   *  painting-site-visit-first). */
   depositHref?: string
   /** Override the $99 site-visit short-link. Roofing's dedicated surface
    *  (/r/roof/<token>/inspection) passes its own route. Defaults to the

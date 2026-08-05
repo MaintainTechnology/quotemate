@@ -726,6 +726,7 @@ export function SolarAddressForm({
         type="submit"
         data-testid="solar-submit"
         disabled={busy}
+        aria-busy={busy}
         className="group mt-1 inline-flex items-center justify-center gap-2.5 bg-accent px-5 py-4 font-mono text-sm font-bold uppercase tracking-[0.14em] text-ink-deep transition-colors hover:bg-accent-press active:bg-accent-press disabled:opacity-60"
       >
         {busy ? (

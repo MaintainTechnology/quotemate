@@ -129,6 +129,7 @@ export default function CatalogueAgentPage() {
           type="button"
           onClick={triggerRun}
           disabled={busyRun || !token}
+          aria-busy={busyRun}
           className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.16em] border border-accent bg-accent/10 px-4 py-2 text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busyRun ? 'Sweeping…' : 'Run a sweep now'}
@@ -214,6 +215,7 @@ export default function CatalogueAgentPage() {
                     type="button"
                     onClick={() => review(r.id, 'approved')}
                     disabled={busyRow === r.id}
+                    aria-busy={busyRow === r.id}
                     className="font-mono text-[0.6rem] font-bold uppercase tracking-[0.16em] border border-accent bg-accent/10 px-3 py-1.5 text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Approve
@@ -222,6 +224,7 @@ export default function CatalogueAgentPage() {
                     type="button"
                     onClick={() => review(r.id, 'rejected')}
                     disabled={busyRow === r.id}
+                    aria-busy={busyRow === r.id}
                     className="font-mono text-[0.6rem] font-bold uppercase tracking-[0.16em] border border-warning/40 px-3 py-1.5 text-warning transition-colors hover:bg-warning/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Reject

@@ -10,9 +10,11 @@
 // Gated twice: an unpaid visitor is sent to pay first, and an already-booked
 // visitor is sent to /thanks.
 //
-// Painting differs from roofing in what "pay" means: roofing charges a flat $99
-// site visit, painting charges a per-tier DEPOSIT, so the pay short-link needs
-// a tier (/r/paint/<token>/<tier>).
+// Painting now pays exactly what roofing pays (spec painting-site-visit-first
+// R3): the flat $99 refundable site visit, minted at
+// /r/paint/<token>/inspection — an unpaid visitor is sent there regardless of
+// any legacy ?tier= param (tier deposits are retired). That mint's
+// success_url lands here with a session_id, same as roofing's.
 //
 // Next 16: params AND searchParams are Promises (await them).
 
@@ -25,7 +27,11 @@ import { tradeIcon } from '@/app/q/_chrome/icons'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { loadTenantBookingOptions } from '@/lib/quote/trade-booking'
 import { bookingRef } from '@/lib/quote/thanks'
-import { VALID_PAINT_TIERS } from '@/lib/painting/pay-redirect'
+import {
+  PAINT_INSPECTION_TIER,
+  paintPayRedirectTier,
+  VALID_PAINT_TIERS,
+} from '@/lib/painting/pay-redirect'
 import { tzForState } from '@/lib/quote/availability'
 import { getStripe } from '@/lib/stripe/client'
 import { BookingCalendar, type CalendarDay } from '@/app/q/_chrome/BookingCalendar'
@@ -54,14 +60,6 @@ const GHOST_LINK: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
   textDecoration: 'none',
-}
-
-/** Which tier the pay short-link charges when a visitor lands here unpaid.
- *  There is no flat fee to fall back on, and paid_tier is null by definition
- *  while unpaid — so honour an explicit ?tier= the short-link accepts, else the
- *  Better baseline the quote page features (app/q/paint/[token]/page.tsx). */
-function payTier(requested: string | null | undefined): string {
-  return requested && VALID_PAINT_TIERS.has(requested) ? requested : 'better'
 }
 
 /** Short timezone note ("AEST") so the customer knows whose clock the times are
@@ -108,8 +106,12 @@ export default async function PaintBookingPage(props: {
           .from('painting_measurements')
           .update({
             paid_at: new Date().toISOString(),
-            // Deposit tier off the Session, validated — never a hardcoded tier.
-            paid_tier: tier && VALID_PAINT_TIERS.has(tier) ? tier : null,
+            // Tier off the Session, validated — never hardcoded. 'inspection'
+            // is the $99 site visit (the same value the webhook records).
+            paid_tier:
+              tier && (VALID_PAINT_TIERS.has(tier) || tier === PAINT_INSPECTION_TIER)
+                ? tier
+                : null,
             paid_stripe_session_id: session.id,
             // mig 181 — same stamp the webhook writes, so whichever wins the
             // race records the real charge for the thank-you page.
@@ -125,7 +127,12 @@ export default async function PaintBookingPage(props: {
   }
 
   // Not paid → send them to pay first (this page is the post-payment surface).
-  if (!paidAt) redirect(`/r/paint/${token}/${payTier(sp.tier)}`)
+  // Always the flat $99 site visit — painting's only customer payment; the
+  // legacy ?tier= param no longer affects payment routing (pure, unit-tested).
+  // A held row bounces off the mint's release gate back to the quote page.
+  if (!paidAt) {
+    redirect(`/r/paint/${token}/${paintPayRedirectTier()}`)
+  }
 
   const scheduledAt = (row.scheduled_at as string | null) ?? null
   // Already booked → the thank-you page owns the confirmation. This page's
@@ -164,7 +171,7 @@ export default async function PaintBookingPage(props: {
             on /q/paint/<token>/thanks, which the booking POST redirects to. */}
         <SheetSection eyebrow="Book your visit" eyebrowAccent>
           <p style={{ margin: '14px 0 0', maxWidth: 560, fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-            Deposit received. Choose a date, then a time that suits — your visit
+            Payment received. Choose a date, then a time that suits — your visit
             is locked in as soon as you confirm.
           </p>
           <div style={{ marginTop: 14 }}>

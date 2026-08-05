@@ -74,6 +74,7 @@ import {
   shouldEngagePainting,
   expireIdlePaintingState,
   isActivePaintingFlow,
+  paintingTurnIsDeterministic,
   type PaintingConversationState,
 } from '@/lib/sms/painting-receptionist'
 import {
@@ -1052,7 +1053,13 @@ async function handlePaintingTurn(args: {
   // Same conversation layer as the roofing handler: flag OFF ⇒ the
   // deterministic call this route has always made; flag ON ⇒ Sonnet 5 picks
   // the tool and any failure falls back to that same call for this turn.
-  const useLlm = !!args.tenantFacts && llmReceptionistEnabled(tenantId)
+  // Two turns pre-empt the model regardless of the flag (spec 2026-08-05):
+  // the opener (so the form-offer opener with BOTH paths always goes out)
+  // and an explicit "use the form" reply parked at offer_form.
+  const useLlm =
+    !paintingTurnIsDeterministic(prevState, latestInbound) &&
+    !!args.tenantFacts &&
+    llmReceptionistEnabled(tenantId)
   const turn = useLlm
     ? await paintingTurnViaLlm({
         prev: prevState,

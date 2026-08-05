@@ -61,6 +61,7 @@ import {
 } from './roofing-intake'
 import {
   nextPaintingStep,
+  parseFloorAreaM2,
   type PaintingSlots,
   type PaintingStep,
 } from './painting-intake'
@@ -406,6 +407,9 @@ const PaintingSlotPatch = z.object({
   ceiling_height: z.enum(['standard', 'high', 'extra_high', 'raked']).nullish(),
   storeys: z.union([z.literal(1), z.literal(2), z.literal(3)]).nullish(),
   colour_change: z.boolean().nullish(),
+  // A volunteered floor area ("it's about 180sqm") lands in the slots so the
+  // optional floor_area gather step is satisfied without being asked.
+  manual_floor_area_m2: z.number().min(1).max(2000).nullish(),
 })
 
 const baseDecision = {
@@ -1418,6 +1422,30 @@ function mapPaintingTool(
   const askStep = (): PaintingStep => {
     const q = nextPaintingStep(slots)
     return q.step === 'ready' || q.step === 'inspection' ? holdStep() : q.step
+  }
+
+  // Fold the floor-area answer when the model didn't. The model cannot
+  // record the asked-once skip: applyPatch drops null patch values ("null =
+  // unchanged"), so a "not sure" at the floor_area ask left the slot
+  // undefined and nextPaintingStep re-asked the question forever. Same
+  // "the model didn't set it, so code does" pattern as
+  // confirmAddressIfAffirmed / fillAddressParts, using the SAME parser as
+  // the deterministic machine so the two paths cannot drift. Scoped to the
+  // gather-advancing tools only: the deterministic machine bails to dialog
+  // on questions/topic switches BEFORE parsing, so a question or a trade
+  // switch at floor_area stays parked here too. verify_address is
+  // deliberately EXCLUDED — an address correction ("actually it's unit 3,
+  // 45 Smith Street") is not an answer to the floor-area question, and
+  // parseFloorAreaM2 on it would read the street number as a plausible m²
+  // that silently overrides the footprint lookup; the deterministic machine
+  // avoids the same contamination via its "address anywhere wins BEFORE the
+  // parse" ordering, and the question is simply re-asked after the confirm.
+  if (
+    prevStep === 'floor_area' &&
+    slots.manual_floor_area_m2 === undefined &&
+    (d.tool === 'ask_for_detail' || d.tool === 'price_painting')
+  ) {
+    slots = { ...slots, manual_floor_area_m2: parseFloorAreaM2(inbound) }
   }
 
   switch (d.tool) {

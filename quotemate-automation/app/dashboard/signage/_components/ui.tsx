@@ -67,7 +67,7 @@ export function SignageNav({ active, brandSlug }: { active: SignageSection; bran
               key={item.key}
               href={withBrand(item.href, brandSlug)}
               aria-current={current ? 'page' : undefined}
-              className={`whitespace-nowrap border-b-2 px-4 py-3 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] transition-colors ${
+              className={`whitespace-nowrap border-b-2 px-4 py-3 font-mono text-xs font-semibold uppercase tracking-[0.16em] transition-colors ${
                 current
                   ? 'border-accent text-text-pri'
                   : 'border-transparent text-text-dim hover:border-ink-line hover:text-text-sec'
@@ -84,7 +84,7 @@ export function SignageNav({ active, brandSlug }: { active: SignageSection; bran
 
 export function Crumbs({ trail }: { trail: Array<{ label: string; href?: string }> }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-3 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-text-dim">
       {trail.map((c, i) => (
         <span key={c.label} className="flex items-center gap-3">
           {i > 0 && <span className="text-ink-line" aria-hidden="true">/</span>}
@@ -104,7 +104,7 @@ export function Crumbs({ trail }: { trail: Array<{ label: string; href?: string 
 export function SectionHeading({ eyebrow, title, hint }: { eyebrow: string; title: string; hint?: string }) {
   return (
     <div>
-      <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</div>
+      <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</div>
       <h2 className="mt-3 font-extrabold uppercase leading-[1.1] tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)]">{title}</h2>
       {hint && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">{hint}</p>}
     </div>
@@ -112,7 +112,7 @@ export function SectionHeading({ eyebrow, title, hint }: { eyebrow: string; titl
 }
 
 export function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
-  const cls = 'mb-2 block font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim'
+  const cls = 'mb-2 block font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim'
   if (htmlFor) {
     return <label htmlFor={htmlFor} className={cls}>{children}</label>
   }
@@ -132,10 +132,10 @@ export const BTN_GHOST =
   'inline-flex items-center justify-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50'
 
 export const BTN_GHOST_SM =
-  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50'
+  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50'
 
 export const BTN_DANGER_SM =
-  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors hover:border-warning-bright hover:text-warning-bright disabled:cursor-not-allowed disabled:opacity-50'
+  'inline-flex items-center justify-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors hover:border-warning-bright hover:text-warning-bright disabled:cursor-not-allowed disabled:opacity-50'
 
 /* ── Status language — one vocabulary across every signage surface ──── */
 
@@ -180,11 +180,21 @@ export function StateGlyph({ state }: { state: 'compliant' | 'fix' | 'review' })
   return <span className="text-accent" role="img" aria-label="Needs review">◑</span>
 }
 
-/** Left severity rail for verdict cards. */
-export function railFor(state: 'compliant' | 'fix' | 'review'): string {
-  if (state === 'fix') return 'border-l-2 border-l-warning-bright'
-  if (state === 'review') return 'border-l-2 border-l-accent'
-  return 'border-l-2 border-l-teal-glow/50'
+/** Severity tint for a verdict card's hairline.
+ *
+ * Was `railFor`, which returned a `border-l-2` coloured rail — the side-tab
+ * anti-pattern the design system rejects (depth comes from the hairline and
+ * the lit edge, never a thick coloured edge). Renamed because it no longer
+ * returns a rail; a helper still called `railFor` would mislead the next
+ * reader into re-adding one.
+ *
+ * Returns a border COLOUR only. Callers supply the `border` width and must
+ * NOT also declare `border-ink-line`, or the two colour utilities tie on
+ * specificity and the winner falls out of CSS source order. */
+export function severityBorder(state: 'compliant' | 'fix' | 'review'): string {
+  if (state === 'fix') return 'border-warning-bright/40'
+  if (state === 'review') return 'border-accent/40'
+  return 'border-ink-line'
 }
 
 /* ── Data display ───────────────────────────────────────────────────── */
@@ -192,7 +202,7 @@ export function railFor(state: 'compliant' | 'fix' | 'review'): string {
 export function Stat({ label, value, tone, style }: { label: string; value: number; tone?: Tone; style?: React.CSSProperties }) {
   return (
     <div className={`rounded-card border border-ink-line bg-ink-card p-5 ${REVEAL}`} style={style}>
-      <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
+      <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className={`mt-2 font-mono text-3xl font-bold tabular-nums ${tone ? TONE_TEXT[tone] : 'text-text-pri'}`}>{value}</div>
     </div>
   )
@@ -202,7 +212,7 @@ export function Tally({ label, value, tone }: { label: string; value: number; to
   return (
     <div className="rounded-card border border-ink-line bg-ink-card p-4 text-center">
       <div className={`font-mono text-3xl font-bold tabular-nums ${TONE_TEXT[tone]}`}>{value}</div>
-      <div className="mt-1 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-text-dim">{label}</div>
+      <div className="mt-1 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">{label}</div>
     </div>
   )
 }
@@ -247,7 +257,7 @@ export function ComplianceBar({
       {legend && (
         <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5" aria-hidden="true">
           {visible.map((s) => (
-            <span key={s.key} className="inline-flex items-center gap-2 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+            <span key={s.key} className="inline-flex items-center gap-2 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-dim">
               <span className={`h-2 w-2 ${s.cls}`} />
               {s.label} <span className="tabular-nums text-text-sec">{s.count}</span>
             </span>
@@ -276,7 +286,7 @@ export function FleetSnapshot({
         <Stat label="Awaiting" value={rollup.awaiting} style={delay(250)} />
       </div>
       <div className={`rounded-card mt-5 border border-ink-line bg-ink-card p-5 ${REVEAL}`} style={delay(300)}>
-        <div className="mb-3 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Fleet health</div>
+        <div className="mb-3 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">Fleet health</div>
         <ComplianceBar pass={rollup.pass} fix={rollup.fix_needed} review={rollup.needs_review} awaiting={rollup.awaiting} />
       </div>
     </div>
@@ -288,7 +298,7 @@ export function NumberedEyebrow({ n, children }: { n: string; children: React.Re
   return (
     <div className="flex items-center gap-3">
       <span className="font-mono text-4xl font-bold leading-none text-accent">{n}</span>
-      <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-text-dim">{children}</span>
+      <span className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-text-dim">{children}</span>
     </div>
   )
 }
@@ -298,7 +308,7 @@ export function NumberedEyebrow({ n, children }: { n: string; children: React.Re
 export function EmptyState({ title, body, children }: { title: string; body: string; children?: React.ReactNode }) {
   return (
     <div className="rounded-card border border-dashed border-ink-line bg-ink-card/50 px-7 py-10 text-center">
-      <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-text-dim">{title}</div>
+      <div className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-text-dim">{title}</div>
       <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-text-sec">{body}</p>
       {children && <div className="mt-5 flex justify-center">{children}</div>}
     </div>
@@ -306,9 +316,9 @@ export function EmptyState({ title, body, children }: { title: string; body: str
 }
 
 export function Notice({ tone, children }: { tone: Tone; children: React.ReactNode }) {
-  const rail = tone === 'good' ? 'border-l-teal-glow' : tone === 'warn' ? 'border-l-warning-bright' : tone === 'accent' ? 'border-l-accent' : 'border-l-ink-line'
+  const rail = tone === 'warn' ? 'border-warning-bright/40' : 'edge-lit border-ink-line'
   return (
-    <div className={`rounded-card border border-ink-line border-l-4 ${rail} bg-ink-card p-6`}>
+    <div className={`rounded-card border ${rail} bg-ink-card p-6`}>
       <div className="text-sm leading-relaxed text-text-sec">{children}</div>
     </div>
   )
@@ -344,7 +354,7 @@ export function Lightbox({ src, alt, onClose }: { src: string; alt?: string; onC
       className={`fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm ${REVEAL_SOFT}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt ?? 'Preview'} className="max-h-[88vh] max-w-[92vw] border border-ink-line object-contain" />
+      <img src={src} alt={alt ?? 'Preview'} className="qm-panel max-h-[88vh] max-w-[92vw] border border-ink-line object-contain" />
       <button
         ref={closeRef}
         type="button"

@@ -324,6 +324,7 @@ function Controls({
         type="button"
         onClick={onRefresh}
         disabled={refreshing}
+        aria-busy={refreshing}
         className="border border-ink-line px-3 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.12em] text-text-dim transition-colors hover:text-accent disabled:opacity-50"
       >
         {refreshing ? 'Refreshing…' : 'Refresh'}

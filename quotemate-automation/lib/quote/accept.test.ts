@@ -91,4 +91,21 @@ describe('resolveAcceptView', () => {
     expect(v.mode).toBe('inspection')
     expect(v.payHref).toBe('/r/roof/tok_abc123/inspection')
   })
+
+  it("painting's RELEASED-unpaid call shape resolves to the $99 visit, never a deposit", () => {
+    // The paint quote page pins pricesVisible false even on a released quote
+    // with a visible price: the tiers are pricing information and the ONE
+    // payment is the site visit (spec painting-site-visit-first R1).
+    const v = resolveAcceptView({
+      ...base,
+      pricesVisible: false,
+      priceLabel: '$3,970 inc GST',
+      inspectionHref: '/r/paint/tok_abc123/inspection',
+    })
+    expect(v.mode).toBe('inspection')
+    expect(v.payHref).toBe('/r/paint/tok_abc123/inspection')
+    expect(v.acceptTier).toBe('inspection')
+    expect(v.ctaLabel).toBe('Accept & book $99 site visit')
+    expect(v.confirmations.some((c) => /deposit/i.test(c))).toBe(false)
+  })
 })

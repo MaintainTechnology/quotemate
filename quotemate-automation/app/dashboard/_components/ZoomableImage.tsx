@@ -48,10 +48,10 @@ export function ZoomableImage({ src, alt, className, caption }: Props) {
           aria-modal="true"
           aria-label={alt}
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-[120] flex cursor-zoom-out flex-col items-center justify-center gap-3 bg-black/85 p-4 sm:p-8"
+          className="qm-overlay fixed inset-0 z-[120] flex cursor-zoom-out flex-col items-center justify-center gap-3 bg-black/85 p-4 sm:p-8"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={alt} className="max-h-[88vh] max-w-full object-contain shadow-2xl" />
+          <img src={src} alt={alt} className="qm-panel max-h-[88vh] max-w-full object-contain shadow-2xl" />
           {caption && <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/70">{caption}</p>}
           <button
             type="button"

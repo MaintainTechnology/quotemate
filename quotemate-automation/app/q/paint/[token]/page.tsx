@@ -7,10 +7,24 @@
 // area, and the three price tiers as inc-GST RANGES (the estimate is a band,
 // not a point).
 //
-// Deposit (R12): per-tier Stripe deposit links (migration 156) drive the tier
-// CTAs via the /r/paint short-link; tiers without a stored Checkout session
-// show a "Contact us to book" state. A paid quote shows a confirmed state.
+// TWO layouts (spec painting-funnel-parity R1): once there is something to
+// act on — prices released, the $99 site visit paid, or an inspection-routed job with
+// its payable $99 site visit — the customer sees the same five-numbered-
+// section format as roofing (/q/roof/[token]) and electrical/plumbing
+// (/q/[token]): Overview → Job details → Your tradie → Your price → Book. A
+// HELD-for-review quote keeps the long-scroll view with the publish-gate
+// holding message, and ?full=1 forces the long-scroll layout in any state
+// (roofing's escape hatch). Decision: lib/painting/quote-view.ts (pure).
+//
+// Payment (spec painting-site-visit-first, owner decision 2026-08-05): the
+// ONLY customer payment is the flat $99 refundable site visit
+// (/r/paint/<token>/inspection), framed as a site visit and booked after
+// paying — exactly roofing's model. Tier prices remain visible as pricing
+// information (the final price is confirmed on site), but no surface on this
+// page links the retired 30% per-tier deposit mints. A paid quote shows a
+// confirmed state.
 
+import type { CSSProperties, ReactNode } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import type { PaintingEstimate, PaintScope, PaintingPriceTier } from '@/lib/painting/types'
 import { composePaintLocation } from '@/lib/painting/paint-after'
@@ -22,20 +36,29 @@ import {
 } from '@/lib/painting/streetview'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
-import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { paintQuoteViewMode } from '@/lib/painting/quote-view'
+import {
+  loadTenantIdentity,
+  contactDisplayName,
+  safeWebsiteUrl,
+  trustVideoTrack,
+} from '@/lib/quote/tenant-identity'
+import { tradieProfile } from '@/lib/quote/tradie-profile'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
 import { RepaintPreviewFigure } from '../../_chrome/RepaintPreviewFigure'
 import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
 import { formatVisitSlot } from '@/lib/quote/trade-booking'
+import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { tzForState } from '@/lib/quote/availability'
+import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
 import { tradeIcon } from '../../_chrome/icons'
 import { NoSlotsNotice } from '../../_chrome/NoSlotsNotice'
 import {
   QuoteSheet, Letterhead, QuoteHero, StatGrid, Scope,
-  SheetSection, TierCards, CredentialFooter,
-  type QuoteTier, type Stat, type FooterRow,
+  SheetSection, TierCards, CredentialFooter, TrustVideo, TradiePhoto, AddToCalendar,
+  type QuoteTier, type Stat, type FooterRow, type ScopeItem,
 } from '../../_chrome/parts'
 
 export const dynamic = 'force-dynamic'
@@ -81,8 +104,9 @@ export default async function PaintingQuotePage(props: {
   params: Promise<{ token: string }>
   /** ?slots=0 — set by /r/paint when it REFUSED to charge because the painter
    *  has published no bookable windows. Renders NoSlotsNotice so the refusal
-   *  isn't silent. */
-  searchParams: Promise<{ slots?: string }>
+   *  isn't silent. ?full=1 — force the long-scroll layout (roofing's escape
+   *  hatch, spec painting-funnel-parity R1). */
+  searchParams: Promise<{ slots?: string; full?: string }>
 }) {
   const { token } = await props.params
   const sp = await props.searchParams
@@ -166,13 +190,12 @@ export default async function PaintingQuotePage(props: {
   })
   const visibleTiers = tiers.filter((t) => visibleTierKeys.includes(t.tier))
 
-  // Per-tier Stripe deposit links (migration 156). Read in a SEPARATE,
+  // Payment/release state (migrations 156/167). Read in a SEPARATE,
   // best-effort query so this LIVE page never breaks if the code deploys
-  // before the migration applies (the columns simply aren't selected then →
-  // payErr set → the placeholder shows). Each tier with a stored Checkout
-  // session gets a "Pay deposit" button via the /r/paint short-link; a paid
-  // quote shows a confirmed state instead of re-charging.
-  let stripeLinks: Record<string, string> = {}
+  // before a migration applies (the columns simply aren't selected then →
+  // payErr set → the safe defaults hold). A paid quote shows a confirmed
+  // state instead of re-charging; the only payable link this page renders is
+  // the $99 site-visit mint (spec painting-site-visit-first R1).
   let paid = false
   let paidTier: string | null = null
   let paintScheduledAt: string | null = null
@@ -183,11 +206,10 @@ export default async function PaintingQuotePage(props: {
   let released = true
   const { data: payRow, error: payErr } = await supabase
     .from('painting_measurements')
-    .select('stripe_links, paid_at, paid_tier, released_at, scheduled_at, scheduled_window')
+    .select('paid_at, paid_tier, released_at, scheduled_at, scheduled_window')
     .eq('public_token', token)
     .maybeSingle()
   if (!payErr && payRow) {
-    stripeLinks = (payRow.stripe_links as Record<string, string> | null) ?? {}
     paid = !!(payRow.paid_at as string | null)
     paidTier = (payRow.paid_tier as string | null) ?? null
     paintScheduledAt = (payRow.scheduled_at as string | null) ?? null
@@ -224,7 +246,7 @@ export default async function PaintingQuotePage(props: {
   }
 
   // ─── Scope of works — surfaces measured + About-your-home facts ───────
-  const scopeItems: import('../../_chrome/parts').ScopeItem[] = []
+  const scopeItems: ScopeItem[] = []
   const surfaces = Array.isArray(measurement?.surfaces) ? measurement.surfaces : []
   if (scopes.length > 0 || surfaces.length > 0) {
     scopeItems.push({
@@ -257,48 +279,49 @@ export default async function PaintingQuotePage(props: {
     scopeItems.push({ title: 'About your home', list: homeList })
   }
 
-  // ─── Tier cards — mirror the original per-tier CTA gating exactly ─────
+  // ─── Tier cards — pricing INFORMATION only (spec painting-site-visit-first
+  //     R1): the one payment is the $99 site visit, carried by the sticky bar
+  //     and the accept block, so no card links a mint. On a legacy row whose
+  //     tier deposit was paid, the paid tier keeps its ✓. ───
   const quoteTiers: QuoteTier[] = visibleTiers.map((tier) => {
     const paidThis = paid && paidTier === tier.tier
-    let ctaLabel: string
-    let ctaHref: string | null
-    if (paid) {
-      ctaLabel = paidThis ? 'Deposit paid ✓' : 'Deposit paid'
-      ctaHref = null
-    } else if (stripeLinks[tier.tier]) {
-      ctaLabel = 'Pay deposit'
-      ctaHref = `/r/paint/${token}/${tier.tier}`
-    } else {
-      ctaLabel = 'Contact us to book'
-      ctaHref = null
-    }
     return {
       name: tier.label,
       blurb: tier.scope,
       priceText: aud(tier.inc_gst),
       priceNote: `inc GST · ${aud(tier.inc_gst_low)}–${aud(tier.inc_gst_high)}`,
-      ctaLabel,
-      ctaHref,
+      ctaLabel: paid
+        ? paidThis
+          ? 'Deposit paid ✓'
+          : 'Payment received'
+        : 'Final price confirmed on site',
+      ctaHref: null,
     }
   })
 
-  // ─── Sticky bar — the featured (Better if visible, else first) tier ───
+  // ─── Sticky bar — pins the $99 site visit for every unpaid actionable row
+  //     (released or inspection-routed); a HELD row pins nothing. ───
   const featured =
     visibleTiers.find((t) => t.tier === 'better') ?? visibleTiers[0] ?? null
   let stickyBar: StickyBar | null = null
   if (paid) {
     stickyBar = {
       paid: true,
-      paidSub: paidTier
-        ? `${titleCase(paidTier)} option — your painter will be in touch`
-        : 'Your painter will be in touch',
+      // paid_tier 'inspection' = the $99 site visit; a named tier only ever
+      // comes from a legacy per-tier deposit payment.
+      paidSub:
+        paidTier === 'inspection'
+          ? 'Site visit paid — your painter will be in touch'
+          : paidTier
+            ? `${titleCase(paidTier)} option — your painter will be in touch`
+            : 'Your painter will be in touch',
     }
-  } else if (showTiers && featured) {
+  } else if (showTiers || inspection) {
     stickyBar = {
-      tierLabel: `${featured.label} option`,
-      priceText: aud(featured.inc_gst),
-      ctaLabel: stripeLinks[featured.tier] ? 'Pay deposit' : 'Contact us to book',
-      ctaHref: stripeLinks[featured.tier] ? `/r/paint/${token}/${featured.tier}` : null,
+      tierLabel: `$${INSPECTION_FEE_AUD} site visit · refundable`,
+      priceText: `$${INSPECTION_FEE_AUD}`,
+      ctaLabel: `Pay $${INSPECTION_FEE_AUD}`,
+      ctaHref: `/r/paint/${token}/inspection`,
     }
   }
 
@@ -328,24 +351,29 @@ export default async function PaintingQuotePage(props: {
   const heroLine1 = addrSegs.length >= 2 ? `${addrSegs.slice(0, -1).join(', ')},` : cleanAddr
   const heroLine2 = addrSegs.length >= 2 ? addrSegs[addrSegs.length - 1] : undefined
 
-  // Explicit "Accept & confirm" block (Gap #1/#3). Residential painting already
-  // has a working per-tier deposit via /r/paint/<token>/<tier> (mints fresh),
-  // so the accept block confirms the featured tier and routes there. Rendered
-  // only in the priced/released (deposit) state or once paid — a held/on-site
-  // paint quote keeps its existing note (no $99 checkout exists for painting).
+  // Explicit "Accept & confirm" block (Gap #1/#3). Painting's only customer
+  // payment is the flat $99 refundable site visit (spec
+  // painting-site-visit-first R1), so EVERY unpaid actionable quote —
+  // released-priced or inspection-routed — resolves to resolveAcceptView's
+  // inspection mode ("Accept & book $99 site visit", credited toward the
+  // final quote) at /r/paint/<token>/inspection. pricesVisible is pinned
+  // false to make the deposit branch unreachable: the tier prices above are
+  // information, not a payable offer. Both layouts render the block for
+  // released-unpaid, inspection-routed-unpaid and paid rows; a HELD quote
+  // still shows no accept CTA at all.
   const paintAcceptView = resolveAcceptView({
     token,
     tier: (featured?.tier ?? 'better') as 'good' | 'better' | 'best',
     isPaid: paid,
-    pricesVisible: showTiers,
+    pricesVisible: false,
     priceExpired: false,
     priceLabel: featured ? `${aud(featured.inc_gst)} inc GST` : null,
-    depositHref: featured ? `/r/paint/${token}/${featured.tier}` : undefined,
+    inspectionHref: `/r/paint/${token}/inspection`,
   })
-  const showPaintAccept = (showTiers && !!featured) || paid
+  const showPaintAccept = showTiers || inspection || paid
 
   const heroStatus: { label: string; tone: 'await' | 'booked' } = paid
-    ? { label: 'Deposit paid', tone: 'booked' }
+    ? { label: 'Payment received', tone: 'booked' }
     : inspection
       ? { label: 'On-site measure', tone: 'await' }
       : { label: 'Awaiting you', tone: 'await' }
@@ -377,6 +405,77 @@ export default async function PaintingQuotePage(props: {
     }
   }
   const afterImageReady = (row.preview_status as string | null) === 'ready'
+
+  // ── Property imagery via the token-gated /api/painting/q/[token] proxies
+  //    (spec quote-visual-parity R3; mirrors /p/[token]). Top row: the real
+  //    photos (Street View frontage + aerial). Below: the before/after repaint
+  //    block with the colour picker. Extracted as an inner fragment so BOTH
+  //    layouts render the identical block — the long-scroll "Your property"
+  //    section and the five-section "Job details" body (R1). ──
+  const imageryInner: ReactNode = hasPano ? (
+    <>
+      <div
+        style={{
+          display: 'grid',
+          gap: 14,
+          marginTop: 12,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        }}
+      >
+        <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
+          {/* The source photo is 4:3 — an aspect-ratio box shows the
+              whole property instead of a fixed-height crop. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/painting/q/${row.public_token}/street-view`}
+            alt={`Street View of the front of ${row.address ?? 'the property'}`}
+            style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
+          />
+          <figcaption
+            style={{
+              borderTop: '1px solid var(--ink-line)',
+              padding: '10px 14px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              color: 'var(--text-dim)',
+            }}
+          >
+            Front of the property · Google Street View
+          </figcaption>
+        </figure>
+        <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/painting/q/${row.public_token}/static-map`}
+            alt={`Aerial view of ${row.address ?? 'the property'}`}
+            style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
+          />
+          <figcaption
+            style={{
+              borderTop: '1px solid var(--ink-line)',
+              padding: '10px 14px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              color: 'var(--text-dim)',
+            }}
+          >
+            Aerial view · Google Maps
+          </figcaption>
+        </figure>
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <RepaintPreviewFigure
+          publicToken={row.public_token}
+          address={row.address}
+          initialReady={afterImageReady}
+        />
+      </div>
+    </>
+  ) : null
   // Customer-safe take-off (quantities + time on site, no internal costs),
   // limited to the tiers this quote actually shows.
   const customerTiers = customerTakeoff(estimate.takeoff).filter((c) =>
@@ -392,14 +491,508 @@ export default async function PaintingQuotePage(props: {
     !estimate.price?.manual_override && bd0 && (bd0.surfaces?.length ?? 0) > 0 ? bd0 : null
   const measuredNotes = customerMeasurementNotes(measurement?.notes)
 
+  // ── "How your price was built" inner content — customer-safe derivation.
+  //    Each row is the already-computed ex-GST cost of a measured surface
+  //    (rates, coats, prep and colour allowance are baked into that cost), so
+  //    the surface costs sum EXACTLY to the subtotal — no separate multiplier
+  //    step (that would double-count). Tier-relation rows are shown only when
+  //    the call-out floor did not override them. Same content as the PDF table
+  //    (lib/painting/report-html.ts). Extracted as an inner fragment so both
+  //    layouts (long-scroll section / five-section "Your price" body) render
+  //    the identical block. ──
+  const priceBuildInner: ReactNode = breakdown ? (() => {
+    const tierLabel = (k: 'good' | 'better' | 'best') =>
+      tiers.find((t) => t.tier === k)?.label
+    const betterLabel = tierLabel('better') ?? 'Better'
+    // Small-job floor overrides the surface-derived tier prices, so the
+    // "= Better × N%" rows would no longer reconcile — suppress them.
+    const floorApplied = !!estimate.price?.call_out_minimum_applied
+    const rows: Array<{ k: string; v: string; strong?: boolean }> = []
+    for (const s of breakdown.surfaces) {
+      const unit = s.unit === 'lm' ? 'lm' : 'm²'
+      rows.push({
+        k: `${SCOPE_LABEL[s.scope] ?? titleCase(String(s.scope))} · ${Math.round(s.quantity)} ${unit}`,
+        v: aud(s.line_ex_gst),
+      })
+    }
+    if (Number.isFinite(breakdown.better_ex_gst)) {
+      rows.push({ k: 'Subtotal (ex GST)', v: aud(breakdown.better_ex_gst), strong: true })
+    }
+    if (!floorApplied && visibleTierKeys.includes('good') && tierLabel('good') && Number.isFinite(breakdown.good_refresh_fraction)) {
+      rows.push({
+        k: `${tierLabel('good')} = ${betterLabel} ×`,
+        v: `${Math.round(breakdown.good_refresh_fraction * 100)}%`,
+      })
+    }
+    if (!floorApplied && visibleTierKeys.includes('best') && tierLabel('best') && Number.isFinite(breakdown.premium_uplift_pct)) {
+      rows.push({
+        k: `${tierLabel('best')} = ${betterLabel} ×`,
+        v: `${Math.round((1 + breakdown.premium_uplift_pct) * 100)}%`,
+      })
+    }
+    if (Number.isFinite(breakdown.gst_factor) && breakdown.gst_factor > 1) {
+      rows.push({ k: 'GST', v: `+ ${Math.round((breakdown.gst_factor - 1) * 100)}%` })
+    }
+    if (floorApplied && Number.isFinite(breakdown.call_out_minimum_ex_gst) && breakdown.call_out_minimum_ex_gst > 0) {
+      rows.push({ k: 'Call-out minimum applied', v: aud(breakdown.call_out_minimum_ex_gst) })
+    }
+    const loadings = estimate.price?.loadings_applied ?? []
+    return (
+      <>
+        <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+          Your {betterLabel} price is the sum of each measured surface below. Each cost
+          already includes the coats, surface preparation and prep consumables (filler,
+          caulk, tape and drop sheets); headline prices above include GST.
+        </p>
+        <div style={{ marginTop: 14, border: '1px solid var(--ink-line)', background: 'var(--ink-card)', padding: '6px 16px' }}>
+          {rows.map((r, i) => (
+            <div
+              key={`${r.k}-${i}`}
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '9px 0',
+                borderTop: i === 0 ? 'none' : '1px solid var(--ink-line)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12.5,
+                color: r.strong ? 'var(--text-pri)' : 'var(--text-sec)',
+                fontWeight: r.strong ? 600 : 400,
+              }}
+            >
+              <span>{r.k}</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums', color: r.strong ? 'var(--accent)' : 'var(--text-pri)' }}>
+                {r.v}
+              </span>
+            </div>
+          ))}
+        </div>
+        {loadings.length > 0 ? (
+          <div style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-sec)' }}>
+            {loadings.map((l) => (
+              <div key={l.code}>+ {l.detail}</div>
+            ))}
+          </div>
+        ) : null}
+      </>
+    )
+  })() : null
+
+  // "How we measured" list — provenance bullets shared by both layouts.
+  const measuredNotesList: ReactNode = measuredNotes.length > 0 ? (
+    <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6, color: 'var(--text-sec)' }}>
+      {measuredNotes.map((n) => (
+        <li key={n}>{n}</li>
+      ))}
+      <li>A painter confirms all measurements on site before works commence.</li>
+    </ul>
+  ) : null
+
+  // ── "Materials & time on site" inner content — the CUSTOMER-safe take-off
+  //    view: paint quantities and duration per option. Internal costs, rates
+  //    and margin never render on customer surfaces. Shared by both layouts. ──
+  const materialsInner: ReactNode = customerTiers.length > 0 ? (
+    <>
+      <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+        What each option uses on your property — litres round up to whole retail packs, and
+        time on site is an estimate at standard working days, confirmed before works commence.
+      </p>
+      <div
+        style={{
+          display: 'grid',
+          gap: 12,
+          marginTop: 14,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        }}
+      >
+        {customerTiers.map((c) => {
+          const tierLabel = visibleTiers.find((t) => t.tier === c.tier)?.label ?? c.tier
+          return (
+            <div
+              key={c.tier}
+              style={{ border: '1px solid var(--ink-line)', background: 'var(--ink-card)', padding: '14px 16px' }}
+            >
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.14em',
+                  color: 'var(--accent)',
+                }}
+              >
+                {tierLabel}
+              </div>
+              <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none' }}>
+                {c.materials.map((m) => (
+                  <li
+                    key={m}
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                      color: 'var(--text-sec)',
+                    }}
+                  >
+                    {m}
+                  </li>
+                ))}
+              </ul>
+              <div
+                style={{
+                  marginTop: 10,
+                  paddingTop: 10,
+                  borderTop: '1px solid var(--ink-line)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  color: 'var(--text-pri)',
+                }}
+              >
+                {c.time_on_site}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  ) : null
+
   const heroGreeting = inspection
     ? (estimate.price?.routing?.reason ??
-        "This job needs a quick on-site measure before we can lock a price. We'll be in touch to book a time.")
+        'This job needs a quick on-site measure before we can lock a price. Book your $99 refundable site visit below.')
     : !priceGate.showPrices
       ? priceGate.reason
       : visibleTiers.length === 1
         ? 'One painting option below — all prices include 10% GST as an estimated range.'
         : 'Your painting options below — all prices include 10% GST as an estimated range.'
+
+  // ═══ Five-section customer view (spec painting-funnel-parity R1) ═══
+  //
+  // Once there is something to act on — prices released, the visit paid, or an
+  // inspection-routed job with its payable $99 site visit — the customer sees
+  // the same five-numbered-section format as roofing (/q/roof/[token]:659)
+  // and electrical/plumbing (/q/[token] usesGenericCard): Overview → Job
+  // details → Your tradie → Your price → Book. A HELD quote keeps the
+  // long-scroll view below with the publish-gate holding message, and ?full=1
+  // forces the long-scroll layout in any state. Presentation only — every
+  // block reuses the data and gate logic computed above.
+  const viewMode = paintQuoteViewMode({
+    released,
+    paid,
+    inspection,
+    fullParam: sp.full === '1',
+  })
+  if (viewMode === 'five') {
+    // Video + the script it speaks, resolved together so the captions can
+    // never belong to a different film than the one playing. The 'painting'
+    // argument is load-bearing: the dashboard Videos tab stores the clip at
+    // tenants.trade_videos[trade][slot] (mig 179), and with the trade omitted
+    // every tenant fell through to the stock QuoteMax clip — see the note at
+    // app/q/roof/[token]/page.tsx.
+    const welcomeVideo = trustVideoTrack(identity, 'welcome', 'painting')
+    const websiteUrl = safeWebsiteUrl(identity?.website_url)
+    const tradieName = identity?.business_name ?? business
+    // Section 03 identity — the same resolver the quote PDF uses, so the
+    // photo and the sentence are identical on both surfaces (mig 180).
+    const paintTradie = tradieProfile({
+      businessName: tradieName,
+      photoUrl: identity?.photo_url,
+      trade: 'painting',
+    })
+    const tz = tzForState(identity?.state ?? null)
+    const slotLabel = paintScheduledAt
+      ? formatVisitSlot(paintScheduledAt, paintScheduledWindow, tz)
+      : ''
+    const calLinks =
+      paid && paintScheduledAt
+        ? visitCalendarLinks({
+            scheduledAt: paintScheduledAt,
+            scheduledWindow: paintScheduledWindow,
+            tradieName,
+            slotLabel,
+            // Raw address, not the postcode/state echo — the stored address
+            // already carries the state.
+            location: (row.address as string | null)?.trim() || null,
+            timeZone: tz,
+          })
+        : null
+
+    const microNote: CSSProperties = {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 9.5,
+      textTransform: 'uppercase',
+      letterSpacing: '0.12em',
+      color: 'var(--text-dim)',
+    }
+    const subHeading: CSSProperties = {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 11,
+      fontWeight: 700,
+      textTransform: 'uppercase',
+      letterSpacing: '0.14em',
+      color: 'var(--text-pri)',
+      margin: 0,
+    }
+    // Scope's body cell sets white-space: pre-line for plain-text bodies.
+    // These bodies are structured JSX, where pre-line turns every source-code
+    // newline into rendered whitespace.
+    const blockBody: CSSProperties = {
+      display: 'grid',
+      gap: 20,
+      maxWidth: 560,
+      whiteSpace: 'normal',
+    }
+
+    const firstName =
+      ((row.customer_name as string | null) ?? '').trim().split(/\s+/)[0] || null
+    // Overview ORIENTS (the QuoteHero content in a sentence); the sections
+    // below carry the detail. State-aware so a paid visitor isn't told to
+    // book and an inspection-routed one isn't promised "we'll be in touch"
+    // now that the visit is self-serve bookable.
+    const fiveGreeting = paid
+      ? paintScheduledAt
+        ? 'Your visit is booked — the details are below.'
+        : 'Payment received — pick your visit time below.'
+      : inspection
+        ? `${
+            estimate.price?.routing?.reason ??
+            'This job needs a quick on-site measure before we can lock a price.'
+          } Book your site visit below and your painter confirms everything in person.`
+        : heroGreeting
+
+    // Section 02 checklist — the measured surfaces + About-your-home facts
+    // already built for the long-scroll Scope, flattened to bullets.
+    const jobDetailList: ReactNode[] = scopeItems.flatMap((si) => si.list ?? [])
+
+    const paintSections: ScopeItem[] = [
+      {
+        title: 'Overview',
+        body: (
+          <div style={blockBody}>
+            <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              G&apos;day{firstName ? ` ${firstName}` : ''}, here&apos;s your painting quote
+              {cleanAddr ? ` for ${cleanAddr}` : ''}, issued {date}. {fiveGreeting}
+            </p>
+          </div>
+        ),
+      },
+      {
+        title: 'Job details',
+        body: (
+          <div style={blockBody}>
+            {statItems.length > 0 ? <StatGrid items={statItems} /> : null}
+            {scopes.length > 0 ? (
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+                Surfaces to paint — {scopes.map((s) => SCOPE_LABEL[s] ?? s).join(' · ')}.
+              </p>
+            ) : null}
+            {imageryInner ? (
+              <div>
+                <p style={subHeading}>Your property</p>
+                {imageryInner}
+              </div>
+            ) : null}
+            {measuredNotesList ? (
+              <div>
+                <p style={subHeading}>How we measured</p>
+                {measuredNotesList}
+              </div>
+            ) : null}
+          </div>
+        ),
+        list: jobDetailList.length > 0 ? jobDetailList : undefined,
+      },
+      {
+        title: 'Your tradie',
+        body: (
+          <div style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
+            <div className="qm-print-hide">
+              <TrustVideo
+                src={welcomeVideo.url}
+                script={welcomeVideo.script}
+                title={tradieName}
+                caption="A short introduction from your tradie"
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <TradiePhoto src={paintTradie.photoSrc} alt={paintTradie.name} />
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+                {paintTradie.blurb}
+                {websiteUrl ? (
+                  <>
+                    {' '}
+                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                      Visit their website
+                    </a>
+                    .
+                  </>
+                ) : null}
+              </p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        title: 'Your price',
+        body: inspection ? (
+          // No committable tiers — the $99 refundable site visit IS the price
+          // (mirrors the generic page's inspection body).
+          <div style={blockBody}>
+            <div>
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 800,
+                  fontSize: 24,
+                  lineHeight: 1,
+                  color: 'var(--text-pri)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                ${INSPECTION_FEE_AUD}
+              </div>
+              <div style={{ marginTop: 6, ...microNote }}>Site visit · refundable</div>
+              <p style={{ margin: '10px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)', maxWidth: '52ch' }}>
+                {estimate.price?.routing?.reason
+                  ? `Why a visit: ${estimate.price.routing.reason}`
+                  : 'Every home is different, so this job is priced in person rather than sight-unseen.'}{' '}
+                The visit fee is credited toward your final quote.
+              </p>
+            </div>
+          </div>
+        ) : showTiers && quoteTiers.length > 0 ? (
+          <div style={blockBody}>
+            <TierCards
+              heading={visibleTiers.length === 1 ? 'Your painting option' : 'Your painting options'}
+              intro={`Prices are inc-GST estimates derived from ${source} and your declared scope. The final price is confirmed after a quick on-site check.`}
+              tiers={quoteTiers}
+            />
+            {priceBuildInner ? (
+              <div>
+                <p style={subHeading}>How your price was built</p>
+                {priceBuildInner}
+              </div>
+            ) : null}
+            {materialsInner ? (
+              <div>
+                <p style={subHeading}>Materials &amp; time on site</p>
+                {materialsInner}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          // Defensive: paid/released without renderable tiers — never crash a
+          // live public page over pruned tier data.
+          'Your painter will confirm your price with you directly.'
+        ),
+      },
+      {
+        // Every unpaid path books the SITE VISIT (spec painting-site-visit-
+        // first R1) — the $99 refundable visit is the payment, never a
+        // "book your job" deposit.
+        title: paid && paintScheduledAt ? 'Your visit' : 'Book your site visit',
+        // The thank-you video + calendar live on the dedicated /book and
+        // /thanks pages. Here we only confirm the booked state, point a
+        // paid-but-unbooked customer to the booking page, or frame the accept
+        // action below.
+        body:
+          paid && paintScheduledAt ? (
+            <div style={{ display: 'grid', gap: 16, maxWidth: 480 }}>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Your visit is booked for{' '}
+                <strong style={{ color: 'var(--text-pri)' }}>{slotLabel}</strong>
+                . {tradieName} will text you the day before to confirm.
+              </p>
+              {calLinks ? (
+                <AddToCalendar
+                  google={calLinks.google}
+                  outlook={calLinks.outlook}
+                  outlookOffice={calLinks.outlookOffice}
+                  icsHref={`/q/paint/${token}/visit.ics`}
+                />
+              ) : null}
+              <a href={`/q/paint/${token}/thanks`} className="qm-cta" style={PAINT_CTA_LINK}>
+                View your booking →
+              </a>
+            </div>
+          ) : paid ? (
+            <div style={{ display: 'grid', gap: 10, maxWidth: 380 }}>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Payment received. Pick a time that suits and your visit is locked in.
+              </p>
+              <a href={`/q/paint/${token}/book`} className="qm-cta" style={PAINT_CTA_LINK}>
+                Pick your visit time →
+              </a>
+            </div>
+          ) : noSlots ? (
+            // /r/paint refused to charge — no windows published. Explain it
+            // rather than repeating the CTA that just bounced them.
+            <NoSlotsNotice tradieName={identity?.business_name ?? null} />
+          ) : inspection ? (
+            // No CTA here on purpose — the AcceptBlock below is the ONE
+            // action band on this page (it records customer_accepted_at
+            // before routing to Stripe).
+            <div style={{ display: 'grid', gap: 10, maxWidth: 480 }}>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Your painter prices this one in person. Book the ${INSPECTION_FEE_AUD} site
+                visit below and you pick your time straight after paying — the fee is
+                refundable and credited toward your final quote.
+              </p>
+              <span style={microNote}>Takes about 30 minutes on site</span>
+            </div>
+          ) : (
+            // Released prices are information — the payment is still the $99
+            // site visit (spec painting-site-visit-first R1). The AcceptBlock
+            // below stays the ONE action band on this page.
+            <div style={{ display: 'grid', gap: 10, maxWidth: 480 }}>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Happy with your options? Book the ${INSPECTION_FEE_AUD} site visit below and
+                you pick your time straight after paying — the fee is refundable, credited
+                toward your final quote, and your painter confirms the final price on site.
+              </p>
+              <span style={microNote}>Takes about 30 minutes on site</span>
+            </div>
+          ),
+      },
+    ]
+
+    return (
+      // The shared sticky bar already pins the $99 site visit for every
+      // unpaid actionable row (built above) — no five-section special case.
+      <QuoteChrome trade={{ label: 'Paint', icon: tradeIcon('paint') }} sticky={stickyBar}>
+        {/* Owner-only "Review & edit" pill → /p/[estimate_token] (spec R3). */}
+        <TradieJobBanner trade="painting" publicToken={row.public_token} />
+        <QuoteSheet label={`Painting quote · ${business}`}>
+          <Letterhead
+            name={identity?.business_name ?? business}
+            credential={`Painting quote · ${date}`}
+            logoUrl={identity?.logo_url ?? null}
+            contactName={contactDisplayName(identity)}
+            phone={(identity?.owner_mobile ?? '').trim() || null}
+            email={(identity?.owner_email ?? '').trim() || null}
+          />
+          <Scope eyebrow={`Painting quote · ${business}`} items={paintSections} />
+          {/* Acceptance record (customer_accepted_at) — kept OUT of section 05
+              on purpose: it renders its own full-bleed action band with the
+              #accept anchor. Rendered ONLY when actionable — always the $99
+              site-visit mode now; in 'paid' mode section 05 already confirms
+              the booking. */}
+          {paintAcceptView.actionable ? (
+            <AcceptBlock token={token} view={paintAcceptView} />
+          ) : null}
+          {/* The shared default tagline still sells the retired tier-deposit
+              flow ("Pick a tier · Pay the deposit"). Painting takes the same
+              $99-visit line roofing uses (spec painting-site-visit-first R4). */}
+          <CredentialFooter
+            rows={footerRows}
+            tagline="Book the visit · We confirm on site · Licensed & insured"
+          />
+        </QuoteSheet>
+      </QuoteChrome>
+    )
+  }
 
   return (
     <QuoteChrome trade={{ label: 'Paint', icon: tradeIcon('paint') }} sticky={stickyBar}>
@@ -426,72 +1019,10 @@ export default async function PaintingQuotePage(props: {
 
         {statItems.length > 0 ? <StatGrid items={statItems} /> : null}
 
-        {/* ── Property imagery via the token-gated /api/painting/q/[token]
-            proxies (spec quote-visual-parity R3; mirrors /p/[token]).
-            Top row: the real photos (Street View frontage + aerial).
-            Below: the before/after repaint block with the colour picker. ── */}
-        {hasPano ? (
+        {/* ── Property imagery (shared inner — see imageryInner above). ── */}
+        {imageryInner ? (
           <SheetSection eyebrow="Your property" eyebrowAccent>
-            <div
-              style={{
-                display: 'grid',
-                gap: 14,
-                marginTop: 12,
-                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              }}
-            >
-              <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
-                {/* The source photo is 4:3 — an aspect-ratio box shows the
-                    whole property instead of a fixed-height crop. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/painting/q/${row.public_token}/street-view`}
-                  alt={`Street View of the front of ${row.address ?? 'the property'}`}
-                  style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
-                />
-                <figcaption
-                  style={{
-                    borderTop: '1px solid var(--ink-line)',
-                    padding: '10px 14px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.14em',
-                    color: 'var(--text-dim)',
-                  }}
-                >
-                  Front of the property · Google Street View
-                </figcaption>
-              </figure>
-              <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/painting/q/${row.public_token}/static-map`}
-                  alt={`Aerial view of ${row.address ?? 'the property'}`}
-                  style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
-                />
-                <figcaption
-                  style={{
-                    borderTop: '1px solid var(--ink-line)',
-                    padding: '10px 14px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.14em',
-                    color: 'var(--text-dim)',
-                  }}
-                >
-                  Aerial view · Google Maps
-                </figcaption>
-              </figure>
-            </div>
-            <div style={{ marginTop: 14 }}>
-              <RepaintPreviewFigure
-                publicToken={row.public_token}
-                address={row.address}
-                initialReady={afterImageReady}
-              />
-            </div>
+            {imageryInner}
           </SheetSection>
         ) : null}
 
@@ -507,7 +1038,9 @@ export default async function PaintingQuotePage(props: {
           <SheetSection eyebrow="On-site measure needed" eyebrowAccent>
             <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
               {estimate.price?.routing?.reason ??
-                "This job needs a quick on-site measure before we can lock a price. We'll be in touch to book a time."}
+                'This job needs a quick on-site measure before we can lock a price.'}{' '}
+              Book your ${INSPECTION_FEE_AUD} refundable site visit below — the fee is
+              credited toward your final quote.
             </p>
           </SheetSection>
         ) : !priceGate.showPrices ? (
@@ -524,173 +1057,26 @@ export default async function PaintingQuotePage(props: {
           />
         ) : null}
 
-        {/* ── How your price was built — customer-safe derivation. Each row
-            is the already-computed ex-GST cost of a measured surface (rates,
-            coats, prep and colour allowance are baked into that cost), so the
-            surface costs sum EXACTLY to the subtotal — no separate multiplier
-            step (that would double-count). Tier-relation rows are shown only
-            when the call-out floor did not override them. Same content as the
-            PDF table (lib/painting/report-html.ts). ── */}
-        {showTiers && breakdown ? (() => {
-          const tierLabel = (k: 'good' | 'better' | 'best') =>
-            tiers.find((t) => t.tier === k)?.label
-          const betterLabel = tierLabel('better') ?? 'Better'
-          // Small-job floor overrides the surface-derived tier prices, so the
-          // "= Better × N%" rows would no longer reconcile — suppress them.
-          const floorApplied = !!estimate.price?.call_out_minimum_applied
-          const rows: Array<{ k: string; v: string; strong?: boolean }> = []
-          for (const s of breakdown.surfaces) {
-            const unit = s.unit === 'lm' ? 'lm' : 'm²'
-            rows.push({
-              k: `${SCOPE_LABEL[s.scope] ?? titleCase(String(s.scope))} · ${Math.round(s.quantity)} ${unit}`,
-              v: aud(s.line_ex_gst),
-            })
-          }
-          if (Number.isFinite(breakdown.better_ex_gst)) {
-            rows.push({ k: 'Subtotal (ex GST)', v: aud(breakdown.better_ex_gst), strong: true })
-          }
-          if (!floorApplied && visibleTierKeys.includes('good') && tierLabel('good') && Number.isFinite(breakdown.good_refresh_fraction)) {
-            rows.push({
-              k: `${tierLabel('good')} = ${betterLabel} ×`,
-              v: `${Math.round(breakdown.good_refresh_fraction * 100)}%`,
-            })
-          }
-          if (!floorApplied && visibleTierKeys.includes('best') && tierLabel('best') && Number.isFinite(breakdown.premium_uplift_pct)) {
-            rows.push({
-              k: `${tierLabel('best')} = ${betterLabel} ×`,
-              v: `${Math.round((1 + breakdown.premium_uplift_pct) * 100)}%`,
-            })
-          }
-          if (Number.isFinite(breakdown.gst_factor) && breakdown.gst_factor > 1) {
-            rows.push({ k: 'GST', v: `+ ${Math.round((breakdown.gst_factor - 1) * 100)}%` })
-          }
-          if (floorApplied && Number.isFinite(breakdown.call_out_minimum_ex_gst) && breakdown.call_out_minimum_ex_gst > 0) {
-            rows.push({ k: 'Call-out minimum applied', v: aud(breakdown.call_out_minimum_ex_gst) })
-          }
-          const loadings = estimate.price?.loadings_applied ?? []
-          return (
-            <SheetSection eyebrow="How your price was built" eyebrowAccent>
-              <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-                Your {betterLabel} price is the sum of each measured surface below. Each cost
-                already includes the coats, surface preparation and prep consumables (filler,
-                caulk, tape and drop sheets); headline prices above include GST.
-              </p>
-              <div style={{ marginTop: 14, border: '1px solid var(--ink-line)', background: 'var(--ink-card)', padding: '6px 16px' }}>
-                {rows.map((r, i) => (
-                  <div
-                    key={`${r.k}-${i}`}
-                    style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      padding: '9px 0',
-                      borderTop: i === 0 ? 'none' : '1px solid var(--ink-line)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 12.5,
-                      color: r.strong ? 'var(--text-pri)' : 'var(--text-sec)',
-                      fontWeight: r.strong ? 600 : 400,
-                    }}
-                  >
-                    <span>{r.k}</span>
-                    <span style={{ fontVariantNumeric: 'tabular-nums', color: r.strong ? 'var(--accent)' : 'var(--text-pri)' }}>
-                      {r.v}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {loadings.length > 0 ? (
-                <div style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-sec)' }}>
-                  {loadings.map((l) => (
-                    <div key={l.code}>+ {l.detail}</div>
-                  ))}
-                </div>
-              ) : null}
-            </SheetSection>
-          )
-        })() : null}
+        {/* ── How your price was built (shared inner — see priceBuildInner). ── */}
+        {showTiers && priceBuildInner ? (
+          <SheetSection eyebrow="How your price was built" eyebrowAccent>
+            {priceBuildInner}
+          </SheetSection>
+        ) : null}
 
         {/* ── How we measured — measurement provenance, standalone so it shows
             whenever notes exist (independent of the price-build section and a
             manual tier edit), matching the PDF exactly. ── */}
-        {measuredNotes.length > 0 ? (
+        {measuredNotesList ? (
           <SheetSection eyebrow="How we measured" eyebrowAccent>
-            <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6, color: 'var(--text-sec)' }}>
-              {measuredNotes.map((n) => (
-                <li key={n}>{n}</li>
-              ))}
-              <li>A painter confirms all measurements on site before works commence.</li>
-            </ul>
+            {measuredNotesList}
           </SheetSection>
         ) : null}
 
-        {/* ── Materials & time on site — the CUSTOMER-safe take-off view:
-            paint quantities and duration per option. Internal costs, rates
-            and margin never render on customer surfaces. ── */}
-        {!inspection && priceGate.showPrices && customerTiers.length > 0 ? (
+        {/* ── Materials & time on site (shared inner — see materialsInner). ── */}
+        {!inspection && priceGate.showPrices && materialsInner ? (
           <SheetSection eyebrow="Materials & time on site" eyebrowAccent>
-            <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-              What each option uses on your property — litres round up to whole retail packs, and
-              time on site is an estimate at standard working days, confirmed before works commence.
-            </p>
-            <div
-              style={{
-                display: 'grid',
-                gap: 12,
-                marginTop: 14,
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              }}
-            >
-              {customerTiers.map((c) => {
-                const tierLabel = visibleTiers.find((t) => t.tier === c.tier)?.label ?? c.tier
-                return (
-                  <div
-                    key={c.tier}
-                    style={{ border: '1px solid var(--ink-line)', background: 'var(--ink-card)', padding: '14px 16px' }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10,
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.14em',
-                        color: 'var(--accent)',
-                      }}
-                    >
-                      {tierLabel}
-                    </div>
-                    <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none' }}>
-                      {c.materials.map((m) => (
-                        <li
-                          key={m}
-                          style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: 12,
-                            lineHeight: 1.6,
-                            color: 'var(--text-sec)',
-                          }}
-                        >
-                          {m}
-                        </li>
-                      ))}
-                    </ul>
-                    <div
-                      style={{
-                        marginTop: 10,
-                        paddingTop: 10,
-                        borderTop: '1px solid var(--ink-line)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        color: 'var(--text-pri)',
-                      }}
-                    >
-                      {c.time_on_site}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            {materialsInner}
           </SheetSection>
         ) : null}
 
@@ -702,11 +1088,12 @@ export default async function PaintingQuotePage(props: {
           </SheetSection>
         ) : null}
 
-        {/* ── Explicit "Accept & confirm" — deposit on a released/priced quote,
-            confirmation once paid. ── */}
+        {/* ── Explicit "Accept & confirm" — the $99 site visit on every unpaid
+            actionable quote (released or inspection-routed), confirmation once
+            paid. Held quotes render nothing here. ── */}
         {showPaintAccept ? <AcceptBlock token={token} view={paintAcceptView} /> : null}
 
-        {/* Self-serve visit booking — appears once the deposit is paid. The
+        {/* Self-serve visit booking — appears once the site visit is paid. The
             picker itself lives on the dedicated /book page since 2026-07-22
             (spec booking-three-page-split R3), so this is a link rather than an
             inline picker the customer has to scroll a pricing page to find.
@@ -729,7 +1116,7 @@ export default async function PaintingQuotePage(props: {
             ) : (
               <div style={{ marginTop: 12 }}>
                 <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-                  Deposit received — pick a time that suits and we&apos;ll lock in your visit.
+                  Payment received — pick a time that suits and we&apos;ll lock in your visit.
                 </p>
                 <a href={`/q/paint/${token}/book`} className="qm-cta" style={PAINT_CTA_LINK}>
                   Pick your visit time →
@@ -739,7 +1126,12 @@ export default async function PaintingQuotePage(props: {
           </SheetSection>
         ) : null}
 
-        <CredentialFooter rows={footerRows} />
+        {/* Same site-visit tagline as the five-section branch above — the
+            shared default still names the retired tier deposit. */}
+        <CredentialFooter
+          rows={footerRows}
+          tagline="Book the visit · We confirm on site · Licensed & insured"
+        />
       </QuoteSheet>
     </QuoteChrome>
   )

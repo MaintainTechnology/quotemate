@@ -24,7 +24,7 @@ export default function DashboardTopNav() {
     >
       <Link
         href="/dashboard"
-        className="flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+        className="flex items-center gap-2 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
       >
         <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
         Dashboard

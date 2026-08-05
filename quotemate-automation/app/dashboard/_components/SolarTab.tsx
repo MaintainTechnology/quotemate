@@ -409,8 +409,8 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
 
       {/* Felt setup notice — the sub-tab stays browsable when disabled. */}
       {sub === 'felt' && feltEnabled === false && (
-        <div className="rounded-card border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+        <div className="rounded-card border border-warning-bright/40 bg-ink-card px-6 py-5">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.16em] text-warning">
             Felt not configured
           </div>
           <p className="mt-1 text-sm leading-relaxed text-text-sec">
@@ -425,7 +425,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       <>
           {/* Shareable customer entry link + copy button */}
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
-        <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+        <div className="flex items-center gap-3 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">
           {sub === 'felt' ? (
             <MapIcon className="h-4 w-4" aria-hidden="true" />
           ) : (
@@ -467,7 +467,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       {/* Estimate list */}
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className="font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">
             {sub === 'felt' ? 'Felt estimates' : 'Solar estimates'}
             {estimates ? ` · ${visibleEstimates.length}` : ''}
           </div>
@@ -481,7 +481,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         </div>
 
         {loading && (
-          <p className="mt-4 text-base text-text-dim">Loading estimates…</p>
+          <p className="qm-loading mt-4 text-base text-text-dim">Loading estimates…</p>
         )}
         {error && !loading && (
           <p className="mt-4 text-base text-warning">
@@ -518,7 +518,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                           {e.address}
                         </div>
                       )}
-                      <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+                      <div className="mt-1 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
                         {fmtDate(e.createdAt)}
                       </div>
                     </div>
@@ -541,12 +541,12 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                             href={e.pylonLeadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent"
+                            className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent"
                           >
                             Pylon: {e.pylonStage}
                           </a>
                         ) : (
-                          <span className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-sec">
+                          <span className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-micro font-semibold uppercase tracking-[0.12em] text-text-sec">
                             Pylon: {e.pylonStage}
                           </span>
                         ))}
@@ -557,7 +557,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                           href={e.openSolarProjectUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="border border-teal-glow/40 px-3 py-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-teal-glow transition-colors hover:border-teal-glow"
+                          className="border border-teal-glow/40 px-3 py-1 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-teal-glow transition-colors hover:border-teal-glow"
                         >
                           OpenSolar project
                         </a>
@@ -614,7 +614,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                     e.buildings.length >= 2 &&
                     e.buildingMapCenter && (
                       <div className="mt-4">
-                        <div className="mb-2 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+                        <div className="mb-2 font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
                           Estimating which building?
                         </div>
                         <BuildingPicker
@@ -635,7 +635,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                     )}
 
                   {e.status === 'flagged' && (
-                    <div className="mt-4 border border-warning/40 border-l-4 border-l-warning bg-ink-card px-4 py-3">
+                    <div className="mt-4 border border-warning-bright/40 bg-ink-card px-4 py-3">
                       <p className="text-sm font-semibold text-warning">
                         {e.guardrailCount} open check
                         {e.guardrailCount === 1 ? '' : 's'} blocking release
@@ -722,6 +722,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                         type="button"
                         onClick={() => void confirmEstimate(e.token)}
                         disabled={busy}
+                        aria-busy={busy}
                         className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:opacity-60"
                       >
                         {busy ? 'Releasing…' : 'Confirm & release'}
@@ -836,7 +837,7 @@ function Stat({
 }) {
   return (
     <div className="bg-ink-deep px-4 py-3">
-      <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+      <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
         {label}
       </div>
       <div
@@ -863,13 +864,13 @@ function StatWithHint({
 }) {
   return (
     <div className="bg-ink-deep px-4 py-3" title={title}>
-      <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+      <div className="font-mono text-micro font-semibold uppercase tracking-[0.16em] text-text-dim">
         {label}
       </div>
       <div className="mt-1 font-mono text-base font-bold tabular-nums text-text-pri">
         {value}
       </div>
-      <div className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+      <div className="mt-0.5 font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
         {hint}
       </div>
     </div>

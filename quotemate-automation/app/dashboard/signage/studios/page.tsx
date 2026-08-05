@@ -319,7 +319,7 @@ export default function SignageStudiosPage() {
                   className={INPUT}
                 />
                 {searching && (
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[0.7rem] text-text-dim motion-safe:animate-[pulse-soft_1.2s_ease-in-out_infinite]">
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-micro text-text-dim motion-safe:animate-[pulse-soft_1.2s_ease-in-out_infinite]">
                     searching…
                   </span>
                 )}
@@ -336,7 +336,7 @@ export default function SignageStudiosPage() {
                           className="w-full cursor-pointer px-4 py-3 text-left transition-colors hover:bg-ink-line/40 focus-visible:bg-ink-line/40 focus-visible:outline-none"
                         >
                           <div className="font-mono text-sm text-text-pri">{p.name}</div>
-                          <div className="font-mono text-[0.7rem] uppercase tracking-[0.12em] text-text-dim">{p.address}</div>
+                          <div className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">{p.address}</div>
                         </button>
                       </li>
                     ))}
@@ -389,7 +389,7 @@ export default function SignageStudiosPage() {
                 <input id="studio-region" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="AU-NSW" className={INPUT} />
               </div>
               <div className="flex items-end">
-                <button type="submit" disabled={busy || !name.trim()} className={BTN_PRIMARY}>
+                <button type="submit" disabled={busy || !name.trim()} aria-busy={busy} className={BTN_PRIMARY}>
                   {busy ? 'Adding…' : 'Add studio'}
                 </button>
               </div>
@@ -414,7 +414,7 @@ export default function SignageStudiosPage() {
           </div>
 
           {/* Roster */}
-          <h2 className="mt-12 font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <h2 className="mt-12 font-mono text-meta font-semibold uppercase tracking-[0.18em] text-accent">
             Roster · <span className="tabular-nums">{studios.length}</span> studio{studios.length === 1 ? '' : 's'}
           </h2>
           {studios.length === 0 ? (
@@ -429,7 +429,7 @@ export default function SignageStudiosPage() {
                   <StaticMapThumb token={token} studio={s} onView={setLightbox} />
                   <div className="min-w-[12rem] flex-1">
                     <div className="font-mono text-sm text-text-pri">{s.name}</div>
-                    <div className="mt-0.5 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-text-dim">
+                    <div className="mt-0.5 font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
                       {[s.region, s.address].filter(Boolean).join(' · ') || 'No address'}
                     </div>
                   </div>
@@ -483,7 +483,7 @@ function Preview({ token, label, url, emptyHint, onView }: { token: string | nul
   const src = useAuthedImage(url, token)
   return (
     <div>
-      <div className="mb-1.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</div>
+      <div className="mb-1.5 font-mono text-micro font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</div>
       <button
         type="button"
         disabled={!src}
@@ -494,7 +494,7 @@ function Preview({ token, label, url, emptyHint, onView }: { token: string | nul
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt={label} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">{emptyHint ?? 'no imagery'}</div>
+          <div className="flex h-full w-full items-center justify-center font-mono text-micro uppercase tracking-[0.1em] text-text-dim">{emptyHint ?? 'no imagery'}</div>
         )}
       </button>
     </div>
@@ -529,7 +529,7 @@ function Thumb({ src, alt, empty, onView }: { src: string | null; alt: string; e
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={alt} className="h-full w-full object-cover" />
       ) : (
-        <div className="flex h-full w-full items-center justify-center font-mono text-[0.55rem] uppercase tracking-[0.1em] text-text-dim">{empty}</div>
+        <div className="flex h-full w-full items-center justify-center font-mono text-micro uppercase tracking-[0.1em] text-text-dim">{empty}</div>
       )}
     </button>
   )

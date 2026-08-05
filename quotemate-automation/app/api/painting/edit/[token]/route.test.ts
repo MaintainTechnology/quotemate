@@ -3,7 +3,7 @@
 // inspection-routed jobs have no priced tiers to edit.
 //
 // Supabase is mocked at the module boundary with the same chainable builder
-// as app/api/tenant/trade-jobs/route.test.ts; Stripe re-mint is mocked.
+// as app/api/tenant/trade-jobs/route.test.ts; the Stripe expire call is mocked.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -34,21 +34,16 @@ const h = vi.hoisted(() => {
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
-vi.mock('@/lib/stripe/painting-checkout', () => ({
-  createPaintingCheckoutSessions: vi.fn(async () => ({ good: 'https://stripe/new-g' })),
-}))
 vi.mock('@/lib/stripe/checkout', () => ({
   expireCheckoutSession: vi.fn(async () => ({ ok: true })),
 }))
 
 import { POST } from './route'
-import { createPaintingCheckoutSessions } from '@/lib/stripe/painting-checkout'
 import { expireCheckoutSession } from '@/lib/stripe/checkout'
 
 beforeEach(() => {
   h.results.length = 0
   h.queries.length = 0
-  vi.mocked(createPaintingCheckoutSessions).mockClear()
   vi.mocked(expireCheckoutSession).mockClear()
 })
 
@@ -105,7 +100,9 @@ describe('POST /api/painting/edit/[token]', () => {
     expect(upd, 'expected a painting_measurements update').toBeTruthy()
   })
 
-  it('re-mints Stripe deposit sessions when a released edit changes a price', async () => {
+  it('drops the legacy tier links on a priced edit and KEEPS the $99 site-visit session', async () => {
+    // spec painting-site-visit-first R2 — no tier deposit is ever re-minted;
+    // stripe_links.inspection is the one payable Session and must survive.
     h.results.push(
       {
         data: {
@@ -115,6 +112,7 @@ describe('POST /api/painting/edit/[token]', () => {
           routing: 'auto_quote',
           public_token: 'pub-1',
           address: '1 Test St',
+          stripe_links: { good: 'https://stripe/old-g', inspection: 'https://stripe/visit' },
         },
         error: null,
       },
@@ -122,11 +120,14 @@ describe('POST /api/painting/edit/[token]', () => {
     )
     const res = await POST(editReq([{ tier: 'better', inc_gst: 9000 }]), ctx)
     expect(res.status).toBe(200)
-    expect(vi.mocked(createPaintingCheckoutSessions)).toHaveBeenCalledTimes(1)
 
     const upd = h.queries.find((q) => q.table === 'painting_measurements' && q.ops.some((o) => o.op === 'update'))
     const updateArg = upd!.ops.find((o) => o.op === 'update')!.args[0] as Record<string, unknown>
-    expect(updateArg).toHaveProperty('stripe_links')
+    expect(updateArg.stripe_links).toEqual({ inspection: 'https://stripe/visit' })
+    // Only the stale tier Session is expired — never the site visit.
+    expect(vi.mocked(expireCheckoutSession).mock.calls.map((c) => c[0])).toEqual([
+      'https://stripe/old-g',
+    ])
   })
 
   it('refuses to edit a PAID job — transacted prices are immutable', async () => {
@@ -145,10 +146,10 @@ describe('POST /api/painting/edit/[token]', () => {
     const res = await POST(editReq([{ tier: 'better', inc_gst: 9000 }]), ctx)
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ error: 'cannot_edit_paid_quote' })
-    expect(vi.mocked(createPaintingCheckoutSessions)).not.toHaveBeenCalled()
+    expect(vi.mocked(expireCheckoutSession)).not.toHaveBeenCalled()
   })
 
-  it('expires the previously-issued Stripe sessions when a released price edit re-mints', async () => {
+  it('expires the previously-issued tier Stripe sessions on a released price edit', async () => {
     h.results.push(
       {
         data: {

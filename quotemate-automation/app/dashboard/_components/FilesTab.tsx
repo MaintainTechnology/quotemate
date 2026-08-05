@@ -366,7 +366,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
             </p>
             {answer.citations.length > 0 && (
               <div className="mt-4 border-t border-ink-line pt-4">
-                <div className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-text-dim">
+                <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
                   Sources
                 </div>
                 <ul className="mt-2.5 grid gap-2.5">
@@ -383,6 +383,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                               type="button"
                               onClick={() => download(doc)}
                               disabled={downloading === doc.id}
+                              aria-busy={downloading === doc.id}
                               className="font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50"
                             >
                               {c.title ?? doc.display_name ?? 'Document'}
@@ -423,7 +424,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
         )}
 
         {loading ? (
-          <div className="mt-8 text-sm text-text-dim">Loading…</div>
+          <div className="qm-loading mt-8 text-sm text-text-dim">Loading…</div>
         ) : !docs || docs.length === 0 ? (
           <div className="rounded-card mt-8 border border-ink-line bg-ink-card p-8 text-center">
             <FileText size={24} className="mx-auto text-text-dim" aria-hidden="true" />
@@ -453,7 +454,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       <div className="truncate text-sm font-semibold text-text-pri">
                         {doc.display_name ?? 'Untitled document'}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-micro uppercase tracking-[0.1em] text-text-dim">
                         <span>{doc.source_kind === 'invoice' ? 'Invoice' : 'Quote'}</span>
                         {doc.trade && (
                           <>
@@ -477,7 +478,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     <button
                       type="button"
                       onClick={() => view(doc)}
-                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <Eye size={13} />
                       View
@@ -486,7 +487,8 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       type="button"
                       onClick={() => download(doc)}
                       disabled={downloading === doc.id}
-                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                      aria-busy={downloading === doc.id}
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                     >
                       {downloading === doc.id ? (
                         <Loader2 size={13} className="animate-spin" />
@@ -498,7 +500,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     <button
                       type="button"
                       onClick={() => setCommentsDoc(doc)}
-                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <MessageSquare size={13} />
                       Comments{doc.comment_count ? ` (${doc.comment_count})` : ''}
@@ -535,11 +537,11 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
           aria-modal="true"
           aria-label={viewerDoc.display_name ?? 'Document'}
           onClick={closeViewer}
-          className="fixed inset-0 z-[120] flex flex-col bg-black/85 p-4 sm:p-6"
+          className="qm-overlay fixed inset-0 z-[120] flex flex-col bg-black/85 p-4 sm:p-6"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="rounded-card mx-auto flex h-full w-full max-w-5xl flex-col border border-ink-line bg-ink-card shadow-2xl"
+            className="qm-panel rounded-card mx-auto flex h-full w-full max-w-5xl flex-col border border-ink-line bg-ink-card shadow-2xl"
           >
             {/* Header: title + download + close */}
             <div className="flex items-center justify-between gap-3 border-b border-ink-line px-4 py-3">
@@ -558,7 +560,8 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                   type="button"
                   onClick={() => download(viewerDoc)}
                   disabled={downloading === viewerDoc.id}
-                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                  aria-busy={downloading === viewerDoc.id}
+                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                 >
                   {downloading === viewerDoc.id ? (
                     <Loader2 size={13} className="animate-spin" />
@@ -659,11 +662,15 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
           aria-modal="true"
           aria-label={`Comments — ${commentsDoc.display_name ?? 'document'}`}
           onClick={closeComments}
-          className="fixed inset-0 z-[130] flex justify-end bg-black/70"
+          className="qm-overlay fixed inset-0 z-[130] flex justify-end bg-black/70"
         >
+          {/* Right-edge drawer, so it travels in from the right edge rather
+              than scaling from its middle — the motion has to agree with
+              where the panel actually lives, or the enter reads as unrelated
+              to the surface it came from. */}
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex h-full w-full max-w-md flex-col border-l border-ink-line bg-ink-card shadow-2xl"
+            className="qm-drawer-right flex h-full w-full max-w-md flex-col border-l border-ink-line bg-ink-card shadow-2xl"
           >
             <div className="flex items-center justify-between gap-3 border-b border-ink-line px-4 py-3">
               <span className="truncate text-sm font-semibold text-text-pri">

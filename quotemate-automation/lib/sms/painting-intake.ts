@@ -23,10 +23,13 @@
 // (no floor area found, pre-1970 exterior lead risk, low-confidence area)
 // are provider-derived and fire at estimate time in the route.
 //
-// Floor area is NOT asked over SMS: the estimate defaults to the "Other
-// tools" path (Google Solar footprint → Geoscape / floor plan), so the
-// address lookup supplies the area. `manual_floor_area_m2` stays an
-// optional override the route can fill if a customer volunteers a number.
+// Floor area IS asked over SMS (form parity, 2026-08-05) — once, and it is
+// optional: a plausible number (1–2000 m²) fills `manual_floor_area_m2`,
+// anything else (including "not sure") records the skip as null and the
+// estimate defaults to the "Other tools" path (Google Solar footprint →
+// Geoscape / floor plan), so the address lookup supplies the area exactly
+// as before. Tri-state: undefined = not asked yet, null = asked and
+// skipped, number = customer-stated.
 //
 // PURE — no I/O, no SDK. Fully unit-tested.
 // ════════════════════════════════════════════════════════════════════
@@ -65,7 +68,9 @@ export type PaintingSlots = {
   storeys?: 1 | 2 | 3 | null
   /** Tri-state: undefined = not asked yet, then true / false once asked. */
   colour_change?: boolean
-  /** Optional override — the address lookup supplies area by default. */
+  /** Optional, asked once. Tri-state: undefined = not asked yet, null =
+   *  asked and skipped (the address lookup supplies the area), number =
+   *  customer-stated m². */
   manual_floor_area_m2?: number | null
 }
 
@@ -81,6 +86,9 @@ export type PaintingStep =
   | 'condition'
   | 'ceiling_height'
   | 'storeys'
+  // Optional floor-area ask (form parity) — after storeys, before
+  // colour_change so the "Last one —" wording on colour_change stays true.
+  | 'floor_area'
   | 'colour_change'
   | 'ready'
   | 'inspection'
@@ -340,6 +348,19 @@ export function mapStoreys(text: string): 1 | 2 | 3 | null {
   return null
 }
 
+/** PURE — pull an approximate floor area in m² from a freeform reply, or
+ *  null when there's no usable number. Accepts "180", "180m2", "180 sqm",
+ *  "about 180". Only a plausible residential band (1–2000 m²) is returned;
+ *  the step is optional, so anything else — including "not sure" — is a
+ *  skip (null), never a re-ask. */
+export function parseFloorAreaM2(text: string): number | null {
+  const m = (text ?? '').match(/\d+(?:[.,]\d+)?/)
+  if (!m) return null
+  const n = Number(m[0].replace(',', '.'))
+  if (!Number.isFinite(n) || n < 1 || n > 2000) return null
+  return n
+}
+
 /** PURE — map a yes/no to whether the customer is changing colour. We
  *  check the "no / same colour / keeping it" side first so "not changing
  *  the colour" reads as false. Anything ambiguous defaults to false (the
@@ -426,6 +447,12 @@ export function applyPaintingAnswer(
       if (v != null) next.storeys = v
       break
     }
+    case 'floor_area': {
+      // Asked exactly once; a non-number (including "not sure") records the
+      // skip as null so the address lookup supplies the area.
+      next.manual_floor_area_m2 = parseFloorAreaM2(msg)
+      break
+    }
     case 'colour_change': {
       // Asked exactly once; any non-affirmative answer is a safe `false`.
       next.colour_change = mapColourChange(msg)
@@ -458,6 +485,8 @@ export function paintingReadiness(slots: PaintingSlots): 'ready' | 'need_more' |
   if (slots.condition == null) return 'need_more'
   if (slots.ceiling_height == null) return 'need_more'
   if (slots.storeys == null) return 'need_more'
+  // === undefined, NOT == null: null means asked-and-skipped (complete).
+  if (slots.manual_floor_area_m2 === undefined) return 'need_more'
   if (slots.colour_change == null) return 'need_more'
   if (slots.condition === 'poor') return 'inspection'
   if (slots.ceiling_height === 'raked') return 'inspection'
@@ -483,6 +512,8 @@ const QUESTIONS: Record<
   ceiling_height:
     'How high are the ceilings? Reply: standard (about 2.4 m), high (about 2.7 m, Queenslander or period), or raked (cathedral or sloped) — or just tell me the height, e.g. 3.2 m.',
   storeys: 'How many storeys is the property? Reply: single, double, or 3 or more.',
+  floor_area:
+    "If you know the approximate floor area in square metres, reply with the number — or say 'not sure' and I'll measure it from the property footprint.",
   colour_change: 'Last one — are you changing the colour, for example light to dark? Reply yes or no.',
 }
 
@@ -524,6 +555,12 @@ export function nextPaintingStep(slots: PaintingSlots): {
   if (slots.storeys == null) return { step: 'storeys', question: QUESTIONS.storeys }
   if (slots.storeys === 3) {
     return { step: 'inspection', reason: 'three or more storeys need an on-site access check' }
+  }
+
+  // Optional, asked once: === undefined means not asked yet; null means the
+  // customer skipped it ("not sure") and the address lookup supplies the area.
+  if (slots.manual_floor_area_m2 === undefined) {
+    return { step: 'floor_area', question: QUESTIONS.floor_area }
   }
 
   if (slots.colour_change == null) return { step: 'colour_change', question: QUESTIONS.colour_change }

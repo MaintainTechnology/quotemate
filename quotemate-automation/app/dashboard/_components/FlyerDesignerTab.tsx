@@ -377,12 +377,13 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         </section>
 
         <section>
-          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Start a new flyer</h3>
+          <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">Start a new flyer</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FLYER_TEMPLATES.map((t) => (
               <button
                 key={t.id}
                 disabled={busy}
+                aria-busy={busy}
                 onClick={() => createFromTemplate(t.id)}
                 className="rounded-card group flex flex-col items-start gap-3 border border-ink-line bg-ink-card p-5 text-left transition-colors hover:border-accent disabled:opacity-50"
               >
@@ -397,9 +398,9 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         </section>
 
         <section>
-          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">My flyers</h3>
+          <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">My flyers</h3>
           {loadingList ? (
-            <p className="mt-4 text-sm text-text-dim">Loading…</p>
+            <p className="qm-loading mt-4 text-sm text-text-dim">Loading…</p>
           ) : flyers.length === 0 ? (
             <p className="mt-4 text-sm text-text-dim">No saved flyers yet — pick a template above to begin.</p>
           ) : (
@@ -449,8 +450,8 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
           className="rounded-card min-w-0 flex-1 border border-ink-line bg-ink-card px-3 py-2 text-text-pri"
           placeholder="Flyer name"
         />
-        <button onClick={saveFlyer} disabled={saving} className={btnAccent}>{saving ? 'Saving…' : 'Save'}</button>
-        <button onClick={exportFlyer} disabled={exporting} className={btnAccent}>{exporting ? 'Exporting…' : 'Download PNG + PDF'}</button>
+        <button onClick={saveFlyer} disabled={saving} aria-busy={saving} className={btnAccent}>{saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={exportFlyer} disabled={exporting} aria-busy={exporting} className={btnAccent}>{exporting ? 'Exporting…' : 'Download PNG + PDF'}</button>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
@@ -470,7 +471,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         {/* Properties + tools */}
         <div className="space-y-5">
           <div className="rounded-card space-y-2 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Add</p>
+            <p className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">Add</p>
             <div className="flex flex-wrap gap-2">
               <button onClick={addText} className={btnPlain}>+ Text</button>
               <label className={`${btnPlain} cursor-pointer`}>
@@ -491,7 +492,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
           {/* QR helper */}
           <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">QR code</p>
+            <p className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">QR code</p>
             {qrAction === 'generate' ? (
               <>
                 <p className="text-sm text-text-sec">You don’t have a customer QR code yet. Generate one and drop it on the flyer — it’s saved to your Marketing tab too.</p>
@@ -520,7 +521,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
           {/* Selected element properties */}
           <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Selected element</p>
+            <p className="font-mono text-micro uppercase tracking-[0.18em] text-text-dim">Selected element</p>
             {!selected ? (
               <p className="text-sm text-text-dim">Click an element on the canvas to edit it.</p>
             ) : (

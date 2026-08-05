@@ -45,7 +45,10 @@ import {
   createInspectionCheckoutSession,
   createRoofingSiteVisitSession,
 } from './checkout'
-import { createPaintingCheckoutSessionForTier } from './painting-checkout'
+import {
+  createPaintingCheckoutSessionForTier,
+  createPaintingSiteVisitSession,
+} from './painting-checkout'
 
 // Braces matter: `mockClear()` returns the mock itself, and a function returned
 // from beforeEach is treated by Vitest as a teardown callback — so the concise
@@ -91,6 +94,10 @@ const CREATORS: Array<[string, () => Promise<unknown>]> = [
         token: 'tok',
         appUrl,
       }),
+  ],
+  [
+    'createPaintingSiteVisitSession ($99 painting site visit)',
+    () => createPaintingSiteVisitSession({ token: 'tok', address: '1 Test St', appUrl }),
   ],
 ]
 

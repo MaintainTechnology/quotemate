@@ -37,7 +37,7 @@ export function Methodology({ model, runtimeSeconds, sheets, bom }: Props) {
 
   return (
     <section aria-label="How this estimate was built">
-      <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent">
+      <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-accent">
         Transparency
       </div>
       <h3 className="mt-1.5 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">

@@ -178,6 +178,7 @@ function CheckoutButton({
       type="button"
       onClick={start}
       disabled={loading}
+      aria-busy={loading}
       aria-describedby={error ? `${plan}-checkout-error` : undefined}
       className={`mt-7 inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep disabled:opacity-60 ${
         featured

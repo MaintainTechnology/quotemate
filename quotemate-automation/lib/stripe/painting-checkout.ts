@@ -5,10 +5,18 @@
 // residential painting quote, whose tiers carry inc-GST point prices directly
 // (not ex-GST subtotals). Each Session charges the deposit (default 30% of the
 // tier's inc-GST total) and the URLs are stored on
-// painting_measurements.stripe_links, read by /r/paint/[token]/[tier].
+// painting_measurements.stripe_links.
 //
-// Platform-direct charging (NOT Connect) — money lands in QuoteMax's account,
-// the same v1 posture as the main quote flow. AUD-only, address-free.
+// ⚠ The G/B/B deposit path is RETIRED from the customer surface (spec
+// painting-site-visit-first, owner decision 2026-08-05): /r/paint 302s every
+// tier request onto the $99 site visit, so createPaintingCheckoutSession(s)
+// ForTier is no longer reachable from a customer click. Kept deliberately —
+// re-enabling the deposit model is a routing change, not a rebuild. It also
+// charged platform-direct (NOT Connect), which is part of why it was retired.
+//
+// The live customer payment is createPaintingSiteVisitSession below: the flat
+// $99 refundable visit, which mirrors the roofing site-visit mint and rides
+// Connect when the tenant has a connected account. AUD-only, address-free.
 //
 // The session-creation call is I/O; the deposit-amount maths is a pure,
 // unit-tested helper.
@@ -16,6 +24,12 @@
 
 import { getStripe } from './client'
 import type { StripeLinks } from './checkout'
+import {
+  connectPaymentIntentExtras,
+  connectSessionMetadata,
+  type ConnectDestination,
+} from './connect'
+import { INSPECTION_FEE_AUD_CENTS } from '@/lib/quote/money'
 import type { PaintingEstimate } from '@/lib/painting/types'
 
 /** Default deposit percentage for a painting job (matches the main flow's
@@ -92,6 +106,70 @@ export async function createPaintingCheckoutSessionForTier(opts: {
     },
   })
 
+  return session.url ?? null
+}
+
+/**
+ * Painting site-visit path: a single flat $99 refundable Checkout Session
+ * for an INSPECTION-ROUTED painting row (spec painting-funnel-parity R2) —
+ * the row has no committable tier prices, so the only payable action is the
+ * visit. Mirrors createRoofingSiteVisitSession (lib/stripe/checkout.ts) but
+ * keyed by metadata.painting_token + tier 'inspection', so the EXISTING
+ * webhook branch records paid_at / paid_tier / paid_amount_cents on
+ * painting_measurements unchanged. Success lands on the dedicated /book
+ * page (calendar picker), whose session_id race guard already ties a
+ * session to this row.
+ */
+export async function createPaintingSiteVisitSession(opts: {
+  /** painting_measurements.public_token — drives success/cancel URLs. */
+  token: string
+  address: string | null
+  customerEmail?: string | null
+  appUrl: string
+  /** Tenant's live connected account — routes the charge via Connect with
+   *  the platform fee. Omitted/null → platform-direct. */
+  connect?: ConnectDestination | null
+}): Promise<string | null> {
+  const stripe = getStripe()
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    // AU-only business: force AUD, never localise the price to another currency
+    // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+    adaptive_pricing: { enabled: false },
+    // Link renders the 'Save my information for faster checkout' row and a
+    // US-format phone field. Hidden per-session (not via the Dashboard) so it
+    // stays hidden when the charge rides on a tradie's connected account.
+    wallet_options: { link: { display: 'never' } },
+    line_items: [
+      {
+        price_data: {
+          currency: 'aud',
+          product_data: {
+            name: `QuoteMax — painting site visit${opts.address ? ` · ${opts.address}` : ''}`,
+            description:
+              'Refundable site-visit deposit. Credited toward your final painting quote when you proceed.',
+          },
+          unit_amount: INSPECTION_FEE_AUD_CENTS,
+        },
+        quantity: 1,
+      },
+    ],
+    customer_email: opts.customerEmail || undefined,
+    // Land on the dedicated booking page (calendar picker) instead of
+    // scrolling back on the quote surface — mirrors the roofing site visit.
+    success_url: `${opts.appUrl}/q/paint/${opts.token}/book?paid=1&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${opts.appUrl}/q/paint/${opts.token}`,
+    metadata: {
+      painting_token: opts.token,
+      tier: 'inspection',
+      fee_aud_cents: String(INSPECTION_FEE_AUD_CENTS),
+      ...(opts.connect ? connectSessionMetadata(INSPECTION_FEE_AUD_CENTS, opts.connect) : {}),
+    },
+    payment_intent_data: {
+      metadata: { painting_token: opts.token, tier: 'inspection' },
+      ...(opts.connect ? connectPaymentIntentExtras(INSPECTION_FEE_AUD_CENTS, opts.connect) : {}),
+    },
+  })
   return session.url ?? null
 }
 

@@ -97,11 +97,11 @@ export function OverviewAnalytics({
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <h2
           id="activity-heading"
-          className="font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold text-text-pri"
+          className="font-mono text-micro uppercase tracking-[0.16em] font-bold text-text-pri"
         >
           Who&rsquo;s reaching out &amp; what&rsquo;s been processed
         </h2>
-        <span className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
+        <span className="font-mono text-micro uppercase tracking-[0.14em] text-text-dim">
           {periodLabel(period)}
         </span>
       </header>
@@ -258,18 +258,23 @@ function NeedsAttention({
     return (
       <div className={`${CARD} flex items-center gap-3 border border-emerald-800/50 bg-emerald-950/20 px-5 py-4`}>
         <span className="h-2 w-2 rounded-full bg-emerald-300" aria-hidden="true" />
-        <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold text-emerald-200">
+        <span className="font-mono text-micro uppercase tracking-[0.14em] font-bold text-emerald-200">
           You&rsquo;re all caught up
         </span>
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+        <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-dim">
           No quotes waiting, no cold chats
         </span>
       </div>
     )
   }
 
+  // qm-stagger: these are the "needs your attention" cards, and they land
+  // together the moment the analytics fetch resolves. Sequencing them 45ms
+  // apart reads as a list being dealt out rather than a block appearing —
+  // and because it is decorative it never gates the click, so a card is
+  // pressable the instant it paints.
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="qm-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {actions.map((a) => (
         <button
           key={a.label}
@@ -281,11 +286,11 @@ function NeedsAttention({
             <span className="font-mono text-2xl font-extrabold leading-none tabular-nums text-amber-300">
               {a.count}
             </span>
-            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-sec">
+            <span className="font-mono text-micro uppercase tracking-[0.12em] text-text-sec">
               {a.label}
             </span>
           </span>
-          <span className="shrink-0 font-mono text-[0.6rem] font-bold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-0.5">
+          <span className="shrink-0 font-mono text-micro font-bold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-0.5">
             {a.cta} &rarr;
           </span>
         </button>
@@ -307,14 +312,14 @@ function Counter({
 }) {
   return (
     <div className="bg-ink-card p-4 sm:p-5">
-      <div className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-text-dim">
+      <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
         {label}
       </div>
       <div className="mt-2 font-mono font-extrabold leading-none text-[clamp(1.4rem,2.6vw,2rem)] tabular-nums text-accent">
         {value.toLocaleString('en-AU')}
       </div>
       {hint && (
-        <div className="mt-1.5 font-mono text-[0.55rem] uppercase tracking-[0.12em] text-text-sec">
+        <div className="mt-1.5 font-mono text-micro uppercase tracking-[0.12em] text-text-sec">
           {hint}
         </div>
       )}
@@ -325,13 +330,13 @@ function Counter({
 function SpeedCard({ minutes }: { minutes: number | null }) {
   return (
     <div className={`${CARD} bg-ink-card border border-ink-line p-5`}>
-      <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
+      <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-dim">
         Typical time to quote
       </div>
       <div className="mt-3 font-mono font-extrabold leading-none text-[clamp(1.75rem,4vw,2.75rem)] tabular-nums text-accent">
         {formatDuration(minutes)}
       </div>
-      <div className="mt-2 font-mono text-[0.58rem] uppercase tracking-[0.12em] text-text-sec">
+      <div className="mt-2 font-mono text-micro uppercase tracking-[0.12em] text-text-sec">
         {minutes == null ? 'No quotes yet' : 'Request → drafted quote'}
       </div>
     </div>

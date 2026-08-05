@@ -130,7 +130,7 @@ export function ChangePasswordCard() {
 
           <div className="flex items-center justify-between pt-2">
             {done ? (
-              <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-success-bright">
+              <span className="font-mono text-micro uppercase tracking-[0.16em] text-success-bright">
                 ✓ Password updated
               </span>
             ) : (
@@ -139,6 +139,7 @@ export function ChangePasswordCard() {
             <button
               type="submit"
               disabled={submitting}
+              aria-busy={submitting}
               className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
             >
               {submitting ? 'Updating…' : 'Update password'}

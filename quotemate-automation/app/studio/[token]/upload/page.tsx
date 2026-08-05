@@ -220,6 +220,7 @@ export default function StudioUploadPage() {
                 type="button"
                 onClick={submit}
                 disabled={busy || totalFiles === 0}
+                aria-busy={busy}
                 className={`mt-2 w-full py-4 sm:w-auto ${BTN_PRIMARY}`}
               >
                 {busy ? 'Uploading your photos…' : <>Submit {totalFiles} photo{totalFiles === 1 ? '' : 's'} for review <span aria-hidden="true">&rarr;</span></>}

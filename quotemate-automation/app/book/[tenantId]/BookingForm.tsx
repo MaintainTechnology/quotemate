@@ -174,7 +174,7 @@ export function BookingForm({
         </div>
       )}
 
-      <button type="submit" disabled={submitting}
+      <button type="submit" disabled={submitting} aria-busy={submitting}
         className="inline-flex w-full items-center justify-center bg-accent px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50">
         {submitting ? 'Sending…' : 'Request this time'}
       </button>

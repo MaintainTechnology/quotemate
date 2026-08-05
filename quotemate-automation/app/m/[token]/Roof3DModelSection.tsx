@@ -503,6 +503,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
                   type="button"
                   onClick={() => void generate()}
                   disabled={busy}
+                  aria-busy={busy}
                   className="inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press disabled:opacity-60"
                 >
                   {phase === 'failed' ? 'Retry 3D model' : 'Generate 3D model'}
@@ -511,6 +512,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
                   type="button"
                   onClick={() => void openManual()}
                   disabled={busy}
+                  aria-busy={busy}
                   className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-pri hover:border-accent hover:text-accent disabled:opacity-60"
                 >
                   Manual capture
@@ -523,6 +525,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
                     setPhase('upload')
                   }}
                   disabled={busy}
+                  aria-busy={busy}
                   className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-pri hover:border-accent hover:text-accent disabled:opacity-60"
                 >
                   Upload photos

@@ -13,11 +13,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { estimatePainting } from './measure'
 import { buildSavedPaintingRow } from './save-row'
-import { effectivePaintingRateCardFromOverlay, paintingDepositPctFromCard } from './rate-card-overlay'
+import { effectivePaintingRateCardFromOverlay } from './rate-card-overlay'
 import type { EstimateRequest } from './request-schema'
 import type { PaintingEstimate, PaintingRateCard } from './types'
-import { createPaintingCheckoutSessions } from '@/lib/stripe/painting-checkout'
-import type { StripeLinks } from '@/lib/stripe/checkout'
 import { ensurePaintingPdf, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { buildPaintingInspectionSms, buildPaintingQuoteSms } from '@/lib/sms/painting-compose'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
@@ -31,9 +29,6 @@ export type PaintingQuoteDispatch =
       estimateToken: string
       estimate: PaintingEstimate
       inspection: boolean
-      /** Per-tier Stripe deposit Checkout URLs (empty when none could be
-       *  created — no Stripe key, an inspection quote, or a Stripe error). */
-      stripeLinks: StripeLinks
     }
   | { ok: false; reason: string }
 
@@ -81,10 +76,6 @@ export async function runAndSavePaintingQuote(args: {
   customerPhone?: string | null
   customerName?: string | null
   request: EstimateRequest
-  /** Base URL for the Stripe success/cancel pages. When omitted, no
-   *  per-tier deposit sessions are created (the SMS still sends, link-free). */
-  appUrl?: string
-  depositPct?: number
 }): Promise<PaintingQuoteDispatch> {
   const rateCard = args.tenantId
     ? await loadPaintingRateCard(args.supabase, args.tenantId, args.primaryTrade ?? null)
@@ -123,34 +114,14 @@ export async function runAndSavePaintingQuote(args: {
   const estimateToken = saved.estimate_token
   const inspection = estimate.price.routing.decision === 'inspection_required'
 
-  // Priced quotes only: mint per-tier Stripe deposit sessions and store them
-  // so /r/paint/[token]/[tier] resolves. Best-effort — a missing Stripe key
-  // or a Stripe error leaves stripe_links null and the SMS sends link-free.
-  let stripeLinks: StripeLinks = {}
-  if (!inspection && args.appUrl) {
-    try {
-      stripeLinks = await createPaintingCheckoutSessions({
-        estimate,
-        token,
-        address: args.request.address.address,
-        appUrl: args.appUrl,
-        // Explicit caller value wins; else the tenant rate card's deposit;
-        // else the checkout's platform default (30%).
-        depositPct: args.depositPct ?? paintingDepositPctFromCard(rateCard) ?? undefined,
-      })
-      if (Object.keys(stripeLinks).length > 0) {
-        await args.supabase
-          .from('painting_measurements')
-          .update({ stripe_links: stripeLinks })
-          .eq('public_token', token)
-      }
-    } catch (e) {
-      console.warn('[painting] Stripe deposit sessions not created (non-fatal)', e instanceof Error ? e.message : e)
-      stripeLinks = {}
-    }
-  }
-
-  return { ok: true, token, estimateToken, estimate, inspection, stripeLinks }
+  // No Stripe session is minted here. Draft time used to create up to three
+  // per-tier 30% deposit Sessions, but since spec painting-site-visit-first
+  // nothing can link them (/r/paint 302s G/B/B onto the $99 site visit), and
+  // this function is awaited BEFORE the customer's holding SMS — so those were
+  // three sequential Stripe round-trips of pure latency producing dead links.
+  // The one payable Session, the flat $99 site visit, is minted on demand by
+  // /r/paint/<token>/inspection and stored under stripe_links.inspection.
+  return { ok: true, token, estimateToken, estimate, inspection }
 }
 
 /**
@@ -175,8 +146,9 @@ export async function resolvePaintingPdfMms(token: string): Promise<string | und
  * best-effort PDF MMS URL — for a successful dispatch. ONE place both the SMS
  * Q&A path (handlePaintingTurn) and the self-serve form POST call, so the two
  * never drift:
- *   • priced     → G/B/B + per-tier Stripe deposit links + quote-page link +
- *                  PDF link, with the PDF attached as an MMS.
+ *   • priced     → G/B/B prices + quote-page link + PDF link + the $99
+ *                  site-visit short-link (painting's ONE customer payment,
+ *                  spec painting-site-visit-first), PDF attached as an MMS.
  *   • inspection → the on-site-measure message (no price / Stripe / PDF).
  * The caller decides where to send (the tenant's number) and how to persist.
  */
@@ -226,7 +198,6 @@ export async function composePaintingQuoteDelivery(args: {
     tierMode,
     token: disp.token,
     appUrl,
-    stripeLinks: disp.stripeLinks,
   })
   return { text, mmsUrl }
 }

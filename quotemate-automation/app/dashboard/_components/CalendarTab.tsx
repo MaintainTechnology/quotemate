@@ -426,6 +426,7 @@ export function CalendarTab({
             type="button"
             onClick={() => void load()}
             disabled={loading}
+            aria-busy={loading}
             title="Refresh bookings"
             style={{ ...GHOST_BTN, opacity: loading ? 0.5 : 1 }}
           >
