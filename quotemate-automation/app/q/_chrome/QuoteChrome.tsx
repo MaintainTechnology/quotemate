@@ -18,7 +18,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { QuoteMaxMark, SunIcon, MoonIcon, DownloadIcon, ArrowRightIcon } from './icons'
+import { SunIcon, MoonIcon, DownloadIcon, ArrowRightIcon } from './icons'
+import { BrandMark } from '@/app/_components/BrandMark'
 
 export type StickyBar =
   | { paid: true; paidSub?: ReactNode }
@@ -108,7 +109,14 @@ export function QuoteChrome({
         style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, height: 56, padding: '0 20px', borderBottom: '1px solid var(--ink-line)', background: 'var(--ink-deep)' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <QuoteMaxMark size={24} />
+          {/* The current QuoteMax logo — the Q/M monogram, shared with the
+              favicon, the social card and the cockpit header via BrandMark.
+              This bar was still on the retired yellow-tile mark.
+
+              h-6 w-auto, never a square: the monogram is a 1.47:1 landscape
+              glyph cropped tight to its bounding box, so a square box
+              letterboxes it and throws the extra size away. */}
+          <BrandMark className="h-6 w-auto" />
           {/* qm-chrome-label: hidden under 460px (globals.css). The bar is
               three fixed-width groups under `space-between`, so at 390px
               this label was being clipped mid-word by the trade pill —

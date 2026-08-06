@@ -28,7 +28,7 @@ import {
 } from '@/lib/painting/streetview'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
-import { QuoteMaxMark } from '../../q/_chrome/icons'
+import { BrandMark } from '@/app/_components/BrandMark'
 import { RepaintPreviewFigure } from '../../q/_chrome/RepaintPreviewFigure'
 import { PaintResultView } from '@/app/dashboard/painting/_components/PaintResultView'
 import { SendToCustomerButton } from './SendToCustomerButton'
@@ -164,7 +164,7 @@ export default async function PaintEstimateResultsPage({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <QuoteMaxMark size={24} />
+          <BrandMark className="h-6 w-auto" />
           <span
             style={{
               fontFamily: 'var(--font-mono)',

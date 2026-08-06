@@ -150,7 +150,19 @@ export function WrenchIcon(p: IconProps) {
   )
 }
 
-// The QuoteMax logomark — yellow tile, dark speech bubble, accent check.
+/** @deprecated The RETIRED QuoteMax logomark — yellow tile, dark speech
+ *  bubble, accent check. Superseded by the Q/M monogram in
+ *  `app/_components/BrandMark`, which is the single source of truth shared
+ *  with the favicon (app/icon.svg), the social card and the cockpit header.
+ *
+ *  Every caller was migrated (quote chrome, the "prepared with" footer, and
+ *  the /m and /p surfaces); this is kept only so an old branch or a vendored
+ *  copy still compiles. Do NOT reach for it in new code — a quote rendering
+ *  this mark is showing customers a logo the business no longer uses.
+ *
+ *  Note it is NOT interchangeable with BrandMark at a call site: this is a
+ *  square 1:1 tile taking `size`, BrandMark is a 1.47:1 landscape glyph
+ *  taking a `className` height (`h-6 w-auto`). */
 export function QuoteMaxMark({ size = 24, ...rest }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label="QuoteMax" style={{ display: 'block', flexShrink: 0 }} {...rest}>

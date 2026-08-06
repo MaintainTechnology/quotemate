@@ -1545,6 +1545,20 @@ html {
   --duo-shadow:    rgba(22, 18, 15, 0.55);
   --duo-highlight: rgba(255, 196, 0, 0.16);
   --qm-duo-filter: grayscale(0.6) sepia(0.18) saturate(0.95) contrast(1.05) brightness(0.92);
+
+  /* The BrandMark logo tokens MUST be re-declared here, keyed to
+     data-qm-theme, for the same reason the whole palette above is: this
+     surface flips its own theme independently of the site's.
+
+     Without these, --logo-body resolves from html[data-theme], which is
+     'light' for everyone by default (app/layout.tsx pins it before first
+     paint) — so a customer who toggles the QUOTE to dark would get the
+     charcoal #16120F logo painted onto a #16120F charcoal bar and see
+     nothing at all. Values are the literal source artwork colours from
+     quote-max-logo-4/5.svg, not --accent, so the mark stays the supplied
+     asset rather than a recolour of it. */
+  --logo-body:  #FFFFFF;
+  --logo-notch: #E3C13C;
 }
 
 /* LIGHT — the polished toggle target (matches the app's tuned warm-paper). */
@@ -1574,6 +1588,11 @@ html {
   --duo-shadow:    rgba(43, 36, 34, 0.42);
   --duo-highlight: rgba(255, 196, 0, 0.20);
   --qm-duo-filter: grayscale(0.5) sepia(0.2) saturate(1.05) contrast(1.03) brightness(1.02);
+
+  /* Charcoal body on the cream sheet; the gold notch is the same in both
+     themes because it is the artwork's own colour, not a theme choice. */
+  --logo-body:  #16120F;
+  --logo-notch: #E3C13C;
 }
 
 .qm-quote {

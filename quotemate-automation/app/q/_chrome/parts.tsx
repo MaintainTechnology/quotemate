@@ -9,7 +9,8 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { businessInitials } from '@/lib/brand/monogram'
 import { captionTrackSrc } from '@/lib/videos/captions'
-import { CheckIcon, QuoteMaxMark, DownloadIcon } from './icons'
+import { CheckIcon, DownloadIcon } from './icons'
+import { BrandMark } from '@/app/_components/BrandMark'
 
 /* ── shared type primitives ──────────────────────────────────────────── */
 const MONO: CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -743,7 +744,7 @@ export function CredentialFooter({
         <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <span style={{ ...MONO, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-dim)' }}>Quote prepared with</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-            <QuoteMaxMark size={16} />
+            <BrandMark className="h-4 w-auto" />
             <span style={{ ...SANS, fontWeight: 800, fontSize: 13, textTransform: 'uppercase', letterSpacing: '-0.01em', color: 'var(--text-sec)' }}>QuoteMax</span>
           </span>
         </div>

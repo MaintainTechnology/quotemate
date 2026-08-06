@@ -32,7 +32,7 @@ import {
 import { buildSaveAsQuoteRequest } from '@/lib/roofing/save-as-quote-helpers'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
-import { QuoteMaxMark } from '../../q/_chrome/icons'
+import { BrandMark } from '@/app/_components/BrandMark'
 import { MeasurementReview } from './MeasurementReview'
 import { RoofLayoutSection } from './RoofLayoutSection'
 import { Roof3DModelSection } from './Roof3DModelSection'
@@ -230,7 +230,7 @@ export default async function MeasurementResultsPage({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <QuoteMaxMark size={24} />
+          <BrandMark className="h-6 w-auto" />
           <span
             style={{
               fontFamily: 'var(--font-mono)',
