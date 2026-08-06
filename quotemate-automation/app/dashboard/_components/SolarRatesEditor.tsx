@@ -157,7 +157,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
     hint: string
   }) => (
     <label key={args.key} className="block">
-      <span className="mb-2 block font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec">
+      <span className="mb-2 block text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-sec">
         {args.label}
       </span>
       <input
@@ -186,7 +186,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Solar rates
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
@@ -199,7 +199,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
           </p>
         </div>
         {savedAt && !errMsg && (
-          <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-teal-glow">
+          <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-teal-glow">
             ✓ Saved
           </span>
         )}
@@ -213,7 +213,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
       {errMsg && <p className="mt-5 text-sm text-warning-bright">{errMsg}</p>}
 
       <div className="mt-6 border-t border-ink-line pt-5">
-        <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-pri">
+        <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-pri">
           $ per kW by panel grade
         </div>
         <p className="mt-1 text-sm text-text-sec">All-in supply + install rate per kW DC, ex GST.</p>
@@ -238,7 +238,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
       </div>
 
       <div className="mt-6 border-t border-ink-line pt-5">
-        <div className="qm-loading font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-pri">
+        <div className="qm-loading text-xs font-semibold uppercase tracking-[0.08em] text-text-pri">
           Loadings
         </div>
         <p className="mt-1 text-sm text-text-sec">Percentages stacked on the base rate. Enter 20 for 20%.</p>
@@ -267,7 +267,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
       </div>
 
       <div className="mt-6 border-t border-ink-line pt-5">
-        <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-pri">
+        <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-pri">
           Job minimum, STC &amp; deposit
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-3">
@@ -306,7 +306,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
 
       <div className="mt-6 border-t border-ink-line pt-5">
         <label className="block max-w-sm">
-          <span className="mb-2 block font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec">
+          <span className="mb-2 block text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-sec">
             GST registered
           </span>
           <select
@@ -328,7 +328,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
           type="submit"
           disabled={loading || saving || !accessToken || !hasPricingBook}
           aria-busy={loading || saving}
-          className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? 'Saving…' : (<>Save rates <span aria-hidden="true">&rarr;</span></>)}
         </button>
@@ -346,7 +346,7 @@ export function SolarRatesEditor({ accessToken }: { accessToken: string | null }
           }}
           disabled={loading || saving}
           aria-busy={loading || saving}
-          className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50"
+          className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim hover:text-accent disabled:opacity-50"
         >
           Reset all to default
         </button>

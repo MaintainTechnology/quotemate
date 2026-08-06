@@ -66,6 +66,7 @@ import { PreviewSection } from './PreviewSection'
 import TradieEditor from './TradieEditor'
 import { AcceptBlock } from '../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
+import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
 import { computePriceHoldUntil, priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import {
@@ -253,6 +254,19 @@ export default async function PublicQuotePage(props: {
   // the generic card AND log a warning here on the customer surface.
   const tradeFormat = resolveTradeFormat(intakeTrade)
   const isRoofing = tradeFormat.key === 'roofing'
+  // Spec elec-plumb-site-visit-first (2026-08-06) — electrical + plumbing sell
+  // ONE customer payment: the flat $99 refundable site inspection. The G/B/B
+  // prices stay visible as information; the tradie confirms the price on site.
+  //
+  // ⚠ Read off the RAW intake trade, NOT `intakeTrade` above (whose
+  // `?? 'electrical'` display fallback would capture every trade-less row) and
+  // NOT tradeFormat.usesGenericCard (true for unknown trades too). This page is
+  // shared with solar, commercial painting and the roofing rows on `quotes`,
+  // all of which still sell deposits — so the gate is an allowlist that fails
+  // open, matching /r/[token]/[tier] exactly.
+  const siteVisitFirst = isSiteVisitFirstTrade(
+    (intake as { trade?: string | null } | null)?.trade ?? null,
+  )
 
   // ── Solar → dedicated page redirect ──────────────────────────────
   // The solar pipeline token-twins its rows (quotes.share_token ==
@@ -612,7 +626,10 @@ export default async function PublicQuotePage(props: {
     ((quote as { price_hold_until?: string | null }).price_hold_until ?? null) ??
     computePriceHoldUntil(quote.created_at as string | null)
   const hold = priceHoldStatus(effectiveHoldUntil)
-  const showHoldBanner = !isPaid && !isInspection && hold.state !== 'none'
+  // Suppressed for site-visit-first trades: the banner's "lock it in with your
+  // N% deposit" promises a payment they no longer take, and the $99 they DO
+  // take has no price hold to advertise (spec elec-plumb-site-visit-first R5).
+  const showHoldBanner = !isPaid && !isInspection && !siteVisitFirst && hold.state !== 'none'
   // Price hold lapsed → suppress the "Lock in" CTA so a customer can't book /
   // pay against a stale price. The banner above already tells them to reply
   // for a refreshed quote. N/A to inspection ($99 fee, no hold) or once paid.
@@ -623,8 +640,12 @@ export default async function PublicQuotePage(props: {
   // is still live and unpaid, advertise the countdown so they book now.
   const ebStatus = earlyBirdStatus(ebDiscountPct, ebExpiresAt)
   const ebApplied = ebAppliedPct > 0
+  // The offer is realised at the G/B/B mint (resolveMintDiscount, untouched,
+  // excludes 'inspection'), and site-visit-first trades no longer reach that
+  // mint — so advertising the countdown to them would be a discount they can
+  // never earn. An ALREADY-applied discount still renders below, unchanged.
   const showEarlyBirdOffer =
-    !isPaid && !isInspection && !ebApplied && ebStatus.state === 'live'
+    !isPaid && !isInspection && !siteVisitFirst && !ebApplied && ebStatus.state === 'live'
 
   // Mig 142 — resolve which tier(s) the customer sees for THIS feature's mode.
   // Presentation-only: the full good/better/best stays persisted for the tradie
@@ -678,6 +699,8 @@ export default async function PublicQuotePage(props: {
   //   paid            → "Deposit paid"
   //   inspection      → $99 site-visit CTA (unless roofing-indicative, which
   //                     keeps real tiers + its own $99 banner in-sheet)
+  //   elec/plumbing   → $99 site-visit CTA, priced or not (spec
+  //                     elec-plumb-site-visit-first R2 — the only payment)
   //   otherwise       → featured visible tier's inc-GST price + deposit CTA
   //                     (href suppressed when the price hold has lapsed or no
   //                     Stripe link exists).
@@ -701,6 +724,16 @@ export default async function PublicQuotePage(props: {
       // /r/<token>/inspection mints a fresh $99 Session per click — no stored
       // stripe_links.inspection needed (roofing/commercial save routes never
       // wrote one). Always link so the CTA is never dead.
+      ctaHref: `/r/${token}/inspection`,
+    }
+  } else if (siteVisitFirst) {
+    // Same bar as the inspection branch above: electrical/plumbing sell the
+    // same $99 refundable visit whether or not the row was inspection-routed.
+    // Never gated on the price hold — the $99 has none.
+    stickyBar = {
+      tierLabel: `$${INSPECTION_FEE_AUD} site visit · refundable`,
+      priceText: `$${INSPECTION_FEE_AUD}`,
+      ctaLabel: `Pay $${INSPECTION_FEE_AUD}`,
       ctaHref: `/r/${token}/inspection`,
     }
   } else if (featuredKey) {
@@ -735,7 +768,12 @@ export default async function PublicQuotePage(props: {
     token,
     tier: (featuredKey ?? 'better') as 'good' | 'better' | 'best',
     isPaid,
-    pricesVisible: !isInspection,
+    // pricesVisible false ⇒ resolveAcceptView's 4th branch: accept + pay the
+    // $99. That is exactly what a site-visit-first trade sells, and it also
+    // means a LAPSED hold no longer strands them on the 'expired' branch —
+    // the $99 has no hold. resolveAcceptView itself is untouched; only these
+    // inputs change (spec elec-plumb-site-visit-first R2).
+    pricesVisible: !isInspection && !siteVisitFirst,
     priceExpired,
     priceLabel: acceptFeaturedTier ? `$${fmt(acceptInc)} inc GST` : null,
     depositLabel: acceptDep ? `${depositPct ?? 30}% deposit ($${fmt(acceptDep)})` : null,
@@ -757,13 +795,14 @@ export default async function PublicQuotePage(props: {
   if (quote.estimated_timeframe) {
     statItems.push({ k: 'Timeframe', v: quote.estimated_timeframe as string })
   }
-  if (!isInspection && depositPct) {
+  // No deposit cell for a site-visit-first trade — the $99 visit is the ask.
+  if (!isInspection && !siteVisitFirst && depositPct) {
     statItems.push({ k: 'Deposit', v: `${depositPct}%`, sub: 'to book' })
   }
   if (pricingBook?.gst_registered) {
     statItems.push({ k: 'GST', v: 'Incl.', sub: 'all prices' })
-  } else if (isInspection) {
-    statItems.push({ k: 'Site visit', v: '$99', sub: 'refundable' })
+  } else if (isInspection || siteVisitFirst) {
+    statItems.push({ k: 'Site visit', v: `$${INSPECTION_FEE_AUD}`, sub: 'refundable' })
   }
 
   // Credential footer rows — only render rows whose data genuinely exists.
@@ -821,11 +860,22 @@ export default async function PublicQuotePage(props: {
     : isInspection
       ? { label: 'Site visit', tone: 'await' }
       : { label: 'Awaiting you', tone: 'await' }
+  // Site-visit-first framing (spec elec-plumb-site-visit-first R2/R5): the
+  // prices stay on the page, but the only thing the customer is asked to pay
+  // is the refundable $99 visit — never a % deposit against a price nobody has
+  // confirmed on site yet.
+  const siteVisitGreeting = `The only payment now is a $${INSPECTION_FEE_AUD} site visit - refundable and credited toward your final quote. Your tradie confirms the final price on site.`
   const heroGreeting = isInspection
     ? `This job needs a quick on-site visit before a real price can be locked in. The visit is $99, refundable and credited toward your final quote.`
     : tierCount === 1
-      ? `One option below. Price includes 10% GST. Tap to lock it in with a ${depositPct ?? 30}% deposit.`
-      : `${tierCount === 2 ? 'Two' : 'Three'} options below. All prices include 10% GST. Tap any tier to lock it in with a ${depositPct ?? 30}% deposit.`
+      ? `One option below. Price includes 10% GST. ${
+          siteVisitFirst ? siteVisitGreeting : `Tap to lock it in with a ${depositPct ?? 30}% deposit.`
+        }`
+      : `${tierCount === 2 ? 'Two' : 'Three'} options below. All prices include 10% GST. ${
+          siteVisitFirst
+            ? siteVisitGreeting
+            : `Tap any tier to lock it in with a ${depositPct ?? 30}% deposit.`
+        }`
 
   // ═══ Five-section roofing layout (spec customer-quote-five-sections) ═══
   //
@@ -1552,8 +1602,12 @@ export default async function PublicQuotePage(props: {
                     const rowTotals = allocateIncGst(lines, stack.totalDollars)
                     const dep = tierDeposit(t)
                     const recommended = showRecommendedBadge && quote.selected_tier === k
-                    const paidThis = isPaid && quote.paid_tier === k
-                    const otherPaid = isPaid && quote.paid_tier !== k
+                    // A site-visit-first row's paid_tier is 'inspection', so no
+                    // tier is "the paid one" — without this, EVERY card would
+                    // read "Another option confirmed" and dim itself once the
+                    // $99 landed. The cards stay display-only and undimmed.
+                    const paidThis = !siteVisitFirst && isPaid && quote.paid_tier === k
+                    const otherPaid = !siteVisitFirst && isPaid && quote.paid_tier !== k
                     return (
                       <div
                         key={k}
@@ -1695,7 +1749,9 @@ export default async function PublicQuotePage(props: {
                                 <StackRow label="GST" value="Not registered" />
                               )}
                               <StackRow label="Total (inc GST)" value={`$${fmt(stack.totalDollars)}`} strong />
-                              {dep ? (
+                              {/* No deposit row for a site-visit-first trade —
+                                  the $99 visit is the only thing to pay. */}
+                              {dep && !siteVisitFirst ? (
                                 <StackRow
                                   label={`Deposit to book (${depositPct}%)`}
                                   value={`$${fmt(dep)}`}
@@ -1727,6 +1783,16 @@ export default async function PublicQuotePage(props: {
                         ) : otherPaid ? (
                           <div style={{ marginTop: 14, ...microNote, textAlign: 'center' }}>
                             Another option confirmed
+                          </div>
+                        ) : siteVisitFirst ? (
+                          // Display-only card: the price stays, the per-tier
+                          // deposit CTA does not. The ONE action lives in the
+                          // AcceptBlock + sticky bar (spec R2). Never shows the
+                          // "price expired" note — the $99 has no price hold.
+                          <div style={{ marginTop: 14, ...microNote, textAlign: 'center' }}>
+                            {isPaid
+                              ? `$${INSPECTION_FEE_AUD} site visit paid`
+                              : `Confirmed at your $${INSPECTION_FEE_AUD} site visit`}
                           </div>
                         ) : priceExpired ? (
                           <div style={{ marginTop: 14, ...microNote, textAlign: 'center' }}>
@@ -1797,11 +1863,6 @@ export default async function PublicQuotePage(props: {
                   Pick your visit time →
                 </a>
               </>
-            ) : priceExpired ? (
-              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-                This price has lapsed, so there is nothing to book just yet. Reply to your
-                tradie&apos;s text and they&apos;ll send a refreshed quote.
-              </p>
             ) : isInspection ? (
               // No CTA here on purpose. The AcceptBlock below is the ONE action
               // band on this page (it records customer_accepted_at before
@@ -1815,6 +1876,24 @@ export default async function PublicQuotePage(props: {
                 </p>
                 <span style={microNote}>Takes about 30 minutes on site</span>
               </>
+            ) : siteVisitFirst ? (
+              // Same one-action rule as the inspection branch: no CTA here, the
+              // AcceptBlock below owns it. Ordered ABOVE the priceExpired branch
+              // on purpose — a lapsed hold must not tell an electrical/plumbing
+              // customer there is "nothing to book" when the $99 is still live.
+              <>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Accept below and book the ${INSPECTION_FEE_AUD} site visit — you pick your
+                  time straight after paying. The fee is refundable and credited toward your
+                  final quote, and your tradie confirms the final price on site.
+                </p>
+                <span style={microNote}>Takes about 30 minutes on site</span>
+              </>
+            ) : priceExpired ? (
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                This price has lapsed, so there is nothing to book just yet. Reply to your
+                tradie&apos;s text and they&apos;ll send a refreshed quote.
+              </p>
             ) : (
               <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                 Accept your option below and pay the {depositPct ?? 30}% deposit — you pick

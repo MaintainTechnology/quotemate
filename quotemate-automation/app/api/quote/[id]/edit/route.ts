@@ -37,6 +37,7 @@ import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { buildQuoteUpdatedSms } from '@/lib/sms/templates'
+import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { resolveQuoteDisplayMode } from '@/lib/quote/display'
 import { loadCandidatePrices } from '@/lib/estimate/run'
@@ -498,49 +499,72 @@ export async function POST(
   // for any quote that wasn't booked yet).
   const appliedDiscountPct = ((quote.applied_discount_pct as number | null | undefined) ?? 0)
 
-  // Connect routing (2% platform fee) — same decision the original Session
-  // used, re-read off the tenant row loaded for the ownership check above.
-  const connect = connectDestinationForTenant(tenant)
-
-  for (const key of changedTiers) {
-    const oldUrl = stripeLinks[key]
-    if (oldUrl) {
-      const exp = await expireCheckoutSession(oldUrl)
-      if (!exp.ok) {
-        console.warn('[quote/edit] expire failed (continuing)', {
-          quoteId,
-          tier: key,
-          reason: exp.reason,
-        })
-      }
+  if (isSiteVisitFirstTrade(intakeTrade)) {
+    // Electrical/plumbing sell ONE thing: the flat $99 site visit (spec
+    // elec-plumb-site-visit-first). A G/B/B Session minted here would be
+    // permanently unreachable — /r/<token>/<tier> 302s those tiers onto the
+    // inspection mint and no surface exposes the stored URL — so re-minting is
+    // a wasted Stripe call plus a dead stripe_links write on every edit.
+    // Instead DROP the stale tier link and EXPIRE it, so a Checkout tab left
+    // open from the deposit era can never complete at a price the tradie has
+    // just changed. Same treatment painting gave its retired tier mint
+    // (app/api/painting/edit/[token]/route.ts).
+    //
+    // ⚠ stripe_links.inspection is deliberately untouched: it is the LIVE $99
+    // Session, and it does not move with the tier prices.
+    const stale: string[] = []
+    for (const key of changedTiers) {
+      const oldUrl = stripeLinks[key]
+      if (oldUrl) stale.push(oldUrl)
+      delete stripeLinks[key]
     }
-    // Cast each tier to the Stripe helper's strict { label, subtotal_ex_gst }
-    // shape — by this point every tier we'd actually re-issue has those
-    // fields populated (label from the edit, subtotal recomputed above).
-    type StripeTierShape = { label: string; subtotal_ex_gst: number | string } | null
-    const newUrl = await createCheckoutSessionForTier({
-      quote: {
-        id: quote.id as string,
-        good: nextTiers.good as StripeTierShape,
-        better: nextTiers.better as StripeTierShape,
-        best: nextTiers.best as StripeTierShape,
-        deposit_pct: 30,
-        // P1 — the re-issued Session honours gst_registered exactly like the
-        // total_inc_gst recomputed above.
-        gst_registered: gstRegistered,
-      },
-      tierKey: key,
-      intake: {
-        job_type: (intake?.job_type as string) ?? 'other',
-        scope: (intake?.scope as { item_count?: number } | null) ?? null,
-        caller: (intake?.caller as { name?: string; email?: string } | null) ?? null,
-      },
-      shareToken: quote.share_token as string,
-      appUrl,
-      discountPct: appliedDiscountPct,
-      connect,
-    })
-    if (newUrl) stripeLinks[key] = newUrl
+    // Best-effort — expireCheckoutSession tolerates already-expired/paid.
+    await Promise.allSettled(stale.map((url) => expireCheckoutSession(url)))
+  } else {
+    // Connect routing (2% platform fee) — same decision the original Session
+    // used, re-read off the tenant row loaded for the ownership check above.
+    const connect = connectDestinationForTenant(tenant)
+
+    for (const key of changedTiers) {
+      const oldUrl = stripeLinks[key]
+      if (oldUrl) {
+        const exp = await expireCheckoutSession(oldUrl)
+        if (!exp.ok) {
+          console.warn('[quote/edit] expire failed (continuing)', {
+            quoteId,
+            tier: key,
+            reason: exp.reason,
+          })
+        }
+      }
+      // Cast each tier to the Stripe helper's strict { label, subtotal_ex_gst }
+      // shape — by this point every tier we'd actually re-issue has those
+      // fields populated (label from the edit, subtotal recomputed above).
+      type StripeTierShape = { label: string; subtotal_ex_gst: number | string } | null
+      const newUrl = await createCheckoutSessionForTier({
+        quote: {
+          id: quote.id as string,
+          good: nextTiers.good as StripeTierShape,
+          better: nextTiers.better as StripeTierShape,
+          best: nextTiers.best as StripeTierShape,
+          deposit_pct: 30,
+          // P1 — the re-issued Session honours gst_registered exactly like the
+          // total_inc_gst recomputed above.
+          gst_registered: gstRegistered,
+        },
+        tierKey: key,
+        intake: {
+          job_type: (intake?.job_type as string) ?? 'other',
+          scope: (intake?.scope as { item_count?: number } | null) ?? null,
+          caller: (intake?.caller as { name?: string; email?: string } | null) ?? null,
+        },
+        shareToken: quote.share_token as string,
+        appUrl,
+        discountPct: appliedDiscountPct,
+        connect,
+      })
+      if (newUrl) stripeLinks[key] = newUrl
+    }
   }
 
   // ─── Persist ───────────────────────────────────────────────
@@ -783,11 +807,20 @@ export async function POST(
             // after Stripe's 24h expiry (unchanged tiers still carried
             // draft-time Sessions here) and skip /r's book-first funnel +
             // price-hold gate + fresh-Session mint.
-            pay_links: Object.fromEntries(
-              Object.entries(stripeLinks)
-                .filter(([, v]) => !!v)
-                .map(([k]) => [k, `${appUrl}/r/${quote.share_token as string}/${k}`]),
-            ) as Partial<Record<'good' | 'better' | 'best' | 'inspection', string>>,
+            pay_links: {
+              ...(Object.fromEntries(
+                Object.entries(stripeLinks)
+                  .filter(([, v]) => !!v)
+                  .map(([k]) => [k, `${appUrl}/r/${quote.share_token as string}/${k}`]),
+              ) as Partial<Record<'good' | 'better' | 'best' | 'inspection', string>>),
+              // Spec elec-plumb-site-visit-first R5 — electrical/plumbing sell
+              // only the $99 site visit, so the revised-quote message needs that
+              // link even when stripe_links still holds G/B/B only.
+              // /r/<token>/inspection mints a fresh Session per click.
+              ...(isSiteVisitFirstTrade(intakeTrade)
+                ? { inspection: `${appUrl}/r/${quote.share_token as string}/inspection` }
+                : null),
+            },
             deposit_pct: 30,
             quote_view_url: `${appUrl}/q/${quote.share_token as string}`,
             pdf_url: quotePdfPath ? quotePdfUrl(quote.share_token as string) : null,
@@ -815,6 +848,9 @@ export async function POST(
             tierMode: asQuoteTierMode(
               (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode ?? null,
             ),
+            // Spec elec-plumb-site-visit-first R5 — the trade decides whether
+            // the message sells per-tier deposits or the one $99 site visit.
+            trade: intakeTrade,
           },
         )
         // Best-effort MMS attach of the refreshed PDF (shared helper signs

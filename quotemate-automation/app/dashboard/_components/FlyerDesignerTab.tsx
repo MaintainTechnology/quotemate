@@ -354,7 +354,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
   }
 
   // ─── Render ─────────────────────────────────────────────────────
-  const btn = 'border border-ink-line px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors'
+  const btn = 'border border-ink-line px-3 py-2 text-xs uppercase tracking-[0.08em] transition-colors'
   const btnAccent = `${btn} border-accent/70 text-accent hover:bg-accent/10`
   const btnPlain = `${btn} text-text-sec hover:border-accent hover:text-text-pri`
 
@@ -377,7 +377,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         </section>
 
         <section>
-          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Start a new flyer</h3>
+          <h3 className=" text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">Start a new flyer</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FLYER_TEMPLATES.map((t) => (
               <button
@@ -389,7 +389,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
               >
                 <span className="font-extrabold uppercase tracking-[-0.01em] text-lg text-text-pri">{t.name}</span>
                 <span className="text-sm leading-relaxed text-text-sec">{t.description}</span>
-                <span className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-accent group-hover:text-accent-press">
+                <span className="mt-1 text-xs uppercase tracking-[0.08em] text-accent group-hover:text-accent-press">
                   Use template &rarr;
                 </span>
               </button>
@@ -398,7 +398,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         </section>
 
         <section>
-          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">My flyers</h3>
+          <h3 className=" text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">My flyers</h3>
           {loadingList ? (
             <p className="qm-loading mt-4 text-sm text-text-dim">Loading…</p>
           ) : flyers.length === 0 ? (
@@ -471,7 +471,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         {/* Properties + tools */}
         <div className="space-y-5">
           <div className="rounded-card space-y-2 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Add</p>
+            <p className=" text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">Add</p>
             <div className="flex flex-wrap gap-2">
               <button onClick={addText} className={btnPlain}>+ Text</button>
               <label className={`${btnPlain} cursor-pointer`}>
@@ -492,7 +492,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
           {/* QR helper */}
           <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">QR code</p>
+            <p className=" text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">QR code</p>
             {qrAction === 'generate' ? (
               <>
                 <p className="text-sm text-text-sec">You don’t have a customer QR code yet. Generate one and drop it on the flyer — it’s saved to your Marketing tab too.</p>
@@ -521,7 +521,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
           {/* Selected element properties */}
           <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Selected element</p>
+            <p className=" text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">Selected element</p>
             {!selected ? (
               <p className="text-sm text-text-dim">Click an element on the canvas to edit it.</p>
             ) : (

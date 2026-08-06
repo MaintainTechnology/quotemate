@@ -184,7 +184,14 @@ export default async function ThanksPage(props: {
   const tierPaid = paidTier ?? sp.tier ?? null
   const isInspection = tierPaid === 'inspection' || !!quote.needs_inspection
   const isPriced = quote.needs_inspection === false
-  const jobLabel = humanizeJobType(jobType) ?? (isInspection ? 'Site inspection' : 'Your job')
+  // Since spec elec-plumb-site-visit-first (2026-08-06) a NORMALLY-PRICED
+  // electrical/plumbing quote also pays the $99 'inspection' tier, so
+  // `isInspection` no longer implies "this job could not be priced". Calling
+  // that booking a "site inspection" misdescribes it — it is a site visit that
+  // confirms a price the customer has already seen. Genuinely inspection-routed
+  // rows (needs_inspection true ⇒ isPriced false) keep the old wording.
+  const visitNoun = isPriced ? 'Site visit' : 'Site inspection'
+  const jobLabel = humanizeJobType(jobType) ?? (isInspection && !isPriced ? 'Site inspection' : 'Your job')
   // scheduledAt is non-null here — thanksPageTarget only returns 'render' with
   // both a payment and a slot.
   const visitLabel = formatScheduled(scheduledAt!, scheduledWindow, tz)
@@ -204,12 +211,12 @@ export default async function ThanksPage(props: {
   // deterministic UID the .ics route uses, buildCalendarLinks supplies the two
   // Outlook deep-links AddToCalendar renders as secondary options.
   const { start, end } = resolveEventWindow(scheduledAt!, scheduledWindow)
-  const summary = `${isInspection ? 'Inspection' : jobLabel} — ${tradieName ?? 'QuoteMax'}`
+  const summary = `${isInspection ? visitNoun : jobLabel} — ${tradieName ?? 'QuoteMax'}`
   const appUrl = process.env.APP_URL?.replace(/\/$/, '') ?? null
   const link = appUrl ? `${appUrl}/q/${quote.share_token}` : null
   const description = [
     isInspection
-      ? `Site inspection${tradieName ? ` with ${tradieName}` : ''}.`
+      ? `${visitNoun}${tradieName ? ` with ${tradieName}` : ''}.`
       : `Your ${jobLabel} visit${tradieName ? ` with ${tradieName}` : ''}.`,
     link ? `Quote: ${link}` : null,
   ]

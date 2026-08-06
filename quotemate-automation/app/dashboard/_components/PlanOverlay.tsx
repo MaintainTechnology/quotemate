@@ -124,7 +124,7 @@ export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = 
   return (
     <div className="rounded-card mt-5 border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center gap-3 border-b border-ink-line px-4 py-2.5">
-        <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className=" text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-accent">
           Plan viewer
         </span>
         <label className="flex items-center gap-2 font-mono text-xs text-text-dim">
@@ -152,7 +152,7 @@ export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = 
           <button
             type="button"
             onClick={() => onSelect?.(null)}
-            className="font-mono text-xs font-semibold uppercase tracking-[0.12em] text-accent hover:text-accent-press"
+            className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent hover:text-accent-press"
           >
             Show all
           </button>

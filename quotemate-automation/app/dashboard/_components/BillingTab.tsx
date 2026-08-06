@@ -347,7 +347,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
             Annual
           </ToggleButton>
         </div>
-        <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className=" text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-accent">
           Save ~17% — 2 months free
         </span>
       </div>
@@ -374,7 +374,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
                   {plan.name}
                 </h3>
                 {plan.featured && (
-                  <span className="bg-accent px-2 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.12em] text-white">
+                  <span className="bg-accent px-2 py-0.5 text-[0.55rem] font-bold uppercase tracking-[0.08em] text-white">
                     Popular
                   </span>
                 )}
@@ -387,7 +387,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
                 >
                   {aud(perMonth)}
                 </span>
-                <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                <span className=" text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
                   / mo
                 </span>
               </div>
@@ -466,7 +466,7 @@ function UsageBar({
   return (
     <div className="rounded-card border border-ink-line bg-ink-card p-4">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+        <span className=" text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
           {label}
         </span>
         <span className="font-mono text-sm tabular-nums text-text-pri">
@@ -507,7 +507,7 @@ function StatusPill({ status }: { status: string | null }) {
         : 'Inactive'
   return (
     <span
-      className={`border px-2 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${tone}`}
+      className={`border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em] ${tone}`}
     >
       {label}
     </span>

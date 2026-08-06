@@ -366,7 +366,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
             </p>
             {answer.citations.length > 0 && (
               <div className="mt-4 border-t border-ink-line pt-4">
-                <div className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-text-dim">
+                <div className=" text-[0.58rem] uppercase tracking-[0.08em] text-text-dim">
                   Sources
                 </div>
                 <ul className="mt-2.5 grid gap-2.5">
@@ -454,7 +454,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       <div className="truncate text-sm font-semibold text-text-pri">
                         {doc.display_name ?? 'Untitled document'}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">
                         <span>{doc.source_kind === 'invoice' ? 'Invoice' : 'Quote'}</span>
                         {doc.trade && (
                           <>

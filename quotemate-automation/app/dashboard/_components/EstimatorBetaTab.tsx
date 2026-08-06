@@ -110,7 +110,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
         aria-busy={analysing ? 'true' : 'false'}
         className="rounded-card border border-ink-line bg-ink-card p-7 motion-safe:animate-[fade-up_220ms_ease-out_both] sm:p-9"
       >
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+        <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
           Plan take-off
         </div>
         <h3 className="mt-2 max-w-2xl font-extrabold uppercase tracking-tight text-2xl leading-[1.05] text-text-pri sm:text-3xl">
@@ -152,7 +152,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
           {file ? (
             <>
               <span className="font-mono text-sm font-semibold text-teal-glow">✓ {file.name}</span>
-              <span className="font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
+              <span className=" text-[0.66rem] uppercase tracking-[0.08em] text-text-dim">
                 {(file.size / 1e6).toFixed(1)} MB · click or drop to swap
               </span>
             </>
@@ -162,7 +162,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
                 ⌖
               </span>
               <span className="text-sm font-semibold text-text-pri">Drop the plan PDF here</span>
-              <span className="font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
+              <span className=" text-[0.66rem] uppercase tracking-[0.08em] text-text-dim">
                 or click to browse · max 32 MB
               </span>
             </>
@@ -171,7 +171,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
 
         <div className="mt-5 grid gap-5 sm:grid-cols-[2fr_1fr]">
           <label className="block">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
               Sheet hint
             </div>
             <input
@@ -192,7 +192,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
               type="submit"
               disabled={analysing || !file || !accessToken}
               aria-busy={analysing}
-              className="rounded-ctl inline-flex w-full items-center justify-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex w-full items-center justify-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {analysing ? (
                 <>
@@ -217,7 +217,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
 
         {errMsg && (
           <div role="alert" className="rounded-card mt-5 border border-warning-bright/40 bg-ink-deep px-4 py-3">
-            <div className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-warning">
+            <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-warning">
               Something went wrong
             </div>
             <p className="mt-1 text-sm text-text-sec">{errMsg}</p>
@@ -239,7 +239,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
       >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
               Run history
             </div>
             <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
@@ -247,7 +247,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             </h3>
           </div>
           {history && history.length > 0 && (
-            <span className="font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
+            <span className=" text-[0.66rem] uppercase tracking-[0.08em] text-text-dim">
               last {history.length} upload{history.length === 1 ? '' : 's'}
             </span>
           )}
@@ -256,13 +256,13 @@ export function EstimatorBetaTab({ accessToken }: Props) {
         {history === null ? (
           <output aria-live="polite" className="mt-5 block py-6 text-center">
             <span className="inline-block h-4 w-4 animate-spin border-2 border-accent/40 border-t-accent align-middle" aria-hidden="true" />
-            <span className="qm-loading ml-3 align-middle font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
+            <span className="qm-loading ml-3 align-middle text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
               Loading history…
             </span>
           </output>
         ) : history.length === 0 ? (
           <div className="rounded-card mt-5 border border-dashed border-ink-line bg-ink-deep px-6 py-10 text-center">
-            <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
+            <p className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
               No saved runs yet
             </p>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-text-sec">
@@ -303,7 +303,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
                         <span className="font-mono text-sm font-bold tabular-nums text-accent">{money(total)}</span>
                       )}
                       <RunStatusChip status={status} />
-                      <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors group-hover:text-accent">
+                      <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim transition-colors group-hover:text-accent">
                         Open <span aria-hidden="true">→</span>
                       </span>
                     </button>
@@ -316,7 +316,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
                           {u.sheet_hint ? ` · ${u.sheet_hint}` : ''}
                         </span>
                       </span>
-                      <span className="font-mono text-[0.66rem] uppercase tracking-[0.12em] text-warning">
+                      <span className=" text-[0.66rem] uppercase tracking-[0.08em] text-warning">
                         extraction failed
                       </span>
                     </div>

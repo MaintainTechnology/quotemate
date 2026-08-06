@@ -52,7 +52,7 @@ export function ZoomableImage({ src, alt, className, caption }: Props) {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={src} alt={alt} className="qm-panel max-h-[88vh] max-w-full object-contain shadow-2xl" />
-          {caption && <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/70">{caption}</p>}
+          {caption && <p className=" text-xs uppercase tracking-[0.08em] text-white/70">{caption}</p>}
           <button
             type="button"
             onClick={(e) => {

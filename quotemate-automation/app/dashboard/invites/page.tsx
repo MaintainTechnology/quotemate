@@ -132,7 +132,7 @@ export default function MarketingPage() {
             <BrandMark className="h-10 w-auto" />
             <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
           </div>
-          <Link href="/dashboard" className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri">
+          <Link href="/dashboard" className="flex items-center gap-2 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-text-pri">
             <span aria-hidden>←</span> Dashboard
           </Link>
         </div>
@@ -171,7 +171,7 @@ export default function MarketingPage() {
               <button type="button" onClick={saveSlug} disabled={slugSaving} className={GHOST}>
                 {slugSaving ? 'Saving…' : 'Save'}
               </button>
-              {slug && <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-success">● Live</span>}
+              {slug && <span className=" text-[0.62rem] uppercase tracking-[0.08em] text-success">● Live</span>}
             </div>
             <p className="mt-2.5 text-xs text-text-dim">Auto-set from your business name. This is where the “landing page” QR sends customers.</p>
           </Panel>
@@ -233,7 +233,7 @@ export default function MarketingPage() {
       {/* closing orange accent bar */}
       <div className="relative z-10 bg-accent">
         <div className="mx-auto max-w-5xl px-6 py-4 text-center">
-          <span className="font-mono text-xs uppercase tracking-[0.16em] text-white">
+          <span className=" text-xs uppercase tracking-[0.08em] text-white">
             Every scan is a lead · QuoteMax
           </span>
         </div>

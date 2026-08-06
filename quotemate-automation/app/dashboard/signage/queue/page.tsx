@@ -257,7 +257,7 @@ export default function SignageQueuePage() {
           <div className="grid items-start gap-8 lg:grid-cols-[1fr_1.4fr]">
             {/* Left: queue + fleet */}
             <div>
-              <h2 className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">Needs your attention</h2>
+              <h2 className=" text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-accent">Needs your attention</h2>
               <div className="mt-4 grid gap-3">
                 {queue.length === 0 ? (
                   <EmptyState
@@ -285,7 +285,7 @@ export default function SignageQueuePage() {
                           <div className="mt-3">
                             <ComplianceBar size="sm" legend={false} pass={q.counts.compliant} fix={q.counts.fix} review={q.counts.review} />
                           </div>
-                          <div className="mt-2 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-text-dim" aria-hidden="true">
+                          <div className="mt-2 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim" aria-hidden="true">
                             <span className="tabular-nums">{q.counts.compliant}</span> compliant · <span className="tabular-nums">{q.counts.fix}</span> to fix ·{' '}
                             <span className="tabular-nums">{q.counts.review}</span> review
                           </div>
@@ -296,7 +296,7 @@ export default function SignageQueuePage() {
                 )}
               </div>
 
-              <h2 className="mt-12 font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">Fleet</h2>
+              <h2 className="mt-12 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-accent">Fleet</h2>
               <div className="mt-4 grid gap-2">
                 {fleet.map((f) => (
                   <button
@@ -364,7 +364,7 @@ function DetailPanel({
     <div className={REVEAL}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             {assessment.region ?? 'Studio'}
           </div>
           <h3 className="mt-1 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri">{assessment.studio_name}</h3>
@@ -389,7 +389,7 @@ function DetailPanel({
       )}
 
       {assessment.kb_degraded && (
-        <div className="rounded-card mt-3 border border-warning-bright/40 bg-ink-deep px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-warning-bright">
+        <div className="rounded-card mt-3 border border-warning-bright/40 bg-ink-deep px-3 py-2 text-[0.7rem] uppercase tracking-[0.08em] text-warning-bright">
           ⚠ The second-stage brand-standards check did not complete for this assessment — verdicts are Step-1 (database) only.
         </div>
       )}
@@ -397,7 +397,7 @@ function DetailPanel({
       {/* Photos */}
       {photos.length > 0 && (
         <div className="mt-6">
-          <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">Submitted photos</div>
+          <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">Submitted photos</div>
           <div className="mt-2.5 flex flex-wrap gap-3">
             {photos.map((p, i) =>
               p.url ? (
@@ -413,7 +413,7 @@ function DetailPanel({
                     alt={prettyGroup(p.shot_slot)}
                     className="h-24 w-32 border border-ink-line object-cover transition-[border-color,opacity] group-hover:border-accent group-hover:opacity-90"
                   />
-                  <span className="mt-1 block font-mono text-[0.64rem] uppercase tracking-[0.12em] text-text-dim group-hover:text-text-sec">
+                  <span className="mt-1 block text-[0.64rem] uppercase tracking-[0.08em] text-text-dim group-hover:text-text-sec">
                     {p.shot_slot}
                   </span>
                 </button>
@@ -427,7 +427,7 @@ function DetailPanel({
       <div className="mt-7 grid gap-6">
         {groups.map((g) => (
           <div key={g}>
-            <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">{prettyGroup(g)}</div>
+            <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">{prettyGroup(g)}</div>
             <div className="mt-2 grid gap-2">
               {verdicts
                 .filter((v) => v.rule_group === g)
@@ -448,7 +448,7 @@ function DetailPanel({
                             {v.kb_citation && <span className="text-text-dim"> · {v.kb_citation}</span>}
                           </p>
                         )}
-                        <div className="mt-1 flex flex-wrap gap-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
+                        <div className="mt-1 flex flex-wrap gap-2 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">
                           {v.source_citation && <span>{v.source_citation}</span>}
                           {v.applicability !== 'auto_vision' && <span>· auto-downgraded ({v.applicability.replace(/_/g, ' ')})</span>}
                         </div>
@@ -464,7 +464,7 @@ function DetailPanel({
       {/* Advisory — Step-2-only brand-standard observations */}
       {advisory.length > 0 && (
         <div className="mt-7">
-          <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">Other observations</div>
+          <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">Other observations</div>
           <div className="mt-2 grid gap-2">
             {advisory.map((a, i) => (
               <div key={i} className="rounded-card border border-ink-line bg-ink-deep px-4 py-3">
@@ -472,7 +472,7 @@ function DetailPanel({
                   <span className="text-accent" aria-hidden="true">◇</span>
                   <div className="min-w-0">
                     <p className="text-sm text-text-pri">{a.description}</p>
-                    <div className="mt-1 flex flex-wrap gap-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
+                    <div className="mt-1 flex flex-wrap gap-2 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">
                       <span>{a.shot}</span>
                       {a.citation && <span>· {a.citation}</span>}
                     </div>
@@ -491,7 +491,7 @@ function DetailPanel({
           disabled={busy}
           aria-busy={busy}
           onClick={() => onDecide('approved')}
-          className="inline-flex items-center justify-center bg-teal-glow px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-ink-deep transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center justify-center bg-teal-glow px-5 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-ink-deep transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Approve
         </button>
@@ -500,7 +500,7 @@ function DetailPanel({
           disabled={busy}
           aria-busy={busy}
           onClick={() => onDecide('needs_changes')}
-          className="inline-flex items-center justify-center bg-warning px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center justify-center bg-warning px-5 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Needs changes
         </button>
@@ -509,12 +509,12 @@ function DetailPanel({
           disabled={busy}
           aria-busy={busy}
           onClick={() => onDecide('escalated')}
-          className="rounded-ctl inline-flex items-center justify-center border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex items-center justify-center border border-ink-line px-5 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           Escalate
         </button>
       </div>
-      <p className="mt-3 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-text-dim">
+      <p className="mt-3 text-[0.68rem] uppercase tracking-[0.08em] text-text-dim">
         The AI flags; HQ decides. Approving does not auto-notify the studio.
       </p>
     </div>

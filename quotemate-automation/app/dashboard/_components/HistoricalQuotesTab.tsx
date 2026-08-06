@@ -386,7 +386,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
               <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm text-text-pri">{r.raw_description ?? '(no description)'}</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
                     <span>{money(r.price_inc_gst)} inc GST</span>
                     {r.job_type_confidence ? <span>· {r.job_type_confidence} confidence</span> : null}
                     {r.gst_basis === 'unknown' ? (
@@ -453,7 +453,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
           <div className="mt-6 overflow-x-auto border border-ink-line">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-ink-deep font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+                <tr className="bg-ink-deep text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
                   <th className="px-3 py-2 text-left">Job</th>
                   <th className="px-3 py-2 text-right">Jobs</th>
                   <th className="px-3 py-2 text-right">Avg (inc GST)</th>
@@ -533,7 +533,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm text-text-pri">{p.name}</div>
-                      <div className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                      <div className=" text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
                         {p.sample_count} jobs · {p.is_new ? 'new entry' : `was ${money(p.existing_price_ex_gst)} ex GST`}
                       </div>
                     </div>
@@ -580,7 +580,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search descriptions…"
-            className="rounded-ctl flex-1 min-w-[12rem] border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+            className="rounded-ctl min-w-[12rem] flex-1 border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none sm:max-w-xs"
           />
         </div>
         {!quotes || quotes.length === 0 ? (
@@ -594,7 +594,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
               <li key={q.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-text-pri">{q.raw_description ?? '(no description)'}</div>
-                  <div className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                  <div className="mt-0.5 text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
                     {jobLabel(q.job_type)}
                     {q.quoted_at ? ` · ${q.quoted_at}` : ''}
                   </div>

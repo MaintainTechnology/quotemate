@@ -6,6 +6,12 @@
 // four surfaces disagreed on GST conditionality (P1), discount order
 // (P4/P5), and display-vs-charge precision (P8) — any reintroduced fork
 // fails here.
+//
+// The fixture is a ROOFING quote and now says so: spec
+// elec-plumb-site-visit-first (2026-08-06) retired the tier deposit from
+// electrical + plumbing, so `trade: 'roofing'` is what keeps this a real
+// deposit-parity test — and doubles as proof that roofing rows on the shared
+// `quotes` builder still print (and charge) a per-tier deposit.
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -76,7 +82,7 @@ describe.each([
     const sms = buildQuoteSms(
       intake,
       quoteFixture(discountPct) as unknown as Parameters<typeof buildQuoteSms>[1],
-      { tierMode: 'single' },
+      { tierMode: 'single', trade: 'roofing' },
     )
     expect(sms).toContain(`BETTER: $${pageTotal}`)
     expect(sms).toContain(`(deposit $${pageDeposit})`)
@@ -111,6 +117,7 @@ describe('price parity — non-GST-registered tradie (P1)', () => {
     const q = { ...quoteFixture(0), gst_registered: false }
     const sms = buildQuoteSms(intake, q as unknown as Parameters<typeof buildQuoteSms>[1], {
       tierMode: 'single',
+      trade: 'roofing',
     })
     expect(sms).toContain(`BETTER: $${EX}`)
 

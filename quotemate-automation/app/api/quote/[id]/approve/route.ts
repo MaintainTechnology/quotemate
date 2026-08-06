@@ -39,6 +39,7 @@ import {
 } from '@/lib/quote/display'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
+import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { resolveCustomerContact } from '@/lib/quote/send-customer'
 
@@ -169,6 +170,13 @@ export async function POST(
   for (const k of Object.keys(storedLinks)) {
     payLinks[k] = `${appUrl}/r/${quote.share_token as string}/${k}`
   }
+  // Spec elec-plumb-site-visit-first R5 — electrical/plumbing sell only the
+  // $99 site visit, so the approved-send message needs that link even on a
+  // quote drafted before the model changed (stripe_links hold G/B/B only).
+  // /r/<token>/inspection mints a fresh Session per click, so it is always live.
+  if (isSiteVisitFirstTrade(approveIntakeTrade)) {
+    payLinks.inspection = `${appUrl}/r/${quote.share_token as string}/inspection`
+  }
   const depositPct =
     typeof quote.deposit_pct === 'number'
       ? quote.deposit_pct
@@ -228,6 +236,7 @@ export async function POST(
   const body = buildQuoteSms(intakeForSms, quoteForSms, {
     displayMode: asQuoteDisplayMode(displayMode),
     tierMode,
+    trade: approveIntakeTrade,
   })
   const fromNumber = tenant.twilio_sms_number ?? process.env.TWILIO_SMS_NUMBER ?? undefined
   // Best-effort MMS attach of the PDF — the shared helper signs the media

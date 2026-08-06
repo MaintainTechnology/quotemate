@@ -179,7 +179,7 @@ export function RoofTilesViewer({ token, address, postcode, state }: Props) {
     <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Fly around in 3D</div>
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">Fly around in 3D</div>
           <p className="mt-1 max-w-2xl text-sm text-text-sec">
             Orbit the property in Google&rsquo;s photorealistic 3D model — see the whole roof, access,
             tree overhang and neighbours. Drag to orbit, scroll to zoom.
@@ -187,7 +187,7 @@ export function RoofTilesViewer({ token, address, postcode, state }: Props) {
         </div>
         <div className="flex items-center gap-3">
           {active && status === 'ready' && (
-            <button type="button" onClick={toggleOrbit} className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent">
+            <button type="button" onClick={toggleOrbit} className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-accent hover:text-accent">
               {orbiting ? 'Stop orbit' : 'Auto-orbit'}
             </button>
           )}
@@ -195,7 +195,7 @@ export function RoofTilesViewer({ token, address, postcode, state }: Props) {
             type="button"
             onClick={() => setActive((v) => !v)}
             disabled={address.trim().length < 3}
-            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
           >
             {active ? 'Hide 3D' : (<>Fly around in 3D <span aria-hidden="true">&rarr;</span></>)}
           </button>
@@ -207,7 +207,7 @@ export function RoofTilesViewer({ token, address, postcode, state }: Props) {
           <div ref={containerRef} className="rounded-card h-[28rem] w-full overflow-hidden border border-ink-line bg-ink-deep" />
           {status === 'loading' && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="inline-flex items-center gap-3 bg-ink-deep/80 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">
+              <span className="inline-flex items-center gap-3 bg-ink-deep/80 px-4 py-2 text-sm font-semibold uppercase tracking-[0.08em] text-text-sec">
                 <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/40 border-t-accent" aria-hidden="true" />
                 {stage}
               </span>

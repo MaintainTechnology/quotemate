@@ -37,6 +37,7 @@ import {
 } from '@/lib/quote/display'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
+import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
 import { normaliseAuMobile } from '@/lib/phone/au'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { sendEmail } from '@/lib/email/resend'
@@ -152,6 +153,11 @@ export async function POST(
   // everywhere) so a cross-trade tenant's SMS display/tier mode matches the
   // trade-scoped PDF render rather than an arbitrary pricing_book row.
   const trade = ((intake?.trade as string | null | undefined) ?? 'electrical').trim() || 'electrical'
+  // The site-visit-first gate must read the RAW trade, never the display
+  // fallback above: a trade-less row defaulted to 'electrical' would be sent
+  // the $99-only SMS while its /r mint still fails open to a deposit — the
+  // message and the money would disagree. approve/ and edit/ already do this.
+  const rawTrade = (intake?.trade as string | null | undefined) ?? null
   const { data: pricingBook } = await supabase
     .from('pricing_book')
     .select('quote_display, quote_tier_mode, gst_registered')
@@ -221,6 +227,13 @@ export async function POST(
     for (const k of Object.keys(storedLinks)) {
       payLinks[k] = `${appUrl}/r/${shareToken}/${k}`
     }
+    // Spec elec-plumb-site-visit-first R5 — electrical/plumbing sell only the
+    // $99 site visit, so the message needs that link even on a quote drafted
+    // before the model changed (whose stripe_links hold G/B/B only).
+    // /r/<token>/inspection mints a fresh Session per click, so it is always live.
+    if (isSiteVisitFirstTrade(rawTrade)) {
+      payLinks.inspection = `${appUrl}/r/${shareToken}/inspection`
+    }
     const depositPct =
       typeof quote.deposit_pct === 'number'
         ? quote.deposit_pct
@@ -254,6 +267,7 @@ export async function POST(
     const smsBody = buildQuoteSms(intakeForSms, quoteForSms, {
       displayMode: asQuoteDisplayMode(displayMode),
       tierMode,
+      trade: rawTrade,
     })
     const fromNumber = tenant.twilio_sms_number ?? process.env.TWILIO_SMS_NUMBER ?? undefined
 

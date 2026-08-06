@@ -521,7 +521,7 @@ function RoofingMeasurePageInner() {
               type="submit"
               disabled={busy || authState !== 'ready'}
               aria-busy={busy}
-              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? (<><Spinner /> Measuring…</>) : (<>Measure all structures <span aria-hidden="true">&rarr;</span></>)}
             </button>
@@ -586,7 +586,7 @@ function RoofingMeasurePageInner() {
       )}
 
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
-        <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
+        <span className=" text-sm font-semibold uppercase tracking-[0.08em]">
           QuoteMax · Roof measure · multi-structure
         </span>
       </div>
@@ -730,7 +730,7 @@ function MultiResultBlock({
       {/* Combined total */}
       <div className="rounded-card edge-lit mt-10 border border-ink-line bg-ink-card p-7 sm:p-9">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Combined total · {combined.count} structure{combined.count === 1 ? '' : 's'} included
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri">
@@ -740,11 +740,11 @@ function MultiResultBlock({
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           {(['good', 'better', 'best'] as const).map((tier, i) => (
             <div key={tier} className="rounded-card border border-ink-line bg-ink-deep p-6">
-              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{tier} · combined</div>
+              <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">{tier} · combined</div>
               <div className="mt-3 font-mono text-3xl font-bold tabular-nums text-accent sm:text-4xl">
                 ${formatMoney(combined.incGst[i])}
               </div>
-              <div className="mt-2 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+              <div className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
                 inc GST · ${formatMoney(combined.exGst[i])} ex GST
               </div>
             </div>
@@ -756,12 +756,12 @@ function MultiResultBlock({
             type="button"
             onClick={onSave}
             disabled={saveState === 'saving' || combined.count === 0}
-            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saveState === 'saving' ? (<><Spinner /> Saving…</>) : (<>Save job ({combined.count})</>)}
           </button>
           {saveState === 'saved' && savedId && (
-            <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-teal-glow">
+            <span className=" text-sm font-semibold uppercase tracking-[0.08em] text-teal-glow">
               ✓ Saved · {savedId.slice(0, 8)}
             </span>
           )}
@@ -769,7 +769,7 @@ function MultiResultBlock({
             type="button"
             onClick={onSendAsQuote}
             disabled={quoteState === 'saving' || combined.count === 0}
-            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             {quoteState === 'saving'
               ? (<><Spinner /> Creating deposit page…</>)
@@ -780,7 +780,7 @@ function MultiResultBlock({
         </div>
         {quoteState === 'saved' && quoteShareUrl && (
           <div className="rounded-card mt-4 border border-ink-line bg-ink-deep p-5">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
+            <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-teal-glow">
               ✓ Deposit checkout page created
             </div>
             <p className="mt-2 text-base text-text-sec">
@@ -800,7 +800,7 @@ function MultiResultBlock({
                 onClick={() => {
                   void navigator.clipboard.writeText(quoteShareUrl)
                 }}
-                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec hover:border-accent hover:text-accent"
+                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-text-sec hover:border-accent hover:text-accent"
               >
                 Copy
               </button>
@@ -808,7 +808,7 @@ function MultiResultBlock({
                 href={quoteShareUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-ctl inline-flex items-center gap-2 bg-accent px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press"
+                className="rounded-ctl inline-flex items-center gap-2 bg-accent px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-white hover:bg-accent-press"
               >
                 Open <span aria-hidden="true">&rarr;</span>
               </a>
@@ -817,7 +817,7 @@ function MultiResultBlock({
                   href={`/api/q/${quoteShareToken}/pdf`}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec hover:border-accent hover:text-accent"
+                  className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-text-sec hover:border-accent hover:text-accent"
                 >
                   Download PDF <span aria-hidden="true">&darr;</span>
                 </a>
@@ -835,7 +835,7 @@ function MultiResultBlock({
       {/* Provider warnings */}
       {warnings.length > 0 && (
         <div className="rounded-card mt-8 border border-ink-line bg-ink-card p-7 sm:p-8">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Provider warnings</div>
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">Provider warnings</div>
           <ul className="mt-3 space-y-2 text-base text-text-sec">
             {warnings.map((w, i) => (
               <li key={i} className="flex items-baseline gap-3">
@@ -882,14 +882,14 @@ function StructureCard({
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             {structure.role === 'primary' ? 'Main dwelling' : 'Secondary structure'} · {String(index + 1).padStart(2, '0')}
           </div>
           <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{structure.label}</h3>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 text-text-sec" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={isIncluded} onChange={onToggleInclude} className="h-4 w-4 accent-accent" />
-          <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em]">In job</span>
+          <span className=" text-xs font-semibold uppercase tracking-[0.08em]">In job</span>
         </label>
       </div>
 
@@ -905,7 +905,7 @@ function StructureCard({
 
       {/* Per-structure material override */}
       <div className="mt-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-2 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
           Material for this structure
         </div>
         <select
@@ -925,9 +925,9 @@ function StructureCard({
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         {p.tiers.map((t) => (
           <div key={t.tier} className="rounded-card border border-ink-line bg-ink-deep p-5">
-            <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">{t.tier} · {t.label}</div>
+            <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">{t.tier} · {t.label}</div>
             <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-accent">${formatMoney(t.inc_gst)}</div>
-            <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">inc GST</div>
+            <div className="mt-1 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">inc GST</div>
           </div>
         ))}
       </div>
@@ -952,7 +952,7 @@ function PropertyContextStrip({ quote }: { quote: MultiRoofQuote }) {
   if (chips.length === 0) return null
   return (
     <div className="rounded-card edge-lit mt-8 border border-ink-line bg-ink-card px-6 py-5 sm:px-8">
-      <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+      <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
         Property context · PropRadar
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -994,7 +994,7 @@ function combinedIncludedTotals(
 
 function Breadcrumb() {
   return (
-    <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+    <div className="flex flex-wrap items-center gap-3 text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
       <Link href="/dashboard" className="transition-colors hover:text-text-pri">Dashboard</Link>
       <span className="text-ink-line">/</span>
       <Link href="/dashboard?tab=roofing" className="transition-colors hover:text-text-pri">Roof</Link>
@@ -1007,7 +1007,7 @@ function Breadcrumb() {
 function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div>
-      <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</div>
+      <div className=" text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-accent">{eyebrow}</div>
       <h2 className="mt-3 font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1]">{title}</h2>
     </div>
   )
@@ -1015,7 +1015,7 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-2 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
+    <div className="mb-2 text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">{children}</div>
   )
 }
 
@@ -1027,7 +1027,7 @@ function PitchProvenance({ metrics, declaredPitch }: { metrics: RoofMetrics; dec
   const measured = metrics.pitch_source === 'measured' && metrics.pitch_degrees != null
   if (measured) {
     return (
-      <div className="rounded-ctl mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-ink-line bg-ink-deep px-3 py-2 font-mono text-xs font-semibold uppercase tracking-[0.12em]">
+      <div className="rounded-ctl mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-ink-line bg-ink-deep px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em]">
         <span className="text-text-sec">◳ Pitch {metrics.pitch_degrees}° measured</span>
         <span className="text-text-dim">
           · Google aerial {metrics.imagery_date ?? 'date n/a'}
@@ -1038,7 +1038,7 @@ function PitchProvenance({ metrics, declaredPitch }: { metrics: RoofMetrics; dec
     )
   }
   return (
-    <div className="rounded-ctl mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-3 py-2 font-mono text-xs font-semibold uppercase tracking-[0.12em] text-text-dim">
+    <div className="rounded-ctl mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
       <span>◳ Pitch declared · {declaredPitch}</span>
     </div>
   )
@@ -1051,7 +1051,7 @@ function GeoscapeAttributes({ metrics }: { metrics: RoofMetrics }) {
   if (chips.length === 0) return null
   return (
     <div className="mt-5">
-      <div className="mb-2 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
         Geoscape building data
       </div>
       <div className="flex flex-wrap gap-2">
@@ -1069,7 +1069,7 @@ function GeoscapeAttributes({ metrics }: { metrics: RoofMetrics }) {
 function MiniStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-card border border-ink-line bg-ink-deep p-4">
-      <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
+      <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-xl font-bold tabular-nums text-text-pri">{value}</div>
       {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}
     </div>
@@ -1081,7 +1081,7 @@ function Notice({ tone, label, children }: { tone: 'warn' | 'accent'; label: str
   const labelColour = tone === 'warn' ? 'text-warning' : 'text-accent'
   return (
     <div className={`rounded-card mt-6 border ${border} bg-ink-card px-5 py-4`}>
-      <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${labelColour}`}>{label}</div>
+      <div className={` text-[0.78rem] font-semibold uppercase tracking-[0.08em] ${labelColour}`}>{label}</div>
       <p className="mt-1 text-base text-text-sec">{children}</p>
     </div>
   )
@@ -1133,7 +1133,7 @@ function MeasureProgressModal({ open, busy }: { open: boolean; busy: boolean }) 
           id="measure-progress-title"
           role="status"
           aria-live="polite"
-          className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent"
+          className="flex items-center gap-3 text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent"
         >
           {/* Accent (not white) spinner so it stays visible on the white
               ink-card in light mode as well as the dark card in dark mode.
@@ -1173,7 +1173,7 @@ function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' }) {
   return (
     <div className="rounded-ctl mt-10 inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
       <span className={`h-2.5 w-2.5 ${dot}`} aria-hidden="true" />
-      <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">{label}</span>
+      <span className=" text-sm font-semibold uppercase tracking-[0.08em] text-text-sec">{label}</span>
     </div>
   )
 }

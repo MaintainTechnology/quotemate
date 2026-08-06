@@ -187,7 +187,7 @@ export function AddressAutocomplete({
         className="rounded-ctl w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
       />
       {busy && (
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
           …
         </span>
       )}

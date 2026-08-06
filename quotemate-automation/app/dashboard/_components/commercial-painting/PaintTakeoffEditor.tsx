@@ -184,7 +184,7 @@ export function PaintTakeoffEditor({
             aria-expanded={showFlags}
             className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left"
           >
-            <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning">
+            <span className=" text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-warning">
               {flags.length} reconciliation flag{flags.length === 1 ? '' : 's'}
             </span>
             <span className="h-px flex-1 bg-ink-line" aria-hidden />
@@ -194,7 +194,7 @@ export function PaintTakeoffEditor({
             <ul className="border-t border-ink-line px-4 py-3 text-sm text-text-sec">
               {flags.map((f, i) => (
                 <li key={i} className="flex gap-2 py-0.5">
-                  <span className="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
+                  <span className=" text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">
                     {f.kind === 'delta' ? 'Δ' : f.kind === 'plan_only' ? 'PLAN' : 'DOC'}
                   </span>
                   <span>{f.room} · {f.surface} — {f.detail}</span>
@@ -208,7 +208,7 @@ export function PaintTakeoffEditor({
       {/* Finishes schedule reference */}
       {finishesSchedule.length > 0 && (
         <details className="rounded-card mt-3 border border-ink-line bg-ink-deep">
-          <summary className="cursor-pointer list-none px-4 py-2.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-sec [&::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none px-4 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-text-sec [&::-webkit-details-marker]:hidden">
             Finishes schedule from the plans · {finishesSchedule.length} entries
           </summary>
           <div className="overflow-x-auto border-t border-ink-line">
@@ -230,7 +230,7 @@ export function PaintTakeoffEditor({
 
       {/* Bulk edit — set the coats on every line at once. */}
       <div className="rounded-card mt-4 flex flex-wrap items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3">
-        <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+        <span className=" text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
           Bulk edit
         </span>
         <label className="flex items-center gap-2 text-sm text-text-sec">
@@ -252,11 +252,11 @@ export function PaintTakeoffEditor({
           type="button"
           onClick={applyBulkCoats}
           disabled={bulkCoats.trim() === ''}
-          className="rounded-ctl inline-flex cursor-pointer items-center gap-1.5 border border-ink-line bg-ink-card px-3 py-1.5 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-ctl inline-flex cursor-pointer items-center gap-1.5 border border-ink-line bg-ink-card px-3 py-1.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
         >
           Apply to all lines
         </button>
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+        <span className=" text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
           {COATS_MIN}–{COATS_MAX} coats
         </span>
       </div>
@@ -266,12 +266,12 @@ export function PaintTakeoffEditor({
         {groups.map(([room, groupRows]) => (
           <div key={room}>
             <div className="flex items-center gap-3">
-              <h4 className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-accent">{room}</h4>
+              <h4 className=" text-xs font-bold uppercase tracking-[0.08em] text-accent">{room}</h4>
               <span className="h-px flex-1 bg-ink-line" aria-hidden />
               <button
                 type="button"
                 onClick={() => addRow(room)}
-                className="inline-flex cursor-pointer items-center gap-1 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors hover:text-accent"
+                className="inline-flex cursor-pointer items-center gap-1 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-accent"
               >
                 <Plus className="h-3 w-3" aria-hidden /> Line
               </button>
@@ -279,7 +279,7 @@ export function PaintTakeoffEditor({
             <div className="mt-2 overflow-x-auto">
               <table className="w-full min-w-[760px] border-collapse text-sm">
                 <thead>
-                  <tr className="text-left font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+                  <tr className="text-left text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
                     <th className="py-1.5 pr-3 font-semibold">Surface</th>
                     <th className="py-1.5 pr-3 font-semibold">System</th>
                     <th className="py-1.5 pr-3 text-right font-semibold">Qty</th>
@@ -403,7 +403,7 @@ export function PaintTakeoffEditor({
 
       {/* Confirm bar */}
       <div className="mt-5 flex flex-wrap items-center gap-4 border-t border-ink-line pt-4">
-        <label className="flex items-center gap-2 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+        <label className="flex items-center gap-2 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
           Labour rate $/hr
           <input
             type="number"
@@ -428,7 +428,7 @@ export function PaintTakeoffEditor({
           disabled={pricing}
           aria-busy={pricing}
           onClick={handleConfirm}
-          className="rounded-ctl inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 text-sm font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pricing ? (
             <>
@@ -445,7 +445,7 @@ export function PaintTakeoffEditor({
         <button
           type="button"
           onClick={() => setRows(toRows(initialItems))}
-          className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-sec"
+          className="inline-flex cursor-pointer items-center gap-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-text-sec"
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Reset edits
         </button>

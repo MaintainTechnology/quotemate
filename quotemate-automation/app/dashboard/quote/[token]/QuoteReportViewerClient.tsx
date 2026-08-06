@@ -157,7 +157,7 @@ export default function QuoteReportViewerClient(props: {
       {/* top-11: sticks below the layout's h-11 dashboard bar. */}
       <div className="sticky top-11 z-30 border-b border-ink-line bg-ink-deep/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
+          <div className=" text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
             Quote report · <span className="text-text-sec">{trade}</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -220,7 +220,7 @@ export default function QuoteReportViewerClient(props: {
         </div>
         {disabledReason && (
           <div className="mx-auto max-w-5xl px-4 pb-2 sm:px-6">
-            <p className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+            <p className=" text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
               {disabledReason}
             </p>
           </div>
@@ -236,7 +236,7 @@ export default function QuoteReportViewerClient(props: {
           >
             <h2
               id="risk-flags-heading"
-              className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim"
+              className=" text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-dim"
             >
               Assumed while pricing · only you see this
             </h2>
@@ -264,7 +264,7 @@ export default function QuoteReportViewerClient(props: {
           />
         ) : htmlSrc ? (
           <>
-            <div className="mb-2 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+            <div className="mb-2 flex items-center gap-2 text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
               Live preview · edits appear here after you save · Download PDF exports it
             </div>
@@ -284,7 +284,7 @@ export default function QuoteReportViewerClient(props: {
           />
         ) : (
           <div className="flex flex-col items-center gap-4 rounded border border-ink-line bg-ink-card px-6 py-16 text-center">
-            <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
+            <div className=" text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
               Inline preview not available yet for {trade}
             </div>
             <p className="max-w-md text-sm text-text-sec">

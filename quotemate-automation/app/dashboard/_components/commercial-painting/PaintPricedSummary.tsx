@@ -31,7 +31,7 @@ function aud(n: number): string {
 }
 
 const NUM_TH =
-  'px-4 py-2.5 text-right font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
+  'px-4 py-2.5 text-right text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-text-dim'
 const NUM_TD = 'px-4 py-3 text-right font-mono text-sm tabular-nums text-text-sec'
 
 function LinesTable({ lines, traceKey }: { lines: PricedPaintLine[]; traceKey: string }) {
@@ -40,14 +40,14 @@ function LinesTable({ lines, traceKey }: { lines: PricedPaintLine[]; traceKey: s
       <table className="w-full min-w-[640px] border-collapse text-sm">
         <thead>
           <tr className="bg-ink-deep/40">
-            <th scope="col" className="px-4 py-2.5 text-left font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+            <th scope="col" className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
               Surface
             </th>
             <th scope="col" className={NUM_TH}>Qty</th>
             <th scope="col" className={NUM_TH}>Hours</th>
             <th scope="col" className={NUM_TH}>Material</th>
             <th scope="col" className={NUM_TH}>Line ex GST</th>
-            <th scope="col" className="px-4 py-2.5 text-right font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+            <th scope="col" className="px-4 py-2.5 text-right text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
               <span className="sr-only">Show working</span>
             </th>
           </tr>
@@ -88,7 +88,7 @@ function LineRow({
       <tr className={TROW}>
         <td className="px-4 py-3">
           <span className="text-sm text-text-pri">{line.surface}</span>
-          <span className="ml-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">{line.room}</span>
+          <span className="ml-2 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">{line.room}</span>
         </td>
         <td className={NUM_TD}>
           {line.quantity}{line.unit === 'm2' ? ' m²' : ''} × {line.coats}c
@@ -102,11 +102,11 @@ function LineRow({
             onClick={toggle}
             aria-expanded={open}
             aria-controls={traceId}
-            className={`rounded-ctl inline-flex cursor-pointer items-center gap-1 border px-1.5 py-0.5 font-mono text-[0.62rem] font-semibold uppercase tracking-widest transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
-              open
-                ? 'border-accent/70 bg-accent/10 text-accent'
-                : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
-            }`}
+            className={`rounded-ctl inline-flex cursor-pointer items-center gap-1 border px-1.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.08em] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+ open
+ ? 'border-accent/70 bg-accent/10 text-accent'
+ : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
+ }`}
           >
             how?
             <svg viewBox="0 0 12 12" className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">
@@ -118,20 +118,20 @@ function LineRow({
       {open && (
         <tr id={traceId} className="bg-ink-deep">
           <td colSpan={6} className="border-t border-ink-line/60 px-4 py-4">
-            <div className="mb-3 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-accent">
+            <div className="mb-3 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-accent">
               How this line was priced
             </div>
             <dl className="grid gap-4 text-xs sm:grid-cols-2">
               <div className="border-l-2 border-l-accent/40 pl-3">
-                <dt className="font-mono font-semibold uppercase tracking-[0.1em] text-text-dim">Labour</dt>
+                <dt className=" font-semibold uppercase tracking-[0.08em] text-text-dim">Labour</dt>
                 <dd className="mt-1 font-mono leading-relaxed tabular-nums text-text-sec">{line.trace.labourFormula}</dd>
               </div>
               <div className="border-l-2 border-l-accent/40 pl-3">
-                <dt className="font-mono font-semibold uppercase tracking-[0.1em] text-text-dim">Material · {line.product}</dt>
+                <dt className=" font-semibold uppercase tracking-[0.08em] text-text-dim">Material · {line.product}</dt>
                 <dd className="mt-1 font-mono leading-relaxed tabular-nums text-text-sec">{line.trace.materialFormula}</dd>
               </div>
             </dl>
-            <p className="mt-3 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
+            <p className="mt-3 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">
               {line.trace.method} · rate {line.trace.rateCode} · height ×{line.trace.heightMultiplier}
             </p>
           </td>
@@ -192,7 +192,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
       {/* Unmatched — never guessed */}
       {bom.unmatched.length > 0 && (
         <div className="rounded-card border border-warning-bright/40 bg-ink-deep px-4 py-3.5">
-          <p className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">
+          <p className=" text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-warning-bright">
             {bom.unmatched.length} line{bom.unmatched.length === 1 ? '' : 's'} returned unpriced
           </p>
           <ul className="mt-2 space-y-1 text-sm text-text-sec">
@@ -211,7 +211,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
             <table className="w-full min-w-[520px] border-collapse text-sm">
               <thead>
                 <tr className="bg-ink-deep/40">
-                  <th scope="col" className="px-4 py-2.5 text-left font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Product</th>
+                  <th scope="col" className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-text-dim">Product</th>
                   <th scope="col" className={NUM_TH}>Litres</th>
                   <th scope="col" className={NUM_TH}>$/L ex GST</th>
                   <th scope="col" className={NUM_TH}>Cost ex GST</th>
@@ -268,7 +268,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
       {/* Assumptions + exclusions — differentiated so exclusions read as a guard */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-card border border-ink-line bg-ink-deep p-5">
-          <h4 className="font-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-text-dim">Assumptions</h4>
+          <h4 className=" text-[0.66rem] font-bold uppercase tracking-[0.08em] text-text-dim">Assumptions</h4>
           <ul className="mt-3 space-y-1.5 text-sm text-text-sec">
             {bom.assumptions.map((a, i) => (
               <li key={i} className="flex gap-2">
@@ -279,7 +279,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
           </ul>
         </div>
         <div className="rounded-card border border-warning-bright/40 bg-ink-deep p-5">
-          <h4 className="font-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-warning-bright">Exclusions</h4>
+          <h4 className=" text-[0.66rem] font-bold uppercase tracking-[0.08em] text-warning-bright">Exclusions</h4>
           <ul className="mt-3 space-y-1.5 text-sm text-text-sec">
             {bom.exclusions.map((e, i) => (
               <li key={i} className="flex gap-2">

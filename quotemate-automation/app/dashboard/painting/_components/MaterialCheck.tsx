@@ -68,14 +68,14 @@ export function MaterialCheck({ token, address, postcode, state, yearBuilt }: Pr
       <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Exterior wall material</div>
+            <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">Exterior wall material</div>
             <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">What are the walls made of?</h3>
           </div>
           <button
             type="button"
             onClick={scan}
             disabled={stage === 'scanning' || !token}
-            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
           >
             {stage === 'scanning' ? (<><Spinner /> Scanning…</>) : stage === 'done' ? 'Re-scan' : 'Scan frontage'}
           </button>
@@ -97,7 +97,7 @@ export function MaterialCheck({ token, address, postcode, state, yearBuilt }: Pr
             </div>
 
             <div className={`rounded-card border ${guidance.inspection ? 'border-warning-bright/40' : 'border-accent/40'} bg-ink-deep p-5`}>
-              <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${guidance.inspection ? 'text-warning' : 'text-accent'}`}>
+              <div className={` text-[0.78rem] font-semibold uppercase tracking-[0.08em] ${guidance.inspection ? 'text-warning' : 'text-accent'}`}>
                 {guidance.inspection ? 'Inspection required' : 'Cost implication'}
               </div>
               <p className="mt-2 text-sm text-text-sec">{guidance.inspection ? guidance.inspection_reason : guidance.cost_note}</p>
@@ -117,7 +117,7 @@ export function MaterialCheck({ token, address, postcode, state, yearBuilt }: Pr
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-card border border-ink-line bg-ink-deep p-4">
-      <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
+      <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-xl font-bold tabular-nums text-text-pri">{value}</div>
       {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}
     </div>

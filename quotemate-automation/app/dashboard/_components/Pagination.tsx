@@ -122,10 +122,10 @@ export function usePagination<T>(
 }
 
 const NAV_BTN =
-  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-ink-line bg-ink-card text-text-sec font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors hover:bg-ink-deep hover:text-text-pri disabled:opacity-40 disabled:pointer-events-none cursor-pointer'
+  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-ink-line bg-ink-card text-text-sec text-[0.7rem] uppercase tracking-[0.08em] font-bold transition-colors hover:bg-ink-deep hover:text-text-pri disabled:opacity-40 disabled:pointer-events-none cursor-pointer'
 
 const ACTIVE_BTN =
-  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-accent bg-accent text-white font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold cursor-default'
+  'inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 border border-accent bg-accent text-white text-[0.7rem] uppercase tracking-[0.08em] font-bold cursor-default'
 
 /**
  * Numbered pagination control (Prev · 1 … 4 5 6 … 12 · Next) plus an

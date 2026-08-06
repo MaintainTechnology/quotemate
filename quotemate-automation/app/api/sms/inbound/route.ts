@@ -1151,6 +1151,44 @@ async function handlePaintingTurn(args: {
     }
   }
 
+  /** Tell the painter a site visit was just booked. Same shape as the roofing
+   *  handler's notify, with the trade word set so the painter is not told
+   *  about a "roofing" inspection. Never throws — a notify failure must not
+   *  cost the customer their reply. */
+  const notifyPaintingInspectionBooked = async (address: string) => {
+    try {
+      const { data: t } = tenantId
+        ? await supabase
+            .from('tenants')
+            .select('owner_mobile, owner_first_name, twilio_sms_number')
+            .eq('id', tenantId)
+            .maybeSingle()
+        : { data: null }
+      const row = (t as {
+        owner_mobile?: string | null
+        owner_first_name?: string | null
+        twilio_sms_number?: string | null
+      } | null) ?? null
+      await notifyRoofingTradie({
+        kind: 'inspection_booked',
+        tenant: {
+          owner_mobile: row?.owner_mobile ?? null,
+          owner_first_name: row?.owner_first_name ?? null,
+          twilio_sms_number: row?.twilio_sms_number ?? null,
+        },
+        customerName: firstName,
+        customerPhone: fromNumber,
+        address,
+        betterIncGst: null,
+        quoteUrl: `${baseUrl}/dashboard`,
+        tradeLabel: 'painting',
+        dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie', tenantId }),
+      })
+    } catch (e) {
+      console.warn('[sms/inbound:painting] inspection-booked notify failed (non-fatal)', e)
+    }
+  }
+
   // ── Passthrough → hand the turn to the general LLM dialog (return false).
   // Warm 'quoted' thread: CLOSE (end the warm window). Mid-GATHER bail (a
   // topic switch / interrupt / question, 2026-07-24): do NOT close — leave
@@ -1177,6 +1215,13 @@ async function handlePaintingTurn(args: {
   if (decision.action === 'booking') {
     await sendReply(composePaintingBooking(firstName, decision.confirmed))
     await persist({ slots: decision.slots, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'done')
+    // A booked painting inspection is a live lead. Roofing tells the tradie
+    // (the 'booking' branch above); painting closed the thread and told
+    // NOBODY, so every "a painter will be in touch shortly" was a promise made
+    // to no one and the lead died silently (live 2026-08-05).
+    if (decision.confirmed) {
+      await notifyPaintingInspectionBooked(decision.slots.address ?? 'address not captured')
+    }
     return true
   }
 

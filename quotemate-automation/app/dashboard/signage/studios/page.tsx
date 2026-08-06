@@ -336,7 +336,7 @@ export default function SignageStudiosPage() {
                           className="w-full cursor-pointer px-4 py-3 text-left transition-colors hover:bg-ink-line/40 focus-visible:bg-ink-line/40 focus-visible:outline-none"
                         >
                           <div className="font-mono text-sm text-text-pri">{p.name}</div>
-                          <div className="font-mono text-[0.7rem] uppercase tracking-[0.12em] text-text-dim">{p.address}</div>
+                          <div className=" text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">{p.address}</div>
                         </button>
                       </li>
                     ))}
@@ -408,13 +408,13 @@ export default function SignageStudiosPage() {
               accept=".csv,text/csv"
               aria-label="Studio roster CSV"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void importCsv(f) }}
-              className="mt-4 block w-full text-sm text-text-sec file:mr-4 file:cursor-pointer file:border-0 file:bg-ink-line file:px-4 file:py-2.5 file:font-mono file:text-xs file:font-semibold file:uppercase file:tracking-[0.12em] file:text-text-pri"
+              className="mt-4 block w-full text-sm text-text-sec file:mr-4 file:cursor-pointer file:border-0 file:bg-ink-line file:px-4 file:py-2.5 file:text-xs file:font-semibold file:uppercase file:tracking-[0.08em] file:text-text-pri"
             />
             {importMsg && <p role="status" className="mt-3 text-sm text-text-sec">{importMsg}</p>}
           </div>
 
           {/* Roster */}
-          <h2 className="mt-12 font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <h2 className="mt-12 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Roster · <span className="tabular-nums">{studios.length}</span> studio{studios.length === 1 ? '' : 's'}
           </h2>
           {studios.length === 0 ? (
@@ -429,7 +429,7 @@ export default function SignageStudiosPage() {
                   <StaticMapThumb token={token} studio={s} onView={setLightbox} />
                   <div className="min-w-[12rem] flex-1">
                     <div className="font-mono text-sm text-text-pri">{s.name}</div>
-                    <div className="mt-0.5 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-text-dim">
+                    <div className="mt-0.5 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
                       {[s.region, s.address].filter(Boolean).join(' · ') || 'No address'}
                     </div>
                   </div>
@@ -483,7 +483,7 @@ function Preview({ token, label, url, emptyHint, onView }: { token: string | nul
   const src = useAuthedImage(url, token)
   return (
     <div>
-      <div className="mb-1.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</div>
+      <div className="mb-1.5 text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-text-dim">{label}</div>
       <button
         type="button"
         disabled={!src}
@@ -494,7 +494,7 @@ function Preview({ token, label, url, emptyHint, onView }: { token: string | nul
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt={label} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">{emptyHint ?? 'no imagery'}</div>
+          <div className="flex h-full w-full items-center justify-center text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">{emptyHint ?? 'no imagery'}</div>
         )}
       </button>
     </div>
@@ -529,7 +529,7 @@ function Thumb({ src, alt, empty, onView }: { src: string | null; alt: string; e
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={alt} className="h-full w-full object-cover" />
       ) : (
-        <div className="flex h-full w-full items-center justify-center font-mono text-[0.55rem] uppercase tracking-[0.1em] text-text-dim">{empty}</div>
+        <div className="flex h-full w-full items-center justify-center text-[0.55rem] uppercase tracking-[0.08em] text-text-dim">{empty}</div>
       )}
     </button>
   )

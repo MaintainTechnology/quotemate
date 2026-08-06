@@ -103,7 +103,7 @@ function TabButton({
       className={`flex-1 px-6 py-4 text-left transition-colors ${active ? 'bg-ink-card' : 'bg-ink-deep hover:bg-ink-card/60'}`}
     >
       <div
-        className={`font-mono text-sm font-semibold uppercase tracking-[0.14em] ${active ? 'text-accent' : 'text-text-sec'}`}
+        className={` text-sm font-semibold uppercase tracking-[0.08em] ${active ? 'text-accent' : 'text-text-sec'}`}
       >
         {label}
       </div>
@@ -410,7 +410,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       {/* Felt setup notice — the sub-tab stays browsable when disabled. */}
       {sub === 'felt' && feltEnabled === false && (
         <div className="rounded-card border border-warning-bright/40 bg-ink-card px-6 py-5">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-warning">
             Felt not configured
           </div>
           <p className="mt-1 text-sm leading-relaxed text-text-sec">
@@ -425,7 +425,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       <>
           {/* Shareable customer entry link + copy button */}
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
-        <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+        <div className="flex items-center gap-3 text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
           {sub === 'felt' ? (
             <MapIcon className="h-4 w-4" aria-hidden="true" />
           ) : (
@@ -445,7 +445,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
           <button
             type="button"
             onClick={() => void copyLink()}
-            className="rounded-ctl inline-flex shrink-0 items-center justify-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
+            className="rounded-ctl inline-flex shrink-0 items-center justify-center gap-2 bg-accent px-5 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press"
           >
             {copied ? (
               <>
@@ -467,14 +467,14 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       {/* Estimate list */}
       <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             {sub === 'felt' ? 'Felt estimates' : 'Solar estimates'}
             {estimates ? ` · ${visibleEstimates.length}` : ''}
           </div>
           <button
             type="button"
             onClick={() => void load()}
-            className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent"
+            className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-accent"
           >
             Refresh
           </button>
@@ -518,7 +518,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                           {e.address}
                         </div>
                       )}
-                      <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+                      <div className="mt-1 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
                         {fmtDate(e.createdAt)}
                       </div>
                     </div>
@@ -541,12 +541,12 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                             href={e.pylonLeadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent"
+                            className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] text-[0.58rem] font-semibold uppercase tracking-[0.08em] text-text-sec transition-colors hover:border-accent hover:text-accent"
                           >
                             Pylon: {e.pylonStage}
                           </a>
                         ) : (
-                          <span className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-sec">
+                          <span className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] text-[0.58rem] font-semibold uppercase tracking-[0.08em] text-text-sec">
                             Pylon: {e.pylonStage}
                           </span>
                         ))}
@@ -557,7 +557,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                           href={e.openSolarProjectUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="border border-teal-glow/40 px-3 py-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-teal-glow transition-colors hover:border-teal-glow"
+                          className="border border-teal-glow/40 px-3 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-teal-glow transition-colors hover:border-teal-glow"
                         >
                           OpenSolar project
                         </a>
@@ -614,7 +614,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                     e.buildings.length >= 2 &&
                     e.buildingMapCenter && (
                       <div className="mt-4">
-                        <div className="mb-2 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+                        <div className="mb-2 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
                           Estimating which building?
                         </div>
                         <BuildingPicker
@@ -685,7 +685,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                       href={e.quoteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                       View
@@ -698,7 +698,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                         href={`/api/q/solar/${e.token}/pdf`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+                        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-accent hover:text-accent"
                       >
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
                         PDF
@@ -711,7 +711,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                         href={e.feltMapUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-teal-glow hover:text-teal-glow"
+                        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-teal-glow hover:text-teal-glow"
                       >
                         <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         Open in Felt
@@ -723,7 +723,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                         onClick={() => void confirmEstimate(e.token)}
                         disabled={busy}
                         aria-busy={busy}
-                        className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:opacity-60"
+                        className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:opacity-60"
                       >
                         {busy ? 'Releasing…' : 'Confirm & release'}
                       </button>
@@ -749,13 +749,13 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                                     [e.token]: { ...draftFor(e), phase: p },
                                   }))
                                 }
-                                className={`px-3 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
-                                  i > 0 ? 'border-l border-ink-line' : ''
-                                } ${
-                                  active
-                                    ? 'bg-accent text-ink-deep'
-                                    : 'bg-ink-deep text-text-sec hover:text-text-pri'
-                                }`}
+                                className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition-colors ${
+ i > 0 ? 'border-l border-ink-line' : ''
+ } ${
+ active
+ ? 'bg-accent text-ink-deep'
+ : 'bg-ink-deep text-text-sec hover:text-text-pri'
+ }`}
                               >
                                 {p === 'three' ? '3-phase' : 'Single'}
                               </button>
@@ -790,11 +790,11 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                             })
                           }}
                           disabled={!!redrafting[e.token]}
-                          className={`rounded-ctl inline-flex items-center gap-2 px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors disabled:opacity-60 ${
-                            e.status === 'flagged'
-                              ? 'bg-accent text-white hover:bg-accent-press'
-                              : 'border border-ink-line text-text-pri hover:border-accent hover:text-accent'
-                          }`}
+                          className={`rounded-ctl inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition-colors disabled:opacity-60 ${
+ e.status === 'flagged'
+ ? 'bg-accent text-white hover:bg-accent-press'
+ : 'border border-ink-line text-text-pri hover:border-accent hover:text-accent'
+ }`}
                         >
                           <RefreshCw
                             className={`h-3.5 w-3.5 ${redrafting[e.token] ? 'animate-spin' : ''}`}
@@ -837,7 +837,7 @@ function Stat({
 }) {
   return (
     <div className="bg-ink-deep px-4 py-3">
-      <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+      <div className=" text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
         {label}
       </div>
       <div
@@ -864,13 +864,13 @@ function StatWithHint({
 }) {
   return (
     <div className="bg-ink-deep px-4 py-3" title={title}>
-      <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+      <div className=" text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
         {label}
       </div>
       <div className="mt-1 font-mono text-base font-bold tabular-nums text-text-pri">
         {value}
       </div>
-      <div className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+      <div className="mt-0.5 text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
         {hint}
       </div>
     </div>

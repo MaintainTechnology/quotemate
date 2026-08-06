@@ -153,7 +153,7 @@ export function PhotoVerify({ accessToken, address }: Props) {
     <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             AI photo verification
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
@@ -164,7 +164,7 @@ export function PhotoVerify({ accessToken, address }: Props) {
           <button
             type="button"
             onClick={reset}
-            className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent"
+            className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim hover:text-accent"
           >
             Replace photo
           </button>
@@ -192,10 +192,10 @@ export function PhotoVerify({ accessToken, address }: Props) {
             onChange={onPick}
             className="hidden"
           />
-          <div className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri">
+          <div className=" text-sm font-semibold uppercase tracking-[0.08em] text-text-pri">
             Drop a photo here · or click to pick
           </div>
-          <div className="mt-2 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+          <div className="mt-2 text-xs uppercase tracking-[0.08em] text-text-dim">
             JPEG / PNG / HEIC · up to 12 MB
           </div>
         </div>
@@ -277,7 +277,7 @@ function VerdictPanel({
           <p className="mt-1 text-base text-text-sec">{verdict.reason}</p>
         </div>
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
             Roof material · {verdict.materialConfidence} confidence
           </div>
           <div className="mt-1 font-mono text-lg font-semibold text-text-pri">
@@ -286,7 +286,7 @@ function VerdictPanel({
         </div>
         {verdict.redFlags.length > 0 && (
           <div>
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+            <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-warning">
               Flags Claude raised
             </div>
             <ul className="mt-1 space-y-1 text-base text-text-sec">
@@ -307,7 +307,7 @@ function VerdictPanel({
 
 function StatusLine({ label, tone }: { label: string; tone: 'accent' }) {
   return (
-    <div className="flex items-center gap-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent">
+    <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.08em] text-accent">
       <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/40 border-t-accent" aria-hidden="true" />
       <span>{label}</span>
     </div>

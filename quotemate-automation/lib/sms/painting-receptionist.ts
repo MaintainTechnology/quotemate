@@ -135,6 +135,26 @@ function captureOpeningAddress(slots: PaintingSlots, inbound: string): PaintingS
   return next.address ? next : slots
 }
 
+/**
+ * PURE — did this reply CHANGE a slot that drives the inspection decision?
+ * Only `storeys` (3+) and `condition` (poor) route to an inspection, so only
+ * those two can un-route it. Returns the corrected slots, or null when nothing
+ * inspection-relevant moved — which keeps a question or a proposed time a live
+ * lead rather than turning every unclear reply into a re-gather.
+ */
+function correctInspectionSlot(slots: PaintingSlots, inbound: string): PaintingSlots | null {
+  // "the condition is sound not poor" names BOTH values, and the mapper would
+  // take the wrong one. Drop the negated clause so the kept value wins.
+  const text = inbound.replace(/\bnot\s+\w+/gi, ' ')
+  let next = slots
+  for (const field of ['storeys', 'condition'] as const) {
+    const applied = applyPaintingAnswer(next, field, text)
+    // A correction must produce a value AND differ from what we already had.
+    if (applied[field] != null && applied[field] !== next[field]) next = applied
+  }
+  return next === slots ? null : next
+}
+
 /** PURE — turn the gathered slots into the next ask/estimate/inspection. */
 function fromNextStep(slots: PaintingSlots): PaintingTurnDecision {
   const next = nextPaintingStep(slots)
@@ -166,6 +186,14 @@ export function advancePainting(
   // roofing receptionist had — audit 2026-07-23). isStopRequest is handled
   // above, so a genuine opt-out never reaches here.
   if (lastStep === 'await_booking') {
+    // ...but a CORRECTION to the slot that caused the inspection is not
+    // consent — it removes the reason for the visit. Live 2026-08-05: "3"
+    // storeys routed to inspection, the customer replied "Oh sorry its 1
+    // storey only", and because that is not a decline it was read as "yes,
+    // book it". The correction was discarded and a painter was promised for a
+    // job that no longer needed a site visit. Re-price instead.
+    const corrected = correctInspectionSlot(slots, inbound)
+    if (corrected) return fromNextStep(corrected)
     return { action: 'booking', slots, confirmed: !isNegative(inbound) }
   }
 

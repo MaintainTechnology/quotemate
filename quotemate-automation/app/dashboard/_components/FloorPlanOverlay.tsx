@@ -73,7 +73,7 @@ function Marker({
         style={{ width: 14, height: 14, borderColor: colour, backgroundColor: `${colour}40` }}
       />
       <span
-        className="mt-0.5 block whitespace-nowrap px-1 font-mono text-[0.55rem] font-bold uppercase tracking-wide"
+        className="mt-0.5 block whitespace-nowrap px-1 text-[0.55rem] font-bold uppercase tracking-wide"
         // Warm-charcoal scrim, not the blue-black this carried before
         // (rgba(10,15,30)) — the Warm-Not-Blue rule applies to a label
         // backing plate as much as to a page canvas. Hardcoded rather than
@@ -152,7 +152,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
   return (
     <div className="rounded-card mt-5 border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center gap-3 border-b border-ink-line px-4 py-2.5">
-        <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className=" text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-accent">
           Indicative design overlay
         </span>
         <div className="flex gap-0 border border-ink-line">
@@ -161,9 +161,9 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
               key={s}
               type="button"
               onClick={() => setSystem(s)}
-              className={`px-3 py-1 font-mono text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                system === s ? 'bg-accent text-white' : 'text-text-dim hover:text-text-pri'
-              }`}
+              className={`px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] transition-colors ${
+ system === s ? 'bg-accent text-white' : 'text-text-dim hover:text-text-pri'
+ }`}
             >
               {s}
             </button>
@@ -285,7 +285,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
                     backgroundColor: 'rgba(10, 15, 30, 0.78)',
                   }}
                 >
-                  <span className="block font-mono text-[0.6rem] font-bold uppercase tracking-wide text-white">
+                  <span className="block text-[0.6rem] font-bold uppercase tracking-wide text-white">
                     {room.name}
                   </span>
                   <span className="block whitespace-nowrap font-mono text-[0.55rem] text-white/80">

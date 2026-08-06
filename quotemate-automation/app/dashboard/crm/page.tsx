@@ -48,7 +48,7 @@ type Preview = {
 
 const PROVIDER_LABEL: Record<string, string> = { hubspot: 'HubSpot', zoho: 'Zoho' }
 
-const EYEBROW = 'font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim'
+const EYEBROW = ' text-[0.7rem] uppercase tracking-[0.08em] text-text-dim'
 const PRIMARY =
   'inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-xs uppercase tracking-[0.12em] transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 const GHOST =
@@ -228,7 +228,7 @@ export default function CrmPage() {
           </div>
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+            className="flex items-center gap-2 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-text-pri"
           >
             <span aria-hidden>←</span> Dashboard
           </Link>
@@ -241,7 +241,7 @@ export default function CrmPage() {
           <div className="flex flex-wrap items-center gap-3">
             <span className={EYEBROW}>CRM &amp; Email</span>
             {isConnected && (
-              <span className="rounded-ctl inline-flex items-center gap-1.5 border border-success/40 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-success">
+              <span className="rounded-ctl inline-flex items-center gap-1.5 border border-success/40 px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.08em] text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" /> Connected
               </span>
             )}
@@ -266,7 +266,7 @@ export default function CrmPage() {
 
         {loading ? (
           <div className="rounded-card mt-12 border border-ink-line bg-ink-card p-6">
-            <p className="qm-loading font-mono text-xs uppercase tracking-[0.14em] text-text-dim">Loading…</p>
+            <p className="qm-loading text-xs uppercase tracking-[0.08em] text-text-dim">Loading…</p>
           </div>
         ) : isConnected ? (
           <>
@@ -293,7 +293,7 @@ export default function CrmPage() {
                             <span className="font-extrabold uppercase tracking-tight">{PROVIDER_LABEL[c.provider]}</span>
                             <StatusPill status={c.status} />
                           </div>
-                          <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
+                          <div className="mt-1 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">
                             Linked {fmtDate(c.connected_at)} · Last sync {fmtDate(c.last_synced_at)}
                           </div>
                         </div>
@@ -371,7 +371,7 @@ export default function CrmPage() {
                         <br />
                         recipient(s) will receive the announcement.
                       </p>
-                      <ul className="mt-4 space-y-1.5 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-text-dim">
+                      <ul className="mt-4 space-y-1.5 text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
                         <li>{preview.total_contacts} total contacts</li>
                         <li>− {preview.duplicates_removed} duplicates</li>
                         <li>− {preview.suppressed_unsubscribed} unsubscribed</li>
@@ -415,7 +415,7 @@ export default function CrmPage() {
                 )}
 
                 {campaign?.last_sent_at && !preview && !result && (
-                  <p className="mt-5 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
+                  <p className="mt-5 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">
                     Last sent {fmtDate(campaign.last_sent_at)} · {campaign.sent_count} delivered
                   </p>
                 )}
@@ -496,7 +496,7 @@ export default function CrmPage() {
       {/* closing accent bar */}
       <div className="relative z-10 bg-accent">
         <div className="mx-auto max-w-5xl px-6 py-4 text-center">
-          <span className="font-mono text-xs uppercase tracking-[0.16em] text-accent-ink">
+          <span className=" text-xs uppercase tracking-[0.08em] text-accent-ink">
             Your contacts, one tap away · QuoteMax
           </span>
         </div>
@@ -513,7 +513,7 @@ function Kpi({ n, label, accent }: { n: number; label: string; accent?: boolean 
       <div className={`font-mono text-3xl font-bold leading-none md:text-4xl ${accent ? 'text-accent' : 'text-text-pri'}`}>
         {n}
       </div>
-      <div className="mt-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim">{label}</div>
+      <div className="mt-2 text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">{label}</div>
     </div>
   )
 }
@@ -541,7 +541,7 @@ function StatusPill({ status }: { status: string }) {
         ? 'text-danger border-danger/40'
         : 'text-text-dim border-ink-line'
   return (
-    <span className={`rounded-ctl inline-flex border px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em] ${tone}`}>
+    <span className={`rounded-ctl inline-flex border px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.08em] ${tone}`}>
       {status}
     </span>
   )

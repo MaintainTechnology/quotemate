@@ -106,11 +106,11 @@ const AREA_SOURCE_LABEL: Record<AcResolvedRoom['area_source'], string> = {
 // ── Shared style fragments (Maintain design system) ──────────────────
 
 const FIELD_LABEL =
-  'font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
+  ' text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim'
 const FIELD_INPUT =
   'w-full border border-ink-line bg-ink-deep px-4 py-3 text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none'
 const SUMMARY_TOGGLE =
-  'cursor-pointer select-none font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-press'
+  'cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.08em] text-accent hover:text-accent-press'
 
 export default function AirconRecommendPage() {
   return (
@@ -208,14 +208,14 @@ function AirconRecommendPageInner() {
   if (authState === 'loading') {
     return (
       <main className="min-h-screen bg-ink-deep p-10">
-        <p className="qm-loading font-mono text-sm uppercase tracking-[0.14em] text-text-dim">Loading…</p>
+        <p className="qm-loading text-sm uppercase tracking-[0.08em] text-text-dim">Loading…</p>
       </main>
     )
   }
   if (authState === 'signed-out') {
     return (
       <main className="min-h-screen bg-ink-deep p-10">
-        <p className="font-mono text-sm uppercase tracking-[0.14em] text-text-dim">
+        <p className=" text-sm uppercase tracking-[0.08em] text-text-dim">
           Sign in to use the AC recommender.
         </p>
       </main>
@@ -227,7 +227,7 @@ function AirconRecommendPageInner() {
       <div className="mx-auto max-w-6xl px-6 py-12 sm:px-8 sm:py-16">
         {/* ── Header ── */}
         <header className="mb-10 sm:mb-14">
-          <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+          <span className=" text-xs uppercase tracking-[0.08em] text-text-dim">
             Trade tool · HVAC sizing &amp; pricing
           </span>
           <h1 className="mt-4 text-[clamp(2rem,4.5vw,3.5rem)] font-extrabold uppercase leading-none tracking-[-0.03em]">
@@ -331,7 +331,7 @@ function AirconRecommendPageInner() {
             />
             <div className="flex flex-wrap items-center gap-4">
               <label className="rounded-ctl inline-flex cursor-pointer items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3 text-sm text-text-sec hover:border-accent">
-                <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                <span className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-accent">
                   {planFile ? 'Change plan' : 'Upload plan'}
                 </span>
                 <input
@@ -348,7 +348,7 @@ function AirconRecommendPageInner() {
                 <button
                   type="button"
                   onClick={() => setPlanFile(null)}
-                  className="font-mono text-xs font-semibold uppercase tracking-[0.12em] text-text-dim hover:text-accent"
+                  className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim hover:text-accent"
                 >
                   Remove
                 </button>
@@ -397,7 +397,7 @@ function FormSectionHeading({ num, title, sub }: { num: string; title: string; s
     <div className="mb-5 flex items-baseline gap-4 border-b border-ink-line pb-3">
       <span className="font-mono text-xl font-bold leading-none text-accent">{num}</span>
       <h2 className="text-sm font-extrabold uppercase tracking-[0.04em]">{title}</h2>
-      <span className="hidden font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim sm:inline">
+      <span className="hidden text-[0.65rem] uppercase tracking-[0.08em] text-text-dim sm:inline">
         {sub}
       </span>
     </div>
@@ -415,7 +415,7 @@ function SectionHeader({ num, title, sub }: { num: string; title: string; sub?: 
           {title}
         </h2>
         {sub && (
-          <p className="mt-1 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-text-dim">{sub}</p>
+          <p className="mt-1 text-[0.68rem] uppercase tracking-[0.08em] text-text-dim">{sub}</p>
         )}
       </div>
     </div>
@@ -548,7 +548,7 @@ function AirconPdfButton({
         onClick={() => void download()}
         disabled={busy}
         aria-busy={busy}
-        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-5 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? 'Preparing PDF…' : 'Download PDF ↓'}
       </button>
@@ -597,9 +597,9 @@ function LocationPanel({ location, token }: { location: AcLocationEvidence; toke
 function Chip({ label, accent }: { label: string; accent?: boolean }) {
   return (
     <span
-      className={`border px-3 py-1 font-mono text-[0.68rem] uppercase tracking-widest ${
-        accent ? 'border-accent text-accent' : 'border-ink-line text-text-sec'
-      }`}
+      className={`border px-3 py-1 text-[0.68rem] uppercase tracking-[0.08em] ${
+ accent ? 'border-accent text-accent' : 'border-ink-line text-text-sec'
+ }`}
     >
       {label}
     </span>
@@ -645,7 +645,7 @@ function AcStaticMap({
   return (
     <div className="relative h-56 w-full overflow-hidden border-b border-ink-line bg-ink-deep sm:h-full sm:border-b-0 sm:border-r">
       <div className="rounded-card pointer-events-none absolute left-3 top-3 z-10 border border-ink-line bg-ink-deep/95 px-3 py-1.5">
-        <span className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <span className=" text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
           Google satellite
         </span>
       </div>
@@ -657,7 +657,7 @@ function AcStaticMap({
           className="h-full w-full object-cover"
         />
       ) : (
-        <div className="flex h-full items-center justify-center p-4 text-center font-mono text-xs uppercase tracking-widest text-text-dim">
+        <div className="flex h-full items-center justify-center p-4 text-center text-xs uppercase tracking-[0.08em] text-text-dim">
           {geocode.ok ? 'Loading satellite view…' : 'No map — address not resolved'}
         </div>
       )}
@@ -671,7 +671,7 @@ function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
   return (
     <div className="rounded-card mt-5 border border-ink-line bg-ink-card p-6 sm:p-8">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        <span className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-accent">
           Plan read · {plan.filename}
         </span>
         <Chip label={`page ${plan.page}`} />
@@ -682,7 +682,7 @@ function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
       <div className="mt-4 overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-ink-line font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+            <tr className="border-b border-ink-line text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
               <th className="py-2.5 pr-4 font-semibold">Room</th>
               <th className="py-2.5 pr-4 font-semibold">Type</th>
               <th className="py-2.5 pr-4 font-semibold">Conditioned</th>
@@ -694,8 +694,8 @@ function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
             {plan.rooms.map((room) => (
               <tr key={room.name} className={`border-b border-ink-line/50 ${room.load_type ? '' : 'text-text-dim'}`}>
                 <td className="py-2.5 pr-4">{room.name}</td>
-                <td className="py-2.5 pr-4 font-mono text-xs uppercase">{room.room_type}</td>
-                <td className="py-2.5 pr-4 font-mono text-xs uppercase">
+                <td className="py-2.5 pr-4 text-xs uppercase">{room.room_type}</td>
+                <td className="py-2.5 pr-4 text-xs uppercase">
                   {room.load_type ? `yes · ${room.load_type}` : 'no'}
                 </td>
                 <td className="py-2.5 pr-4 font-mono">{room.area_m2}</td>
@@ -745,14 +745,14 @@ function Stat({
   return (
     <div className="rounded-card flex min-w-0 flex-col justify-between gap-2 border border-ink-line bg-ink-deep px-4 py-4 sm:px-5">
       <p
-        className={`wrap-break-word font-mono font-bold leading-tight text-text-pri ${
-          text ? 'text-base uppercase tracking-wide sm:text-lg' : 'text-2xl leading-none sm:text-3xl'
-        }`}
+        className={`wrap-break-word font-bold leading-tight text-text-pri ${
+ text ? 'text-base uppercase tracking-wide sm:text-lg' : 'text-2xl leading-none sm:text-3xl'
+ }`}
       >
         {value}
         {unit && <span className="ml-1 text-sm font-normal text-text-dim">{unit}</span>}
       </p>
-      <p className="font-mono text-[0.62rem] leading-snug uppercase tracking-[0.14em] text-text-dim">{label}</p>
+      <p className=" text-[0.62rem] leading-snug uppercase tracking-[0.08em] text-text-dim">{label}</p>
     </div>
   )
 }
@@ -794,7 +794,7 @@ function SizingPanel({
         <div className="mt-4 overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-ink-line font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+              <tr className="border-b border-ink-line text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
                 <th className="py-2.5 pr-4 font-semibold">Room</th>
                 <th className="py-2.5 pr-4 font-semibold">Area m²</th>
                 <th className="py-2.5 pr-4 font-semibold">Volume m³</th>
@@ -840,7 +840,7 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
     <div className={`rounded-card flex flex-col border bg-ink-card p-6 sm:p-8 ${o.best_fit ? 'border-accent' : 'border-ink-line'}`}>
       <div className="mb-1 flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+          <p className=" text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
             {o.capacity_kw} kW system
           </p>
           <h3 className="mt-1 text-2xl font-extrabold uppercase tracking-[-0.01em]">{o.system_type}</h3>
@@ -851,14 +851,14 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
       <p className="mt-3 text-3xl font-extrabold leading-none sm:text-4xl">
         {money(o.price.low)} <span className="text-text-dim">–</span> {money(o.price.high)}
       </p>
-      <p className="mt-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-text-dim">
+      <p className="mt-2 text-[0.68rem] uppercase tracking-[0.08em] text-text-dim">
         inc GST · indicative · point estimate{' '}
         <span className="text-text-sec">{money(p.point_estimate_inc_gst)}</span> ±{p.confidence_band_pct}%
       </p>
 
       <details className="mt-6 border-t border-ink-line pt-4 text-sm">
         <summary className={SUMMARY_TOGGLE}>How this price was calculated</summary>
-        <p className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">{p.formula}</p>
+        <p className="mt-3 text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">{p.formula}</p>
         <table className="mt-3 w-full border-collapse text-left text-xs">
           <tbody>
             {p.components.map((c) => (

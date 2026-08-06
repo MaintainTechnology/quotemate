@@ -229,7 +229,7 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
       <div ref={containerRef} className="rounded-card h-[28rem] w-full overflow-hidden border border-ink-line bg-ink-deep" />
       {status === 'loading' && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="inline-flex items-center gap-3 bg-ink-deep/80 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">
+          <span className="inline-flex items-center gap-3 bg-ink-deep/80 px-4 py-2 text-sm font-semibold uppercase tracking-[0.08em] text-text-sec">
             <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/40 border-t-accent" aria-hidden="true" />
             {stage}
           </span>

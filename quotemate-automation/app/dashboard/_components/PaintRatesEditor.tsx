@@ -284,7 +284,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
   if (!hasPricingBook) {
     return (
       <div className="rounded-card border border-ink-line bg-ink-card p-6">
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+        <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-warning">
           Paint rates · pricing book missing
         </div>
         <p className="mt-2 text-base text-text-sec">
@@ -299,19 +299,19 @@ export function PaintRatesEditor({ accessToken }: Props) {
     <form onSubmit={save} className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8" aria-busy={loading || saving}>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Paint rates</div>
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">Paint rates</div>
           <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">Tune the painting pricing engine</h3>
           <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
             Override the defaults the painting estimator uses. Blank fields fall back to the
             default. New estimates use the updated rates instantly.
           </p>
         </div>
-        {savedAt && !errMsg && <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-teal-glow">✓ Saved</span>}
+        {savedAt && !errMsg && <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-teal-glow">✓ Saved</span>}
       </div>
 
       {errMsg && (
         <div className="rounded-card mt-5 border border-warning-bright/40 bg-ink-deep px-4 py-3">
-          <div className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-warning">Could not save</div>
+          <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-warning">Could not save</div>
           <p className="mt-1 text-sm text-text-sec">{errMsg}</p>
         </div>
       )}
@@ -457,10 +457,10 @@ export function PaintRatesEditor({ accessToken }: Props) {
       </div>
 
       <div className="mt-7 flex flex-wrap items-center gap-4 pt-2">
-        <button type="submit" disabled={loading || saving || !accessToken} aria-busy={loading || saving} className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="submit" disabled={loading || saving || !accessToken} aria-busy={loading || saving} className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
           {saving ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" /> Saving…</>) : (<>Save rates <span aria-hidden="true">&rarr;</span></>)}
         </button>
-        <button type="button" onClick={() => { setRates({ walls: '', ceilings: '', trim: '', exterior: '' }); setDoubleStorey(''); setPremium(''); setGoodFrac(''); setColourExtra(''); setCallOut(''); setGstMode(''); setCoverage(EMPTY_PRODUCTS); setLitrePrice(EMPTY_PRODUCTS); setProduction({ walls: '', ceilings: '', trim: '', exterior: '' }); setCrew(''); setSundries(''); setPricingModel(''); setHourlyRate(''); setCoatsMult({ '1': '', '2': '', '3': '' }); setCondMult({ sound: '', minor: '', bare: '' }); setDepositPct(''); setHoursPerDay(''); setPremiumMaterialUplift('') }} disabled={loading || saving} aria-busy={loading || saving} className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50">
+        <button type="button" onClick={() => { setRates({ walls: '', ceilings: '', trim: '', exterior: '' }); setDoubleStorey(''); setPremium(''); setGoodFrac(''); setColourExtra(''); setCallOut(''); setGstMode(''); setCoverage(EMPTY_PRODUCTS); setLitrePrice(EMPTY_PRODUCTS); setProduction({ walls: '', ceilings: '', trim: '', exterior: '' }); setCrew(''); setSundries(''); setPricingModel(''); setHourlyRate(''); setCoatsMult({ '1': '', '2': '', '3': '' }); setCondMult({ sound: '', minor: '', bare: '' }); setDepositPct(''); setHoursPerDay(''); setPremiumMaterialUplift('') }} disabled={loading || saving} aria-busy={loading || saving} className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim hover:text-accent disabled:opacity-50">
           Reset all to default
         </button>
       </div>
@@ -473,14 +473,14 @@ export function PaintRatesEditor({ accessToken }: Props) {
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="mt-7 border-t border-ink-line pt-5">
-      <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-accent">{title}</div>
+      <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">{title}</div>
       <p className="mt-1 text-sm text-text-sec">{subtitle}</p>
     </div>
   )
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
+  return <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">{children}</div>
 }
 
 function Caption({ error, defaultHint }: { error?: string; defaultHint?: string }) {

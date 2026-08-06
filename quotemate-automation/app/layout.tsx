@@ -40,7 +40,18 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      // en-AU, not bare "en" — correct for an Australian product: it drives
+      // screen-reader pronunciation, hyphenation and spellcheck.
+      //
+      // ⚠ It does NOT change how <input type="date"> renders. Chrome formats
+      // date inputs from the BROWSER locale (navigator.language), not from
+      // this attribute — verified: with lang="en-AU" set, an en-US browser
+      // still shows mm/dd/yyyy. So an Australian tradie on an en-AU browser
+      // already sees dd/mm/yyyy and always did; a US-locale browser cannot be
+      // corrected from here at all. Changing that would mean replacing the
+      // native inputs with a custom picker, which is a real feature, not a
+      // styling fix. Do not "re-fix" this by tweaking lang.
+      lang="en-AU"
       suppressHydrationWarning
       className={`${manrope.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >

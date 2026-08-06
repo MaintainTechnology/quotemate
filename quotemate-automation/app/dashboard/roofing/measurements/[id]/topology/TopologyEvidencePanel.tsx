@@ -99,7 +99,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
     <section className="mt-10 border border-ink-line bg-ink-card p-6 sm:p-8" aria-labelledby="topology-evidence-title">
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <div className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">
             Roof topology evidence · synthetic benchmark
           </div>
           <h2 id="topology-evidence-title" className="mt-2 font-extrabold uppercase tracking-[-0.03em] text-2xl text-text-pri sm:text-3xl">
@@ -107,18 +107,18 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-text-sec">{disclaimer}</p>
         </div>
-        <span className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+        <span className="border border-ink-line bg-ink-deep px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
           Dashboard only
         </span>
       </div>
 
       <div className={`mt-6 border bg-ink-deep px-5 py-4 ${gateCopy.tone}`} role="status">
-        <div className="font-mono text-xs font-semibold uppercase tracking-[0.15em] text-text-pri">{gateCopy.label}</div>
+        <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-pri">{gateCopy.label}</div>
         <p className="mt-1 text-sm leading-relaxed text-text-sec">{gateCopy.detail}</p>
       </div>
 
       <fieldset className="mt-8 border border-ink-line bg-ink-deep p-5" aria-describedby="dwelling-selection-help">
-        <legend className="px-2 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <legend className="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
           01 · Select main dwelling
         </legend>
         <p id="dwelling-selection-help" className="text-sm leading-relaxed text-text-sec">
@@ -150,7 +150,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                 />
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                    <div className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
                       {structure.role === 'primary' ? 'Primary pricing structure' : 'Secondary structure'} · {String(structure.structureIndex).padStart(2, '0')}
                     </div>
                     <div className="mt-1 font-semibold text-text-pri">{structure.label}</div>
@@ -179,7 +179,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
 
       {!view && (
         <div className="mt-6 border border-dashed border-ink-line bg-ink-deep px-6 py-12 text-center">
-          <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">Awaiting dwelling confirmation</div>
+          <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">Awaiting dwelling confirmation</div>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-text-sec">
             Choose and confirm the main dwelling to open the neutral synthetic benchmark. It will not use satellite imagery, property geometry, or call a provider.
           </p>
@@ -195,7 +195,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                 activeCandidateId={activeCandidateId}
               />
               <figcaption className="border-t border-ink-line bg-ink-card px-5 py-4">
-                <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em] text-text-dim">
+                <div className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
                   Facet assignment evidence
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-text-sec">
@@ -205,7 +205,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
             </figure>
 
             <aside className="border border-ink-line bg-ink-deep p-5" aria-live="polite">
-              <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Selected evidence</div>
+              <div className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim">Selected evidence</div>
               {activeCandidate ? <CandidateDetail candidate={activeCandidate} /> : (
                 <div className="mt-4 text-sm leading-relaxed text-text-sec">
                   <p>Select a synthetic candidate frame below to inspect its length, confidence, and evidence reasons.</p>
@@ -214,7 +214,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
               )}
               {view.excludedStructures.length > 0 && (
                 <div className="mt-6 border-t border-ink-line pt-5">
-                  <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Excluded from this preview</div>
+                  <div className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim">Excluded from this preview</div>
                   <p className="mt-2 text-sm text-text-sec">{view.excludedStructures.join(', ')}</p>
                 </div>
               )}
@@ -233,7 +233,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   className={`border bg-ink-deep p-4 text-left transition-colors ${selected ? 'border-text-pri' : 'border-ink-line hover:border-text-dim'}`}
                   style={{ borderLeftColor: summary.color, borderLeftWidth: '4px' }}
                 >
-                  <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em]" style={{ color: summary.color }}>
+                  <div className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em]" style={{ color: summary.color }}>
                     {summary.label}s
                   </div>
                   <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -250,7 +250,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
           </div>
 
           <div className="mt-5 border border-ink-line bg-ink-deep p-4" aria-label="Synthetic candidate evidence frames">
-            <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.15em] text-text-dim">Synthetic candidate frames</div>
+            <div className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim">Synthetic candidate frames</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {view.candidates.map((candidate) => {
                 const selected = activeCandidateId === candidate.id
@@ -268,7 +268,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-mono text-xs font-bold" style={{ color: candidate.color }}>{candidate.tag}</span>
-                      <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">Candidate</span>
+                      <span className=" text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">Candidate</span>
                     </div>
                     <div className="mt-2 text-sm font-semibold text-text-pri">{candidate.kind} · {formatMetres(candidate.planLengthM)}</div>
                     <div className="mt-1 text-xs text-text-sec">{candidate.confidence}% confidence · review required</div>
@@ -280,7 +280,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
 
           <div className="mt-5 flex flex-wrap gap-2" aria-label="Topology candidate legend">
             {view.legend.map((item) => (
-              <span key={item.kind} className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-text-sec">
+              <span key={item.kind} className="border border-ink-line bg-ink-deep px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-sec">
                 <span aria-hidden="true" className="mr-2 inline-block h-2.5 w-2.5" style={{ backgroundColor: item.color }} />
                 {item.tagPrefix} · {item.label} · review required
               </span>
@@ -297,7 +297,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
 function CandidateDetail({ candidate }: { candidate: TopologyEvidenceDisplayCandidate }) {
   return (
     <div className="mt-4">
-      <div className="font-mono text-xs font-bold uppercase tracking-[0.14em]" style={{ color: candidate.color }}>{candidate.tag} · {candidate.kind}</div>
+      <div className=" text-xs font-bold uppercase tracking-[0.08em]" style={{ color: candidate.color }}>{candidate.tag} · {candidate.kind}</div>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <DetailMetric label="Plan" value={formatMetres(candidate.planLengthM)} />
         <DetailMetric label="Surface" value={candidate.surfaceLengthM === null ? '—' : formatMetres(candidate.surfaceLengthM)} />
@@ -305,7 +305,7 @@ function CandidateDetail({ candidate }: { candidate: TopologyEvidenceDisplayCand
         <DetailMetric label="State" value="Candidate" />
       </div>
       <div className="mt-5">
-        <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim">Evidence reasons</div>
+        <div className=" text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-dim">Evidence reasons</div>
         <ul className="mt-2 space-y-1.5 text-sm text-text-sec">
           {candidate.reasons.map((reason) => <li key={reason}>· {reason}</li>)}
         </ul>
@@ -317,7 +317,7 @@ function CandidateDetail({ candidate }: { candidate: TopologyEvidenceDisplayCand
 function DetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-ink-line bg-ink-card p-3">
-      <div className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">{label}</div>
+      <div className=" text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">{label}</div>
       <div className="mt-1 font-mono text-sm font-semibold tabular-nums text-text-pri">{value}</div>
     </div>
   )

@@ -77,7 +77,7 @@ export function buildRoofingTradieNotification(args: {
   }
   if (args.kind === 'inspection_booked') {
     return (
-      `${hi}new roofing INSPECTION booked via SMS.\n` +
+      `${hi}new ${args.tradeLabel ?? 'roofing'} INSPECTION booked via SMS.\n` +
       `Customer: ${who}\n` +
       `Property: ${args.address}\n` +
       `Details: ${args.quoteUrl}\n` +

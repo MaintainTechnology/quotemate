@@ -30,11 +30,11 @@ export function BrandTabs({
             type="button"
             aria-pressed={active ? 'true' : 'false'}
             onClick={() => !active && onSelect(b.slug)}
-            className={`px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.16em] transition-colors ${
-              active
-                ? 'bg-accent text-white'
-                : 'text-text-dim hover:bg-ink-line/40 hover:text-text-pri'
-            }`}
+            className={`px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition-colors ${
+ active
+ ? 'bg-accent text-white'
+ : 'text-text-dim hover:bg-ink-line/40 hover:text-text-pri'
+ }`}
           >
             {b.name}
           </button>

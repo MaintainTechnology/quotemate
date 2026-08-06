@@ -24,6 +24,7 @@ import { decideRouting } from '@/lib/routing/decide'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
 import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
+import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
 import { stampScopeShort } from '@/lib/quote/scope-short'
 import { generatePreviewImage } from '@/lib/ig-engine/generate'
 import { generateSampleImages } from '@/lib/ig-engine/samples'
@@ -612,9 +613,20 @@ export async function POST(req: Request) {
 
     // Create Stripe Checkout Session(s). Two distinct paths:
     //   • auto-quote → 3 Sessions (one per tier, deposit only)
-    //   • inspection-required → 1 Session for the $99 site-visit fee
+    //   • $99 site visit → 1 Session for the flat inspection fee
     // If creation fails for any reason we log + continue without links — the
     // quote is still saved; SMS will go without pay buttons rather than failing.
+    //
+    // Since spec elec-plumb-site-visit-first (2026-08-06) electrical and
+    // plumbing ALWAYS take the $99 branch — inspection-routed or not. The
+    // draft.good/better/best computation above is untouched: the prices are
+    // still produced, stored and shown, they are just no longer sold against
+    // (the tradie confirms the final price on site). createCheckoutSessionsForQuote
+    // stays in the codebase, unreachable from this route for those two trades.
+    //
+    // ⚠ Allowlist on the RAW intake.trade, matching /r/[token]/[tier] and the
+    // customer page: a legacy trade-less intake fails open to the tier mint.
+    const siteVisitFirst = isSiteVisitFirstTrade(intake?.trade as string | null | undefined)
     let payLinks: Partial<Record<'good' | 'better' | 'best' | 'inspection', string>> | undefined
     let depositPct: number | null = null
     // Prefer the configured APP_URL (prod), but fall back to NEXT_PUBLIC_APP_URL
@@ -629,7 +641,7 @@ export async function POST(req: Request) {
     // platform-direct otherwise. Never throws.
     const connect = await connectDestinationForTenantId(supabase, intakeTenantId)
 
-    if (!draft.needs_inspection) {
+    if (!draft.needs_inspection && !siteVisitFirst) {
       log.step('creating Stripe Checkout Sessions (one per tier, deposit only)')
       try {
         const stripeLinks = await createCheckoutSessionsForQuote({
@@ -669,7 +681,11 @@ export async function POST(req: Request) {
         })
       }
     } else {
-      log.step('creating Stripe Checkout Session for $99 site-visit deposit (inspection-required path)')
+      log.step(
+        siteVisitFirst && !draft.needs_inspection
+          ? 'creating Stripe Checkout Session for the $99 site visit (electrical/plumbing — the only customer payment)'
+          : 'creating Stripe Checkout Session for $99 site-visit deposit (inspection-required path)',
+      )
       try {
         const inspectionUrl = await createInspectionCheckoutSession({
           quoteId: quote!.id,
@@ -888,7 +904,13 @@ export async function POST(req: Request) {
         const tierMode = asQuoteTierMode(
           (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode ?? null,
         )
-        const body = buildQuoteSms(intake, quoteForSms, { displayMode, tierMode })
+        // Spec elec-plumb-site-visit-first R5 — the trade decides whether the
+        // message sells per-tier deposits or the one $99 site visit.
+        const body = buildQuoteSms(intake, quoteForSms, {
+          displayMode,
+          tierMode,
+          trade: intake?.trade as string | null | undefined,
+        })
         const segs = body.length <= 160 ? 1 : Math.ceil(body.length / 153)
         dispatch.ok('body built', { chars: body.length, sms_segments: segs })
 

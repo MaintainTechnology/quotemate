@@ -13,6 +13,7 @@ import {
   type PaintingTurnDecision,
 } from './painting-receptionist'
 import { toPaintingRequest } from './painting-intake'
+import type { PaintScope } from '@/lib/painting/types'
 
 function drive(messages: Array<string>): {
   decisions: PaintingTurnDecision[]
@@ -135,6 +136,51 @@ describe('advancePainting — inspection + booking', () => {
     // a question or a proposed time is a LIVE LEAD, not a decline.
     expect(advancePainting(parked, 'what does it cost?')).toMatchObject({ action: 'booking', confirmed: true })
     expect(advancePainting(parked, 'Tuesday works for me')).toMatchObject({ action: 'booking', confirmed: true })
+  })
+
+  // Live 2026-08-05: "3" storeys routed to inspection, the customer corrected
+  // to "Oh sorry its 1 storey only", and because that is not a decline it was
+  // read as "yes, book it". The correction was discarded and a painter was
+  // promised for a job that no longer needed a site visit.
+  it('a correction that removes the inspection trigger does NOT book', () => {
+    const parked = {
+      slots: {
+        address: '28 Greens Rd, Coorparoo QLD 4151',
+        scopes: ['walls', 'ceilings'] as PaintScope[],
+        coats: 3 as const,
+        condition: 'sound' as const,
+        ceiling_height: 'standard' as const,
+        storeys: 3 as const,
+      },
+      last_step: 'await_booking' as const,
+      pending_form_token: null,
+      pending_quote_token: null,
+    }
+    // Sanity: an ordinary reply still books, so this test cannot pass vacuously.
+    expect(advancePainting(parked, 'yes please')).toMatchObject({ action: 'booking', confirmed: true })
+
+    const fixed = advancePainting(parked, 'Oh sorry its 1 storey only')
+    expect(fixed.action).not.toBe('booking')
+    expect(fixed.slots.storeys).toBe(1)
+  })
+
+  // The other inspection trigger. "poor" condition routes to inspection; the
+  // customer correcting it to sound must reopen the quote, not book a visit.
+  it('a condition correction also reopens instead of booking', () => {
+    const parked = {
+      slots: {
+        address: '28 Greens Rd, Coorparoo QLD 4151',
+        scopes: ['walls'] as PaintScope[],
+        coats: 2 as const,
+        condition: 'poor' as const,
+      },
+      last_step: 'await_booking' as const,
+      pending_form_token: null,
+      pending_quote_token: null,
+    }
+    const fixed = advancePainting(parked, 'sorry the condition is sound not poor')
+    expect(fixed.action).not.toBe('booking')
+    expect(fixed.slots.condition).toBe('sound')
   })
 })
 

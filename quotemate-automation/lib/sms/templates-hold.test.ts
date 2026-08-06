@@ -4,6 +4,12 @@
 // Also locks in the no-regression invariant: when price_hold_until is
 // absent (legacy quotes + the SMS-parity fixture), buildQuoteSms output
 // is byte-identical to before — the hold line is purely additive.
+//
+// Every case here runs the DEPOSIT path (no `trade` threaded ⇒ the
+// elec-plumb-site-visit-first allowlist fails open). That is deliberate: the
+// hold line only exists on that path — for electrical/plumbing the $99 site
+// visit has no price hold, so the line is suppressed and its absence is
+// asserted in templates-site-visit.test.ts instead.
 
 import { describe, expect, it } from 'vitest'
 import {

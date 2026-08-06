@@ -6,6 +6,9 @@
 // buttons AND the pay links already sitting in customers' SMS threads —
 // so the order enforced here holds everywhere:
 //
+//   electrical/plumbing G/B/B     → /r/<token>/inspection (2026-08-06: those
+//                                   two trades sell only the $99 site visit —
+//                                   spec elec-plumb-site-visit-first R1)
 //   price hold expired            → /q/<token>       (blocked: refresh needed)
 //   already paid                  → /q/<token>/paid  (never re-charge)
 //   tenant has NO bookable windows → /q/<token>?slots=0 (never charge into an
@@ -46,6 +49,7 @@ import { isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
 import { resolveMintDiscount } from '@/lib/quote/early-bird'
+import { resolveGenericMintTier } from '@/lib/quote/mint-tier'
 import { pipelineLog } from '@/lib/log/pipeline'
 import {
   createCheckoutSessionForTier,
@@ -288,7 +292,7 @@ async function mintFreshDepositUrl(
   }
 }
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string; tier: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ token: string; tier: string }> }) {
   const { token, tier } = await ctx.params
   if (!VALID_TIERS.has(tier)) {
     return new Response('Invalid tier', { status: 400 })
@@ -303,6 +307,34 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     .single()
 
   if (!quote) return new Response('Not found', { status: 404 })
+
+  // ── $99-site-visit gate (spec elec-plumb-site-visit-first R1, 2026-08-06) ──
+  // Electrical and plumbing sell ONE customer payment: the flat $99 refundable
+  // site inspection. Their G/B/B links — including the ones already sitting in
+  // customers' SMS threads — 302 onto the inspection mint here rather than 400,
+  // so no previously-sent link dies. This runs BEFORE resolvePayRedirect on
+  // purpose: that resolver's price-hold gate would otherwise bounce a lapsed
+  // elec/plumb link to a dead end, when the $99 it now redirects to has no hold.
+  //
+  // ⚠ ALLOWLIST ONLY. This route is shared by five trades — solar,
+  // commercial_painting and the roofing rows on `quotes` still mint real G/B/B
+  // deposits below. A trade we can't resolve (tenant-less/legacy row, missing
+  // intake) FAILS OPEN to today's behaviour: it is not provably elec/plumb.
+  // Only a priced tier can be redirected, so 'inspection' skips the lookup.
+  if (tier !== 'inspection' && quote.intake_id) {
+    const { data: tradeRow } = await db()
+      .from('intakes')
+      .select('trade')
+      .eq('id', quote.intake_id)
+      .maybeSingle()
+    const gate = resolveGenericMintTier(tier, (tradeRow?.trade as string | null) ?? null)
+    if (gate.kind === 'redirect_to_inspection') {
+      // Same-app hop, so base it on the REQUEST rather than APP_URL: the two
+      // provisioned Twilio webhook hosts both serve this app, and an unset
+      // APP_URL would otherwise produce "undefined/r/…" and break the link.
+      return Response.redirect(new URL(`/r/${token}/inspection`, req.url), 302)
+    }
+  }
 
   // Inspection-required quotes are EXEMPT from the price-hold gate — their
   // tier prices are indicative (final price confirmed on-site) and the /q

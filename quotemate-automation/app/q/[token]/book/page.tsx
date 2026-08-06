@@ -19,11 +19,17 @@
 //   4. already booked           -> /thanks
 //   5. paid, no slot            -> the calendar
 //   6. paid, no slot, no windows -> the calendar's own empty state
+//
+// State 2 is TRADE-SCOPED since spec elec-plumb-site-visit-first (2026-08-06):
+// electrical/plumbing sell only the flat $99 site inspection, which has no
+// price hold, so a lapsed hold must send them to pay rather than dead-end them.
+// resolveBookUnpaidAction owns that decision; solar is unchanged.
 
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { resolveNextTier } from '@/lib/quote/booking'
+import { resolveBookUnpaidAction } from '@/lib/quote/mint-tier'
 import { isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
@@ -62,7 +68,7 @@ export default async function BookingPage(props: {
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, tenant_id, created_at, price_hold_until, needs_inspection',
+      'id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, tenant_id, intake_id, created_at, price_hold_until, needs_inspection',
     )
     .eq('share_token', token)
     .maybeSingle()
@@ -75,18 +81,39 @@ export default async function BookingPage(props: {
   // Tier the pay step charges, when we have to bounce them to it.
   const tier = resolveNextTier(sp.tier ?? null, quote.selected_tier as string | null)
 
+  // The trade decides what an unpaid visitor is sent to pay, and whether a
+  // lapsed price hold blocks them at all. Read only on the unpaid path — a paid
+  // visitor's outcome can't change — and always the RAW intakes.trade, so an
+  // unresolvable trade fails open to today's behaviour like the mint route does.
+  let unpaidTrade: string | null = null
+  if (!isPaid && quote.intake_id) {
+    const { data: intakeRow } = await supabase
+      .from('intakes')
+      .select('trade')
+      .eq('id', quote.intake_id as string)
+      .maybeSingle()
+    unpaidTrade = (intakeRow?.trade as string | null) ?? null
+  }
+
   // Lapsed price — block booking entirely; pricing may have changed since the
   // quote was sent. An already-paid quote has transacted and is exempt, as are
-  // inspection-required quotes whose prices are indicative by design.
-  const priceExpired =
-    !isPaid &&
-    !(quote as { needs_inspection?: boolean | null }).needs_inspection &&
-    isPriceHoldExpired(
-      (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
-      (quote as { created_at?: string | null }).created_at ?? null,
-    )
+  // inspection-required quotes whose prices are indicative by design — and, since
+  // spec elec-plumb-site-visit-first R3, so are electrical/plumbing: their only
+  // payment is the $99 site inspection, which carries no price hold, so the old
+  // untier-aware gate dead-ended a customer who could still have paid.
+  const unpaidAction = isPaid
+    ? null
+    : resolveBookUnpaidAction({
+        trade: unpaidTrade,
+        holdExpired: isPriceHoldExpired(
+          (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
+          (quote as { created_at?: string | null }).created_at ?? null,
+        ),
+        needsInspection: !!(quote as { needs_inspection?: boolean | null }).needs_inspection,
+        nextTier: tier,
+      })
 
-  if (priceExpired) {
+  if (unpaidAction?.kind === 'expired') {
     return (
       <Shell token={token}>
         <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-warning">
@@ -111,7 +138,7 @@ export default async function BookingPage(props: {
   }
 
   // Pay-first: booking follows the order the customer placed.
-  if (!isPaid) redirect(`/r/${token}/${tier}`)
+  if (unpaidAction) redirect(`/r/${token}/${unpaidAction.tier}`)
 
   // Already booked → the thank-you page owns the confirmation.
   if (isScheduled) redirect(`/q/${token}/thanks`)

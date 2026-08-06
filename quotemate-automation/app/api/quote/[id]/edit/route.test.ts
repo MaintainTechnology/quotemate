@@ -129,6 +129,7 @@ vi.mock('@/lib/estimate/validate', () => ({
 }))
 
 import { POST } from './route'
+import { createCheckoutSessionForTier, expireCheckoutSession } from '@/lib/stripe/checkout'
 
 const params = { params: Promise.resolve({ id: 'q1' }) }
 
@@ -225,6 +226,69 @@ describe('POST /api/quote/[id]/edit — pricing book is scoped to the quote trad
     const better = captured.quotesUpdate!.better as { subtotal_ex_gst: number }
     const total = captured.quotesUpdate!.total_inc_gst as number
     expect(total).toBeCloseTo(+(better.subtotal_ex_gst * 1.1).toFixed(2), 2)
+  })
+})
+
+describe('POST /api/quote/[id]/edit — the tier mint is trade-gated (spec elec-plumb-site-visit-first)', () => {
+  // The retired path: for these two trades /r/<token>/<G|B|B> 302s onto the
+  // inspection mint and nothing exposes stripe_links[tier], so re-minting a
+  // Session on every edit burns a Stripe call and writes a dead link.
+  it.each(['electrical', 'plumbing'])(
+    '%s: drops + expires the stale tier links and mints NOTHING',
+    async (trade) => {
+      state.intake = { trade, job_type: 'downlights', caller: null, scope: null }
+      // Catalogue trades require a COMPLETE book (route: the grounding validator
+      // grades edits against it) — a sparse row 409s before the mint loop.
+      state.pricingBook = { trade, gst_registered: true, hourly_rate: 110, default_markup_pct: 30 }
+      ;(state.quote as Record<string, unknown>).stripe_links = {
+        good: 'https://stripe.test/old-good',
+        better: 'https://stripe.test/old-better',
+        inspection: 'https://stripe.test/site-visit',
+      }
+
+      const res = await POST(req(EDIT_BODY, 'tok'), params)
+      expect(res.status).toBe(200)
+
+      expect(vi.mocked(createCheckoutSessionForTier)).not.toHaveBeenCalled()
+      // Only the CHANGED tier's stale Session is expired…
+      expect(vi.mocked(expireCheckoutSession).mock.calls.map((c) => c[0])).toEqual([
+        'https://stripe.test/old-better',
+      ])
+      // …and the live $99 link survives, along with untouched tiers.
+      expect(captured.quotesUpdate!.stripe_links).toEqual({
+        good: 'https://stripe.test/old-good',
+        inspection: 'https://stripe.test/site-visit',
+      })
+    },
+  )
+
+  it.each(['solar', 'commercial_painting'])(
+    '%s: still re-mints the tier Session exactly as before',
+    async (trade) => {
+      state.intake = { trade, job_type: 'other', caller: null, scope: null }
+      state.pricingBook = { trade, gst_registered: true }
+      ;(state.quote as Record<string, unknown>).stripe_links = {
+        better: 'https://stripe.test/old-better',
+      }
+
+      const res = await POST(req(EDIT_BODY, 'tok'), params)
+      expect(res.status).toBe(200)
+
+      expect(vi.mocked(createCheckoutSessionForTier)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(expireCheckoutSession).mock.calls.map((c) => c[0])).toEqual([
+        'https://stripe.test/old-better',
+      ])
+      expect(captured.quotesUpdate!.stripe_links).toEqual({
+        better: 'https://stripe.test/session/better',
+      })
+    },
+  )
+
+  it('a trade-less legacy row fails open and still re-mints', async () => {
+    state.intake = { trade: null, job_type: 'other', caller: null, scope: null }
+    const res = await POST(req(EDIT_BODY, 'tok'), params)
+    expect(res.status).toBe(200)
+    expect(vi.mocked(createCheckoutSessionForTier)).toHaveBeenCalledTimes(1)
   })
 })
 

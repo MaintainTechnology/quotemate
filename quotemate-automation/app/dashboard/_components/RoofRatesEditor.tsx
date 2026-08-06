@@ -282,7 +282,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
   if (!hasPricingBook) {
     return (
       <div className="rounded-card border border-ink-line bg-ink-card p-6">
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+        <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-warning">
           Roof rates · pricing book missing
         </div>
         <p className="mt-2 text-base text-text-sec">
@@ -301,7 +301,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Roof rates
           </div>
           <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
@@ -314,7 +314,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
           </p>
         </div>
         {savedAt && !errMsg && (
-          <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-teal-glow">
+          <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-teal-glow">
             ✓ Saved
           </span>
         )}
@@ -322,7 +322,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
 
       {errMsg && (
         <div className="rounded-card mt-5 border border-warning-bright/40 bg-ink-deep px-4 py-3">
-          <div className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-warning">
+          <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-warning">
             Could not save
           </div>
           <p className="mt-1 text-sm text-text-sec">{errMsg}</p>
@@ -529,7 +529,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
           type="submit"
           disabled={loading || saving || !accessToken}
           aria-busy={loading || saving}
-          className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? (
             <>
@@ -582,7 +582,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
           }}
           disabled={loading || saving}
           aria-busy={loading || saving}
-          className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50"
+          className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim hover:text-accent disabled:opacity-50"
         >
           Reset all to default
         </button>
@@ -596,7 +596,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="mt-7 border-t border-ink-line pt-5">
-      <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-accent">
+      <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">
         {title}
       </div>
       <p className="mt-1 text-sm text-text-sec">{subtitle}</p>
@@ -606,7 +606,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+    <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
       {children}
     </div>
   )

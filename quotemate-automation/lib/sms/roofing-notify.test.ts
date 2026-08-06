@@ -140,6 +140,17 @@ describe('AC2 existing kinds are byte-identical', () => {
     )
   })
 
+  // A painting inspection used to text the painter "new ROOFING inspection
+  // booked" — the module is roofing-named but painting reuses it, and only
+  // booking_confirmed honoured tradeLabel.
+  it('inspection_booked names the trade it was given', () => {
+    expect(
+      buildRoofingTradieNotification({
+        ...BASE, kind: 'inspection_booked', betterIncGst: null, tradeLabel: 'painting',
+      }),
+    ).toContain('new painting INSPECTION booked via SMS.')
+  })
+
   it('question_asked', () => {
     expect(
       buildRoofingTradieNotification({

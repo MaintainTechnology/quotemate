@@ -8,6 +8,7 @@ import { priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { asQuoteDisplayMode, type QuoteDisplayMode } from '@/lib/quote/display'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { depositCents, totalIncGstCents, dollars } from '@/lib/quote/money'
+import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
 
 /** Phase A — caller-supplied display mode flag. 'summary' suppresses the
  *  per-tier "X items + Yhr labour" component line so the SMS reads as a
@@ -22,6 +23,13 @@ export interface QuoteSmsOptions {
    *  behaviour; production callers pass the tenant's resolved pricing_book
    *  mode (which defaults to 'single'). */
   tierMode?: QuoteTierMode
+  /** RAW `intakes.trade` for this quote. Electrical + plumbing sell only the
+   *  flat $99 refundable site inspection (spec elec-plumb-site-visit-first
+   *  R5), so their message keeps the tier PRICES but drops the per-tier
+   *  deposit amount + pay link and carries one $99 line instead. Every other
+   *  trade — and an unthreaded/unresolvable trade — keeps today's per-tier
+   *  deposit shape: the allowlist fails open exactly like the mint route. */
+  trade?: string | null
 }
 
 function pickVariant<T>(variants: readonly T[]): T {
@@ -44,6 +52,26 @@ function pushPriceHoldLine(lines: string[], holdUntil: string | null | undefined
   }
 }
 
+/**
+ * The ONE payment line for a site-visit-first trade (electrical + plumbing,
+ * spec elec-plumb-site-visit-first R5). Worded verbatim like
+ * buildInspectionQuoteSms and painting's buildPaintingQuoteSms so all three
+ * trades promise the customer exactly the same thing.
+ *
+ * `/r/<token>/inspection` mints a fresh $99 Session per click and needs no
+ * stored stripe_links.inspection, so the caller can always supply it; the
+ * link-less fallback exists only for a caller that couldn't build a URL.
+ */
+function pushSiteVisitLines(lines: string[], inspectionUrl: string | null | undefined): void {
+  if (inspectionUrl) {
+    lines.push('Tap to lock in your site visit ($99 refundable, credited toward your final quote):')
+    lines.push(inspectionUrl)
+  } else {
+    lines.push('Call us back to lock in a site visit ($99 refundable, credited toward your final quote).')
+  }
+  lines.push('')
+}
+
 /** Capitalise the first character of a string for use mid-sentence. */
 function capitaliseFirst(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1)
@@ -53,9 +81,10 @@ function capitaliseFirst(s: string): string {
  * Quote-updated SMS — fired when the tradie edits a quote via the
  * /q/<token> edit overlay and chooses to notify the customer.
  *
- * Same shape as buildQuoteSms (full three-tier breakdown with prices,
- * deposit amounts, and per-tier Stripe pay links) so the customer sees
- * the latest numbers without having to open the quote page first.
+ * Same shape as buildQuoteSms (tier breakdown with prices, plus either the
+ * per-tier deposit amounts + Stripe pay links or — for a site-visit-first
+ * trade — the single $99 line) so the customer sees the latest numbers
+ * without having to open the quote page first.
  *
  * Lead line differs from the original quote SMS — "Quick update from
  * your tradie" / "Your tradie revised your quote" — so the customer
@@ -74,6 +103,8 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
     return buildInspectionQuoteUpdatedSms(intake, quote)
   }
   const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
+  // Electrical/plumbing: prices stay, the deposit ask goes (see the option docs).
+  const siteVisitFirst = isSiteVisitFirstTrade(options?.trade)
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
   const timeframe = (quote.estimated_timeframe ?? '').toLowerCase().trim()
@@ -119,7 +150,7 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
     tierCount === 2 ? '2 OPTIONS' :
     tierCount === 3 ? '3 OPTIONS' :
     'YOUR OPTIONS'
-  if (hasPayLinks && depositPct > 0) {
+  if (hasPayLinks && depositPct > 0 && !siteVisitFirst) {
     lines.push(`${heading} (inc 10% GST - ${depositPct}% deposit to confirm):`)
   } else {
     lines.push(`${heading} (inc 10% GST):`)
@@ -140,7 +171,8 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
     // No "recommended" badge when only one option is shown — it IS the offer.
     const recommended = visibleTierKeys.length > 1 && quote.selected_tier === key ? ' (recommended)' : ''
 
-    const headerSuffix = deposit ? ` (deposit $${deposit})` : ''
+    // Site-visit-first trades keep the PRICE and lose the deposit ask.
+    const headerSuffix = deposit && !siteVisitFirst ? ` (deposit $${deposit})` : ''
     lines.push(`${key.toUpperCase()}: $${price}${recommended}${headerSuffix}`)
 
     const label = tierLabel(tier)
@@ -150,13 +182,22 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
       if (comps) lines.push(`- ${comps}`)
     }
 
-    const payUrl = quote.pay_links?.[key]
+    // No per-tier pay link for a site-visit-first trade — the ONE payment
+    // line is pushed after the loop.
+    const payUrl = siteVisitFirst ? null : quote.pay_links?.[key]
     if (payUrl) lines.push(`Tap to pay: ${payUrl}`)
 
     lines.push('')
   }
 
-  pushPriceHoldLine(lines, quote.price_hold_until)
+  if (siteVisitFirst) {
+    // The ONE payment. The price-hold line is suppressed with it: the $99 has
+    // no hold, and its "lock in a tier to secure it" wording promises a deposit
+    // these trades no longer take.
+    pushSiteVisitLines(lines, quote.pay_links?.inspection)
+  } else {
+    pushPriceHoldLine(lines, quote.price_hold_until)
+  }
 
   lines.push('Reply or call back if anything looks off.')
   lines.push('')
@@ -978,6 +1019,20 @@ function pickScopeForSms(quote: Quote): string | null {
   return null
 }
 
+/**
+ * The customer quote SMS. Two shapes, decided by options.trade:
+ *
+ *   • default — tier prices + per-tier deposit amount + per-tier pay link.
+ *     Solar, commercial painting and the roofing rows on `quotes` still take
+ *     this path, as does any caller that doesn't thread a trade.
+ *   • electrical / plumbing — the tier PRICES stay, the deposit amount and
+ *     per-tier links go, and ONE "$99 refundable site visit" line replaces
+ *     them (spec elec-plumb-site-visit-first R5). Modelled on painting's
+ *     buildPaintingQuoteSms.
+ *
+ * Genuinely inspection-routed quotes (needs_inspection) keep their own
+ * dedicated layout below and are untouched by the trade gate.
+ */
 export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOptions): string {
   // Inspection-required quotes get a distinct SMS layout — indicative ranges
   // for context, ONE prominent $99 site-visit link, no per-tier pay buttons.
@@ -985,6 +1040,8 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
     return buildInspectionQuoteSms(intake, quote)
   }
   const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
+  // Electrical/plumbing: prices stay, the deposit ask goes (see the option docs).
+  const siteVisitFirst = isSiteVisitFirstTrade(options?.trade)
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
   const job = jobSummary(intake)
@@ -1024,7 +1081,7 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
     tierCount === 2 ? '2 OPTIONS' :
     tierCount === 3 ? '3 OPTIONS' :
     'YOUR OPTIONS'
-  if (hasPayLinks && depositPct > 0) {
+  if (hasPayLinks && depositPct > 0 && !siteVisitFirst) {
     lines.push(`${heading} (inc 10% GST - ${depositPct}% deposit to confirm):`)
   } else {
     lines.push(`${heading} (inc 10% GST):`)
@@ -1045,7 +1102,8 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
     // No "recommended" badge when only one option is shown — it IS the offer.
     const recommended = visibleTierKeys.length > 1 && quote.selected_tier === key ? ' (recommended)' : ''
 
-    const headerSuffix = deposit ? ` (deposit $${deposit})` : ''
+    // Site-visit-first trades keep the PRICE and lose the deposit ask.
+    const headerSuffix = deposit && !siteVisitFirst ? ` (deposit $${deposit})` : ''
     lines.push(`${key.toUpperCase()}: $${price}${recommended}${headerSuffix}`)
 
     const label = tierLabel(tier)
@@ -1055,7 +1113,9 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
       if (comps) lines.push(`- ${comps}`)
     }
 
-    const payUrl = quote.pay_links?.[key]
+    // No per-tier pay link for a site-visit-first trade — the ONE payment
+    // line is pushed after the loop.
+    const payUrl = siteVisitFirst ? null : quote.pay_links?.[key]
     if (payUrl) lines.push(`Tap to pay: ${payUrl}`)
 
     lines.push('')
@@ -1067,9 +1127,20 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
     lines.push('')
   }
 
-  pushPriceHoldLine(lines, quote.price_hold_until)
+  if (siteVisitFirst) {
+    // The ONE payment. The price-hold line is suppressed with it: the $99 has
+    // no hold, and its "lock in a tier to secure it" wording promises a deposit
+    // these trades no longer take.
+    pushSiteVisitLines(lines, quote.pay_links?.inspection)
+  } else {
+    pushPriceHoldLine(lines, quote.price_hold_until)
+  }
 
-  lines.push('Reply or call back to confirm a tier and we will book you in.')
+  lines.push(
+    siteVisitFirst
+      ? 'Reply or call back if anything looks off.'
+      : 'Reply or call back to confirm a tier and we will book you in.',
+  )
   lines.push('')
   lines.push('- QuoteMax')
 

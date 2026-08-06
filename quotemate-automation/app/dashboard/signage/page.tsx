@@ -288,11 +288,11 @@ function SignageHubPageInner() {
                     return (
                       <label
                         key={s.slot}
-                        className={`rounded-ctl inline-flex cursor-pointer items-center gap-2 border px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent ${
-                          on
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-ink-line text-text-sec hover:border-accent/50 hover:text-text-pri'
-                        }`}
+                        className={`rounded-ctl inline-flex cursor-pointer items-center gap-2 border px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent ${
+ on
+ ? 'border-accent bg-accent/10 text-accent'
+ : 'border-ink-line text-text-sec hover:border-accent/50 hover:text-text-pri'
+ }`}
                       >
                         <input type="checkbox" checked={on} onChange={() => toggleShot(s.slot)} className="sr-only" />
                         <span aria-hidden="true">{on ? '✓' : '+'}</span>
@@ -303,7 +303,7 @@ function SignageHubPageInner() {
                 </div>
               </div>
               <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-5 border-t border-ink-line pt-6">
-                <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-dim">
+                <span className=" text-sm font-semibold uppercase tracking-[0.08em] text-text-dim">
                   Targets <span className="tabular-nums text-text-pri">{targetCount}</span> studio{targetCount === 1 ? '' : 's'} ·{' '}
                   <span className="tabular-nums text-text-pri">{shots.size}</span> shot{shots.size === 1 ? '' : 's'}
                 </span>
@@ -345,7 +345,7 @@ function SignageHubPageInner() {
       {authState === 'no-org' && (
         <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 pb-20 sm:px-10">
           <Notice tone="accent">
-            <span className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">No org yet</span>
+            <span className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">No org yet</span>
             <p className="mt-2">
               You&rsquo;re signed in, but no franchisor org is linked to your account. Seed one with{' '}
               <code className="text-text-pri">scripts/seed-signage-demo.mjs your@email</code> then reload.
@@ -355,7 +355,7 @@ function SignageHubPageInner() {
       )}
 
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
-        <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
+        <span className=" text-sm font-semibold uppercase tracking-[0.08em]">
           QuoteMax · Signage compliance · pre-check, not HQ approval
         </span>
       </div>
@@ -387,14 +387,14 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
     <article className={`rounded-card border border-ink-line bg-ink-card p-6 sm:p-7 ${REVEAL}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Sweep · {sweep.required_shots.length} shot{sweep.required_shots.length === 1 ? '' : 's'}
             {created && <span className="text-text-dim"> · {created}</span>}
           </div>
           <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{sweep.name}</h3>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
+          <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
             <span className="tabular-nums text-text-sec">{submitted}/{sweep.requests.length}</span> responded
           </span>
           <button type="button" onClick={onDelete} disabled={deleting} aria-busy={deleting} className={BTN_DANGER_SM}>
@@ -426,7 +426,7 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
               {r.assessment_id && (
                 <Link
                   href={withBrand(`/dashboard/signage/queue?a=${r.assessment_id}`, brandSlug)}
-                  className="rounded-ctl inline-flex items-center justify-center bg-accent px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press"
+                  className="rounded-ctl inline-flex items-center justify-center bg-accent px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press"
                 >
                   Review
                 </Link>
@@ -469,7 +469,7 @@ function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' | 'no-
   return (
     <div className="rounded-ctl inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
       <span className={`h-2.5 w-2.5 ${dot}`} aria-hidden="true" />
-      <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">{label}</span>
+      <span className=" text-sm font-semibold uppercase tracking-[0.08em] text-text-sec">{label}</span>
     </div>
   )
 }

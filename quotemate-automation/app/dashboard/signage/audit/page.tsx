@@ -219,7 +219,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
           onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null) }}
           className="sr-only"
         />
-        <span className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
           {file ? <span className="text-text-pri">{file.name}</span> : 'Choose a PDF — or replace the current one'}
         </span>
       </label>
@@ -239,11 +239,11 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
 
       {result && (
         <div className={`rounded-card mt-5 border border-ink-line bg-ink-deep p-5 ${REVEAL}`}>
-          <div className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-accent">
+          <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">
             {result.applied ? '✓ Saved' : 'AI found'} · {result.rules.length} rule{result.rules.length === 1 ? '' : 's'} ·{' '}
             {result.scored} AI-scorable · {result.shots.length} shot{result.shots.length === 1 ? '' : 's'}
           </div>
-          <div className="mt-2.5 flex flex-wrap gap-2 font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
+          <div className="mt-2.5 flex flex-wrap gap-2 text-[0.66rem] uppercase tracking-[0.08em] text-text-dim">
             {Object.entries(result.tiers).map(([k, v]) => (
               <span key={k} className="border border-ink-line px-2 py-1">
                 {k} <span className="tabular-nums text-text-sec">{v}</span>
@@ -253,7 +253,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
           <div tabIndex={0} role="region" aria-label="Extracted rules" className="rounded-ctl mt-3 max-h-56 overflow-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40">
             {result.rules.slice(0, 30).map((r) => (
               <div key={r.rule_key} className="border-b border-ink-line/60 py-1.5 text-xs leading-relaxed text-text-sec">
-                <span className="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">{r.verdict_mode}</span> {r.rule_text}
+                <span className=" text-[0.62rem] uppercase tracking-[0.08em] text-text-dim">{r.verdict_mode}</span> {r.rule_text}
               </div>
             ))}
             {result.rules.length > 30 && <p className="mt-2 text-xs text-text-dim">+{result.rules.length - 30} more…</p>}
@@ -343,9 +343,9 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
           return (
             <div key={s.slot} className="rounded-card border border-ink-line bg-ink-deep px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">{s.label}</span>
+                <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">{s.label}</span>
                 {picked > 0 && (
-                  <span className="font-mono text-[0.66rem] uppercase tracking-[0.1em] text-teal-glow">
+                  <span className=" text-[0.66rem] uppercase tracking-[0.08em] text-teal-glow">
                     <span className="tabular-nums">{picked}</span> ✓
                   </span>
                 )}
@@ -354,7 +354,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
                 type="file" accept="image/*" multiple
                 aria-label={`Photos for ${s.label}`}
                 onChange={(e) => setFiles((p) => ({ ...p, [s.slot]: e.target.files ? Array.from(e.target.files) : [] }))}
-                className="mt-2 block w-full text-xs text-text-sec file:mr-3 file:cursor-pointer file:border-0 file:bg-ink-line file:px-3 file:py-1.5 file:font-mono file:text-[0.65rem] file:font-semibold file:uppercase file:tracking-[0.1em] file:text-text-pri"
+                className="mt-2 block w-full text-xs text-text-sec file:mr-3 file:cursor-pointer file:border-0 file:bg-ink-line file:px-3 file:py-1.5 file:text-[0.65rem] file:font-semibold file:uppercase file:tracking-[0.08em] file:text-text-pri"
               />
             </div>
           )
@@ -375,7 +375,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
       {report && (
         <div className={`mt-6 ${REVEAL}`}>
           <div className="mb-4 flex items-center justify-between gap-3">
-            <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <span className=" text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
               Compliance report
             </span>
             <button
@@ -383,7 +383,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
               onClick={() => void downloadPdf()}
               disabled={pdfBusy}
               aria-busy={pdfBusy}
-              className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pdfBusy ? 'Preparing…' : 'Download PDF ↓'}
             </button>
@@ -396,7 +396,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
           <div className="mt-5 grid gap-4">
             {report.groups.map((g) => (
               <div key={g.group}>
-                <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{g.group}</div>
+                <div className=" text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-dim">{g.group}</div>
                 <div className="mt-1.5 grid gap-1.5">
                   {g.items.map((it) => (
                     <div key={it.rule_key} className={`rounded-card flex items-start gap-2.5 border bg-ink-deep px-3 py-2.5 ${severityBorder(it.state)}`}>
