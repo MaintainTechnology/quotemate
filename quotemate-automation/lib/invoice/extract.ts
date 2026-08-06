@@ -129,7 +129,12 @@ export async function extractInvoice(
       },
     ],
     generation_config: {
-      temperature: 0.1,
+      // 0, not 0.1 — this is a JSON field-extraction task off an invoice
+      // image, where there is exactly one right answer per field and no
+      // reason to sample. Every other Gemini call in the codebase already
+      // pins 0 (ig-engine/providers/gemini.ts, ig-engine/verify.ts,
+      // roofing/solar-detect.ts); this was the last one that did not.
+      temperature: 0,
       response_mime_type: 'application/json',
     },
   }

@@ -30,6 +30,10 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { geminiProvider } from './providers/gemini'
+// Static, not dynamic: sampling.ts is a pure two-function module with no
+// imports of its own, so it does not compromise this file's import-light
+// property (the AI SDK below stays dynamic for exactly that reason).
+import { deterministicSampling } from '@/lib/llm/sampling'
 
 // The configured judge model. A "claude-*" id routes to the AI SDK
 // path; anything else is forwarded to the Gemini provider as the
@@ -337,7 +341,12 @@ async function judgeViaClaude(
     ]
     const { text } = await generateText({
       model: anthropic(model),
-      temperature: 0,
+      // `model` is PREVIEW_JUDGE_MODEL — set in Preview and Production — so
+      // this is runtime-selectable and an unguarded `temperature: 0` 400s the
+      // moment it names a model that has dropped the parameter (Sonnet 5,
+      // Opus 4.7/4.8). The catch below turns that into a silent
+      // "inconclusive", so the judge would fail without ever being noticed.
+      ...deterministicSampling(model),
       messages: [{ role: 'user' as const, content }],
     })
     return parsePreviewJudgement(text)
