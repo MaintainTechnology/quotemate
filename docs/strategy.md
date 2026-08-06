@@ -1454,4 +1454,84 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
     the `SITE_VISIT_FIRST_TRADES` allowlist, but their funnels have their own
     review gates and should get their own decision, not a quiet widening.
 
+- **v21** (2026-08-07): **residential painting joins auto-send — the tradie review gate is retired; a priced quote is released at draft time and texted to the customer immediately.** Owner decision. Supersedes the "painting remains review-required" clause of **v19** and the review-required half of **v11**.
+
+  **What changed:**
+
+  The two origins that used to draft-and-hold — the SMS/voice receptionist
+  (`lib/sms/painting-estimate-dispatch.ts`) and the self-serve form
+  (`/api/paint-request/[token]`) — now stamp `released_at` when the estimate is
+  saved, exactly as the dashboard path has always done, and send the customer
+  the **full quote** instead of a holding message: tier prices, the
+  `/q/paint/[token]` page, the PDF, and the one $99 site-visit link. Painting
+  now behaves like roofing, electrical and plumbing. Inspection-routed rows are
+  untouched — they have no price to show and keep their on-site-measure
+  message.
+
+  **Why the gate's rationale is gone:**
+
+  It existed because painting prices are *inferred* (Google Solar footprint +
+  street-view area) and the customer was being asked for a **30% deposit** —
+  roughly $6,400 on a $21,432 quote — against a number nobody had checked. v19
+  removed that: the only customer payment is the flat **$99 refundable site
+  visit**, with the final price confirmed on site. A human check between an
+  inferred estimate and a $99 refundable booking buys nothing, and it costs the
+  customer the wait.
+
+  **And the gate was failing silently.** Verified against production
+  2026-08-06: of 8 recent releases **3 sent no SMS at all** — every one of the 8
+  had a `customer_phone` on file, so a missing mobile does not explain it. The
+  route stamped
+  `released_at`, ran the send in `after()`, discarded
+  `sendPaintingQuoteToCustomer`'s `{ sent }` and answered `{ ok: true }`
+  unconditionally — so `/p` showed "✓ Sent to customer" while the customer got
+  nothing. Underneath, the send itself returned `sent: true` off a bare `await
+  sendSms(...)`, and `sendSms` *resolves* `{ ok: false }` on a Twilio
+  rejection rather than throwing. A manual gate that drops a third of its sends
+  is worse than no gate.
+
+  **The invariant that replaces the gate**, stated precisely: *a painting quote
+  is reported as sent only when a carrier accepted the message.* Two columns,
+  two questions — conflating them was the whole bug. `released_at` (mig 157)
+  answers *may the customer see prices*; it is stamped **before** the send
+  because the quote page and the $99 mint gate on it, and a dashboard save
+  stamps it while texting nobody. `quote_sent_at` (**mig 189**) answers *was it
+  delivered*, and is written only after Twilio accepts. So: every send path
+  returns `{ sent }`; the release endpoint answers `{ ok, sent }`; the "Send to
+  customer" button reads `quote_sent_at` for its initial state and `sent ===
+  true` for its result, offering a retry otherwise; a **first** send that fails
+  rolls `released_at` back (`revertPaintingRelease`, which checks the write's
+  `error` — supabase-js resolves rather than throws — and reports whether the
+  rollback landed); and the tradie gets an alert saying in plain words that the
+  customer received nothing.
+
+  **What that does and does not guarantee.** No surface reports a delivery
+  without carrier acceptance. It does **not** guarantee the customer read it —
+  Twilio acceptance is not handset delivery, and no delivery-receipt webhook is
+  wired. Two known gaps stay open, recorded rather than papered over: two
+  simultaneous first-release POSTs can both stamp and send, and one failing
+  reverts a row the other successfully texted; and a row with **no
+  `customer_phone`** can now never reach a sent state from `/p`, because there
+  is nothing to send to — the tradie must add a mobile first.
+
+  **What was deliberately NOT touched:** the gate functions themselves.
+  `canShowPaintingPrices`, `paintingDepositLocked` and `resolvePaintMintTier`
+  keep their signatures and semantics — a genuinely unreleased row (a legacy
+  held draft, or a rolled-back failed send) is still withheld from prices and
+  from the mint. These two origins simply stop producing held rows. The money
+  path is unchanged: the $99 mint, checkout and the Stripe webhook are
+  identical. **Commercial painting and solar keep their own gates** — commercial
+  painting is a separate stack with its own delivery rule, and solar's
+  `SOLAR_AUTO_RELEASE` / `lib/solar/publish.ts` behaviour is unmoved. Neither has
+  a line of diff.
+
+  **Trigger for the next iteration:**
+
+  - Painters report unwanted quotes going out, or want a hold back for a
+    specific job class → the gate modules are intact; re-enabling is a
+    `releasedAt` argument in `runAndSavePaintingQuote`, not a rebuild.
+  - The auto-send failure alert starts firing regularly → the fault is in the
+    send, not the policy; fix delivery rather than reinstating a human
+    checkpoint that was itself dropping a third of its sends.
+
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).
