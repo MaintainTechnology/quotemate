@@ -286,19 +286,26 @@ export function Scope({ items, eyebrow = 'Scope of works' }: { items: ScopeItem[
   return (
     <section style={{ padding: '22px 24px 8px', borderTop: '1px solid var(--ink-line)' }}>
       <div style={eyebrowStyle()}>{eyebrow}</div>
+      {/* Three grid children — number, title, body — NOT the old
+          number + (title-and-body-wrapped-together) pair. Flattening them
+          is what lets one CSS rule (`.qm-scope-row`, globals.css) put the
+          number and title into a desktop rail while phones keep the
+          shipped "number beside title, body indented beneath" layout.
+          Wrapping title and body together again would make the rail
+          impossible without duplicating markup per breakpoint. */}
       {items.map((s, i) => (
-        <div key={i} style={{ display: 'flex', gap: 16, padding: '20px 0', borderTop: '1px solid var(--ink-line)', marginTop: 14 }}>
-          <span aria-hidden="true" style={{ flexShrink: 0, ...MONO, fontWeight: 700, fontSize: 26, lineHeight: 0.85, color: 'var(--accent)' }}>
+        <div key={i} className="qm-scope-row" style={{ padding: '20px 0', borderTop: '1px solid var(--ink-line)', marginTop: 14 }}>
+          <span aria-hidden="true" className="qm-scope-num" style={{ flexShrink: 0, ...MONO, fontWeight: 700, fontSize: 26, lineHeight: 0.85, color: 'var(--accent)' }}>
             {String(i + 1).padStart(2, '0')}
           </span>
-          <div style={{ minWidth: 0 }}>
-            <h3 style={{ margin: 0, ...SANS, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.01em', fontSize: 16.5, color: 'var(--text-pri)' }}>{s.title}</h3>
+          <h3 className="qm-scope-title" style={{ margin: 0, ...SANS, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.01em', fontSize: 16.5, color: 'var(--text-pri)' }}>{s.title}</h3>
+          <div className="qm-scope-body">
             {/* div, not p: body is a ReactNode and the five-sections layout
                 passes block content (figure/div/p) — nesting those inside a
                 <p> is invalid HTML and throws hydration errors. */}
             {s.body ? <div style={{ margin: '9px 0 0', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)', whiteSpace: 'pre-line', maxWidth: '72ch' }}>{s.body}</div> : null}
             {s.list && s.list.length ? (
-              <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
+              <div className="qm-scope-list" style={{ marginTop: 11, display: 'grid', gap: 9 }}>
                 {s.list.map((li, j) => (
                   <div key={j} style={{ display: 'flex', gap: 11, fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-sec)' }}>
                     <CheckIcon /> <span>{li}</span>

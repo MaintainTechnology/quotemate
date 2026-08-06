@@ -739,7 +739,7 @@ export default async function RoofingQuotePage({
       {
         title: 'Overview',
         body: (
-          <div style={{ display: 'grid', gap: 14, maxWidth: 520 }}>
+          <div style={{ display: 'grid', gap: 14, maxWidth: 600 }}>
             <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
               {overviewBits.join(', ')}. A licensed roofer confirms everything on site before any work is booked.
             </p>
@@ -803,11 +803,17 @@ export default async function RoofingQuotePage({
         title: 'Your price',
         body: (
           <div>
+            {/* The single most important number on the page was set at 24px
+                — smaller than the section headings above it and no larger
+                than the tier price in a dashboard list row. A quote's price
+                is its hero figure. clamp() keeps it from overflowing a
+                narrow phone while letting it carry real weight on a laptop. */}
             <div
               style={{
                 ...MONO,
                 fontWeight: 800,
-                fontSize: 24,
+                fontSize: 'clamp(2rem, 5vw, 2.75rem)',
+                letterSpacing: '-0.02em',
                 lineHeight: 1,
                 color: 'var(--text-pri)',
                 fontVariantNumeric: 'tabular-nums',
@@ -1116,13 +1122,15 @@ export default async function RoofingQuotePage({
         {/* On-site inspection notice. */}
         {isInspection && (
           <SheetSection>
+            {/* The whole border carries the warning tint rather than a 3px
+                left tab. Same call as the cockpit's 53 side-tab rails: the
+                eyebrow below already names the state in the warning colour,
+                so the rail was a second, louder copy of that signal. */}
             <div
               style={{
-                borderLeft: '3px solid var(--warning-bright)',
                 background: 'var(--ink-deep)',
-                border: '1px solid var(--ink-line)',
-                borderLeftWidth: 3,
-                borderLeftColor: 'var(--warning-bright)',
+                border: '1px solid color-mix(in srgb, var(--warning-bright) 42%, var(--ink-line))',
+                borderRadius: 'var(--qm-r-sm)',
                 padding: '14px 16px',
               }}
             >

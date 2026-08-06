@@ -896,6 +896,26 @@ html {
   text-underline-offset: 0;
 }
 
+/* Nor inside the dashboard. The highlighter shim exists for MARKETING display
+   headlines, where one accent word must stay distinguishable on cream because
+   yellow-as-text is unreadable there. The cockpit uses .text-accent for a
+   different job — tier names, KPI values, section labels — and a
+   text-decoration underline on those reads as a hyperlink. In the Quotes tab
+   it put a link underline under GOOD / BETTER / BEST, i.e. under the three
+   prices the customer is choosing between.
+   (0,4,0) beats the (0,3,0) shim, and both light paths are covered: the
+   pinned [data-theme="light"] and the device-preference default. */
+:root[data-theme='light'] .qm-dash .text-accent {
+  text-decoration-line: none;
+  text-underline-offset: 0;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .qm-dash .text-accent {
+    text-decoration-line: none;
+    text-underline-offset: 0;
+  }
+}
+
 /* A self-contained dark quote surface (.qm-quote[data-qm-theme="dark"]) can
    sit inside a light ROOT theme (e.g. the tradie /m page). There the
    highlighter shim above would paint .text-accent dark-on-dark — restore
@@ -1057,6 +1077,156 @@ html {
    — the keyframes and the linear timing stay Tailwind's. */
 :root .animate-spin {
   animation-duration: 0.65s;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   DASHBOARD TYPE + BUTTON SYSTEM   (Claude Design direction "1b")
+   ────────────────────────────────────────────────────────────────────
+   Three faults were found in the running dashboard, and all three trace
+   to the same root cause: JetBrains Mono, uppercase, wide-tracked was
+   doing EIGHT different jobs — section labels, buttons, filter chips,
+   status pills, table headers, timestamps, prices and tier names. When
+   one voice says everything, nothing is a heading, a value, or an
+   action. That is what read as "fonts are inconsistent", as clutter,
+   and as "buttons lack proper styling".
+
+   THE RULE: mono has exactly one job — NUMBERS AND IDENTIFIERS.
+   Prices, counts, phone numbers, quote refs, dates. Everything a person
+   READS rather than reads OFF is Manrope.
+
+   This block enforces the half of that rule that can be enforced
+   centrally. It is scoped to .qm-dash and uses `:is()` to reach (0,2,0),
+   which is what it takes to beat a single Tailwind utility like
+   `font-mono` or `uppercase` — the same specificity trick the
+   interaction layer below already relies on. No !important: a component
+   that genuinely needs to opt out can still do so with two classes.
+
+   Deliberately NOT touched: .num / tabular figures, and anything inside
+   a [data-mono] opt-out. Those are the numbers, which keep mono.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Buttons and button-shaped links. Sentence case, Manrope, normal
+   tracking — an action label is a sentence, not a machine identifier.
+   Uppercase + 0.14em tracking on a 4-word button ("Copy deposit link")
+   is what made the action bar read as six equal shouts. */
+.qm-dash :is(button, a.rounded-ctl):not([data-mono]) {
+  font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+}
+
+/* Status pills and count chips carry a STATE, not a serial number.
+   Same treatment, one notch lighter so they sit below the buttons. */
+.qm-dash :is([data-pill], [role="status"] > span):not([data-mono]) {
+  font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* ── The three button ranks ──────────────────────────────────────────
+   Exactly one rank-1 per screen. The audit found the quote detail
+   shipping TWO accent-filled primaries side by side ("Send to customer"
+   and "View customer page"), which is the same as having none. */
+.qm-dash .qm-b1,
+.qm-dash .qm-b2,
+.qm-dash .qm-b3 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.44rem;
+  height: 2.25rem;
+  padding: 0 0.9rem;
+  border-radius: var(--radius-ctl);
+  border: 1px solid transparent;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qm-dash .qm-b1 {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.qm-dash .qm-b1:hover:not(:disabled) { background: var(--accent-press); }
+.qm-dash .qm-b2 {
+  background: var(--ink-card);
+  border-color: var(--ink-line);
+  color: var(--text-pri);
+}
+.qm-dash .qm-b2:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 50%, var(--ink-line)); }
+.qm-dash .qm-b3 {
+  background: transparent;
+  color: var(--text-sec);
+  padding: 0 0.55rem;
+}
+.qm-dash .qm-b3:hover:not(:disabled) { color: var(--text-pri); }
+
+/* ── Native <select>: one chevron for the whole cockpit ──────────────
+   The browser draws its own dropdown arrow, and that arrow is the part
+   that looked cheap: it sits ~4px from the control's edge with no way to
+   move it, ignores every design token, and renders as a different glyph
+   on Windows, macOS and Android — so two selects side by side never
+   quite matched. There are 56 <select> elements across /dashboard in 19
+   files; exactly 3 (the queue filters) had been fixed by hand.
+
+   Fixing the other 53 in JSX would mean touching 18 more files and
+   inventing a wrapper component for forms that do not want one. This is
+   one rule instead, and it reaches all of them because `.qm-dash` sits
+   on app/dashboard/layout.tsx — which wraps every /dashboard route,
+   including the standalone ones (aircon, painting, roofing/measure).
+
+   `background-position: right 0.75rem` is the same 12px inset the
+   hand-built chevron used; `padding-right: 2.25rem` is `pr-9`, so the
+   longest option label can never run under the arrow.
+
+   Two things this must NOT touch: `[multiple]` and `[size]` selects are
+   list boxes, not dropdowns — they have no arrow to replace, and giving
+   them one would put a chevron beside a scrolling list.
+
+   The colour is baked into the data URI because a data: URI cannot read
+   a CSS custom property, so the light palette needs its own copy below —
+   same shape, --text-dim (#6E645C) instead of the dark #A2968A. */
+.qm-dash select:not([multiple]):not([size]) {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A2968A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 14px 14px;
+  padding-right: 2.25rem;
+  cursor: pointer;
+}
+:root[data-theme='light'] .qm-dash select:not([multiple]):not([size]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236E645C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .qm-dash select:not([multiple]):not([size]) {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236E645C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+
+/* Section label. Replaces the mono-uppercase eyebrow: still a label,
+   but Manrope at a tighter track so it recedes behind the value it
+   introduces instead of competing with it. */
+.qm-dash .qm-lbl {
+  font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* The hero figure (direction 1b). One per screen, and it is always a
+   number — so this is one of the few places mono is still correct. */
+.qm-dash .qm-hero-num {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2rem, 3.2vw, 2.875rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1541,6 +1711,137 @@ html {
   .qm-quote :is(.qm-cta, .qm-ghost, .qm-tier, .qm-seg):active {
     transform: none !important;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SCOPE — the numbered sections that ARE the customer quote
+   ══════════════════════════════════════════════════════════════════════
+   The sheet was widened to 1040px for desktop (see --qm-sheet-w) but the
+   content inside it never was: every section body still carried the
+   mockup's 520px phone column, so on a laptop exactly HALF the quote was
+   empty paper. Measured on the live roof quote: sheet 1040px, content
+   520px, on every section.
+
+   The fix is a two-column editorial rail, not a wider blob of text. The
+   number and the section title move into a fixed 172px rail and the body
+   takes the rest — so the page reads as a prepared document rather than a
+   phone screenshot stretched onto a desktop, and a 70-character measure
+   is preserved instead of running text to 1000px (which is unreadable).
+
+   PHONES ARE UNTOUCHED. Below 900px this is the shipped layout exactly:
+   number beside the title, body underneath, spanning the full width. The
+   grid-template-areas swap is the entire difference between the two.
+
+   Shared by every trade — roofing, painting, electrical, plumbing, solar,
+   aircon, commercial paint — because they all render their sections
+   through <Scope> in app/q/_chrome/parts.tsx. */
+.qm-scope-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "num  title"
+    ".    body";
+  column-gap: 16px;
+}
+.qm-scope-num { grid-area: num; }
+.qm-scope-title { grid-area: title; }
+.qm-scope-body { grid-area: body; min-width: 0; }
+
+@media (min-width: 900px) {
+  .qm-scope-row {
+    grid-template-columns: 172px minmax(0, 1fr);
+    grid-template-areas:
+      "num   body"
+      "title body";
+    grid-template-rows: auto 1fr;
+    column-gap: 30px;
+  }
+  /* The rail's title sits directly under its number rather than being
+     pushed to the vertical centre of a tall body. */
+  .qm-scope-title { align-self: start; margin-top: 10px; }
+
+  /* Scope checklists run two-across once there is room — a single column
+     of ten short ticks down an 800px body is a lot of ragged whitespace. */
+  .qm-scope-list { grid-template-columns: 1fr 1fr; column-gap: 30px; }
+}
+
+/* ── Motion: sections resolve as they arrive ──────────────────────────
+   Justified by frequency (see the animation decision framework): a
+   customer opens their quote once, maybe twice. This is the "rare view"
+   tier where entrance motion is allowed to add delight, unlike the
+   cockpit's 100×/day controls which stay still.
+
+   Scroll-driven (`animation-timeline: view()`), so it runs off the main
+   thread and needs no JS in these server components — and it degrades
+   perfectly: browsers without scroll-driven animation skip the whole
+   @supports block and render the finished state, which is the base
+   style. Nothing is ever hidden behind a script that might not run.
+
+   ease-out, 8px, and a scale that starts at 0.995 rather than 0 —
+   nothing in the real world appears from nothing. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .qm-scope-row,
+    .qm-reveal {
+      animation: qm-rise-in 520ms cubic-bezier(0.23, 1, 0.32, 1) both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
+  }
+}
+@keyframes qm-rise-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.995); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Motion: the letterhead + confirmation hero land on arrival ───────
+   A short stagger (60ms steps, inside Emil's 30–80ms band) so the
+   tradie's identity resolves before the number does — the order the
+   customer actually reads them in. */
+@media (prefers-reduced-motion: no-preference) {
+  .qm-stagger > * {
+    animation: qm-rise-in 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+}
+
+/* The confirmation tick on the thank-you page: the one genuinely
+   celebratory moment in the funnel — the customer has just paid. It
+   scales from 0.86, never 0, and it plays once. */
+@media (prefers-reduced-motion: no-preference) {
+  .qm-tick-in { animation: qm-tick 460ms cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+}
+@keyframes qm-tick {
+  from { opacity: 0; transform: scale(0.86); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Reduced motion: duration collapse cannot neutralise a transform, so the
+   transforms are removed explicitly. Opacity is left alone — a fade aids
+   comprehension and is not what causes motion sickness. */
+@media (prefers-reduced-motion: reduce) {
+  .qm-scope-row,
+  .qm-reveal,
+  .qm-stagger > *,
+  .qm-tick-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Thank-you page: the tradie's message and the receipt pair up once there
+   is room, at the same 900px breakpoint the scope rail uses. */
+@media (min-width: 900px) {
+  .qm-thanks-split { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 30px; }
+}
+
+/* The top bar's "Customer quote" wordmark is the first thing to go when
+   the bar runs out of room — at 390px it was being clipped mid-word by
+   the trade pill. The QuoteMax mark beside it already says whose surface
+   this is, so the words are redundant before they are truncated. */
+@media (max-width: 460px) {
+  .qm-chrome-label { display: none; }
 }
 
 /* Scroll region — thin brand scrollbar. */

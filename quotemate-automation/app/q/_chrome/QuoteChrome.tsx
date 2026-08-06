@@ -109,7 +109,11 @@ export function QuoteChrome({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <QuoteMaxMark size={24} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Customer quote</span>
+          {/* qm-chrome-label: hidden under 460px (globals.css). The bar is
+              three fixed-width groups under `space-between`, so at 390px
+              this label was being clipped mid-word by the trade pill —
+              and the mark beside it already says whose surface this is. */}
+          <span className="qm-chrome-label" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Customer quote</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid var(--ink-line)', background: 'var(--ink)', padding: 3, borderRadius: 10 }}>

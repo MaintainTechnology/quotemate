@@ -166,37 +166,118 @@ export default async function RoofThanksPage(props: {
           />
         ) : null}
 
-        {/* a. thank-you video — enlarged + centred (hero of this page). */}
-        <SheetSection eyebrow="Thank you" eyebrowAccent>
-          <div style={{ marginTop: 14, display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center' }}>
-            <div className="qm-print-hide" style={{ width: '100%', maxWidth: 720 }}>
-              <TrustVideo
-                src={thankyouVideo.url}
-                script={thankyouVideo.script}
-                title={tradieName}
-                caption="A thank-you message from your tradie"
-              />
+        {/* a. THE CONFIRMATION.
+            This page used to open on a 9.5px "Thank you" eyebrow and put
+            the one fact the customer came for — when is someone coming? —
+            inside a paragraph, and again inside a table row. The customer
+            has just paid; a confirmation should confirm.
+
+            So: a tick, the plain-English outcome, then the date at hero
+            scale. Nothing was removed — the same sentence still carries
+            the follow-up promise, and every row of the booked table is
+            still below. The eyebrow moves onto the block as a label.
+
+            qm-stagger + --i: tick, then headline, then date, then the
+            sentence, 60ms apart, so it resolves in reading order instead
+            of landing as one slab. */}
+        <SheetSection>
+          <div
+            className="qm-stagger"
+            style={{ display: 'grid', gap: 12, justifyItems: 'center', textAlign: 'center', padding: '12px 0 4px' }}
+          >
+            <span
+              aria-hidden="true"
+              className="qm-tick-in"
+              style={{
+                '--i': 0,
+                display: 'inline-grid',
+                placeItems: 'center',
+                width: 54,
+                height: 54,
+                borderRadius: 999,
+                background: 'color-mix(in srgb, var(--success-bright) 14%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--success-bright) 42%, transparent)',
+                color: 'var(--success-bright)',
+                fontSize: 24,
+                fontWeight: 800,
+                lineHeight: 1,
+              } as CSSProperties}
+            >
+              ✓
+            </span>
+            <h1
+              style={{
+                '--i': 1,
+                margin: 0,
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '-0.02em',
+                fontSize: 'clamp(1.5rem, 4.4vw, 2rem)',
+                lineHeight: 1.05,
+                color: 'var(--text-pri)',
+              } as CSSProperties}
+            >
+              Your site visit is booked
+            </h1>
+            <div
+              style={{
+                '--i': 2,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 800,
+                fontSize: 'clamp(1.05rem, 3vw, 1.5rem)',
+                letterSpacing: '-0.01em',
+                color: 'var(--text-pri)',
+                fontVariantNumeric: 'tabular-nums',
+              } as CSSProperties}
+            >
+              {slotLabel}
             </div>
-            {/* b. next steps */}
-            <p style={{ margin: 0, maxWidth: 560, fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-              Thanks — your site visit is locked in for{' '}
-              <strong style={{ color: 'var(--text-pri)' }}>{slotLabel}</strong>. {tradieName} will
-              text you the day before to confirm the exact time.
+            <p
+              style={{
+                '--i': 3,
+                margin: 0,
+                maxWidth: '52ch',
+                fontSize: 14,
+                lineHeight: 1.55,
+                color: 'var(--text-sec)',
+              } as CSSProperties}
+            >
+              {tradieName} will text you the day before to confirm the exact time.
             </p>
           </div>
         </SheetSection>
 
-        {/* c. what's booked */}
+        {/* b + c. The tradie's message and the receipt sit SIDE BY SIDE from
+            900px up (qm-thanks-split). Stacked, they made a ~1400px column
+            on a laptop that was mostly one video and one table with a lot
+            of paper either side. Phones keep the stack — the grid only
+            splits at the same 900px breakpoint the scope rail uses. */}
         <SheetSection>
-          <div style={{ marginTop: 4 }}>
-            <BookedSummary
-              tradieName={identity?.business_name ?? null}
-              jobLabel="Roof site visit"
-              visitLabel={slotLabel}
-              place={placeLabel}
-              quoteRef={bookingRef(token)}
-              paidLabel={paidLabel}
-            />
+          <div className="qm-thanks-split" style={{ display: 'grid', gap: 22, alignItems: 'start' }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--accent)' }}>
+                Thank you
+              </div>
+              <div className="qm-print-hide" style={{ marginTop: 12 }}>
+                <TrustVideo
+                  src={thankyouVideo.url}
+                  script={thankyouVideo.script}
+                  title={tradieName}
+                  caption="A thank-you message from your tradie"
+                />
+              </div>
+            </div>
+            <div>
+              <BookedSummary
+                tradieName={identity?.business_name ?? null}
+                jobLabel="Roof site visit"
+                visitLabel={slotLabel}
+                place={placeLabel}
+                quoteRef={bookingRef(token)}
+                paidLabel={paidLabel}
+              />
+            </div>
           </div>
         </SheetSection>
 
