@@ -26,8 +26,11 @@
 
 import type { ProductImage } from './product-image'
 
+// Newest GA text/vision model — verify is images-in, text-out, so it wants a
+// text model, not the image-generation id it used to name. See the longer
+// note in ./judge.ts for why GA over the pro *-preview ids.
 const GEMINI_TEXT_MODEL =
-  process.env.GEMINI_VERIFY_MODEL ?? 'gemini-3.1-flash-lite-image'
+  process.env.GEMINI_VERIFY_MODEL ?? 'gemini-3.6-flash'
 const GEMINI_ENDPOINT = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 

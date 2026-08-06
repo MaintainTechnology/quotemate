@@ -38,8 +38,18 @@ import { deterministicSampling } from '@/lib/llm/sampling'
 // The configured judge model. A "claude-*" id routes to the AI SDK
 // path; anything else is forwarded to the Gemini provider as the
 // per-call model override.
+// gemini-3.6-flash: newest GA generation, and a TEXT/vision model rather than
+// the image model this used to name. Judging is images-in, text-out, so an
+// image-generation id was never the right shape for it — it only worked
+// because those models will also emit text. Verified 2026-08-06 with an image
+// part + response_modalities:['TEXT'] at temperature 0.
+//
+// Not a *-preview pro id (gemini-3.1-pro-preview / gemini-3-pro-preview):
+// there is no GA 3.x pro text model, and this repo has already been burned by
+// a preview shutdown. GA beats a marginally stronger preview on a path that
+// silently returns "inconclusive" when it fails.
 const JUDGE_MODEL =
-  process.env.PREVIEW_JUDGE_MODEL ?? 'gemini-3.1-flash-lite-image'
+  process.env.PREVIEW_JUDGE_MODEL ?? 'gemini-3.6-flash'
 
 /** PURE — is the configured judge a Claude model (→ AI SDK path)? */
 export function isClaudeJudgeModel(model: string = JUDGE_MODEL): boolean {

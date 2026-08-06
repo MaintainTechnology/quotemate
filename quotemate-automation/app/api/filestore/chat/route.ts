@@ -22,7 +22,11 @@ export const runtime = 'nodejs'
 // upstream retries 429s, so give it room.
 export const maxDuration = 60
 
-const CHAT_MODEL = (process.env.FILESTORE_CHAT_MODEL || 'gemini-2.5-flash').trim()
+// 'gemini-2.5-flash' now 404s on this project's key ("no longer available to
+// new users"), so both this default AND the FILESTORE_CHAT_MODEL currently set
+// in Production point at a dead model. Fixing the default is only half of it —
+// the env var wins and still needs updating.
+const CHAT_MODEL = (process.env.FILESTORE_CHAT_MODEL || 'gemini-3.6-flash').trim()
 
 /** The table whose id is this estimator's session id (for the ownership check). */
 const SESSION_TABLE: Record<ChatRequest['estimator'], string> = {

@@ -33,7 +33,12 @@ import {
 } from './solar'
 import type { MultiRoofQuote, RoofingRateCard, RoofJobIntent } from './types'
 
-const SOLAR_VISION_MODEL = process.env.GEMINI_VISION_MODEL ?? 'gemini-2.5-flash'
+// Same dead id as lib/invoice/extract.ts carried: 'gemini-2.5-flash' now 404s
+// ("no longer available to new users"), and GEMINI_VISION_MODEL is NOT set in
+// Production, so this default was the live path — aerial solar detection has
+// been failing on it. gemini-3.6-flash verified 2026-08-06 with an image part
+// at temperature 0.
+const SOLAR_VISION_MODEL = process.env.GEMINI_VISION_MODEL ?? 'gemini-3.6-flash'
 // Cap how many structures we run the aerial vision pass over per call, so a
 // parcel with many footprints can't fan out into an unbounded vision bill.
 // Structures beyond the cap are reported via SolarQuoteAddon.structuresSkipped.

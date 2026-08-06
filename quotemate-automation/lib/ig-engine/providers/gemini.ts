@@ -21,10 +21,24 @@ import type {
   TextRequest,
 } from './base'
 
+// Model ids verified against ListModels + a real generateContent call on this
+// project's key, 2026-08-06 — never assume one, this file has already lost
+// 'gemini-3-pro-image-preview' to a shutdown (see lib/roofing/model3d.ts).
+//
+// IMAGE: the pro tier, and GA rather than preview. Verified with the exact
+// body built below (temperature 0, top_p 0, thinking_level high, image_size
+// 1K) returning a real image. Was 'gemini-3.1-flash-lite-image' — the
+// cheapest tier there is, on quote previews the customer actually sees.
 const DEFAULT_IMAGE_MODEL =
-  process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3.1-flash-lite-image'
+  process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image'
+// TEXT gets its OWN default. It used to fall back to DEFAULT_IMAGE_MODEL,
+// which only looked harmless while both were the same cheap flash-lite id —
+// with the image default raised to a pro IMAGE model, that fallback would
+// have quietly billed text generation at pro-image rates against a model
+// built to emit pictures. GEMINI_TEXT_MODEL is set in Preview/Production, so
+// this is the dev-and-fallback path.
 const DEFAULT_TEXT_MODEL =
-  process.env.GEMINI_TEXT_MODEL ?? DEFAULT_IMAGE_MODEL
+  process.env.GEMINI_TEXT_MODEL ?? 'gemini-3.6-flash'
 
 // ── Gemini image generation levers ──────────────────────────────────
 // DELIBERATE: QuoteMax renders quote previews, where reproducibility beats

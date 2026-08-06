@@ -69,7 +69,7 @@ Rules:
 // ─────────────────────────────────────────────────────────────────────
 
 export type ExtractOptions = {
-  /** Override the Gemini text model (defaults to gemini-2.5-flash). */
+  /** Override the Gemini text model (defaults to DEFAULT_MODEL below). */
   model?: string
   /** Injected fetch — defaults to globalThis.fetch. */
   fetchFn?: typeof fetch
@@ -88,7 +88,13 @@ export type ExtractResult =
   | { ok: true; extraction: ExtractedInvoice; raw: unknown }
   | { ok: false; reason: 'no_api_key' | 'http_error' | 'no_text' | 'bad_json' | 'schema_invalid'; message: string; raw?: unknown }
 
-const DEFAULT_MODEL = 'gemini-2.5-flash'
+// Was 'gemini-2.5-flash', which this project's key now 404s outright:
+// "This model models/gemini-2.5-flash is no longer available to new users."
+// So invoice extraction was not merely on an old model, it was dead.
+// gemini-3.6-flash is the newest GA generation and was verified 2026-08-06
+// against this exact shape (temperature 0 + response_mime_type
+// application/json), returning well-formed JSON.
+const DEFAULT_MODEL = 'gemini-3.6-flash'
 
 /**
  * Extract structured invoice data from an image via Gemini vision.
