@@ -7,14 +7,18 @@
 // area, and the three price tiers as inc-GST RANGES (the estimate is a band,
 // not a point).
 //
-// TWO layouts (spec painting-funnel-parity R1): once there is something to
-// act on — prices released, the $99 site visit paid, or an inspection-routed job with
-// its payable $99 site visit — the customer sees the same five-numbered-
-// section format as roofing (/q/roof/[token]) and electrical/plumbing
-// (/q/[token]): Overview → Job details → Your tradie → Your price → Book. A
-// HELD-for-review quote keeps the long-scroll view with the publish-gate
-// holding message, and ?full=1 forces the long-scroll layout in any state
-// (roofing's escape hatch). Decision: lib/painting/quote-view.ts (pure).
+// TWO layouts (spec painting-held-view-parity R1, amending painting-funnel-
+// parity R1): EVERY state renders the five-numbered-section format roofing
+// (/q/roof/[token]) and electrical/plumbing (/q/[token]) use — Overview →
+// Job details → Your tradie → Your price → Next steps — and ?full=1 forces
+// the long-scroll layout in any state (roofing's escape hatch, the only way
+// the branch at the bottom of this file is now reached). Painting is
+// review-required, so the page the quote SMS lands on is almost always the
+// HELD state; it used to take the long-scroll branch, which has no
+// TrustVideo, so the customer never saw the tradie video until the painter
+// pressed Send. A held row now gets the same five sections with the
+// publish-gate holding message in 04 and no payable action anywhere.
+// Decisions: lib/painting/quote-view.ts (pure).
 //
 // Payment (spec painting-site-visit-first, owner decision 2026-08-05): the
 // ONLY customer payment is the flat $99 refundable site visit
@@ -36,7 +40,7 @@ import {
 } from '@/lib/painting/streetview'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
-import { paintQuoteViewMode } from '@/lib/painting/quote-view'
+import { paintHeldForReview, paintQuotePayable, paintQuoteViewMode } from '@/lib/painting/quote-view'
 import {
   loadTenantIdentity,
   contactDisplayName,
@@ -358,9 +362,9 @@ export default async function PaintingQuotePage(props: {
   // inspection mode ("Accept & book $99 site visit", credited toward the
   // final quote) at /r/paint/<token>/inspection. pricesVisible is pinned
   // false to make the deposit branch unreachable: the tier prices above are
-  // information, not a payable offer. Both layouts render the block for
-  // released-unpaid, inspection-routed-unpaid and paid rows; a HELD quote
-  // still shows no accept CTA at all.
+  // information, not a payable offer. Both layouts gate the block on
+  // showPaintAccept — released-unpaid, inspection-routed-unpaid and paid rows
+  // only. A HELD quote shows no accept CTA at all, in either layout.
   const paintAcceptView = resolveAcceptView({
     token,
     tier: (featured?.tier ?? 'better') as 'good' | 'better' | 'best',
@@ -370,7 +374,10 @@ export default async function PaintingQuotePage(props: {
     priceLabel: featured ? `${aud(featured.inc_gst)} inc GST` : null,
     inspectionHref: `/r/paint/${token}/inspection`,
   })
-  const showPaintAccept = showTiers || inspection || paid
+  // Derived from lib/painting/quote-view.ts, NOT restated here: heldView is
+  // its exact complement, so the holding copy and a payment CTA can never
+  // render together. Restating it inline is how the two could drift.
+  const showPaintAccept = paintQuotePayable({ released, paid, inspection })
 
   const heroStatus: { label: string; tone: 'await' | 'booked' } = paid
     ? { label: 'Payment received', tone: 'booked' }
@@ -668,22 +675,28 @@ export default async function PaintingQuotePage(props: {
         ? 'One painting option below — all prices include 10% GST as an estimated range.'
         : 'Your painting options below — all prices include 10% GST as an estimated range.'
 
-  // ═══ Five-section customer view (spec painting-funnel-parity R1) ═══
+  // ═══ Five-section customer view (spec painting-held-view-parity R1) ═══
   //
-  // Once there is something to act on — prices released, the visit paid, or an
-  // inspection-routed job with its payable $99 site visit — the customer sees
-  // the same five-numbered-section format as roofing (/q/roof/[token]:659)
-  // and electrical/plumbing (/q/[token] usesGenericCard): Overview → Job
-  // details → Your tradie → Your price → Book. A HELD quote keeps the
-  // long-scroll view below with the publish-gate holding message, and ?full=1
-  // forces the long-scroll layout in any state. Presentation only — every
-  // block reuses the data and gate logic computed above.
+  // Every state renders the same five-numbered-section format as roofing
+  // (/q/roof/[token]:659) and electrical/plumbing (/q/[token]
+  // usesGenericCard): Overview → Job details → Your tradie → Your price →
+  // Next steps. ?full=1 forces the long-scroll layout below. Presentation
+  // only — every block reuses the data and gate logic computed above.
+  //
+  // heldView is the ONE predicate the publish gate rides on inside this
+  // branch: sections 04 and 05 take their holding-message arms and the
+  // AcceptBlock is suppressed, so a held row shows no price, no deposit link
+  // and no accept CTA — content-equivalent to the long-scroll held view it
+  // replaces, plus section 03's tradie video (the whole point of the fix).
+  // It is the exact complement of showPaintAccept / the sticky-bar gate, both
+  // of which already resolve to "nothing payable" for a held row.
   const viewMode = paintQuoteViewMode({
     released,
     paid,
     inspection,
     fullParam: sp.full === '1',
   })
+  const heldView = paintHeldForReview({ released, paid, inspection })
   if (viewMode === 'five') {
     // Video + the script it speaks, resolved together so the captions can
     // never belong to a different film than the one playing. The 'painting'
@@ -862,6 +875,20 @@ export default async function PaintingQuotePage(props: {
               </p>
             </div>
           </div>
+        ) : heldView ? (
+          // HELD for review — the publish-gate holding message stands in for
+          // the whole price block (spec painting-held-view-parity R2). Same
+          // content as the long-scroll "Quote being finalised" SheetSection:
+          // no tier figures, no derivation table, no deposit or site-visit
+          // CTA, no PDF link. TierCards is unreachable from here.
+          <div style={blockBody}>
+            <div>
+              <p style={subHeading}>Quote being finalised</p>
+              <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                {priceGate.reason}
+              </p>
+            </div>
+          </div>
         ) : showTiers && quoteTiers.length > 0 ? (
           <div style={blockBody}>
             <TierCards
@@ -889,16 +916,26 @@ export default async function PaintingQuotePage(props: {
         ),
       },
       {
-        // Every unpaid path books the SITE VISIT (spec painting-site-visit-
-        // first R1) — the $99 refundable visit is the payment, never a
-        // "book your job" deposit.
-        title: paid && paintScheduledAt ? 'Your visit' : 'Book your site visit',
+        // Every unpaid ACTIONABLE path books the SITE VISIT (spec painting-
+        // site-visit-first R1) — the $99 refundable visit is the payment,
+        // never a "book your job" deposit. A held row books nothing at all:
+        // it is not payable (/r/paint 302s it straight back here), so the
+        // section never names a price or invites one.
+        title: heldView ? 'Next steps' : paid && paintScheduledAt ? 'Your visit' : 'Book your site visit',
         // The thank-you video + calendar live on the dedicated /book and
         // /thanks pages. Here we only confirm the booked state, point a
-        // paid-but-unbooked customer to the booking page, or frame the accept
-        // action below.
+        // paid-but-unbooked customer to the booking page, frame the accept
+        // action below, or — held — say we'll text them when it's ready.
         body:
-          paid && paintScheduledAt ? (
+          heldView ? (
+            <div style={{ display: 'grid', gap: 10, maxWidth: 480 }}>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Nothing to do right now — {tradieName} is finalising your quote. We&apos;ll
+                text you the moment it&apos;s ready, and you can book from this same link.
+              </p>
+              <span style={microNote}>Usually within a business day</span>
+            </div>
+          ) : paid && paintScheduledAt ? (
             <div style={{ display: 'grid', gap: 16, maxWidth: 480 }}>
               <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                 Your visit is booked for{' '}
@@ -978,8 +1015,14 @@ export default async function PaintingQuotePage(props: {
               on purpose: it renders its own full-bleed action band with the
               #accept anchor. Rendered ONLY when actionable — always the $99
               site-visit mode now; in 'paid' mode section 05 already confirms
-              the booking. */}
-          {paintAcceptView.actionable ? (
+              the booking. showPaintAccept is load-bearing since the held
+              state joined this layout: resolveAcceptView returns an ACTIONABLE
+              inspection view for a held row (its own gate is "unreleased →
+              offer the $99 visit"), which painting must not honour — the
+              tradie's release gate comes first, and /r/paint would 302 the
+              click straight back here anyway. Same gate the long-scroll
+              branch uses, so released / inspection / paid are unchanged. */}
+          {showPaintAccept && paintAcceptView.actionable ? (
             <AcceptBlock token={token} view={paintAcceptView} />
           ) : null}
           {/* The shared default tagline still sells the retired tier-deposit
@@ -994,6 +1037,11 @@ export default async function PaintingQuotePage(props: {
     )
   }
 
+  // ═══ Long-scroll layout — ?full=1 ONLY (spec painting-held-view-parity R1).
+  // Retained as roofing's escape hatch; no state reaches it on its own any
+  // more, the held state included. Its gates are unchanged, so a held row
+  // opened with ?full=1 still shows the publish-gate holding message and no
+  // accept CTA. ═══
   return (
     <QuoteChrome trade={{ label: 'Paint', icon: tradeIcon('paint') }} sticky={stickyBar}>
       {/* Owner-only "Review & edit" pill → /p/[estimate_token] (spec R3). */}
