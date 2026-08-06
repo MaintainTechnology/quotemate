@@ -1369,4 +1369,89 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
     still in the codebase; re-enabling it is a routing change, and this entry
     is the record of why it was switched off.
 
+- **v20** (2026-08-06): **electrical and plumbing adopt the same model — the flat $99 refundable site inspection is the only customer payment; the 30% tier deposit is retired from both trades.** Owner decision.
+
+  **What changed:**
+
+  An electrical or plumbing customer is no longer asked for a tier deposit. The
+  Good/Better/Best prices stay **visible** wherever they already appeared — the
+  quote page, the PDF, the SMS (all unchanged in what they *print*) — they are
+  information, not something to transact against — and the
+  single action is: accept, pay the flat $99 refundable site inspection
+  (credited toward the final quote), then pick a time. The tradie confirms the
+  final price on site. `/r/<token>/good|better|best` 302s onto
+  `/r/<token>/inspection`, so every deposit link already sitting in a customer's
+  SMS thread still lands on a payable page.
+
+  **The data that drove it** (queried from the live Supabase instance on
+  2026-08-06 and carried in via `specs/elec-plumb-site-visit-first.md` — the
+  figures are a point-in-time read, not re-derivable from this repo; re-run the
+  query before citing them again):
+
+  The $99 path converts at **14.8%** on electrical (4/27) against **3.2%** for
+  the 30% deposit (3/93); plumbing's deposit path has **never** converted
+  (0/53). The average deposit ask was **$249 electrical / $425 plumbing**
+  against an AI-drafted price nobody had confirmed on site. The deposit was not
+  a weaker offer of the same thing — it was a different, much larger ask made at
+  the wrong moment.
+
+  **What this completes:** roofing, painting, electrical and plumbing now sell
+  the same first step — a paid site visit, then a confirmed price. **Solar and
+  commercial painting keep per-tier deposits**, and they share the *same*
+  `/q/[token]` page and `/r/[token]/[tier]` mint as electrical/plumbing, as do
+  the roofing rows that live on the `quotes` table. The gate is therefore an
+  **allowlist of exactly `['electrical','plumbing']`** read off the raw
+  `intakes.trade` (`lib/quote/mint-tier.ts`), and it **fails open**: a trade that
+  cannot be resolved keeps today's deposit behaviour, because an unknown trade is
+  not provably one of the two. A blocklist here would have silently killed
+  roofing's deposit path.
+
+  **What was deliberately NOT touched:**
+
+  `needs_inspection` was not repurposed. It force-nulls the G/B/B tiers by design
+  (an Opus-drafted inspection quote may not ship fabricated prices), so those
+  rows have no prices to show and were already $99-only — their behaviour is
+  unchanged. This decision targets the `needs_inspection=false` majority (78% of
+  electrical, 82% of plumbing): prices still shown, $99 charged instead of a
+  deposit. The grounding validator, `lib/routing/decide.ts`, the Stripe webhook,
+  `resolveAcceptView`/`resolvePayRedirect`/`resolveMintDiscount` and the roofing
+  and painting funnels are all unchanged; the trade gate lives entirely at the
+  call sites.
+
+  **Two knock-on consequences worth naming:**
+
+  - The **early-booking discount is now unreachable** for these two trades. It is
+    realised at the G/B/B mint (`resolveMintDiscount` excludes `'inspection'` and
+    stays untouched), so the countdown banner is suppressed for them rather than
+    advertising a saving they can never earn. An already-realised discount still
+    renders.
+  - The **7-day price hold no longer gates anything** for them: the $99 has no
+    hold. That also fixed a live dead-end — `/q/[token]/book` showed "price
+    expired" to an unpaid electrical visitor whose hold had lapsed, instead of
+    sending them to the payment that was still open.
+
+  **The retired path:** `createCheckoutSessionsForQuote` (the draft-time 3-tier
+  mint) stays in the codebase, unreachable for these trades — the same treatment
+  painting gave its tier mint in v19. Re-enabling is a routing change, not a
+  rebuild.
+
+  **Asset + doc gaps still open** (v19 logged the first, v20 removes the last
+  generic-funnel trades that justified it): `assets/quotemate_flow_with_inspection.svg`
+  still draws "Customer accepts & pays deposit" / "Deposit received" and a $199
+  inspection figure — now wrong for four of the six trades on that flow, and
+  wrong on the fee everywhere. Two economics inputs above this history also now
+  rest on solar + commercial painting alone: §4's "platform fee on deposits"
+  ARPU line, and §11's "≥1 deposit collected" pilot-exit criterion, which has
+  been unreachable for painters since v19. Recorded, not silently corrected —
+  the numbers need a fresh pass, not a find-and-replace.
+
+  **Trigger for the next iteration:**
+
+  - The $99 conversion advantage does not hold at higher volume, or sparkies ask
+    to take a real deposit at acceptance → revisit, using visit bookings per sent
+    quote as the control (the same measure v19 set for painting).
+  - Solar or commercial painting want the same model → it is one entry added to
+    the `SITE_VISIT_FIRST_TRADES` allowlist, but their funnels have their own
+    review gates and should get their own decision, not a quiet widening.
+
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).
