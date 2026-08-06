@@ -479,6 +479,7 @@ export default async function PaintingQuotePage(props: {
           publicToken={row.public_token}
           address={row.address}
           initialReady={afterImageReady}
+          released={released}
         />
       </div>
     </>

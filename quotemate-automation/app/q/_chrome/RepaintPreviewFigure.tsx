@@ -21,9 +21,16 @@ type Props = {
    *  When false the first load auto-paints — the after pane fills in once
    *  the render lands (10–20 s). */
   initialReady: boolean
+  /** `released_at != null`. A Gemini render is billable, so the route only
+   *  spends one on a RELEASED row and answers 409 `not_released` otherwise.
+   *  Passed in so the picker can say so up front instead of letting the
+   *  tradie click a swatch that is guaranteed to fail. Defaults to true so
+   *  an older call site keeps today's behaviour rather than silently
+   *  disabling its picker. */
+  released?: boolean
 }
 
-export function RepaintPreviewFigure({ publicToken, address, initialReady }: Props) {
+export function RepaintPreviewFigure({ publicToken, address, initialReady, released = true }: Props) {
   const [version, setVersion] = useState(0)
   // Flips once the after <img> settles — for an unrendered released row that
   // request IS the render, so this doubles as the "auto-painting" indicator.
@@ -42,10 +49,22 @@ export function RepaintPreviewFigure({ publicToken, address, initialReady }: Pro
       })
       const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
       if (!json?.ok) {
+        // The route answers 409 for TWO different things and they need
+        // different words. This branched on res.status alone, so an
+        // unreleased row — the billing gate, `error: 'not_released'` — was
+        // reported as "already being painted, try again shortly": nothing
+        // was being painted, and no amount of trying again would ever fix
+        // it. Branch on the machine-readable code the route already sends.
         setError(
-          res.status === 409
+          json?.error === 'busy'
             ? 'A preview is already being painted — try again shortly.'
-            : `Could not repaint the preview (${json?.error ?? `HTTP ${res.status}`}).`,
+            : json?.error === 'not_released'
+              ? // Audience-neutral: this component renders on the TRADIE's
+                // review page and on the CUSTOMER's quote page, so it cannot
+                // say "send it to the customer" — the customer is the one
+                // reading it there.
+                'This quote has not been sent yet — colour previews unlock once it is.'
+              : `Could not repaint the preview (${json?.error ?? `HTTP ${res.status}`}).`,
         )
         return
       }
@@ -117,7 +136,7 @@ export function RepaintPreviewFigure({ publicToken, address, initialReady }: Pro
             <button
               key={c}
               type="button"
-              disabled={busy}
+              disabled={busy || !released}
               aria-busy={busy}
               onClick={() => void repaint(c)}
               className="cursor-pointer border border-ink-line px-2.5 py-1.5 font-mono text-[0.62rem] uppercase tracking-[0.08em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
@@ -126,6 +145,15 @@ export function RepaintPreviewFigure({ publicToken, address, initialReady }: Pro
             </button>
           ))}
         </div>
+        {/* Say WHY up front rather than after a click that cannot succeed.
+            A render is billable and the route refuses an unreleased row, so
+            these swatches were live buttons with a guaranteed failure behind
+            them — and the failure told you to try again shortly. */}
+        {!released ? (
+          <p className="mt-2 font-mono text-xs text-text-dim">
+            Colour previews unlock once this quote is sent.
+          </p>
+        ) : null}
         {error ? <p className="mt-2 font-mono text-xs text-warning-bright">{error}</p> : null}
       </div>
     </div>

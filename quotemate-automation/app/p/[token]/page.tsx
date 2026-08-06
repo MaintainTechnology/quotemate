@@ -256,6 +256,7 @@ export default async function PaintEstimateResultsPage({
               publicToken={row.public_token}
               address={row.address}
               initialReady={row.preview_status === 'ready'}
+              released={released}
             />
           </div>
         </section>
