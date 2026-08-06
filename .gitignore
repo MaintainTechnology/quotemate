@@ -178,3 +178,12 @@ marketing/**/out/
 
 # Debugging scratch — probe scripts, one-off audits. Never shipped.
 .scratch-audit/
+# Browser-verification scratch: Playwright storageState holds LIVE Clerk
+# session cookies, plus run screenshots. Must never be committed.
+.verify/
+**/.verify/
+
+# Design-review screenshots (before/after captures taken while verifying a
+# UI change in the browser). Throwaway evidence, not source — 20MB and
+# growing, and stale the moment the design moves on.
+.design-captures/
