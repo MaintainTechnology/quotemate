@@ -6,8 +6,9 @@
 // The five-numbered-section view (Overview / Job details / Your tradie /
 // Your price / Next steps) is the current-generation customer format
 // roofing and electrical/plumbing already use. EVERY state now gets it —
-// including a HELD quote (priced, not released, not inspection-routed),
-// which is what the SMS quote link lands on for review-required painting.
+// including a HELD quote (priced, not released, not inspection-routed).
+// ⚠ Since spec painting-auto-send the SMS quote link lands on a RELEASED
+// row; held is now the legacy/failed-send state, and still renders correctly.
 // The old carve-out kept held rows on the long-scroll branch, and that
 // branch has no TrustVideo, so the customer never saw the tradie video
 // until the painter pressed Send. ?full=1 keeps roofing's long-scroll

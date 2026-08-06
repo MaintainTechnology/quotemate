@@ -36,16 +36,37 @@ describe('paintingReleaseEligibility', () => {
       send: true,
     })
   })
-  it('is an idempotent no-op once released (no restamp, no send)', () => {
+  it('is an idempotent no-op once released AND SENT (no restamp, no send)', () => {
+    expect(
+      paintingReleaseEligibility({
+        alreadyReleasedAt: '2026-06-26T00:00:00Z',
+        alreadySentAt: '2026-06-26T00:00:05Z',
+      }),
+    ).toEqual({ ok: true, stamp: false, send: false })
+  })
+  // Spec painting-auto-send — released_at only means "prices may show". A
+  // dashboard save stamps it and texts nobody, so Send must actually send
+  // rather than no-op on the first press.
+  it('sends (without restamping) when released but never sent', () => {
     expect(paintingReleaseEligibility({ alreadyReleasedAt: '2026-06-26T00:00:00Z' })).toEqual({
       ok: true,
       stamp: false,
-      send: false,
+      send: true,
     })
-  })
-  it('resends a released quote on an explicit resend, without restamping', () => {
     expect(
-      paintingReleaseEligibility({ alreadyReleasedAt: '2026-06-26T00:00:00Z', resend: true }),
+      paintingReleaseEligibility({
+        alreadyReleasedAt: '2026-06-26T00:00:00Z',
+        alreadySentAt: null,
+      }),
+    ).toEqual({ ok: true, stamp: false, send: true })
+  })
+  it('resends a released+sent quote on an explicit resend, without restamping', () => {
+    expect(
+      paintingReleaseEligibility({
+        alreadyReleasedAt: '2026-06-26T00:00:00Z',
+        alreadySentAt: '2026-06-26T00:00:05Z',
+        resend: true,
+      }),
     ).toEqual({ ok: true, stamp: false, send: true })
   })
   it('a resend flag on a never-released row is just the first release', () => {

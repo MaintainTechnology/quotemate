@@ -154,9 +154,10 @@ export function buildPaintingFormThankYou(ctx: { firstName?: string | null }): s
 }
 
 /**
- * PURE — the holding message texted to the CUSTOMER the moment their request
- * is captured (SMS Q&A or form). The priced quote is held for tradie review,
- * so this sets the expectation without leaking a price.
+ * PURE — the holding message texted to the CUSTOMER when we can't hand them a
+ * price yet. Since spec painting-auto-send a priced quote goes straight out,
+ * so this is now the ERROR fallback: the estimate saved but the quote SMS
+ * could not be delivered. It sets the expectation without leaking a price.
  */
 export function buildPaintingHoldingSms(ctx: {
   firstName?: string | null
@@ -169,7 +170,12 @@ export function buildPaintingHoldingSms(ctx: {
 /**
  * PURE — the notification texted to the TRADIE when a customer requests a
  * painting quote. Links them to the review page where they edit, audit and
- * release it. Mirrors lib/solar/notify.ts buildSolarTradieNotification.
+ * re-send it. Mirrors lib/solar/notify.ts buildSolarTradieNotification.
+ *
+ * `customerTexted: false` is the auto-send FAILURE alert (spec
+ * painting-auto-send R3). Painting no longer waits for the tradie, so a
+ * dropped send has no other witness — the copy has to say, in plain words,
+ * that the customer received NOTHING and the quote needs sending by hand.
  */
 export function buildPaintingTradieNotification(args: {
   tradieFirstName?: string | null
@@ -177,6 +183,7 @@ export function buildPaintingTradieNotification(args: {
   address: string
   betterIncGst?: number | null
   reviewUrl: string
+  customerTexted?: boolean
 }): string {
   const greet = args.tradieFirstName ? `Hi ${args.tradieFirstName}, ` : ''
   const who = args.customerName?.trim() || 'A customer'
@@ -184,6 +191,13 @@ export function buildPaintingTradieNotification(args: {
     typeof args.betterIncGst === 'number' && args.betterIncGst > 0
       ? ` (est. ${fmtAud(args.betterIncGst)})`
       : ''
+  if (args.customerTexted === false) {
+    return (
+      `${greet}${who} requested a painting quote for ${args.address}${price}, ` +
+      `but we could NOT text it to them — the customer has NOT been sent anything. ` +
+      `Open it and send it manually: ${args.reviewUrl}`
+    )
+  }
   return (
     `${greet}${who} just requested a painting quote for ${args.address}${price}. ` +
     `Review, adjust the coats/scope, then send it to them: ${args.reviewUrl}`

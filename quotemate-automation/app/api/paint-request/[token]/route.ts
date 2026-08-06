@@ -4,8 +4,9 @@
 //
 //   GET  → form context (business name + whether it's already submitted).
 //   POST → validate the painting inputs, run the estimate + save the job,
-//          mark the lead submitted, and text the customer their quote
-//          ("your quote is on its way") from the tenant's number.
+//          mark the lead submitted, and text the customer their full quote
+//          from the tenant's number. Since spec painting-auto-send the quote
+//          is released at save time and goes out here — no tradie gate.
 //
 // No auth: the unguessable token IS the capability, exactly like the public
 // quote pages. One-shot: a submitted link can't be re-run.
@@ -13,7 +14,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { EstimateRequestSchema } from '@/lib/painting/request-schema'
 import { composePaintingQuoteDelivery, runAndSavePaintingQuote } from '@/lib/painting/quote-dispatch'
-import { notifyPaintingTradie } from '@/lib/painting/release'
+import { autoSendPaintingQuote, notifyPaintingTradie } from '@/lib/painting/release'
 import { buildPaintingHoldingSms } from '@/lib/sms/painting-compose'
 import { sendSms } from '@/lib/sms/twilio'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
@@ -100,11 +101,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     .update({ status: 'submitted', submitted_at: new Date().toISOString(), quote_token: disp.ok ? disp.token : null })
     .eq('token', token)
 
-  // Post-submit dispatch. A PRICED quote is DRAFTED and held for tradie
-  // review: the customer gets a holding message and the tradie is notified to
-  // review/edit/send (never the price). An INSPECTION-routed request has no
-  // price to audit, so its on-site-measure message goes to the customer
-  // directly. Best-effort — never blocks the thank-you response.
+  // Post-submit dispatch. Since spec painting-auto-send a PRICED quote is
+  // released at save time and texted to the customer here — prices, quote
+  // page, PDF and the one $99 site-visit link — with the tradie notified but
+  // no longer a gate. An INSPECTION-routed request keeps its on-site-measure
+  // message. Best-effort — never blocks the thank-you response.
   if (disp.ok) {
     try {
       const convId = (lead.conversation_id as string | null) ?? null
@@ -147,12 +148,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           }
         }
       } else {
-        if (customerPhone && fromNumber) {
-          await sendSms({
-            to: customerPhone,
-            from: fromNumber,
-            text: buildPaintingHoldingSms({ businessName: tenantRow?.business_name ?? null }),
-          })
+        // Priced — auto-send the full quote through the SAME helper the SMS
+        // receptionist uses, so compose → send → stamp/revert cannot drift
+        // between the two origins. `sent` is true only when Twilio accepted
+        // it: no phone, no from-number, or a rejection is a failure, never a
+        // silent success (spec painting-auto-send R3).
+        const { sent } = await autoSendPaintingQuote({
+          supabase,
+          disp,
+          address,
+          appUrl: APP_BASE_URL,
+          tenantId,
+          send: async (text, mmsUrl) => {
+            if (!customerPhone || !fromNumber) return false
+            const res = await sendSms({ to: customerPhone, from: fromNumber, text, mediaUrl: mmsUrl })
+            if (!res.ok) {
+              console.error('[paint-request] Twilio rejected the quote send', res.code, res.reason)
+              return false
+            }
+            if (convId) {
+              await supabase.from('sms_messages').insert({ conversation_id: convId, direction: 'outbound', body: text })
+            }
+            return true
+          },
+        })
+        if (!sent) {
+          // The row is held again — set the customer's expectation, no price.
+          if (customerPhone && fromNumber) {
+            await sendSms({
+              to: customerPhone,
+              from: fromNumber,
+              text: buildPaintingHoldingSms({ businessName: tenantRow?.business_name ?? null }),
+            })
+          }
         }
         await notifyPaintingTradie({
           tenant: {
@@ -166,6 +194,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           estimateToken: disp.estimateToken,
           appUrl: APP_BASE_URL,
           dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
+          customerTexted: sent,
         })
         if (convId) {
           await supabase

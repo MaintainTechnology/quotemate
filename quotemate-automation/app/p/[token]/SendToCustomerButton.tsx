@@ -1,20 +1,32 @@
 'use client'
 
-// Tradie "Send to customer" action on the /p review page. Releases the held
+// Tradie "Send to customer" action on the /p review page. Releases the
 // painting quote (stamps released_at + texts the customer their full quote)
 // via POST /api/painting/release/[estimate_token]. Idempotent server-side, so
 // a double-click never re-texts; the button just reflects the sent state.
+//
+// Painting auto-sends now (spec painting-auto-send), so a row usually arrives
+// here already released — this button is the RESEND after an edit and the
+// RETRY when an auto-send failed. It shows "Sent" ONLY when the response says
+// `sent === true`: the route used to fire the SMS in after() and answer
+// ok:true regardless, which is how 3 of 8 live releases reported a send that
+// never happened. A retry re-posts with { resend: true } so it still delivers
+// if the row was left released.
 
 import { useEffect, useRef, useState } from 'react'
 
 export function SendToCustomerButton({
   estimateToken,
-  released,
+  sent,
 }: {
   estimateToken: string
-  released: boolean
+  /** painting_measurements.quote_sent_at present — a carrier ACCEPTED the
+   *  quote message. Never released_at: a dashboard save stamps that and texts
+   *  nobody, which is how this button used to show "Sent" for a quote the
+   *  customer never received. */
+  sent: boolean
 }) {
-  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>(released ? 'sent' : 'idle')
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>(sent ? 'sent' : 'idle')
   const [err, setErr] = useState<string | null>(null)
   // Resend of an already-released quote (spec tradie-onsite-quote-editing R5)
   // — after an on-site edit the tradie re-texts the updated quote. POSTs
@@ -23,16 +35,26 @@ export function SendToCustomerButton({
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (resetTimer.current) clearTimeout(resetTimer.current) }, [])
 
-  const send = async () => {
+  const send = async (retry = false) => {
     setState('sending')
     setErr(null)
     try {
-      const res = await fetch(`/api/painting/release/${estimateToken}`, { method: 'POST' })
+      const res = await fetch(`/api/painting/release/${estimateToken}`, {
+        method: 'POST',
+        ...(retry
+          ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ resend: true }) }
+          : {}),
+      })
       const j = await res.json()
-      if (j.ok) setState('sent')
+      // "Sent" requires proof the SMS went out — ok alone is not proof.
+      if (j.ok && j.sent === true) setState('sent')
       else {
         setState('error')
-        setErr(j.error ?? 'Could not send the quote.')
+        setErr(
+          j.error
+            ? String(j.error)
+            : 'The customer was NOT texted — nothing was sent. Try again.',
+        )
       }
     } catch (e) {
       setState('error')
@@ -53,12 +75,12 @@ export function SendToCustomerButton({
         body: JSON.stringify({ resend: true }),
       })
       const j = await res.json()
-      if (j.ok) {
+      if (j.ok && j.sent === true) {
         setResendState('done')
         resetTimer.current = setTimeout(() => setResendState('idle'), 4000)
       } else {
         setResendState('error')
-        setErr(j.error ?? 'Could not resend the quote.')
+        setErr(j.error ? String(j.error) : 'The customer was NOT texted — nothing was sent.')
       }
     } catch (e) {
       setResendState('error')
@@ -92,7 +114,9 @@ export function SendToCustomerButton({
     <span className="inline-flex flex-wrap items-center gap-3">
       <button
         type="button"
-        onClick={send}
+        // A retry after a failed send asks for a resend, so it still delivers
+        // if that attempt left the row released.
+        onClick={() => send(state === 'error')}
         disabled={state === 'sending'}
         className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
       >

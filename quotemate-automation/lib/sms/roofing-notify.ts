@@ -29,6 +29,28 @@ export type RoofingNotifyKind =
 
 const fmtAud = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`
 
+/**
+ * PURE — where the `Details:` link in a booking alert should send the TRADIE.
+ *
+ * Preference order, and why:
+ *  1. `/m/<measure_token>` — an unmeasured lead (Geoscape holds no footprints
+ *     for the address). Its pending_quote_token is deliberately null, since
+ *     there is no measurement for a customer surface to re-serve; before this
+ *     the alert fell all the way to /dashboard and the tradie had no route
+ *     from a booked inspection to the job. Live 2026-08-06, 12 Smith St.
+ *  2. `/q/roof/<public_token>` — a measured job. Carries the owner-only
+ *     "Review & edit" banner through to /m.
+ *  3. `/dashboard` — last resort, when neither token survived.
+ */
+export function roofingBookingDetailsUrl(
+  baseUrl: string,
+  tokens: { leadMeasureToken?: string | null; publicToken?: string | null },
+): string {
+  if (tokens.leadMeasureToken) return `${baseUrl}/m/${tokens.leadMeasureToken}`
+  if (tokens.publicToken) return `${baseUrl}/q/roof/${tokens.publicToken}`
+  return `${baseUrl}/dashboard`
+}
+
 /** PURE — the SMS body for the tradie alert. */
 export function buildRoofingTradieNotification(args: {
   kind: RoofingNotifyKind

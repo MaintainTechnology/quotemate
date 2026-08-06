@@ -54,6 +54,12 @@ export type RoofingConversationState = {
    *  US-002 so the booking-confirm tradie notify can link the saved
    *  measurement). */
   pending_quote_token?: string | null
+  /** measure_token of an UNMEASURED lead row (Geoscape holds no footprints for
+   *  the address). Deliberately separate from pending_quote_token: that one
+   *  stays null so no customer surface re-serves a measurement that doesn't
+   *  exist, but the tradie's booking notify still needs a handle on the job —
+   *  without it the alert linked the bare /dashboard. Tradie-facing only. */
+  pending_lead_measure_token?: string | null
   /** How many structures were measured (so a numbered pick can be validated). */
   pending_structure_count?: number | null
   /** 1-based indices already sent to the customer (so "the others" can

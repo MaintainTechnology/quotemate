@@ -4,7 +4,11 @@
 // missing notify number just means no notification.
 
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { buildRoofingTradieNotification, notifyRoofingTradie } from './roofing-notify'
+import {
+  buildRoofingTradieNotification,
+  notifyRoofingTradie,
+  roofingBookingDetailsUrl,
+} from './roofing-notify'
 
 // One test deletes TRADIE_NOTIFY_NUMBER; restore so nothing leaks into
 // other files sharing this worker's process.env.
@@ -268,5 +272,37 @@ describe('notifyRoofingTradie', () => {
     expect(warn.mock.calls.flat().join(' ')).toMatch(/no notify number|owner_mobile/i)
 
     warn.mockRestore()
+  })
+})
+
+// An unmeasured lead (Geoscape holds no footprints for the address) keeps
+// pending_quote_token null on purpose — there is no measurement for a customer
+// surface to re-serve. The booking alert then fell through to a bare
+// /dashboard link, so a BOOKED inspection had no route to its job: /m 404'd on
+// the null quote and the only link that resolved was the customer page, gated
+// behind "reply YES". Live 2026-08-06, 12 Smith St Surry Hills.
+describe('roofingBookingDetailsUrl', () => {
+  const BASE = 'https://www.quotemax.com.au'
+
+  it('sends an unmeasured lead to its tradie surface, not the dashboard', () => {
+    expect(roofingBookingDetailsUrl(BASE, { leadMeasureToken: 'm123', publicToken: null })).toBe(
+      `${BASE}/m/m123`,
+    )
+  })
+
+  it('sends a measured job to the customer quote page', () => {
+    expect(roofingBookingDetailsUrl(BASE, { leadMeasureToken: null, publicToken: 'p456' })).toBe(
+      `${BASE}/q/roof/p456`,
+    )
+  })
+
+  it('prefers the lead token when both exist — /m is the tradie surface', () => {
+    expect(roofingBookingDetailsUrl(BASE, { leadMeasureToken: 'm123', publicToken: 'p456' })).toBe(
+      `${BASE}/m/m123`,
+    )
+  })
+
+  it('only reaches /dashboard when no token survived', () => {
+    expect(roofingBookingDetailsUrl(BASE, {})).toBe(`${BASE}/dashboard`)
   })
 })

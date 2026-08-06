@@ -374,9 +374,12 @@ export async function runVoiceTradeHandover(args: {
     conversationId = convo.id as string
   }
 
-  /** Send one SMS to the caller and record it on the thread. */
-  const sendReply = async (text: string) => {
-    const res = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber ?? undefined })
+  /** Send one SMS/MMS to the caller and record it on the thread. mediaUrl is
+   *  load-bearing: the painting auto-send attaches the quote PDF, and a
+   *  one-parameter version of this silently dropped it (TS accepts the
+   *  narrower signature, so nothing would have failed the build). */
+  const sendReply = async (text: string, mediaUrl?: string) => {
+    const res = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber ?? undefined, mediaUrl })
     if (!res.ok) {
       log.err('voice-handover: SMS failed on both channels', null, { sms_code: res.smsAttempt.code })
       return res

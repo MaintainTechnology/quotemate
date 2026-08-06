@@ -87,9 +87,18 @@ export async function runAndSavePaintingQuote(args: {
   if (!est.ok) return { ok: false, reason: est.detail }
 
   const estimate = est.estimate
+  const inspection = estimate.price.routing.decision === 'inspection_required'
+  // Spec painting-auto-send R1 — a PRICED lead is released the moment it is
+  // saved, exactly as the dashboard path already does
+  // (app/api/painting/save/route.ts). The tradie review gate is retired: both
+  // callers text the customer their full quote on this same turn, and the
+  // quote page, the PDF route and the $99 site-visit mint all gate on
+  // released_at — so the stamp has to land BEFORE the send, not after it.
+  // An inspection-routed row has no price to show and keeps its null.
   const row = buildSavedPaintingRow({
     tenantId: args.tenantId,
     userId: null,
+    releasedAt: inspection ? null : new Date().toISOString(),
     data: {
       address: args.request.address,
       source: estimate.provider,
@@ -112,7 +121,6 @@ export async function runAndSavePaintingQuote(args: {
   const saved = data as { public_token: string; estimate_token: string }
   const token = saved.public_token
   const estimateToken = saved.estimate_token
-  const inspection = estimate.price.routing.decision === 'inspection_required'
 
   // No Stripe session is minted here. Draft time used to create up to three
   // per-tier 30% deposit Sessions, but since spec painting-site-visit-first

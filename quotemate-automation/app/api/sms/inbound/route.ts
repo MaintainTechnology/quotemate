@@ -56,7 +56,11 @@ import { rulesAsText } from '@/lib/sms/assumptions'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { ensureRoofQuotePdf, roofQuotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { quotePdfMmsEnabled } from '@/lib/sms/send-quote-pdf'
-import { notifyRoofingTradie, type RoofingNotifyKind } from '@/lib/sms/roofing-notify'
+import {
+  notifyRoofingTradie,
+  roofingBookingDetailsUrl,
+  type RoofingNotifyKind,
+} from '@/lib/sms/roofing-notify'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import {
@@ -554,6 +558,9 @@ async function handleRoofingTurn(args: {
       const merged: RoofingConversationState = {
         ...(prevState?.declined_trades ? { declined_trades: prevState.declined_trades } : {}),
         ...(prevState?.booking_reask != null ? { booking_reask: prevState.booking_reask } : {}),
+        ...(prevState?.pending_lead_measure_token
+          ? { pending_lead_measure_token: prevState.pending_lead_measure_token }
+          : {}),
         ...state,
         ...carry,
       }
@@ -561,6 +568,10 @@ async function handleRoofingTurn(args: {
       // past that question would let a later enquiry in the same thread
       // auto-confirm on its FIRST unclear reply.
       if (merged.last_step !== 'await_booking') delete merged.booking_reask
+      // Same scope for the lead handle: it names the job THIS booking question
+      // is about. A re-ask must keep it (the tradie notify fires on the turn
+      // after), anything past await_booking must not.
+      if (merged.last_step !== 'await_booking') delete merged.pending_lead_measure_token
       await supabase
         .from('sms_conversations')
         .update({ roofing_state: merged, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -658,12 +669,15 @@ async function handleRoofingTurn(args: {
     await persist({ slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'done')
     // US-002 — a confirmed inspection is a live lead; tell the tradie.
     if (decision.confirmed) {
-      const token = prevState?.pending_quote_token ?? null
       await notifyTradie(
         'inspection_booked',
         decision.slots.address ?? 'address not captured',
         null,
-        token ? `${baseUrl}/q/roof/${token}` : `${baseUrl}/dashboard`,
+        // Preference order (and why) lives with the pure helper.
+        roofingBookingDetailsUrl(baseUrl, {
+          leadMeasureToken: prevState?.pending_lead_measure_token,
+          publicToken: prevState?.pending_quote_token,
+        }),
       )
     }
     return true
@@ -981,8 +995,14 @@ async function handleRoofingTurn(args: {
   // swallow the customer's reply — the exact black hole it exists to
   // prevent. pending_quote_token stays null deliberately: /q/roof/[token]
   // is headlined "Your roof, measured", which this lead is not.
+  // Kept so the booking notify can link the tradie at THIS job (/m/<measure>)
+  // rather than the bare dashboard. Set only after a confirmed insert —
+  // supabase-js resolves {data,error} on failure rather than throwing, so a
+  // bare await here would hand the tradie a link to a row that never landed.
+  let leadMeasureToken: string | null = null
   if (leadAddress) {
     try {
+      const leadTokens = newMeasurementTokens()
       const { error: leadErr } = await supabase.from('roofing_measurements').insert({
         tenant_id: tenantId,
         address: leadAddress,
@@ -995,10 +1015,12 @@ async function handleRoofingTurn(args: {
         combined_area_m2: null,
         routing: 'inspection_required',
         quote: null,
-        ...newMeasurementTokens(),
+        ...leadTokens,
       })
       if (leadErr) {
         console.warn('[sms/inbound:roofing] unmeasured lead insert failed (non-fatal)', leadErr)
+      } else {
+        leadMeasureToken = leadTokens.measure_token
       }
     } catch (e) {
       console.warn('[sms/inbound:roofing] unmeasured lead insert threw (non-fatal)', e)
@@ -1006,7 +1028,13 @@ async function handleRoofingTurn(args: {
   }
 
   await sendReply(composeMeasureUnavailableMessage(firstName, fallbackAddress))
-  await persist({ slots: decision.slots, last_step: 'await_booking', pending_quote_token: null, pending_structure_count: null }, 'open')
+  await persist({
+    slots: decision.slots,
+    last_step: 'await_booking',
+    pending_quote_token: null,
+    pending_lead_measure_token: leadMeasureToken,
+    pending_structure_count: null,
+  }, 'open')
   return true
 }
 

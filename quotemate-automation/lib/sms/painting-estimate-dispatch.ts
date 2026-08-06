@@ -7,11 +7,19 @@
 //   • handlePaintingTurn (SMS)      — the customer's last gathered answer
 //   • runVoiceTradeHandover (voice) — the call ended with the brief agreed
 //
-// Painting is REVIEW-REQUIRED (docs/strategy.md v11): a priced estimate is
-// DRAFTED and held — the customer gets a holding message, never the price,
-// and the tradie is notified to review/edit/send. An inspection-routed one
-// sends the on-site-measure message and parks at await_booking. Both
-// behaviours are preserved verbatim from the route.
+// Painting AUTO-SENDS (docs/strategy.md v21, spec painting-auto-send): the
+// estimate is released at save time and the customer is texted the full quote
+// — tier prices, the /q/paint link, the PDF and the one $99 site-visit link —
+// on this turn. The tradie is still notified, they are just no longer a gate.
+// This supersedes the review-required behaviour of v11.
+//
+// An inspection-routed one is unchanged: the on-site-measure message, parked
+// at await_booking.
+//
+// If the quote send fails we do NOT pretend it went: the release stamp is
+// rolled back (so /p offers Send again and the customer gate stays shut), the
+// customer gets the holding message, and the tradie's alert says in plain
+// words that the customer was not texted.
 // ════════════════════════════════════════════════════════════════════
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -20,7 +28,7 @@ import { toPaintingRequest, type PaintingSlots } from './painting-intake'
 import type { PaintingConversationState } from './painting-receptionist'
 import { dispatchQuoteMessage } from './dispatch'
 import { runAndSavePaintingQuote } from '@/lib/painting/quote-dispatch'
-import { notifyPaintingTradie } from '@/lib/painting/release'
+import { autoSendPaintingQuote, notifyPaintingTradie } from '@/lib/painting/release'
 
 export type PaintingEstimateDispatchResult =
   | { ok: true; state: PaintingConversationState; token: string; inspection: boolean }
@@ -33,8 +41,9 @@ export async function estimateAndDispatchPainting(args: {
   firstName: string | null
   baseUrl: string
   slots: PaintingSlots
-  /** Sends one SMS to the customer and persists it on the thread. */
-  sendReply: (text: string) => Promise<unknown>
+  /** Sends one SMS/MMS to the customer and persists it on the thread. The
+   *  dispatch result is USED — `ok: false` means the customer got nothing. */
+  sendReply: (text: string, mediaUrl?: string) => Promise<{ ok: boolean }>
 }): Promise<PaintingEstimateDispatchResult> {
   const request = toPaintingRequest(args.slots)
   if (!request) return { ok: false, reason: 'incomplete brief — nothing to estimate' }
@@ -74,8 +83,9 @@ export async function estimateAndDispatchPainting(args: {
     }
   }
 
-  // Priced — DRAFT and hold: the customer never gets the price here. Ack
-  // the customer, then notify the tradie to review/edit/send.
+  // Priced — AUTO-SEND: the row was released at save time, so the quote page,
+  // the PDF and the $99 site-visit link all resolve, and the customer gets the
+  // full quote right here. The tradie notification still fires.
   const { data: t } = args.tenantId
     ? await args.supabase
         .from('tenants')
@@ -91,9 +101,30 @@ export async function estimateAndDispatchPainting(args: {
       business_name?: string | null
     } | null) ?? null
 
-  await args.sendReply(
-    buildPaintingHoldingSms({ firstName: args.firstName, businessName: tenantRow?.business_name ?? null }),
-  )
+  // Compose → send → stamp quote_sent_at ∨ revert the release: all of it lives
+  // in autoSendPaintingQuote so this path and the self-serve form POST cannot
+  // drift on the one rule that matters (never report an undelivered send).
+  const { sent } = await autoSendPaintingQuote({
+    supabase: args.supabase,
+    disp,
+    address,
+    appUrl: args.baseUrl,
+    tenantId: args.tenantId,
+    firstName: args.firstName,
+    send: async (text, mmsUrl) => (await args.sendReply(text, mmsUrl)).ok === true,
+  })
+
+  if (!sent) {
+    // The row is held again — set the customer's expectation without a price.
+    try {
+      await args.sendReply(
+        buildPaintingHoldingSms({ firstName: args.firstName, businessName: tenantRow?.business_name ?? null }),
+      )
+    } catch {
+      /* the quote send already failed — the holding SMS is best-effort */
+    }
+  }
+
   await notifyPaintingTradie({
     tenant: {
       owner_mobile: tenantRow?.owner_mobile ?? null,
@@ -106,6 +137,7 @@ export async function estimateAndDispatchPainting(args: {
     estimateToken: disp.estimateToken,
     appUrl: args.baseUrl,
     dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from, audience: 'tradie' }),
+    customerTexted: sent,
   })
 
   return {

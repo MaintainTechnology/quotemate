@@ -51,6 +51,8 @@ type Row = {
   estimate_token: string
   created_at: string
   released_at: string | null
+  /** Migration 189 — set only once a carrier accepted the quote message. */
+  quote_sent_at: string | null
   tenant_id: string | null
   preview_status: string | null
 }
@@ -66,7 +68,7 @@ export default async function PaintEstimateResultsPage({
   const { data, error } = await supabase
     .from('painting_measurements')
     .select(
-      'address, postcode, state, scopes, estimate, public_token, estimate_token, created_at, released_at, tenant_id, preview_status',
+      'address, postcode, state, scopes, estimate, public_token, estimate_token, created_at, released_at, quote_sent_at, tenant_id, preview_status',
     )
     .eq('estimate_token', token)
     .maybeSingle()
@@ -80,11 +82,17 @@ export default async function PaintEstimateResultsPage({
   // the customer quote chrome use. Best-effort: null renders a generic head.
   const identity = await loadTenantIdentity(supabase, row.tenant_id)
 
-  // released_at (migration 157): null = a held SMS/form draft that still
-  // shows the "Send to customer" button; dashboard saves are released at
-  // save time. (Was a separate best-effort query while the migration rolled
-  // out — long since applied, so it's part of the main select now.)
+  // TWO different questions, two different columns — conflating them is what
+  // made /p claim sends that never happened:
+  //   released_at (mig 157) — MAY the customer see prices? Gates the repaint
+  //     preview's render eligibility, exactly as before.
+  //   quote_sent_at (mig 189) — WAS the quote actually delivered? Evidence a
+  //     carrier accepted it. A dashboard save stamps released_at and texts
+  //     nobody, so only this column may drive "Sent to customer". Null (a
+  //     dashboard save, a legacy held draft, an inspection row, or a failed
+  //     auto-send) leaves the button actionable.
   const released = row.released_at != null
+  const quoteSent = row.quote_sent_at != null
 
   const inspection = estimate.price?.routing?.decision === 'inspection_required'
   // Editable tier shape for the tradie pre-send edit panel (only the
@@ -275,7 +283,9 @@ export default async function PaintEstimateResultsPage({
           <p className="mt-2 text-sm leading-relaxed text-text-sec">
             {inspection
               ? 'This job needs an on-site measure — the customer has been asked to book a time.'
-              : "Check the measurements, coats and pricing above. When it's right, send the full quote to the customer — they don't see a price until you do."}
+              : quoteSent
+                ? 'The customer already has this quote. Adjust the measurements, coats or pricing above and resend if anything changes.'
+                : 'Check the measurements, coats and pricing above, then send the full quote to the customer — they have not received it yet.'}
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-4">
             {/* Editable pre- AND post-release (spec tradie-onsite-quote-editing
@@ -285,7 +295,7 @@ export default async function PaintEstimateResultsPage({
               <EditQuotePanel estimateToken={row.estimate_token} tiers={editableTiers} />
             )}
             {!inspection && (
-              <SendToCustomerButton estimateToken={row.estimate_token} released={released} />
+              <SendToCustomerButton estimateToken={row.estimate_token} sent={quoteSent} />
             )}
             {/* Filled accent primary — matches /m/[token]'s "Open customer
                 quote" (MeasurementReview action row). */}
