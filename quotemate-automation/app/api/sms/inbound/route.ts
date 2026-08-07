@@ -530,8 +530,60 @@ async function handleRoofingTurn(args: {
       action: turn.decision.action,
     })
   }
-  const decision = turn ? turn.decision : advanceRoofing(prevState, decisionInput)
+  let decision = turn ? turn.decision : advanceRoofing(prevState, decisionInput)
   const carry: TurnCarry = turn?.carry ?? {}
+
+  // ── Re-measure guard on an already-quoted thread ──────────────────────
+  //
+  // advanceRoofing's warm-'quoted' arm (roofing-receptionist.ts (3.5)) is the
+  // rule that decides whether a post-quote message is a structure follow-up, a
+  // NEW address, a question about the quote we just sent, or a genuine new job
+  // — and hands everything else back with 'passthrough'. That arm is only
+  // reachable on the deterministic path. With the LLM driving (the default)
+  // NOTHING enforced it, because the line above takes turn.decision verbatim.
+  //
+  // Live 2026-08-07 (QM Sparky, Jeff, 12 Smith St). On a 'quoted' thread the
+  // model answered "Lets just do texting", "Lets do painting its painting not
+  // roofing mate" and "Are you doing roofing?" by MEASURING: a Geoscape call, a
+  // new roofing_measurements row and a fresh quote SMS on every one. Four rows
+  // for one property (0e188f7a, 118d90fc, 268266af, 8b63913e) and the customer
+  // never reached painting.
+  //
+  // Deciding to SPEND — an external measure call, a minted row, another quote
+  // text — is not a conversational judgement, so it is not the model's to make.
+  // Same rule as prices: the model picks words, a deterministic path authorises
+  // the action. The LLM keeps every other decision on this turn.
+  // The trigger is SAME PROPERTY, not last_step. Three separate mapRoofingTool
+  // arms reach measure — ask_for_detail, verify_address and
+  // measure_and_price_roof — because nextRoofingStep() is slot-only and never
+  // sees last_step, so a thread whose brief is already complete reports 'ready'
+  // forever. Keying on last_step==='quoted' missed the transcript's 3rd and 4th
+  // mints, which fired from 'confirm_roof' (the state a re-measure leaves).
+  //
+  // Measured across every state this thread passed through, advanceRoofing
+  // returns measure/inspection for NONE of these turns — so deferring to it
+  // cannot lose a legitimate measurement. A DIFFERENT address is untouched:
+  // pricing a second property is a real job and must still measure, which is
+  // also what keeps this from dead-locking a re-gather.
+  const normAddr = (a: unknown): string =>
+    typeof a === 'string' ? a.toLowerCase().replace(/[^a-z0-9]+/g, '') : ''
+  const measuredAddr = normAddr(prevState?.slots?.address)
+  const targetAddr = normAddr((decision as { slots?: { address?: string } }).slots?.address)
+  const sameProperty = !!prevState?.pending_quote_token && !!measuredAddr && measuredAddr === targetAddr
+
+  if (turn && sameProperty && (decision.action === 'measure' || decision.action === 'inspection')) {
+    const deterministic = advanceRoofing(prevState, decisionInput)
+    if (deterministic.action !== 'measure' && deterministic.action !== 'inspection') {
+      console.warn('[sms/inbound:roofing] LLM re-measured a property this thread already holds — deterministic decision wins', {
+        conversationId,
+        llmAction: decision.action,
+        deterministicAction: deterministic.action,
+        lastStep: prevState?.last_step ?? null,
+        inbound: decisionInput.slice(0, 80),
+      })
+      decision = deterministic
+    }
+  }
 
   // Reply FROM the number the customer texted (the tradie's own
   // provisioned number) — same as every other reply in this route. Never
@@ -1103,7 +1155,44 @@ async function handlePaintingTurn(args: {
       action: turn.decision.action,
     })
   }
-  const decision = turn ? turn.decision : advancePainting(prevState, latestInbound)
+  let decision = turn ? turn.decision : advancePainting(prevState, latestInbound)
+
+  // ── Re-estimate guard on an already-quoted thread ─────────────────────
+  //
+  // Same defect class the roofing handler above carried (fixed 2026-08-07):
+  // advancePainting's warm-'quoted' arm hands a post-quote message back with
+  // 'passthrough' unless it reads like a genuine new painting enquiry, but that
+  // arm is only reachable on the deterministic path. With the LLM driving (the
+  // default) the line above takes turn.decision verbatim, so nothing enforced
+  // it — and 'estimate' runs the pricing engine and texts another quote.
+  //
+  // Roofing's version of this minted FOUR measurement rows for one property in
+  // eight minutes while the customer was trying to switch trades. Deciding to
+  // SPEND is not a conversational judgement, so it is not the model's to make.
+  // Keyed on SAME PROPERTY rather than last_step, for the reason roofing's
+  // twin documents: the step a re-estimate leaves is not 'quoted', so a
+  // last_step trigger misses every mint after the first. A DIFFERENT address is
+  // untouched — a second property is a real job and must still be estimated.
+  const normPaintAddr = (a: unknown): string =>
+    typeof a === 'string' ? a.toLowerCase().replace(/[^a-z0-9]+/g, '') : ''
+  const quotedAddr = normPaintAddr(prevState?.slots?.address)
+  const targetPaintAddr = normPaintAddr((decision as { slots?: { address?: string } }).slots?.address)
+  const samePaintProperty =
+    !!prevState?.pending_quote_token && !!quotedAddr && quotedAddr === targetPaintAddr
+
+  if (turn && samePaintProperty && (decision.action === 'estimate' || decision.action === 'inspection')) {
+    const deterministic = advancePainting(prevState, latestInbound)
+    if (deterministic.action !== 'estimate' && deterministic.action !== 'inspection') {
+      console.warn('[sms/inbound:painting] LLM re-estimated a property this thread already holds — deterministic decision wins', {
+        conversationId,
+        llmAction: decision.action,
+        deterministicAction: deterministic.action,
+        lastStep: prevState?.last_step ?? null,
+        inbound: latestInbound.slice(0, 80),
+      })
+      decision = deterministic
+    }
+  }
   const carry: TurnCarry = turn?.carry ?? {}
 
   const replyFrom = toNumber

@@ -663,7 +663,43 @@ export function advanceRoofing(
     const aboutSentQuote =
       /\b(that|this|it|the)\s+(price|quote|estimate|total|cost|figure|number)\b/.test(lower) ||
       /\bdoes\s+(that|this|it)\b/.test(lower)
-    if ((!looksLikeRoofingEnquiry(inbound) && !newAddress) || (isQuestion && aboutSentQuote && !newAddress)) {
+    // A post-quote question that ASKS ABOUT US rather than requesting more work
+    // is not a new job either. anaphora alone was too narrow: "Are you doing
+    // roofing?" names a roofing keyword, carries no "that price" anaphora, and
+    // so fell through to the reset and RESTARTED the gather on a customer who
+    // already held a quote — then the LLM turned that reopened gather into a
+    // fresh measurement (live 2026-08-07, QM Sparky, token 8b63913e).
+    //
+    // The separator is a NEW-JOB cue, not the question mark: "can you quote
+    // another re-roof" and "how much for the garage?" ask for more work and
+    // still reopen; "are you doing roofing?", "do you do roofing?" do not.
+    const newJobCue =
+      /\b(another|second|also|next|different|other|additional)\b/.test(lower) ||
+      /\b(quote|price[sd]?|pricing|estimate|cost)\b/.test(lower) ||
+      /\bhow much\b/.test(lower)
+    const askingAboutUs = isQuestion && !newJobCue
+    // A CORRECTION names the trade it is REJECTING, so it carries a roofing
+    // keyword and reads as a fresh roofing enquiry. "Lets do painting its
+    // painting not roofing mate" therefore reopened the gather (live
+    // 2026-08-07, token 268266af). The Front Desk now routes that turn to
+    // painting before we ever see it — this is the second line, so one router
+    // slip cannot re-trap the customer in a trade they just refused.
+    //
+    // Strip ONLY the negated mention and re-test: if what remains is no longer
+    // a roofing enquiry, the roof word was the thing being rejected. "no roof
+    // leaks but I want a re-roof quote" still keeps "re-roof" and reopens.
+    const roofNegationStripped = inbound.replace(
+      /\b(?:not|no|isn'?t|aint|ain't)\s+(?:the\s+|a\s+)?roof\w*/gi,
+      ' ',
+    )
+    const correctedAwayFromRoofing =
+      roofNegationStripped !== inbound && !looksLikeRoofingEnquiry(roofNegationStripped)
+    if (
+      (!looksLikeRoofingEnquiry(inbound) && !newAddress) ||
+      (isQuestion && aboutSentQuote && !newAddress) ||
+      (askingAboutUs && !newAddress) ||
+      (correctedAwayFromRoofing && !newAddress)
+    ) {
       return { action: 'passthrough', slots }
     }
     // falls through to the reset below → gather a fresh roofing quote.
