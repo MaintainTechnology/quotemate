@@ -39,9 +39,19 @@ import {
   parseAuState,
   parsePostcode,
   parseYearBuilt,
+  rejectsReadBack,
   type RoofingSlots,
   type RoofingStep,
 } from './roofing-intake'
+// The read-back wordings, the rejection budget and the re-ask copy all live
+// with the module that COMPOSES them, so both trades share one vocabulary and
+// one budget (specs/address-confirm-loop.md).
+import {
+  ADDRESS_REJECTED_REPLY,
+  addressRecheckQuestion,
+  consumeAddressRejection,
+  isAddressReadBack,
+} from './verify-address'
 
 /** Persisted on sms_conversations.roofing_state (jsonb). */
 export type RoofingConversationState = {
@@ -107,10 +117,16 @@ export type RoofingTurnDecision =
   // of re-grabbing roofing. Absent/false on an interrupt/question bail (resume-able).
   | { action: 'passthrough'; slots: RoofingSlots; close?: boolean }
 
-const WRONG_BUILDING_REPROMPT =
-  "No worries. What's the correct property address, with suburb and postcode?"
-const ADDRESS_RETRY =
-  "Sorry, I didn't catch a property address there. What's the address? Please include the street number, suburb and postcode."
+const WRONG_BUILDING_REPROMPT = ADDRESS_REJECTED_REPLY
+/** Two wordings, not one: the second unrecognised address answer must not be
+ *  answered with byte-identical copy (specs/address-confirm-loop.md req 5).
+ *  missBudget('address') is 3, so a miss is only ever 1 or 2 here. */
+const ADDRESS_RETRY = [
+  "Sorry, I didn't catch a property address there. What's the address? Please include the street number, suburb and postcode.",
+  'No worries. Just send the property address on its own, like: 12 Smith St, Surry Hills 2010.',
+]
+const addressRetry = (misses: number): string =>
+  ADDRESS_RETRY[Math.min(Math.max(misses, 1), ADDRESS_RETRY.length) - 1]
 
 const ORDINALS: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5 }
 
@@ -518,8 +534,6 @@ export function roofingTurnInput(
  *  (confirmAddressQuestion's two wordings) OR a geocoder "can't find it"
  *  rejection (addressNotFoundReply). The F4 recovery net skips these so it never
  *  re-harvests an address the customer rejected OR one the map already refused. */
-const ADDRESS_READ_BACK = /just to confirm, the property is|closest address i can find|can['’]?t find/i
-
 /** PURE — the most recent inbound carrying a street address that was NEVER read
  *  back to the customer (so never confirmed/rejected). null when there is none.
  *  Recovers an address dropped by the burst/leader race without ever

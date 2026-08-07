@@ -33,7 +33,11 @@ import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
 import { SMS_RECEPTIONIST_MODEL } from './model'
 import { ROOF_MATERIALS } from '@/lib/roofing/types'
-import { confirmAddressQuestion } from './verify-address'
+import {
+  confirmAddressQuestion,
+  consumeAddressRejection,
+  lastOutboundAskedAddress,
+} from './verify-address'
 import {
   advanceRoofing,
   missBudget,
@@ -47,6 +51,7 @@ import {
 } from './painting-receptionist'
 import {
   applyRoofingAnswer,
+  extractStreetAddress,
   isAffirmative,
   isGreetingOnly,
   isNegative,
@@ -56,6 +61,7 @@ import {
   nextRoofingStep,
   parseAuState,
   parsePostcode,
+  rejectsReadBack,
   type RoofingSlots,
   type RoofingStep,
 } from './roofing-intake'
@@ -1013,6 +1019,7 @@ export async function roofingTurnViaLlm(args: {
           ),
           prevStep,
           args.inbound,
+          prevStep === 'confirm_address' || lastOutboundAskedAddress(args.history),
         ),
         d.tool,
         prevStep,
@@ -1183,13 +1190,39 @@ function resolveGatherStep(
  * turn and the customer said yes, the address is confirmed and the flow
  * moves on. The wording of the next question comes from the deterministic
  * step, not the model.
+ *
+ * ⚠ `askedAddress`, not `prevStep`, is the key. Live 2026-08-07 the read-back
+ * was going out while roofing_state.last_step said 'closed', so every guard
+ * keyed on the step was dead code. "Did our last outbound ask the customer to
+ * confirm an address?" is answerable from the transcript and cannot be wrong.
  */
 function breakConfirmLoop(
   d: RoofingTurnDecision | null,
   prevStep: RoofingStep | null,
   inbound: string,
+  askedAddress: boolean,
 ): RoofingTurnDecision | null {
-  if (!d || d.action !== 'ask' || d.step !== 'confirm_address') return d
+  if (!d || !askedAddress) return d
+  // ── A "no" is the loop's only exit, so it is not the model's to discard ──
+  //
+  // This used to `return d` unchanged on a negative, on the reasoning that a
+  // rejection is a real conversational turn. Live 2026-08-07 that turn was
+  // "keep saying the same sentence": four rejections, four byte-identical
+  // read-backs, no counter moved (specs/address-confirm-loop.md).
+  //
+  // A rejection that CARRIES a replacement address is a correction, not a
+  // refusal, and the model's patch already holds it — leave that alone. A
+  // passthrough / cancel is an exit, not a loop.
+  if (
+    rejectsReadBack(inbound) &&
+    !extractStreetAddress(inbound) &&
+    d.action !== 'passthrough' &&
+    d.action !== 'cancel'
+  ) {
+    const r = consumeAddressRejection(d.slots)
+    return { action: 'ask', slots: r.slots, step: r.step, reply: r.reply }
+  }
+  if (d.action !== 'ask' || d.step !== 'confirm_address') return d
   if (prevStep !== 'confirm_address') return d
   if (!isAffirmative(inbound) || isNegative(inbound)) return d
   const slots: RoofingSlots = { ...d.slots, address_confirmed: true }
@@ -1469,6 +1502,18 @@ function mapPaintingTool(
 
     case 'verify_address': {
       if (!slots.address) return null
+      // ALREADY confirmed — carry on with the gather. The roofing twin has had
+      // this guard since 2026-07-26; painting never did, so the model could
+      // un-confirm a settled address and re-ask the read-back on any turn
+      // (specs/address-confirm-loop.md).
+      if (slots.address_confirmed) {
+        const q = nextPaintingStep(slots)
+        if (q.step === 'ready') return { action: 'estimate', slots }
+        if (q.step === 'inspection') {
+          return { action: 'inspection', slots, reason: q.reason ?? 'an on-site inspection is needed' }
+        }
+        return { action: 'ask', slots, step: q.step, reply: q.question ?? d.reply_to_send }
+      }
       const s: PaintingSlots = { ...slots, address_confirmed: false }
       return { action: 'ask', slots: s, step: 'confirm_address', reply: confirmAddressQuestion(s.address ?? '', false) }
     }

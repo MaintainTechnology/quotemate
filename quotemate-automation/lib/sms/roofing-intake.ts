@@ -46,6 +46,11 @@ export type RoofingSlots = {
    *  MAX_ADDRESS_VERIFY_REJECTS, then we fall back to the plain
    *  read-back so an unmapped new estate can still push through. */
   addr_verify_misses?: number
+  /** How many times the CUSTOMER rejected the read-back. Different event,
+   *  different counter: addr_verify_misses counts the MAP failing to find
+   *  an address, and neither the customer's "no" nor this budget was ever
+   *  counted before (specs/address-confirm-loop.md). */
+  addr_confirm_rejects?: number
   material?: RoofMaterial | null
   pitch?: PitchBucket | null
   intent?: RoofJobIntent | null
@@ -434,6 +439,13 @@ const DENY = /\b(no|nope|nah|wrong|incorrect|not right|different)\b/
 const NEGATION_CUE =
   /\bnot\b|\bcannot\b|\bnever\b|\b(?:is|are|was|were|do|does|did|ca|could|wo|would|should|has|have|had|ai|must|need|sha)n['’]?t\b/
 
+/** PURE — the customer is rejecting what we just read back: a deny word OR a
+ *  negation cue ("that's not it"). One vocabulary, so the state machine and
+ *  the rejection budget cannot disagree about what a "no" is. */
+export function rejectsReadBack(msg: string): boolean {
+  return isNegative(msg) || NEGATION_CUE.test((msg ?? '').toLowerCase())
+}
+
 /**
  * Collapse an EMPHATIC elongation before matching: "Noooo" -> "No",
  * "yesss" -> "yes", "nahhh" -> "nah".
@@ -624,14 +636,18 @@ export function applyRoofingAnswer(
       }
       // F15c — a negation cue (deny word OR "not/isn't/n't …") blocks the
       // confirm and re-asks; a plain affirm with no negation still confirms.
-      const negated = isNegative(msg) || NEGATION_CUE.test((msg ?? '').toLowerCase())
+      const negated = rejectsReadBack(msg)
       if (isAffirmative(msg) && !negated) {
         next.address_confirmed = true
       } else if (negated) {
         // Customer says it's wrong / unsure — clear so we re-ask the address.
+        // addr_verified goes too: it exists to let screenConfirmAddress skip
+        // the map check for that exact string, so keeping it re-blesses the
+        // address they just refused.
         next.address = null
         next.postcode = null
         next.state = null
+        next.addr_verified = null
         next.address_confirmed = false
       }
       break

@@ -467,6 +467,45 @@ export function addressNotFoundReply(raw: string): string {
   return `Sorry, I can't find "${raw}" on the map. Could you double-check the spelling and send the full address again — street number, street, suburb and postcode?`
 }
 
+/** The re-ask after the CUSTOMER rejects the read-back. Also the wording the
+ *  roofing flow uses when they reject the roof photo — same question, so one
+ *  string. */
+export const ADDRESS_REJECTED_REPLY =
+  "No worries. What's the correct property address, with suburb and postcode?"
+
+/** The re-ask when the reply to the read-back was neither yes nor no ("Hi
+ *  Mate"). Deliberately NOT confirmAddressQuestion: repeating that verbatim is
+ *  the loop this module exists to stop (specs/address-confirm-loop.md req 4). */
+export function addressRecheckQuestion(address: string): string {
+  return `Sorry, I need a yes or no on this one. Is the property "${address}"? Reply YES if that's right, or send the correct address.`
+}
+
+/** PURE — is this outbound body one of OUR address read-backs? The four
+ *  wordings above are the only things that ask the customer to confirm an
+ *  address, so "did we just ask?" is answerable from the transcript alone.
+ *
+ *  This is the key every rejection consumer must use. `last_step` is NOT it:
+ *  live 2026-08-07 the read-back was going out with roofing_state.last_step at
+ *  'closed' and painting_state.last_step at 'coats', so every consumer keyed on
+ *  `last_step === 'confirm_address'` was dead code and four rejections in a row
+ *  were discarded. */
+const ADDRESS_READ_BACK =
+  /just to confirm, the property is|closest address i can find|can['’]?t find|is the property "/i
+
+export function isAddressReadBack(body: string): boolean {
+  return ADDRESS_READ_BACK.test(body ?? '')
+}
+
+/** PURE — the newest outbound in the transcript is an address read-back, so
+ *  whatever the customer just sent is an ANSWER to it, whatever step the
+ *  persisted state claims to be on. */
+export function lastOutboundAskedAddress(
+  turns: ReadonlyArray<{ direction: string; body: string }>,
+): boolean {
+  const last = [...turns].reverse().find((t) => t.direction === 'outbound')
+  return !!last && isAddressReadBack(last.body)
+}
+
 /** The read-back when the typed address was not found but the register has
  *  a near match. Names BOTH so the customer can see the correction. */
 export function addressSuggestionQuestion(raw: string, suggestion: string): string {
@@ -522,6 +561,47 @@ export type AddressSlotsLike = {
   address_confirmed?: boolean
   addr_verified?: string | null
   addr_verify_misses?: number
+  /** How many times the CUSTOMER rejected the read-back — see
+   *  consumeAddressRejection. Distinct from addr_verify_misses, which counts
+   *  the MAP failing to find an address. */
+  addr_confirm_rejects?: number
+}
+
+/**
+ * PURE — consume a customer's "no" to the address read-back.
+ *
+ * The handshake had no rejection budget of its own: MAX_ADDRESS_VERIFY_REJECTS
+ * bounded GEOCODER rejections (planConfirmAddress's 'reject' arm), which a real
+ * address never reaches, and nothing anywhere counted the CUSTOMER saying no.
+ * Live 2026-08-07 four rejections in one thread were discarded and the same
+ * read-back went out four times (specs/address-confirm-loop.md).
+ *
+ * Clears every trace of the rejected address — including `addr_verified`,
+ * whose whole job is to let screenConfirmAddress SKIP the map check for that
+ * exact string. Leaving it behind re-blesses the address the customer just
+ * refused.
+ *
+ * At the budget the flow stops asking and hands the lead to a human, the same
+ * way a spent map budget does.
+ */
+export function consumeAddressRejection<S extends AddressSlotsLike>(
+  slots: S,
+): { slots: S; step: 'address' | 'await_booking'; reply: string; handoff?: true } {
+  const rejected = slots.address ?? ''
+  const rejects = (slots.addr_confirm_rejects ?? 0) + 1
+  const cleared = {
+    ...slots,
+    address: null,
+    postcode: null,
+    state: null,
+    address_confirmed: false,
+    addr_verified: null,
+    addr_confirm_rejects: rejects,
+  } as S
+  if (rejects >= MAX_ADDRESS_VERIFY_REJECTS) {
+    return { slots: cleared, step: 'await_booking', reply: addressHandoffReply(rejected), handoff: true }
+  }
+  return { slots: cleared, step: 'address', reply: ADDRESS_REJECTED_REPLY }
 }
 
 /**

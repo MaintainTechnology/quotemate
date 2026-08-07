@@ -404,6 +404,29 @@ export function logSendOutcome(
  * Crucially this only sets a WAIT — no message is ever dropped; coalescing
  * means they're processed together once the burst settles.
  */
+/**
+ * PURE — never send the customer the same words twice in a row
+ * (specs/address-confirm-loop.md req 5).
+ *
+ * The last line of defence, not the fix. Live 2026-08-07 one address read-back
+ * went out FOUR times to four different inbound messages, including two plain
+ * rejections, and nothing anywhere noticed. Every known cause of that is now
+ * closed upstream; this exists so the next variant is visible instead of
+ * silent, whichever branch composes it.
+ *
+ * Prefixed rather than suppressed: a customer who receives nothing is worse off
+ * than one who receives an apology in front of the same question, and a
+ * suppressed send would strand the flow waiting on a reply to a message that
+ * was never delivered.
+ */
+export function dedupeConsecutiveReply(
+  text: string,
+  lastSent: string | null | undefined,
+): { body: string; repeated: boolean } {
+  if (!lastSent || text !== lastSent) return { body: text, repeated: false }
+  return { body: `Sorry, I didn't catch that. ${text}`, repeated: true }
+}
+
 export function adaptiveDebounceMs(
   arrivalTimestamps: readonly number[],
   knobs: Pick<DeliveryKnobs, 'debounceMs'>,
