@@ -434,11 +434,33 @@ const DENY = /\b(no|nope|nah|wrong|incorrect|not right|different)\b/
 const NEGATION_CUE =
   /\bnot\b|\bcannot\b|\bnever\b|\b(?:is|are|was|were|do|does|did|ca|could|wo|would|should|has|have|had|ai|must|need|sha)n['’]?t\b/
 
+/**
+ * Collapse an EMPHATIC elongation before matching: "Noooo" -> "No",
+ * "yesss" -> "yes", "nahhh" -> "nah".
+ *
+ * People stretch a word precisely when they mean it hardest, and \b(no)\b never
+ * matched "Noooo". Live 2026-08-07 (QM Sparky, Jeff): at confirm_address the
+ * customer answered "NO", "No", then "Noooo". The elongated one parsed as
+ * NEITHER affirm nor deny, so nothing cleared the address — and because
+ * address_confirmed was already true from the earlier turn, nextRoofingStep
+ * went straight to 'ready' and MEASURED the roof the customer had just
+ * rejected three times.
+ *
+ * Runs of 3+ are collapsed to one character, so ordinary doubles are untouched
+ * ("all", "correct", "address" all survive); only a deliberate stretch is
+ * normalised.
+ */
+function deEmphasise(text: string): string {
+  return (text ?? '').toLowerCase().replace(/([a-z])\1{2,}/g, '$1')
+}
+
 export function isAffirmative(text: string): boolean {
-  return AFFIRM.test((text ?? '').toLowerCase())
+  const t = (text ?? '').toLowerCase()
+  return AFFIRM.test(t) || AFFIRM.test(deEmphasise(t))
 }
 export function isNegative(text: string): boolean {
-  return DENY.test((text ?? '').toLowerCase())
+  const t = (text ?? '').toLowerCase()
+  return DENY.test(t) || DENY.test(deEmphasise(t))
 }
 
 // U5c ("no wait yes" should confirm) was attempted and REVERTED. Three

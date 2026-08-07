@@ -12,7 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { isQuoteRequestTrade } from '@/lib/quote-request/fields'
-import { DeadEnd, QuoteRequestForm, Shell, ThankYou } from './QuoteRequestForm'
+import { DeadEnd, QuoteRequestForm, Shell } from './QuoteRequestForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,10 +64,17 @@ export default async function QuoteRequestPage({
     businessName = (tenant?.business_name as string | undefined) ?? null
   }
 
+  // Already submitted is a DEAD END, not a thank-you. The thank-you copy is
+  // written for the moment the POST returns, where the route knows whether the
+  // job routed to inspection and whether a carrier accepted the message. A
+  // re-opened link knows neither, and the old `inspection={false}` literal made
+  // it assert the cheerier of the two ("your quote is on its way to your phone
+  // now") to someone whose quote went out hours ago, or needs a site visit, or
+  // never sent at all.
   if (lead.status === 'submitted') {
     return (
       <Shell business={businessName}>
-        <ThankYou inspection={false} />
+        <DeadEnd message="You've already sent this one through. Reply to our text if anything has changed and we'll pick it up from there." />
       </Shell>
     )
   }

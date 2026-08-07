@@ -18,7 +18,7 @@ import {
 } from '@/lib/sms/twilio-validator'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
-import { toRoofingRequest, seedRoofingSlots, isStopRequest } from '@/lib/sms/roofing-intake'
+import { toRoofingRequest, seedRoofingSlots, isStopRequest, isNegative } from '@/lib/sms/roofing-intake'
 import { screenConfirmAddress, verifyAuAddress, gateUnverifiedProfileAddress } from '@/lib/sms/verify-address'
 import {
   advanceRoofing,
@@ -579,6 +579,37 @@ async function handleRoofingTurn(args: {
         llmAction: decision.action,
         deterministicAction: deterministic.action,
         lastStep: prevState?.last_step ?? null,
+        inbound: decisionInput.slice(0, 80),
+      })
+      decision = deterministic
+    }
+  }
+
+  // ── "No" at confirm_address must ALWAYS clear the address ─────────────
+  //
+  // The route re-runs screenConfirmAddress for EVERY turn whose step is
+  // confirm_address (see the ask arm below), which regenerates the read-back
+  // "Just to confirm, the property is X. Is that right?". So if the model keeps
+  // answering a rejection with another confirm_address ask carrying the SAME
+  // address, the customer is asked the identical question forever with no miss
+  // budget spent and no way out.
+  //
+  // Live 2026-08-07 (QM Sparky, Jeff): "NO" -> "No" -> "Noooo" -> "No", each
+  // answered with the same read-back for 12 Smith St. advanceRoofing gets this
+  // right — a negative clears slots.address and returns step 'address' — but
+  // that arm is unreachable while the LLM drives.
+  //
+  // Whether a rejection clears the rejected value is not a conversational
+  // judgement; it is the loop's only exit. The model keeps every other turn.
+  if (turn && prevState?.last_step === 'confirm_address' && isNegative(decisionInput)) {
+    const deterministic = advanceRoofing(prevState, decisionInput)
+    const clearsAddress =
+      deterministic.action === 'ask' && deterministic.step === 'address' && !deterministic.slots.address
+    if (clearsAddress && !(decision.action === 'ask' && decision.step === 'address')) {
+      console.warn('[sms/inbound:roofing] LLM re-asked confirm_address after a rejection — deterministic address reset wins', {
+        conversationId,
+        llmAction: decision.action,
+        llmStep: 'step' in decision ? decision.step : null,
         inbound: decisionInput.slice(0, 80),
       })
       decision = deterministic

@@ -106,7 +106,11 @@ export function QuoteRequestForm({
   const [storeys, setStoreys] = useState<1 | 2 | 3>(1)
 
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<{ inspection: boolean } | null>(null)
+  // `texted` mirrors the API's three-state delivery fact (true / false /
+  // null when the async pipeline owns the send). It is carried, not dropped:
+  // dropping it is what let a refused Twilio send still render "your quote is
+  // on its way to your phone now".
+  const [done, setDone] = useState<{ inspection: boolean; texted: boolean | null } | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
   const toggleScope = useCallback((s: PaintScope) => {
@@ -192,7 +196,9 @@ export function QuoteRequestForm({
           }),
         })
         const j = await res.json().catch(() => ({ ok: false, error: 'server_error' }))
-        if (res.ok && j.ok) return setDone({ inspection: !!j.inspection })
+        // `texted` is tri-state — `?? null` on purpose, so "the async pipeline
+        // owns the send" (null) is not flattened into "the send was refused".
+        if (res.ok && j.ok) return setDone({ inspection: !!j.inspection, texted: j.texted ?? null })
         // Status-aware, unlike the painting form: a 4xx is something the
         // customer can fix, a 5xx is ours and worth retrying.
         if (j.error === 'already_submitted') setErr('This form has already been sent through.')
@@ -218,7 +224,7 @@ export function QuoteRequestForm({
   if (done) {
     return (
       <Shell business={businessName}>
-        <ThankYou inspection={done.inspection} />
+        <ThankYou inspection={done.inspection} texted={done.texted} />
       </Shell>
     )
   }
@@ -397,16 +403,28 @@ function Select<T extends string | number>({
   )
 }
 
-export function ThankYou({ inspection }: { inspection: boolean }) {
+/**
+ * Post-submit copy. `texted` is the API's delivery fact:
+ *   false → a send was attempted and REFUSED. Checked first, and it beats
+ *           `inspection`, because both other lines promise the customer a
+ *           text ("on its way", "we'll text you") that is not coming.
+ *   true / null → something was sent, or the async intake pipeline owns the
+ *           send; "on its way" is true in both cases.
+ * The page must never state a delivery the API reported as false — that is
+ * the incident this branch exists for.
+ */
+export function ThankYou({ inspection, texted }: { inspection: boolean; texted?: boolean | null }) {
   return (
     <div className="border border-ink-line border-l-4 border-l-accent bg-ink-card p-8">
       <h1 className="font-extrabold uppercase leading-[0.95] tracking-[-0.03em] text-[clamp(1.75rem,4.5vw,2.75rem)]">
         Thanks, <span className="text-accent">got it</span>
       </h1>
       <p className="mt-4 max-w-lg text-base leading-relaxed text-text-sec">
-        {inspection
-          ? "Thanks for those details. This one needs a quick look on site, so we'll text you to arrange a time."
-          : "Thanks for those details. Your quote is on its way to your phone now."}
+        {texted === false
+          ? "Thanks for those details. We have everything we need and we'll be in touch shortly with your quote."
+          : inspection
+            ? "Thanks for those details. This one needs a quick look on site, so we'll text you to arrange a time."
+            : "Thanks for those details. Your quote is on its way to your phone now."}
       </p>
     </div>
   )

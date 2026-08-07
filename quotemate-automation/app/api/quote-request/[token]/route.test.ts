@@ -10,7 +10,15 @@
 //      outage as "invalid link") and the mark-submitted update (painting
 //      bare-awaits it, so a spent link can silently stay live).
 //
-// Plus: the right Zod branch per trade, and the right estimate path per trade.
+//   3. NEVER claim a send nobody made. `texted` is a delivery fact —
+//      true (a carrier accepted it), false (attempted and refused), or null
+//      (the async intake pipeline owns the send). The thank-you page branches
+//      on it, so a hardcoded `true` puts "your quote is on its way" in front
+//      of a customer who is getting nothing.
+//
+// Plus: the right Zod branch per trade, and the right estimate path per trade
+// — the SHARED dispatcher module the SMS gather calls, so the tradie alert,
+// the holding SMS and the conversation state come along with it.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -19,8 +27,16 @@ const h = vi.hoisted(() => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role'
   // Apex, never www: the www host 307-redirects cross-origin and strips
   // Authorization, which would 401 the internal intake hand-off.
+  //
+  // The two are set to DIFFERENT hosts on purpose — that is the whole point.
+  // NEXT_PUBLIC_APP_URL is the repo's www variable (see
+  // lib/sms/roofing-measure-dispatch.ts, lib/twilio/sms-webhook-url.test.ts),
+  // APP_URL is the apex every internal self-caller reads. Setting both to the
+  // apex, as this file used to, made the precedence untestable: flipping the
+  // route back to NEXT_PUBLIC-first still passed. The intake-hand-off
+  // assertion below now fails if anyone flips it.
   process.env.APP_URL = 'https://quotemax.com.au'
-  process.env.NEXT_PUBLIC_APP_URL = 'https://quotemax.com.au'
+  process.env.NEXT_PUBLIC_APP_URL = 'https://www.quotemax.com.au'
   process.env.CRON_SECRET = 'cron-secret'
 
   type Result = { data: unknown; error: unknown }
@@ -59,25 +75,41 @@ const h = vi.hoisted(() => {
     writes,
     client: { from },
     runAndSavePaintingQuote: vi.fn(),
-    sendPaintingQuoteToCustomer: vi.fn(),
-    revertPaintingRelease: vi.fn(async () => ({ reverted: true })),
+    autoSendPaintingQuote: vi.fn(),
+    notifyPaintingTradie: vi.fn(async () => ({ notified: true })),
     measureAndDispatchRoofing: vi.fn(),
-    sendSms: vi.fn(async () => ({ ok: true, sid: 'SM1' })),
+    notifyRoofingTradie: vi.fn(async () => ({ notified: true })),
+    dispatchQuoteMessage: vi.fn(async () => ({ ok: true, sid: 'SM9' })),
+    sendSms: vi.fn(
+      async (
+        _opts: { to: string; from?: string; text: string; mediaUrl?: string },
+      ): Promise<{ ok: boolean; sid?: string; code?: string; reason?: string }> => ({
+        ok: true,
+        sid: 'SM1',
+      }),
+    ),
   }
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
+// The painting DISPATCHER (lib/sms/painting-estimate-dispatch) runs for real
+// here — it is the shared module the SMS gather calls, and the holding SMS,
+// the release revert and the tradie alert all live inside it. Only its I/O
+// edges are faked, so this file proves the route wires up the whole sequence
+// rather than re-implementing half of it.
 vi.mock('@/lib/painting/quote-dispatch', () => ({
   runAndSavePaintingQuote: h.runAndSavePaintingQuote,
 }))
 vi.mock('@/lib/painting/release', () => ({
-  sendPaintingQuoteToCustomer: h.sendPaintingQuoteToCustomer,
-  revertPaintingRelease: h.revertPaintingRelease,
+  autoSendPaintingQuote: h.autoSendPaintingQuote,
+  notifyPaintingTradie: h.notifyPaintingTradie,
 }))
 vi.mock('@/lib/sms/roofing-measure-dispatch', () => ({
   measureAndDispatchRoofing: h.measureAndDispatchRoofing,
   ROOFING_APP_BASE_URL: 'https://quotemax.com.au',
 }))
+vi.mock('@/lib/sms/roofing-notify', () => ({ notifyRoofingTradie: h.notifyRoofingTradie }))
+vi.mock('@/lib/sms/dispatch', () => ({ dispatchQuoteMessage: h.dispatchQuoteMessage }))
 vi.mock('@/lib/sms/twilio', () => ({ sendSms: h.sendSms }))
 
 import { POST } from './route'
@@ -151,8 +183,10 @@ const PRICED_PAINT = {
   token: 'pub-1',
   estimateToken: 'est-1',
   inspection: false,
-  estimate: { price: { routing: { decision: 'auto_quote' }, tiers: [] } },
+  estimate: { price: { routing: { decision: 'auto_quote', reason: null }, tiers: [] } },
 }
+
+const QUOTE_SMS = 'Your painting quote: good $1, better $2, best $3'
 
 function req(body: unknown = PAINT_BODY, raw?: string) {
   return new Request(`http://localhost/api/quote-request/${TOKEN}`, {
@@ -177,11 +211,26 @@ beforeEach(() => {
   h.writes.length = 0
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
   h.runAndSavePaintingQuote.mockReset().mockResolvedValue(PRICED_PAINT)
-  h.sendPaintingQuoteToCustomer.mockReset().mockResolvedValue({ sent: true })
-  h.revertPaintingRelease.mockClear()
+  // Stands in for compose + send + stamp/revert. It reports whatever the
+  // route's own transport said, which is exactly the contract that makes the
+  // real helper revert an undelivered release.
+  h.autoSendPaintingQuote
+    .mockReset()
+    .mockImplementation(async (a: { send: (t: string) => Promise<boolean> }) => ({
+      sent: await a.send(QUOTE_SMS),
+    }))
+  h.notifyPaintingTradie.mockClear()
+  // The real dispatcher texts the customer through the injected sendReply —
+  // mock it the same way, or the route's delivery tracking is never exercised
+  // and a hardcoded `texted: true` would sail through this file.
   h.measureAndDispatchRoofing
     .mockReset()
-    .mockResolvedValue({ ok: true, token: 'roof-1', quote: {}, state: { slots: {}, last_step: 'confirm_roof' } })
+    .mockImplementation(async (a: { sendReply: (t: string) => Promise<{ ok: boolean }> }) => {
+      await a.sendReply('Your roof quote is ready')
+      return { ok: true, token: 'roof-1', quote: {}, state: { slots: {}, last_step: 'confirm_roof' } }
+    })
+  h.notifyRoofingTradie.mockClear()
+  h.dispatchQuoteMessage.mockClear()
   h.sendSms.mockReset().mockResolvedValue({ ok: true, sid: 'SM1' })
 })
 
@@ -280,8 +329,28 @@ describe('POST /api/quote-request/[token] — painting hand-off', () => {
         request: expect.objectContaining({ address: ADDRESS }),
       }),
     )
-    expect(h.sendPaintingQuoteToCustomer).toHaveBeenCalled()
+    expect(h.autoSendPaintingQuote).toHaveBeenCalled()
+    expect(h.sendSms).toHaveBeenCalledWith(expect.objectContaining({ to: '+61400000000', text: QUOTE_SMS }))
     expect(leadUpdates().at(-1)?.row).toMatchObject({ quote_token: 'pub-1' })
+  })
+
+  it('tells the painter about the lead — a form quote nobody hears about is a dead lead', async () => {
+    queueHappy()
+    await POST(req(PAINT_BODY), ctx)
+    expect(h.notifyPaintingTradie).toHaveBeenCalledWith(
+      expect.objectContaining({ address: ADDRESS.address, customerTexted: true }),
+    )
+  })
+
+  it("advances painting_state so the receptionist doesn't re-ask a job it just quoted", async () => {
+    queueHappy()
+    await POST(req(PAINT_BODY), ctx)
+    // The thread was pinned at last_step:'offer_form'. Left there, the next
+    // customer message restarts the whole painting Q&A on a quoted job.
+    const stateUpdate = writesTo('sms_conversations').at(-1)
+    expect(stateUpdate?.row).toMatchObject({
+      painting_state: expect.objectContaining({ last_step: 'quoted', pending_quote_token: 'pub-1' }),
+    })
   })
 
   it('writes the submission onto the SMS thread so the tradie can see it', async () => {
@@ -302,12 +371,20 @@ describe('POST /api/quote-request/[token] — painting hand-off', () => {
     expect(leadUpdates().at(-1)?.row).toMatchObject({ status: 'pending', submitted_at: null })
   })
 
-  it('never reports a send Twilio refused, and holds the row again', async () => {
+  it('never reports a send Twilio refused, texts the holding message and says so to the painter', async () => {
     queueHappy()
-    h.sendPaintingQuoteToCustomer.mockResolvedValue({ sent: false })
+    h.sendSms.mockResolvedValue({ ok: false, code: '21610', reason: 'unsubscribed' })
     const res = await POST(req(PAINT_BODY), ctx)
+    // `texted:false` is what stops the thank-you page saying "your quote is on
+    // its way". The release revert itself lives in autoSendPaintingQuote (its
+    // own tests cover it) and fires off this same false.
     expect(await res.json()).toMatchObject({ ok: true, texted: false })
-    expect(h.revertPaintingRelease).toHaveBeenCalledWith(expect.anything(), 'pub-1')
+    // The customer hears SOMETHING rather than silence.
+    const bodies = h.sendSms.mock.calls.map((c) => c[0].text)
+    expect(bodies.some((t) => /preparing your painting quote/i.test(t))).toBe(true)
+    expect(h.notifyPaintingTradie).toHaveBeenCalledWith(
+      expect.objectContaining({ customerTexted: false }),
+    )
   })
 
   it('502s a failed thread write rather than quoting off an unrecorded brief', async () => {
@@ -347,6 +424,31 @@ describe('POST /api/quote-request/[token] — roofing hand-off', () => {
     )
     const stateUpdate = writesTo('sms_conversations').at(-1)
     expect(stateUpdate?.row).toMatchObject({ roofing_state: { slots: {}, last_step: 'confirm_roof' } })
+    expect(await res.json()).toMatchObject({ texted: true })
+  })
+
+  it('tells the roofer about the lead — the dispatcher carries no alert of its own', async () => {
+    queueHappy(roofLead)
+    await POST(req(ROOF_BODY), ctx)
+    expect(h.notifyRoofingTradie).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'quote_sent',
+        customerPhone: '+61400000000',
+        address: ADDRESS.address,
+        quoteUrl: 'https://quotemax.com.au/q/roof/roof-1',
+      }),
+    )
+  })
+
+  it('never claims a delivery Twilio refused', async () => {
+    queueHappy(roofLead)
+    // The roofing link is only ever delivered by this SMS, so a hardcoded
+    // `texted: true` told the customer their quote was on its way when the
+    // carrier had just refused it and they were getting nothing.
+    h.sendSms.mockResolvedValue({ ok: false, code: '21614', reason: 'not a mobile' })
+    const res = await POST(req(ROOF_BODY), ctx)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, texted: false })
   })
 
   it('502s a failed measure and releases the link back to pending', async () => {

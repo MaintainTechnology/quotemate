@@ -40,6 +40,12 @@ const CALLERS = [
   'app/api/intake/structure/route.ts', // both a guarded route AND a caller of draft
   'app/api/t/[slug]/lead/route.ts',
   'app/api/tenant/job-quote/route.ts',
+  // The self-serve quote-request form behind /quote-request/<token> — it hands
+  // the submitted brief to /api/intake/structure. Registered here so the header
+  // assertions below hold it to the same contract as every other caller; it
+  // already sends `Bearer ${CRON_SECRET}` and this test is what keeps it that
+  // way. (Shipped in 6bc5527b; the glob check caught it unregistered.)
+  'app/api/quote-request/[token]/route.ts',
 ] as const
 
 describe('guarded internal routes', () => {

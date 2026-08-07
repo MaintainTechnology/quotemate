@@ -16,13 +16,20 @@
 //   4. write the submission onto the SMS thread (the electrical/plumbing
 //      hand-off structures the transcript, so an unwritten brief means a
 //      quote drafted off nothing)
-//   5. run that trade's estimate path — the SAME one the SMS gather uses
+//   5. run that trade's estimate path — the SAME one the SMS gather uses,
+//      by calling that trade's own dispatcher module rather than re-doing
+//      its steps here (see runHandoff)
 //   6. on any failure, RELEASE the claim (status back to pending) and
 //      return non-2xx. Never 200 on a failed write or hand-off.
 //
 // Differences from the painting reference are deliberate, not drift: it
 // returns 200 on a failed estimate, bare-awaits its mark-submitted write,
 // and reads a lead-lookup error as an invalid link. All three are fixed here.
+//
+// The response's `texted` is a delivery FACT (true / false / null-for-not-mine),
+// never a hopeful literal — the thank-you page branches on it, so claiming a
+// send Twilio refused puts "your quote is on its way" in front of a customer
+// who is getting nothing.
 
 import { createClient } from '@supabase/supabase-js'
 import { isQuoteRequestTrade, type QuoteRequestTrade } from '@/lib/quote-request/fields'
@@ -32,11 +39,14 @@ import {
   summariseSubmission,
   type QuoteRequestData,
 } from '@/lib/quote-request/schema'
-import { runAndSavePaintingQuote } from '@/lib/painting/quote-dispatch'
-import { revertPaintingRelease, sendPaintingQuoteToCustomer } from '@/lib/painting/release'
+import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
+import { estimateAndDispatchPainting } from '@/lib/sms/painting-estimate-dispatch'
+import { applySolarToTiers } from '@/lib/sms/roofing-compose'
 import { measureAndDispatchRoofing } from '@/lib/sms/roofing-measure-dispatch'
+import { notifyRoofingTradie } from '@/lib/sms/roofing-notify'
 import { sendSms } from '@/lib/sms/twilio'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { MultiRoofQuote } from '@/lib/roofing/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -52,8 +62,17 @@ const supabase = createClient(
 
 // APEX, never www: the www host 307-redirects cross-origin and strips
 // Authorization, which 401s the internal intake hand-off below.
+//
+// APP_URL FIRST, and that order is load-bearing — every other internal
+// self-caller reads APP_URL (app/api/q/choose/[token], app/api/sms/inbound,
+// app/api/vapi/webhook), while NEXT_PUBLIC_APP_URL is the repo's *www*
+// variable (lib/sms/roofing-measure-dispatch.ts defaults it to
+// https://www.quotemax.com.au). Preferring NEXT_PUBLIC_APP_URL here would
+// make this one route POST the hand-off to www, take the 307, lose the
+// Authorization header and 502 every electrical/plumbing submission while
+// its siblings kept working.
 const APP_BASE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'https://quotemax.com.au'
+  process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://quotemax.com.au'
 ).replace(/\/$/, '')
 
 type Lead = {
@@ -67,9 +86,18 @@ type Lead = {
 
 type Conversation = { to_number: string | null; conversation_state: Record<string, unknown> | null }
 
-/** What a trade's estimate path reports back. `ok:false` releases the claim. */
+/** What a trade's estimate path reports back. `ok:false` releases the claim.
+ *
+ *  `texted` is a THREE-state delivery fact, never a wish:
+ *    true  — a carrier accepted the customer's message on this request
+ *    false — a send was attempted and refused (or nothing could be sent);
+ *            the thank-you page must NOT say the quote is on its way
+ *    null  — nobody sent anything here: the async intake pipeline owns the
+ *            customer's SMS (electrical / plumbing), so this request cannot
+ *            report on it either way.
+ *  Hardcoding `true` is the silent-failure class this field exists to close. */
 type Handoff =
-  | { ok: true; quoteToken: string | null; inspection: boolean; texted?: boolean }
+  | { ok: true; quoteToken: string | null; inspection: boolean; texted?: boolean | null }
   | { ok: false; reason: string }
 
 const fail = (status: number, error: string, extra?: Record<string, unknown>) =>
@@ -188,7 +216,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       if (tokErr) console.error('[quote-request] quote_token not recorded', token, tokErr.message)
     }
 
-    return Response.json({ ok: true, inspection: handoff.inspection, texted: handoff.texted ?? false })
+    return Response.json({
+      ok: true,
+      inspection: handoff.inspection,
+      texted: handoff.texted ?? null,
+    })
   } catch (e) {
     console.error('[quote-request] unhandled failure', e)
     await release()
@@ -205,52 +237,126 @@ async function runHandoff(args: {
   const { lead, data, conv } = args
   const client = supabase as unknown as SupabaseClient
 
-  if (data.trade === 'painting') {
-    // Identical entry point to the painting SMS receptionist and the
-    // existing /paint-request form, so the three cannot drift.
-    const disp = await runAndSavePaintingQuote({
-      supabase: client,
-      tenantId: lead.tenant_id,
-      customerPhone: lead.customer_phone,
-      customerName: data.first_name ?? null,
-      request: { address: data.address, inputs: data.inputs },
-    })
-    if (!disp.ok) return { ok: false, reason: disp.reason }
-
-    const { sent } = await sendPaintingQuoteToCustomer(client, {
-      publicToken: disp.token,
-      appUrl: APP_BASE_URL,
-    })
-    // A priced row is released at save time. If nothing reached the
-    // customer, hold it again so /p can retry — never leave a row claiming
-    // a delivery that did not happen.
-    if (!sent && !disp.inspection) await revertPaintingRelease(client, disp.token)
-    return { ok: true, quoteToken: disp.token, inspection: disp.inspection, texted: sent }
-  }
-
-  if (data.trade === 'roofing') {
+  // ── Roofing and painting: hand the brief to that trade's SHARED SMS
+  //    dispatcher — the very module the receptionist's Q&A gather calls on
+  //    its last answer (lib/sms/roofing-measure-dispatch.ts,
+  //    lib/sms/painting-estimate-dispatch.ts). Spec §3: "the same estimate
+  //    path the SMS gather uses for that trade". Calling the halves by hand
+  //    is what dropped the tradie notification, the holding SMS and the
+  //    conversation state on this origin; there is only one path now, so
+  //    they cannot drift apart again.
+  //
+  //    Each dispatcher owns the customer message, the tradie notification
+  //    (painting: notifyPaintingTradie inside it; roofing: fired below,
+  //    because roofing's dispatcher has never carried one) and returns the
+  //    conversation state. This route owns the transport and persisting it.
+  if (data.trade === 'painting' || data.trade === 'roofing') {
+    // Both dispatchers text the customer from the tenant's number and record
+    // the turn on the thread, so both need the thread they were offered from.
     if (!lead.conversation_id || !lead.customer_phone) {
-      return { ok: false, reason: 'roofing needs the SMS thread it was offered from' }
-    }
-    let fromNumber = conv?.to_number ?? null
-    let tenantTrade: string | null = null
-    if (lead.tenant_id) {
-      const { data: t } = await supabase
-        .from('tenants')
-        .select('trade, twilio_sms_number')
-        .eq('id', lead.tenant_id)
-        .maybeSingle()
-      const tenant = (t as { trade?: string | null; twilio_sms_number?: string | null } | null) ?? null
-      tenantTrade = tenant?.trade ?? null
-      if (!fromNumber) fromNumber = tenant?.twilio_sms_number ?? null
+      return { ok: false, reason: `${data.trade} needs the SMS thread it was offered from` }
     }
     const conversationId = lead.conversation_id
     const customerPhone = lead.customer_phone
 
+    const { data: t } = lead.tenant_id
+      ? await supabase
+          .from('tenants')
+          .select('trade, twilio_sms_number, owner_mobile, owner_first_name')
+          .eq('id', lead.tenant_id)
+          .maybeSingle()
+      : { data: null }
+    const tenant =
+      (t as {
+        trade?: string | null
+        twilio_sms_number?: string | null
+        owner_mobile?: string | null
+        owner_first_name?: string | null
+      } | null) ?? null
+    const fromNumber = conv?.to_number ?? tenant?.twilio_sms_number ?? null
+
+    // The ONE delivery fact this request is allowed to report. Starts null
+    // (nothing attempted) and is AND-ed across turns, so a dispatch that
+    // sends twice — quote refused, then the holding message accepted —
+    // reports false rather than the last call's success.
+    let delivered: boolean | null = null
+    const sendReply = async (text: string, mediaUrl?: string): Promise<{ ok: boolean }> => {
+      const res = await sendSms({ to: customerPhone, from: fromNumber ?? undefined, text, mediaUrl })
+      if (!res.ok) {
+        console.error('[quote-request] Twilio rejected the customer reply', data.trade, res.code, res.reason)
+        delivered = false
+        return { ok: false }
+      }
+      const { error } = await supabase
+        .from('sms_messages')
+        .insert({ conversation_id: conversationId, direction: 'outbound', body: text })
+      // Carrier acceptance IS the delivery fact, and a failed thread write
+      // must not be folded into it: this boolean is also what
+      // autoSendPaintingQuote reverts the release on, so treating a
+      // bookkeeping error as "not sent" would withhold a quote the customer
+      // is already holding in their hand. Loud, ops-visible, not a verdict.
+      if (error) console.error('[quote-request] outbound reply not persisted', error.message)
+      delivered = delivered !== false
+      return { ok: true }
+    }
+
+    /** Persist the state the dispatcher handed back. Not fatal — the quote
+     *  exists and the customer has it — but a thread that forgot it re-asks
+     *  a job it already quoted (painting sat pinned at 'offer_form' and
+     *  restarted the whole Q&A on the customer's next message). */
+    const persistThreadState = async (
+      column: 'painting_state' | 'roofing_state',
+      state: unknown,
+    ) => {
+      const { error } = await supabase
+        .from('sms_conversations')
+        .update({ [column]: state, updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+      if (error) console.error(`[quote-request] ${column} not persisted`, error.message)
+    }
+
+    if (data.trade === 'painting') {
+      const i = data.inputs
+      // estimateAndDispatchPainting owns: estimate + save + auto-send (or
+      // the inspection message), the holding SMS when the send is refused,
+      // the release revert, and notifyPaintingTradie with customerTexted.
+      const dispatched = await estimateAndDispatchPainting({
+        supabase: client,
+        tenantId: lead.tenant_id,
+        customerPhone,
+        firstName: data.first_name ?? null,
+        baseUrl: APP_BASE_URL,
+        slots: {
+          address: data.address.address,
+          postcode: data.address.postcode,
+          state: data.address.state,
+          // Typed and confirmed on the form; there is no read-back turn.
+          address_confirmed: true,
+          addr_verified: data.address.address,
+          scopes: i.scopes,
+          coats: i.coats,
+          condition: i.condition,
+          ceiling_height: i.ceiling_height,
+          storeys: i.storeys ?? 1,
+          colour_change: i.colour_change,
+          manual_floor_area_m2: i.manual_floor_area_m2 ?? null,
+        },
+        sendReply,
+      })
+      if (!dispatched.ok) return { ok: false, reason: dispatched.reason }
+      await persistThreadState('painting_state', dispatched.state)
+      return {
+        ok: true,
+        quoteToken: dispatched.token,
+        inspection: dispatched.inspection,
+        texted: delivered,
+      }
+    }
+
     const dispatched = await measureAndDispatchRoofing({
       supabase: client,
       tenantId: lead.tenant_id,
-      tenantTrade,
+      tenantTrade: tenant?.trade ?? null,
       conversationId,
       customerPhone,
       replyFrom: fromNumber ?? undefined,
@@ -274,37 +380,49 @@ async function runHandoff(args: {
       // not pre-empt it — that would be a second, drifting copy of the
       // routing rules.
       isInspection: false,
-      sendReply: async (text: string) => {
-        const res = await sendSms({ to: customerPhone, from: fromNumber ?? undefined, text })
-        if (!res.ok) {
-          console.error('[quote-request] Twilio rejected the roofing reply', res.code, res.reason)
-          return
-        }
-        const { error } = await supabase
-          .from('sms_messages')
-          .insert({ conversation_id: conversationId, direction: 'outbound', body: text })
-        if (error) console.error('[quote-request] roofing reply not persisted', error.message)
-      },
+      sendReply,
     })
     if (!dispatched.ok) return { ok: false, reason: dispatched.reason }
+    await persistThreadState('roofing_state', dispatched.state)
 
-    const { error: stateErr } = await supabase
-      .from('sms_conversations')
-      .update({ roofing_state: dispatched.state, updated_at: new Date().toISOString() })
-      .eq('id', conversationId)
-    if (stateErr) {
-      // Not fatal: the quote exists and the customer has it. But the thread
-      // has forgotten it, so the next reply restarts — worth an alert.
-      console.error('[quote-request] roofing_state not persisted', stateErr.message)
+    const quote = dispatched.quote as MultiRoofQuote | null
+    const inspection = quote?.routing?.decision === 'inspection_required'
+
+    // Roofing's dispatcher carries no tradie alert — the SMS route fires
+    // notifyRoofingTradie itself. Without this call a form-submitted roofing
+    // lead was measured, priced and texted, and reached no tradie at all.
+    // Best-effort: a failed alert must never cost the customer their quote.
+    try {
+      await notifyRoofingTradie({
+        kind: 'quote_sent',
+        tenant: {
+          owner_mobile: tenant?.owner_mobile ?? null,
+          owner_first_name: tenant?.owner_first_name ?? null,
+          twilio_sms_number: tenant?.twilio_sms_number ?? null,
+        },
+        customerName: data.first_name ?? null,
+        customerPhone,
+        address: data.address.address,
+        // An inspection-routed measure has no committed price, so the alert
+        // carries none (the same rule the SMS path follows).
+        betterIncGst: inspection
+          ? null
+          : (applySolarToTiers(quote?.combined?.tiers ?? [], quote?.solar ?? null)[1]?.inc_gst ?? null),
+        quoteUrl: `${APP_BASE_URL}/q/roof/${dispatched.token}`,
+        dispatch: (o) =>
+          dispatchQuoteMessage({
+            to: o.to,
+            text: o.text,
+            from: o.from,
+            audience: 'tradie',
+            tenantId: lead.tenant_id,
+          }),
+      })
+    } catch (e) {
+      console.warn('[quote-request] roofing tradie notify failed (non-fatal)', e)
     }
 
-    const routing = (dispatched.quote as { routing?: { decision?: string } } | null)?.routing?.decision
-    return {
-      ok: true,
-      quoteToken: dispatched.token,
-      inspection: routing === 'inspection_required',
-      texted: true,
-    }
+    return { ok: true, quoteToken: dispatched.token, inspection, texted: delivered }
   }
 
   // electrical / plumbing — the transcript-driven pipeline. The form answers
@@ -342,6 +460,8 @@ async function runHandoff(args: {
   if (!res.ok) {
     return { ok: false, reason: `intake/structure HTTP ${res.status}: ${(await res.text()).slice(0, 200)}` }
   }
-  // The pipeline owns the customer's quote SMS from here.
-  return { ok: true, quoteToken: null, inspection: false }
+  // The pipeline owns the customer's quote SMS from here, so this request
+  // sent nothing and must not claim it did either way — `texted: null`, not
+  // false (which the thank-you page reads as a refused send).
+  return { ok: true, quoteToken: null, inspection: false, texted: null }
 }
