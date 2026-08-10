@@ -35,8 +35,11 @@ import { SMS_RECEPTIONIST_MODEL } from './model'
 import { ROOF_MATERIALS } from '@/lib/roofing/types'
 import {
   confirmAddressQuestion,
+  consumeAddressMiss,
   consumeAddressRejection,
+  isAddressReadBack,
   lastOutboundAskedAddress,
+  type AddressSlotsLike,
 } from './verify-address'
 import {
   advanceRoofing,
@@ -1017,9 +1020,9 @@ export async function roofingTurnViaLlm(args: {
           enforceRoofingReadiness(
             mapRoofingTool(d, slots, prevStep, args.prev, reasked, args.facts, args.inbound),
           ),
-          prevStep,
           args.inbound,
           prevStep === 'confirm_address' || lastOutboundAskedAddress(args.history),
+          settleRoofing(d.reply_to_send),
         ),
         d.tool,
         prevStep,
@@ -1054,6 +1057,31 @@ export async function roofingTurnViaLlm(args: {
 const READINESS_EXEMPT: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
   'confirm_address', 'confirm_roof', 'await_booking', 'quoted', 'closed',
 ])
+
+/** The trade half of breakConfirmLoop: gathered slots → this turn's decision,
+ *  wording from the deterministic step (the model's own text is only the
+ *  fallback). One per trade; everything else about the handshake is shared. */
+const settleRoofing =
+  (fallbackReply: string) =>
+  (slots: RoofingSlots): RoofingTurnDecision => {
+    const q = nextRoofingStep(slots)
+    if (q.step === 'ready') return { action: 'measure', slots }
+    if (q.step === 'inspection') {
+      return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
+    }
+    return { action: 'ask', slots, step: q.step, reply: q.question ?? fallbackReply }
+  }
+
+const settlePainting =
+  (fallbackReply: string) =>
+  (slots: PaintingSlots): PaintingTurnDecision => {
+    const q = nextPaintingStep(slots)
+    if (q.step === 'ready') return { action: 'estimate', slots }
+    if (q.step === 'inspection') {
+      return { action: 'inspection', slots, reason: q.reason ?? 'an on-site inspection is needed' }
+    }
+    return { action: 'ask', slots, step: q.step, reply: q.question ?? fallbackReply }
+  }
 
 function enforceRoofingReadiness(d: RoofingTurnDecision | null): RoofingTurnDecision | null {
   if (!d || d.action !== 'ask' || READINESS_EXEMPT.has(d.step)) return d
@@ -1196,42 +1224,83 @@ function resolveGatherStep(
  * keyed on the step was dead code. "Did our last outbound ask the customer to
  * confirm an address?" is answerable from the transcript and cannot be wrong.
  */
-function breakConfirmLoop(
-  d: RoofingTurnDecision | null,
-  prevStep: RoofingStep | null,
+function breakConfirmLoop<
+  S extends AddressSlotsLike,
+  D extends { action: string; slots: S },
+>(
+  d: D | null,
   inbound: string,
   askedAddress: boolean,
-): RoofingTurnDecision | null {
+  /** The trade's own readiness map — confirmed slots in, next decision out.
+   *  This is the ONLY per-trade part, which is why one function now serves
+   *  both receptionists instead of roofing having a fix and painting not. */
+  settle: (slots: S) => D,
+): D | null {
   if (!d || !askedAddress) return d
-  // ── A "no" is the loop's only exit, so it is not the model's to discard ──
+  // A passthrough / cancel is the customer LEAVING the handshake, not looping
+  // inside it.
+  if (d.action === 'passthrough' || d.action === 'cancel') return d
+
+  const ask = (r: { slots: S; step: string; reply: string; handoff?: true }): D =>
+    ({
+      action: 'ask',
+      slots: r.slots,
+      step: r.step,
+      reply: r.reply,
+      ...(r.handoff ? { handoff: true } : {}),
+    }) as unknown as D
+
+  // ── (1) YES, checked FIRST ────────────────────────────────────────────
+  //
+  // Order is load-bearing. `rejectsReadBack` ORs in a bare NEGATION_CUE, so
+  // "Yes correct, don't worry about the gutters" and "Yeah that's the one, the
+  // neighbour isn't involved" both contain a negation and read as rejections
+  // if the affirmative is not consulted first — wiping an address the customer
+  // just CONFIRMED and burning the handoff budget on them. That is worse than
+  // the loop this function exists to break, so yes wins.
+  //
+  // ⚠ Keyed on `askedAddress`, NOT on prevStep. Live 2026-08-07 the read-back
+  // was on the wire with last_step at 'closed' (roofing) / 'coats' (painting),
+  // so a step-keyed affirm arm left the customer who said YES stuck in exactly
+  // the loop the customer who said NO escaped (req 3).
+  if (isAffirmative(inbound) && !isNegative(inbound)) {
+    // A turn that already moved PAST verification (measure / estimate /
+    // inspection) is not re-decided here — non-goal: "changing what a
+    // successful verification does".
+    if (d.action !== 'ask') return d
+    const slots = { ...d.slots, address_confirmed: true } as S
+    delete slots.addr_confirm_misses
+    return settle(slots)
+  }
+
+  // A reply CARRYING a replacement address is a correction, not a refusal and
+  // not a miss: the model's patch already holds it and reading THAT back is
+  // progress.
+  if (extractStreetAddress(inbound)) return d
+
+  // ── (2) NO — the loop's only exit, so not the model's to discard ───────
   //
   // This used to `return d` unchanged on a negative, on the reasoning that a
   // rejection is a real conversational turn. Live 2026-08-07 that turn was
   // "keep saying the same sentence": four rejections, four byte-identical
   // read-backs, no counter moved (specs/address-confirm-loop.md).
   //
-  // A rejection that CARRIES a replacement address is a correction, not a
-  // refusal, and the model's patch already holds it — leave that alone. A
-  // passthrough / cancel is an exit, not a loop.
-  if (
-    rejectsReadBack(inbound) &&
-    !extractStreetAddress(inbound) &&
-    d.action !== 'passthrough' &&
-    d.action !== 'cancel'
-  ) {
-    const r = consumeAddressRejection(d.slots)
-    return { action: 'ask', slots: r.slots, step: r.step, reply: r.reply }
-  }
-  if (d.action !== 'ask' || d.step !== 'confirm_address') return d
-  if (prevStep !== 'confirm_address') return d
-  if (!isAffirmative(inbound) || isNegative(inbound)) return d
-  const slots: RoofingSlots = { ...d.slots, address_confirmed: true }
-  const q = nextRoofingStep(slots)
-  if (q.step === 'ready') return { action: 'measure', slots }
-  if (q.step === 'inspection') {
-    return { action: 'inspection', slots, reason: q.reason ?? 'on-site inspection required' }
-  }
-  return { action: 'ask', slots, step: q.step, reply: q.question ?? d.reply }
+  // Deliberately NOT restricted to `action === 'ask'`. A model that answers a
+  // rejection with `measure` is the money-path version of the same bug — live
+  // that day address_confirmed was already true, so readiness went straight to
+  // 'ready' and the roof the customer had just refused three times was
+  // measured (see deEmphasise in roofing-intake.ts).
+  if (rejectsReadBack(inbound)) return ask(consumeAddressRejection(d.slots))
+
+  // ── (3) Neither yes nor no ("Hi Mate") — req 4 ────────────────────────
+  //
+  // Only a REPEAT OF THE READ-BACK is the loop. A genuine answer to a question
+  // the customer asked mid-handshake is a real turn and is left alone; the
+  // model copying our own read-back back out of the history is not, and it
+  // spends the miss budget instead of going out verbatim.
+  const reply = (d as unknown as { reply?: unknown }).reply
+  if (d.action !== 'ask' || typeof reply !== 'string' || !isAddressReadBack(reply)) return d
+  return ask(consumeAddressMiss(d.slots))
 }
 
 function mapRoofingTool(
@@ -1428,7 +1497,17 @@ export async function paintingTurnViaLlm(args: {
     cancel: () => ({ action: 'cancel', slots: prevSlots }),
     fallback: () => advancePainting(args.prev, args.inbound),
     reask: () => ({ action: 'ask', slots: prevSlots, step: 'await_booking', reply: BOOKING_REASK }),
-    map: (d, slots) => mapPaintingTool(d, slots, prevStep, reasked, args.facts, args.inbound),
+    // The SAME address-handshake guard roofing has. It was roofing-only, and
+    // the incident state was painting_state.last_step = 'coats' — so the trade
+    // that actually looped was the one with no guard at all
+    // (specs/address-confirm-loop.md).
+    map: (d, slots) =>
+      breakConfirmLoop(
+        mapPaintingTool(d, slots, prevStep, reasked, args.facts, args.inbound),
+        args.inbound,
+        prevStep === 'confirm_address' || lastOutboundAskedAddress(args.history),
+        settlePainting(d.reply_to_send),
+      ),
   })
 
   // ONLY a booking answer spends the budget. holdStep keeps a question at

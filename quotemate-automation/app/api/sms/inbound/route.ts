@@ -18,8 +18,8 @@ import {
 } from '@/lib/sms/twilio-validator'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
-import { toRoofingRequest, seedRoofingSlots, isStopRequest, isNegative } from '@/lib/sms/roofing-intake'
-import { screenConfirmAddress, verifyAuAddress, gateUnverifiedProfileAddress } from '@/lib/sms/verify-address'
+import { toRoofingRequest, seedRoofingSlots, isStopRequest, isNegative, isAffirmative, rejectsReadBack, extractStreetAddress } from '@/lib/sms/roofing-intake'
+import { screenConfirmAddress, verifyAuAddress, gateUnverifiedProfileAddress, lastOutboundAskedAddress, consumeAddressRejection } from '@/lib/sms/verify-address'
 import {
   advanceRoofing,
   confirmedIncludedIndices,
@@ -152,6 +152,7 @@ import {
   retryWithBackoff,
   logSendOutcome,
   adaptiveDebounceMs,
+  dedupeConsecutiveReply,
   type PipelineLoggerLike,
 } from '@/lib/sms/send-reliability'
 import {
@@ -601,18 +602,46 @@ async function handleRoofingTurn(args: {
   //
   // Whether a rejection clears the rejected value is not a conversational
   // judgement; it is the loop's only exit. The model keeps every other turn.
-  if (turn && prevState?.last_step === 'confirm_address' && isNegative(decisionInput)) {
-    const deterministic = advanceRoofing(prevState, decisionInput)
-    const clearsAddress =
-      deterministic.action === 'ask' && deterministic.step === 'address' && !deterministic.slots.address
-    if (clearsAddress && !(decision.action === 'ask' && decision.step === 'address')) {
-      console.warn('[sms/inbound:roofing] LLM re-asked confirm_address after a rejection — deterministic address reset wins', {
-        conversationId,
-        llmAction: decision.action,
-        llmStep: 'step' in decision ? decision.step : null,
-        inbound: decisionInput.slice(0, 80),
-      })
-      decision = deterministic
+  //
+  // ⚠ Keyed on the TRANSCRIPT, not on last_step. The second incident that day
+  // had the read-back going out with last_step at 'closed', so this guard —
+  // and every other consumer of a rejection — was dead code
+  // (specs/address-confirm-loop.md). lastOutboundAskedAddress cannot be stale:
+  // it reads what we actually sent.
+  //
+  // ⚠ And it does NOT delegate the decision back to advanceRoofing. That is
+  // step-keyed too: on the incident state it "agreed" only because last_step
+  // 'closed' makes it reset the whole gather, and on a stale mid-gather step
+  // it would not agree at all. consumeAddressRejection IS the shared budget —
+  // call it directly, and skip only when this turn already spent it (the
+  // counter is the evidence; nothing else moves it).
+  const askedAddressLastTurn =
+    prevState?.last_step === 'confirm_address' || lastOutboundAskedAddress(turns)
+  const rejectionConsumed =
+    (decision.slots.addr_confirm_rejects ?? 0) > (prevState?.slots?.addr_confirm_rejects ?? 0)
+  if (
+    askedAddressLastTurn &&
+    !rejectionConsumed &&
+    !isAffirmative(decisionInput) &&
+    rejectsReadBack(decisionInput) &&
+    !extractStreetAddress(decisionInput) &&
+    decision.action !== 'passthrough' &&
+    decision.action !== 'cancel'
+  ) {
+    console.warn('[sms/inbound:roofing] a rejection of the address read-back was not consumed — forcing the shared budget', {
+      conversationId,
+      llmAction: decision.action,
+      llmStep: 'step' in decision ? decision.step : null,
+      lastStep: prevState?.last_step ?? null,
+      inbound: decisionInput.slice(0, 80),
+    })
+    const r = consumeAddressRejection(decision.slots)
+    decision = {
+      action: 'ask',
+      slots: r.slots,
+      step: r.step,
+      reply: r.reply,
+      ...(r.handoff ? { handoff: true as const } : {}),
     }
   }
 
@@ -620,13 +649,35 @@ async function handleRoofingTurn(args: {
   // provisioned number) — same as every other reply in this route. Never
   // the shared/office number, or the customer sees a stranger's number.
   const replyFrom = toNumber
+  // The newest thing we already said. Updated as we send, because one turn can
+  // send more than once (quote + follow-up).
+  let lastSent = turns.filter((t) => t.direction === 'outbound').at(-1)?.body ?? null
   const sendReply = async (text: string, mediaUrl?: string) => {
-    const res = await dispatchQuoteMessage({ to: fromNumber, text, from: replyFrom, mediaUrl })
-    await supabase.from('sms_messages').insert({
+    // ── Never the same message twice in a row (spec req 5) ──────────────
+    // The backstop, not the fix: every known cause is closed upstream, and
+    // this is what makes the NEXT variant of the bug visible instead of
+    // silent. Prefixed rather than dropped — a customer who gets nothing is
+    // worse off than one who gets an apology with the question.
+    const { body, repeated } = dedupeConsecutiveReply(text, lastSent)
+    if (repeated) {
+      console.error('[sms/inbound:roofing] composed a byte-identical repeat reply - see specs/address-confirm-loop.md', {
+        conversationId,
+        body: text.slice(0, 120),
+      })
+    }
+    lastSent = body
+    const res = await dispatchQuoteMessage({ to: fromNumber, text: body, from: replyFrom, mediaUrl })
+    // supabase-js RESOLVES {data, error} on failure — a bare await here made
+    // a failed insert invisible, and the repeat backstop above reads this
+    // history on the next turn.
+    const { error: logError } = await supabase.from('sms_messages').insert({
       conversation_id: conversationId,
       direction: 'outbound',
-      body: text,
+      body,
     })
+    if (logError) {
+      console.error('[sms/inbound:roofing] outbound sms_messages insert failed', logError)
+    }
     return res
   }
   const persist = async (state: RoofingConversationState, status: 'open' | 'done') => {
@@ -655,10 +706,23 @@ async function handleRoofingTurn(args: {
       // is about. A re-ask must keep it (the tradie notify fires on the turn
       // after), anything past await_booking must not.
       if (merged.last_step !== 'await_booking') delete merged.pending_lead_measure_token
-      await supabase
+      // supabase-js RESOLVES {data, error} on failure — it does not throw, so
+      // the try/catch below never saw a rejected write. Every bound this flow
+      // owns (addr_confirm_rejects, misses, booking_reask) rides in this jsonb:
+      // a silently-dropped update restarts every counter at zero next turn,
+      // which is precisely how a bounded loop keeps not ending
+      // (specs/address-confirm-loop.md).
+      const { error: persistError } = await supabase
         .from('sms_conversations')
         .update({ roofing_state: merged, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', conversationId)
+      if (persistError) {
+        console.error('[sms/inbound:roofing] roofing_state persist FAILED - counters will restart next turn', {
+          conversationId,
+          lastStep: merged.last_step ?? null,
+          error: persistError,
+        })
+      }
     } catch (e) {
       console.warn('[sms/inbound:roofing] roofing_state persist failed (migration 085?)', e)
     }
@@ -830,7 +894,15 @@ async function handleRoofingTurn(args: {
     // The LLM receptionist just told the customer we'd check something and
     // come back to them. That promise is only honest if a human hears about
     // it, so the deflect and this alert ship as a pair.
-    if (turn?.notify === 'question_asked') {
+    //
+    // `decision.handoff` is the same promise from the other direction: the
+    // address rejection budget is spent and addressHandoffReply() has just
+    // told the customer one of the team will confirm the property. Until now
+    // that flag was dropped by every consumer and NOBODY was told
+    // (specs/address-confirm-loop.md req 2). The screen's own handoff notifies
+    // above; this is the customer-rejection twin, which never reaches it
+    // because its step is 'await_booking', not 'confirm_address'.
+    if (turn?.notify === 'question_asked' || decision.handoff) {
       await notifyTradie(
         'question_asked',
         decision.slots.address ?? 'address not captured',
@@ -1226,14 +1298,77 @@ async function handlePaintingTurn(args: {
   }
   const carry: TurnCarry = turn?.carry ?? {}
 
+  // ── An answer to the address read-back is never discarded ─────────────
+  //
+  // The roofing handler's twin guard (see it for the full reasoning). Ported
+  // because the incident state was painting_state.last_step = 'coats': the
+  // trade that actually looped is this one, and it had no guard at all.
+  //
+  // ⚠ Keyed on the TRANSCRIPT, not on last_step, and it consumes the rejection
+  // ITSELF rather than asking advancePainting to agree — advancePainting is
+  // step-keyed, and on 'coats' it answers `ask/scopes` with the address still
+  // set, so a guard that waited for its agreement was dead code on the exact
+  // state the spec documents.
+  const askedAddressLastTurn =
+    prevState?.last_step === 'confirm_address' || lastOutboundAskedAddress(turns)
+  const rejectionConsumed =
+    (decision.slots.addr_confirm_rejects ?? 0) > (prevState?.slots?.addr_confirm_rejects ?? 0)
+  if (
+    askedAddressLastTurn &&
+    !rejectionConsumed &&
+    !isAffirmative(latestInbound) &&
+    rejectsReadBack(latestInbound) &&
+    !extractStreetAddress(latestInbound) &&
+    decision.action !== 'passthrough' &&
+    decision.action !== 'cancel'
+  ) {
+    console.warn('[sms/inbound:painting] a rejection of the address read-back was not consumed — forcing the shared budget', {
+      conversationId,
+      llmAction: decision.action,
+      llmStep: 'step' in decision ? decision.step : null,
+      lastStep: prevState?.last_step ?? null,
+      inbound: latestInbound.slice(0, 80),
+    })
+    const r = consumeAddressRejection(decision.slots)
+    decision = {
+      action: 'ask',
+      slots: r.slots,
+      step: r.step,
+      reply: r.reply,
+      ...(r.handoff ? { handoff: true as const } : {}),
+    }
+  }
+
   const replyFrom = toNumber
+  // The newest thing we already said. Updated as we send, because one turn can
+  // send more than once (quote + follow-up).
+  let lastSent = turns.filter((t) => t.direction === 'outbound').at(-1)?.body ?? null
   const sendReply = async (text: string, mediaUrl?: string) => {
-    const res = await dispatchQuoteMessage({ to: fromNumber, text, from: replyFrom, mediaUrl })
-    await supabase.from('sms_messages').insert({
+    // ── Never the same message twice in a row (spec req 5) ──────────────
+    // The backstop, not the fix: every known cause is closed upstream, and
+    // this is what makes the NEXT variant of the bug visible instead of
+    // silent. Prefixed rather than dropped — a customer who gets nothing is
+    // worse off than one who gets an apology with the question.
+    const { body, repeated } = dedupeConsecutiveReply(text, lastSent)
+    if (repeated) {
+      console.error('[sms/inbound:painting] composed a byte-identical repeat reply - see specs/address-confirm-loop.md', {
+        conversationId,
+        body: text.slice(0, 120),
+      })
+    }
+    lastSent = body
+    const res = await dispatchQuoteMessage({ to: fromNumber, text: body, from: replyFrom, mediaUrl })
+    // supabase-js RESOLVES {data, error} on failure — a bare await here made
+    // a failed insert invisible, and the repeat backstop above reads this
+    // history on the next turn.
+    const { error: logError } = await supabase.from('sms_messages').insert({
       conversation_id: conversationId,
       direction: 'outbound',
-      body: text,
+      body,
     })
+    if (logError) {
+      console.error('[sms/inbound:painting] outbound sms_messages insert failed', logError)
+    }
     return res
   }
   const persist = async (state: PaintingConversationState, status: 'open' | 'done') => {
@@ -1251,10 +1386,23 @@ async function handlePaintingTurn(args: {
       // past that question would let a later enquiry in the same thread
       // auto-confirm on its FIRST unclear reply.
       if (merged.last_step !== 'await_booking') delete merged.booking_reask
-      await supabase
+      // supabase-js RESOLVES {data, error} on failure — it does not throw, so
+      // the try/catch below never saw a rejected write. Every bound this flow
+      // owns (addr_confirm_rejects, addr_confirm_misses, addr_verify_misses,
+      // booking_reask) rides in this jsonb: a silently-dropped update restarts
+      // every counter at zero next turn, which is precisely how a bounded loop
+      // keeps not ending (specs/address-confirm-loop.md).
+      const { error: persistError } = await supabase
         .from('sms_conversations')
         .update({ painting_state: merged, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', conversationId)
+      if (persistError) {
+        console.error('[sms/inbound:painting] painting_state persist FAILED - counters will restart next turn', {
+          conversationId,
+          lastStep: merged.last_step ?? null,
+          error: persistError,
+        })
+      }
     } catch (e) {
       console.warn('[sms/inbound:painting] painting_state persist failed (migration 154?)', e)
     }
@@ -1438,7 +1586,15 @@ async function handlePaintingTurn(args: {
       'open',
     )
     await sendReply(askReply)
-    if (turn?.notify === 'question_asked') await notifyUnansweredQuestion(latestInbound)
+    // See the roofing twin: `decision.handoff` means addressHandoffReply() has
+    // just promised the customer a human, and until now nobody was told.
+    if (turn?.notify === 'question_asked' || decision.handoff) {
+      await notifyUnansweredQuestion(
+        decision.handoff
+          ? `Could not confirm the property address with this customer: "${latestInbound.slice(0, 120)}"`
+          : latestInbound,
+      )
+    }
     return true
   }
 
@@ -2303,11 +2459,23 @@ export async function POST(req: Request) {
       //    we just persisted AND any rapid-fire messages that landed during
       //    the debounce window. This read happens AFTER the adaptive wait so
       //    every queued inbound is included (R44: no message dropped).
-      const { data: historyRows } = await supabase
+      //    supabase-js RESOLVES {data, error} on failure. An unchecked read
+      //    here is not merely a missing log: `turns` becomes [], so
+      //    lastOutboundAskedAddress() reads "we never asked for an address"
+      //    and dedupeConsecutiveReply() has no previous outbound to compare —
+      //    both new backstops switch themselves off, silently, on every turn
+      //    (specs/address-confirm-loop.md).
+      const { data: historyRows, error: historyError } = await supabase
         .from('sms_messages')
         .select('direction, body, created_at')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
+      if (historyError) {
+        console.error('[sms/inbound:after] sms_messages history read FAILED - transcript-keyed guards are blind this turn', {
+          conversationId,
+          error: historyError,
+        })
+      }
 
       historyReadAt = new Date().toISOString()
       const turns: ConversationTurn[] = (historyRows ?? []).map(m => ({

@@ -37,8 +37,10 @@ import {
   type PaintingSlots,
   type PaintingStep,
 } from './painting-intake'
-// Generic AU-address detector — pure, no roofing coupling (shared helper).
-import { extractStreetAddress } from './roofing-intake'
+// Generic AU-address detectors + the ONE shared yes/no vocabulary for the
+// address handshake — pure, no roofing coupling (shared helpers).
+import { extractStreetAddress, isAffirmative, rejectsReadBack } from './roofing-intake'
+import { consumeAddressMiss, consumeAddressRejection } from './verify-address'
 
 /** Persisted on sms_conversations.painting_state (jsonb), decoupled from
  *  the electrical/plumbing conversation_state.slots and the roofing_state. */
@@ -78,7 +80,11 @@ export type PaintingTurnDecision =
   | { action: 'offer_form'; slots: PaintingSlots }
   // Customer opted for the form — acknowledge and wait for the submission.
   | { action: 'await_form'; slots: PaintingSlots; reply: string }
-  | { action: 'ask'; slots: PaintingSlots; step: PaintingStep; reply: string }
+  // `handoff` — this ask is the END of the address handshake: the budget is
+  // spent and the reply PROMISES the customer a human. The route must notify
+  // the tradie on it, or we make a promise nobody hears
+  // (specs/address-confirm-loop.md req 2).
+  | { action: 'ask'; slots: PaintingSlots; step: PaintingStep; reply: string; handoff?: true }
   | { action: 'estimate'; slots: PaintingSlots }
   | { action: 'inspection'; slots: PaintingSlots; reason: string }
   | { action: 'cancel'; slots: PaintingSlots }
@@ -90,8 +96,8 @@ export type PaintingTurnDecision =
 
 const AWAIT_FORM_ACK =
   "Great — fill that in whenever you're ready and I'll text your quote straight over. Or just reply here anytime and I'll ask a few quick questions instead."
-const ADDRESS_RETRY =
-  "Sorry, I didn't catch a property address there. What's the address? Please include the street number, suburb and postcode."
+// ponytail: the address re-ask wording moved to verify-address.ts
+// (ADDRESS_REASK_REPLY) so the string and its budget live together.
 
 // The customer is replying to the form offer. We only treat it as "use the
 // form" on an EXPLICIT form cue; a decline, or anything ambiguous, starts
@@ -259,6 +265,24 @@ export function advancePainting(
       return fromNextStep(s)
     }
 
+    // 1b. The customer REJECTED the read-back and gave no replacement (a
+    //     correction carries a street address and was folded above). Consume
+    //     it through the SHARED budget, exactly as roofing-receptionist.ts
+    //     does. Painting had no customer-rejection budget at all, so the bound
+    //     could never fire on the trade the incident actually happened on —
+    //     each rejection cleared the address, we re-asked, forever, and nobody
+    //     was ever handed the lead (specs/address-confirm-loop.md req 1 + 2).
+    if (lastStep === 'confirm_address' && !isAffirmative(inbound) && rejectsReadBack(inbound)) {
+      const r = consumeAddressRejection(before)
+      return {
+        action: 'ask',
+        slots: r.slots,
+        step: r.step,
+        reply: r.reply,
+        ...(r.handoff ? { handoff: true as const } : {}),
+      }
+    }
+
     // 2. Bail to the general LLM dialog BEFORE the parse for:
     //    - a question (a mappable keyword would otherwise be committed);
     //    - a topic switch / interrupt on any NON-enumerable step. The
@@ -279,9 +303,35 @@ export function advancePainting(
 
     // 3. Parse the current step.
     slots = applyPaintingAnswer(slots, lastStep, inbound)
-    // An address answer that didn't parse → clarify, don't store junk.
+    // An address answer that didn't parse → clarify, don't store junk. Routed
+    // through the SHARED budget: this single string had no bound and no second
+    // wording, so two unparseable answers in a row got byte-identical replies
+    // forever (specs/address-confirm-loop.md req 4 + req 5).
     if (lastStep === 'address' && !slots.address) {
-      return { action: 'ask', slots, step: 'address', reply: ADDRESS_RETRY }
+      const m = consumeAddressMiss(slots)
+      return {
+        action: 'ask',
+        slots: m.slots,
+        step: m.step,
+        reply: m.reply,
+        ...(m.handoff ? { handoff: true as const } : {}),
+      }
+    }
+
+    // The read-back was answered with NEITHER a yes nor a no ("Hi Mate").
+    // Falling through here lets nextPaintingStep recompose the identical
+    // read-back off `!address_confirmed` alone, with no budget spent — which
+    // is message #3 of the incident transcript. Re-ask in DIFFERENT words and
+    // bound it (specs/address-confirm-loop.md req 4).
+    if (lastStep === 'confirm_address' && slots.address && !slots.address_confirmed) {
+      const m = consumeAddressMiss(slots)
+      return {
+        action: 'ask',
+        slots: m.slots,
+        step: m.step,
+        reply: m.reply,
+        ...(m.handoff ? { handoff: true as const } : {}),
+      }
     }
 
     // 4. scopes only: a topic switch / interrupt that did NOT land as a scope

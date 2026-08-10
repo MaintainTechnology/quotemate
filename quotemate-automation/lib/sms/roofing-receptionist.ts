@@ -100,7 +100,11 @@ const ANSWERABLE_STEPS: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
 ])
 
 export type RoofingTurnDecision =
-  | { action: 'ask'; slots: RoofingSlots; step: RoofingStep; reply: string }
+  // `handoff` — this ask is the END of the address handshake: the budget is
+  // spent and the reply PROMISES the customer a human. The route must notify
+  // the tradie on it, or we make a promise nobody hears
+  // (specs/address-confirm-loop.md req 2).
+  | { action: 'ask'; slots: RoofingSlots; step: RoofingStep; reply: string; handoff?: true }
   | { action: 'measure'; slots: RoofingSlots }
   | { action: 'inspection'; slots: RoofingSlots; reason: string }
   // Serve the SAVED measurement for these 1-based structures (null = all).
@@ -546,7 +550,7 @@ function recoverDroppedAddress(
     if (t.direction !== 'inbound' || !extractStreetAddress(t.body)) continue
     const readBack = turns
       .slice(i + 1)
-      .some((o) => o.direction === 'outbound' && ADDRESS_READ_BACK.test(o.body))
+      .some((o) => o.direction === 'outbound' && isAddressReadBack(o.body))
     if (!readBack) return t.body
   }
   return null
@@ -740,6 +744,22 @@ export function advanceRoofing(
     const addrFold = tryAddressFold(inbound, slots)
     if (addrFold) {
       nextSlots = addrFold
+    } else if (lastStep === 'confirm_address' && rejectsReadBack(inbound)) {
+      // The customer rejected the read-back and gave us no replacement (a
+      // correction carries a street address and was folded above). Consume it
+      // through the SHARED budget so the handshake cannot run forever: live
+      // 2026-08-07 four rejections in one thread changed nothing at all
+      // (specs/address-confirm-loop.md).
+      const r = consumeAddressRejection(slots)
+      // `handoff` must survive: its reply tells the customer a human will
+      // confirm the property, and the route fires the tradie notify on it.
+      return {
+        action: 'ask',
+        slots: r.slots,
+        step: r.step,
+        reply: r.reply,
+        ...(r.handoff ? { handoff: true as const } : {}),
+      }
     } else if (namesOtherTrade(inbound)) {
       // Round 5 — the customer named another trade. Hand this TURN to the
       // general dialog without counting a miss, which is what fired a roofing
@@ -748,9 +768,15 @@ export function advanceRoofing(
       // would destroy a live lead. Leaving the state intact means a false
       // positive costs one turn, and the customer's next roofing answer resumes.
       return { action: 'passthrough', slots }
-    } else if (isGreetingOnly(inbound)) {
+    } else if (isGreetingOnly(inbound) && lastStep !== 'confirm_address') {
       // A pleasantry is not an answer, but it is not a failed answer either —
       // re-ask the pending question without spending the miss budget.
+      //
+      // confirm_address is EXCLUDED: there the free re-ask is a verbatim
+      // repeat of the read-back with no budget spent, which is exactly the
+      // 2026-08-07 loop ("Hi Mate" answered with the same sentence). It falls
+      // through to the miss path below, which re-asks in different words and
+      // escalates (specs/address-confirm-loop.md req 4).
       const q = nextRoofingStep(slots)
       return q.step === 'ready' || q.step === 'inspection'
         ? { action: 'passthrough', slots }
@@ -803,7 +829,17 @@ export function advanceRoofing(
           // An address answer that didn't parse as an address → clarify, don't
           // store junk (and don't silently re-send the same prompt).
           if (lastStep === 'address') {
-            return { action: 'ask', slots: nextSlots, step: 'address', reply: ADDRESS_RETRY }
+            return { action: 'ask', slots: nextSlots, step: 'address', reply: addressRetry(misses) }
+          }
+          // Same rule at the read-back: re-ask in DIFFERENT words. Repeating
+          // confirmAddressQuestion here is the loop itself.
+          if (lastStep === 'confirm_address' && nextSlots.address) {
+            return {
+              action: 'ask',
+              slots: nextSlots,
+              step: 'confirm_address',
+              reply: addressRecheckQuestion(nextSlots.address),
+            }
           }
         }
       }

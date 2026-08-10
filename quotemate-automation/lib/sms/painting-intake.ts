@@ -34,6 +34,11 @@
 // PURE — no I/O, no SDK. Fully unit-tested.
 // ════════════════════════════════════════════════════════════════════
 
+// One shared vocabulary for the address handshake — the elongation-aware
+// affirm and the "deny word OR negation cue" rejection test. Pure regex
+// helpers, no roofing coupling (painting-receptionist already borrows
+// extractStreetAddress from the same module).
+import { isAffirmative as isAffirmativeStrict, rejectsReadBack } from './roofing-intake'
 import type {
   CeilingHeight,
   PaintAddressInput,
@@ -60,6 +65,13 @@ export type PaintingSlots = {
    *  MAX_ADDRESS_VERIFY_REJECTS, then we fall back to the plain
    *  read-back so an unmapped new estate can still push through. */
   addr_verify_misses?: number
+  /** How many times the CUSTOMER rejected the read-back, and how many replies
+   *  to it were neither yes nor no. Both ride in painting_state.jsonb and are
+   *  bounded by MAX_ADDRESS_VERIFY_REJECTS — painting had NEITHER counter, so
+   *  the bound could never fire on this trade even though the incident state
+   *  was painting_state (specs/address-confirm-loop.md req 1 + 2). */
+  addr_confirm_rejects?: number
+  addr_confirm_misses?: number
   /** Which surfaces to paint — at least one once gathered. */
   scopes?: PaintScope[] | null
   coats?: 1 | 2 | 3 | null
@@ -404,13 +416,24 @@ export function applyPaintingAnswer(
       break
     }
     case 'confirm_address': {
-      if (isAffirmative(msg) && !isNegative(msg)) {
+      // ONE vocabulary for "did they say no", shared with roofing and with the
+      // rejection budget. Painting's local isNegative is a bare DENY word
+      // list: it reads neither "Noooo" nor "that isn't it" as a refusal, so a
+      // rejection the budget WOULD have consumed left the address in place and
+      // the read-back went out again (specs/address-confirm-loop.md req 1).
+      const negated = rejectsReadBack(msg)
+      if (isAffirmativeStrict(msg) && !negated) {
         next.address_confirmed = true
-      } else if (isNegative(msg)) {
+        delete next.addr_confirm_misses
+      } else if (negated) {
         // Customer says it's wrong — clear so we re-ask the address.
+        // addr_verified goes too: it exists to let screenConfirmAddress SKIP
+        // the map check for that exact string, so keeping it re-blesses the
+        // address they just refused (verify-address.ts:627).
         next.address = null
         next.postcode = null
         next.state = null
+        next.addr_verified = null
         next.address_confirmed = false
       }
       break

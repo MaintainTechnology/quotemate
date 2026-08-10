@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ElevenLabs as the QuoteMax SMS receptionist — assessment</title>
+<meta name="description" content="Assessment of whether ElevenLabs Agents can replace the QuoteMax SMS AI receptionist: capability matrix, three blockers, and a recommended hybrid architecture.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* QuoteMax design system — DESIGN.md tokens verbatim.
+     Dark-first: bare :root is the charcoal canvas; paper is the override. */
+  :root {
+    /* palette — DESIGN.md colors, dark canvas */
+    --canvas:      #16120F;   /* ink-deep */
+    --sunken:      #1E1813;   /* ink */
+    --card:        #2B2422;   /* ink-card */
+    --line:        #3A322C;   /* ink-line */
+    --edge:        #4A4136;   /* edge-deep */
+    --edge-lit:    #6E6354;   /* edge-glow */
+    --accent:      #FFC400;
+    --accent-press:#E6AC00;
+    --text-pri:    #F6F1EA;
+    --text-sec:    #C3B8AC;
+    --text-dim:    #A2968A;
+    --ok:          #34D27B;   /* success-bright */
+    --warn:        #F59E0B;   /* warning-bright */
+    --stop:        #F0816B;   /* danger-bright */
+
+    /* type ramp — DESIGN.md typography, the only five steps */
+    --t-display:  clamp(2.6rem, 6.5vw, 5.5rem);
+    --t-headline: clamp(2rem, 4vw, 3.25rem);
+    --t-title:    1.25rem;
+    --t-body:     1rem;
+    --t-label:    0.75rem;
+
+    --sans: Manrope, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+    --measure: 70ch;
+    --pad: clamp(1.25rem, 4vw, 3.5rem);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --canvas:   #FAF8F4;   /* paper-canvas */
+      --sunken:   #F3EEE7;   /* paper-sunken */
+      --card:     #FFFFFF;   /* paper-card */
+      --line:     #CFC2B0;   /* paper-line */
+      --edge:     #CFC2B0;
+      --edge-lit: #A2968A;
+      --text-pri: #241E1B;   /* paper-ink */
+      --text-sec: #5E544E;   /* paper-ink-sec */
+      --text-dim: #6E645C;   /* paper-ink-dim */
+      --ok:       #15803D;   /* success */
+      --warn:     #B45309;   /* warning */
+      --stop:     #B91C1C;   /* danger */
+    }
+  }
+  :root[data-theme="light"] {
+    --canvas:   #FAF8F4;
+    --sunken:   #F3EEE7;
+    --card:     #FFFFFF;
+    --line:     #CFC2B0;
+    --edge:     #CFC2B0;
+    --edge-lit: #A2968A;
+    --text-pri: #241E1B;
+    --text-sec: #5E544E;
+    --text-dim: #6E645C;
+    --ok:       #15803D;
+    --warn:     #B45309;
+    --stop:     #B91C1C;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--text-pri);
+    font-family: var(--sans);
+    font-size: var(--t-body);
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 76rem;
+    margin: 0 auto;
+    padding: var(--pad);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 5vw, 4.5rem);
+  }
+
+  /* ── type: the five documented steps, nothing between them ── */
+  h1, h2 {
+    margin: 0;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    text-transform: uppercase;
+    text-align: left;
+    text-wrap: balance;
+  }
+  h1 { font-size: var(--t-display); font-feature-settings: 'ss01', 'cv11'; }
+  h2 { font-size: var(--t-headline); }
+  h3 {
+    margin: 0;
+    font-size: var(--t-title);
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  p { margin: 0; max-width: var(--measure); color: var(--text-sec); }
+  strong { color: var(--text-pri); font-weight: 700; }
+
+  /* Accent as display text. On paper the canvas cannot carry yellow type,
+     so the accent becomes a highlighter underline instead of a fill. */
+  .hi { color: var(--accent); }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) .hi {
+      color: inherit;
+      text-decoration: underline;
+      text-decoration-color: var(--accent);
+      text-decoration-thickness: 0.14em;
+      text-underline-offset: 0.06em;
+    }
+  }
+  :root[data-theme="light"] .hi {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 0.14em;
+    text-underline-offset: 0.06em;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    padding: 0.08em 0.36em;
+    color: var(--text-pri);
+    white-space: nowrap;
+  }
+  a { color: var(--accent-press); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .label {
+    font-family: var(--mono);
+    font-size: var(--t-label);
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0;
+  }
+
+  /* ── masthead ── */
+  .masthead { display: flex; flex-direction: column; gap: 1.1rem; padding-top: 1rem; }
+  .rule { height: 3px; width: 4.5rem; background: var(--accent); }
+  .meta {
+    font-family: var(--mono); font-size: var(--t-label); line-height: 1.3;
+    color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem;
+  }
+
+  /* ── verdict ── */
+  .verdict {
+    border: 1px solid var(--edge);
+    background: var(--card);
+    padding: clamp(1.25rem, 3vw, 2rem);
+    display: flex; flex-direction: column; gap: 0.9rem;
+  }
+  .verdict .rule { width: 3rem; }
+  .verdict p { max-width: var(--measure); color: var(--text-pri); }
+  .verdict p.sub { color: var(--text-sec); }
+
+  section { display: flex; flex-direction: column; gap: 1.4rem; }
+  .head { display: flex; flex-direction: column; gap: 0.6rem; }
+
+  /* ── finding cards ── */
+  .findings {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+  }
+  .finding { background: var(--card); padding: 1.4rem; display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .chip {
+    display: inline-flex; align-items: center; align-self: flex-start;
+    font-family: var(--mono); font-size: var(--t-label); font-weight: 600;
+    line-height: 1.3; letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 0.25rem 0.55rem; border: 1px solid currentColor;
+  }
+  .chip.ok   { color: var(--ok);   background: color-mix(in srgb, var(--ok) 12%, transparent); }
+  .chip.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+  .chip.stop { color: var(--stop); background: color-mix(in srgb, var(--stop) 12%, transparent); }
+
+  /* ── KPI strip ── */
+  .scale { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .stat { background: var(--card); padding: 1.2rem 1.35rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  .stat .n {
+    font-family: var(--mono); font-size: var(--t-headline); font-weight: 600;
+    line-height: 0.95; letter-spacing: -0.04em; color: var(--text-pri);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .l { font-size: var(--t-label); font-family: var(--mono); line-height: 1.4; color: var(--text-dim); letter-spacing: 0.06em; }
+
+  /* ── table ── */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); }
+  table { border-collapse: collapse; width: 100%; min-width: 48rem; }
+  thead th {
+    text-align: left; font-family: var(--mono); font-size: var(--t-label); font-weight: 600;
+    line-height: 1.3; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-dim);
+    padding: 0.85rem 1rem; background: var(--sunken); border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 0.9rem 1rem; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--text-sec); background: var(--card); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody td:first-child { color: var(--text-pri); font-weight: 600; }
+  td .chip { margin-right: 0.4rem; }
+
+  /* ── blockers ── */
+  .stack { display: flex; flex-direction: column; gap: 1.1rem; }
+  .blocker { border: 1px solid var(--line); background: var(--card); padding: 1.4rem; display: flex; flex-direction: column; gap: 0.85rem; }
+  .blocker .why { border-left: 2px solid var(--edge-lit); padding-left: 1rem; color: var(--text-dim); }
+
+  /* ── flow ── */
+  .flow { display: flex; flex-direction: column; gap: 0.55rem; border: 1px solid var(--line); background: var(--card); padding: 1.4rem; overflow-x: auto; }
+  .lane { display: flex; align-items: stretch; gap: 0.55rem; min-width: 36rem; }
+  .node {
+    border: 1px solid var(--edge); background: var(--sunken);
+    padding: 0.65rem 0.9rem; font-family: var(--mono); font-size: var(--t-label);
+    line-height: 1.3; letter-spacing: 0.04em; display: flex; align-items: center; color: var(--text-pri);
+  }
+  .node.el   { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .node.ours { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+  .node.flex { flex: 1; }
+  .arrow { display: flex; align-items: center; color: var(--text-dim); font-family: var(--mono); font-size: var(--t-label); }
+  .legend { display: flex; flex-wrap: wrap; gap: 1.2rem; font-family: var(--mono); font-size: var(--t-label); letter-spacing: 0.06em; color: var(--text-dim); }
+  .key { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .sw { width: 0.75rem; height: 0.75rem; border: 1px solid; }
+  .sw.el { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .sw.ours { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+
+  /* ── numbered steps: the documented brand sequence component
+       (mono numeral in accent beside an uppercase title over warm-grey copy) ── */
+  ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); counter-reset: s; }
+  ol.steps li { background: var(--card); padding: 1.2rem 1.35rem; display: grid; grid-template-columns: 3rem 1fr; gap: 1rem; align-items: start; counter-increment: s; }
+  ol.steps li::before {
+    content: counter(s, decimal-leading-zero);
+    font-family: var(--mono); font-size: var(--t-title); font-weight: 600;
+    line-height: 1.3; color: var(--accent); font-variant-numeric: tabular-nums;
+  }
+  ol.steps li h3 { text-transform: uppercase; }
+  ol.steps li p { margin-top: 0.35rem; }
+
+  ul.plain { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.55rem; color: var(--text-sec); max-width: var(--measure); }
+  ul.plain li::marker { color: var(--accent); }
+
+  footer { border-top: 1px solid var(--line); padding-top: 1.6rem; display: flex; flex-direction: column; gap: 0.8rem; }
+  footer p, footer li { font-size: var(--t-label); font-family: var(--mono); line-height: 1.6; letter-spacing: 0.04em; color: var(--text-dim); }
+  footer ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.4rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: opacity 120ms ease; }
+    a:hover { opacity: 0.75; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="rule"></div>
+    <p class="label">Architecture assessment · QuoteMax</p>
+    <h1>Can <span class="hi">ElevenLabs</span> replace the QuoteMax SMS receptionist?</h1>
+    <div class="meta">
+      <span>9 August 2026</span>
+      <span>Scope: SMS intake, 8 trades, 8 tenants</span>
+      <span>Measured against: monorepo route + Railway fleet</span>
+    </div>
+  </header>
+
+  <div class="verdict">
+    <div class="rule"></div>
+    <p class="label">Verdict</p>
+    <p><strong>Yes for the conversation. No for the money.</strong> ElevenLabs now runs SMS as a first-class channel, and adopting it would delete most of the code currently producing your errors. But it has no seam to veto what its model writes, and it cannot send or receive MMS. Both problems share one fix: let ElevenLabs own the dialogue, and keep every message carrying a number or an image coming from your own service.</p>
+    <p class="sub">Recommended: a hybrid pilot on one trade with one tenant. Not a full replacement, and not a rejection.</p>
+  </div>
+
+  <section>
+    <div class="head">
+      <p class="label">The three findings that decide it</p>
+      <h2>What the research established</h2>
+    </div>
+    <div class="findings">
+      <div class="finding">
+        <span class="chip ok">Confirmed</span>
+        <h3>SMS is a real channel, not a workaround</h3>
+        <p>ElevenAgents shipped SMS as a generally available channel on 28 July 2026, alongside Telegram, Intercom and Freshdesk (those three are Alpha; SMS is not). You import a Twilio number that supports SMS, re-import it to enable messaging, then assign an agent. Inbound routing and the outbound reply are both handled by ElevenLabs. You write no webhook.</p>
+      </div>
+      <div class="finding">
+        <span class="chip stop">Blocking</span>
+        <h3>No MMS on the SMS channel</h3>
+        <p>File inputs, meaning images and PDFs, are supported on web, mobile and WhatsApp. SMS is excluded. Your roofing flow texts per-building roof photos, the funnel sends quote PDFs as attachments, and inbound customer photos feed the vision intake. None of that survives a straight port.</p>
+      </div>
+      <div class="finding">
+        <span class="chip stop">Blocking</span>
+        <h3>No hook to veto an ungrounded reply</h3>
+        <p>The platform's model speaks and the platform sends. There is no interception point between the two. Your central invariant, <em>LLM conversation, deterministic money</em>, is enforced by inspecting outbound text and discarding it. That check cannot exist inside ElevenLabs.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <p class="label">Baseline</p>
+      <h2>What you would be replacing</h2>
+    </div>
+    <div class="scale">
+      <div class="stat"><span class="n">14,510</span><span class="l">production lines in lib/sms, across 43 modules</span></div>
+      <div class="stat"><span class="n">4,618</span><span class="l">lines in the single /api/sms/inbound route</span></div>
+      <div class="stat"><span class="n">13,270</span><span class="l">test lines across 62 spec files guarding it</span></div>
+      <div class="stat"><span class="n">6</span><span class="l">Railway services, each carrying ~52,800 copied lines of domain code</span></div>
+    </div>
+    <p>The fleet, <code>qm-front-desk</code> plus five trade receptionists, exists for one structural reason: a Twilio number can point at exactly one URL, so a multi-trade tenant needs a router in front of it. The front desk asks Claude Sonnet 5 to classify every turn at a measured 1.5&ndash;3.8&nbsp;s (median 2.7&nbsp;s), because 65% of inbound messages carry no trade word at all. ElevenLabs' workflow subagents and agent-transfer tool make that entire service unnecessary.</p>
+  </section>
+
+  <section>
+    <div class="head">
+      <p class="label">Capability matrix</p>
+      <h2>Function by function</h2>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th scope="col">What the receptionist does today</th><th scope="col">Where it lives now</th><th scope="col">On ElevenLabs</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Receive inbound SMS, reply</td>
+            <td>Twilio webhook, <code>route.ts</code>, <code>dispatch.ts</code></td>
+            <td><span class="chip ok">Native</span>Channel handles both ends. No webhook code.</td>
+          </tr>
+          <tr>
+            <td>Decide which trade owns the turn</td>
+            <td><code>qm-front-desk</code> LLM router plus keyword fallback</td>
+            <td><span class="chip ok">Native</span>Workflow subagents plus agent transfer. Deletes the service.</td>
+          </tr>
+          <tr>
+            <td>Natural dialogue, slot filling, AU idiom</td>
+            <td><code>llm-receptionist.ts</code>, Sonnet 5, 79&nbsp;KB</td>
+            <td><span class="chip ok">Native</span>Its core competency. The model is configurable.</td>
+          </tr>
+          <tr>
+            <td>Enforce a fixed step order per trade</td>
+            <td>Hand-rolled state machines, three of them</td>
+            <td><span class="chip ok">Native</span>Workflow graph: nodes, edges, expression or LLM conditions, dispatch-tool nodes with success and failure paths.</td>
+          </tr>
+          <tr>
+            <td>Call pricing and measurement engines</td>
+            <td>Ten internal tools, including <code>measure_and_price_roof</code>, <code>price_painting</code>, <code>verify_address</code>, <code>send_saved_quote</code>, <code>book_inspection</code></td>
+            <td><span class="chip ok">Maps</span>Webhook tools. OAuth2, Bearer, Basic or custom-header auth, so your <code>CRON_SECRET</code> pattern ports directly.</td>
+          </tr>
+          <tr>
+            <td>STOP and opt-out handling</td>
+            <td>Decided before the model is called</td>
+            <td><span class="chip warn">Verify</span>Twilio enforces STOP at carrier level regardless. Confirm ElevenLabs does not reply first.</td>
+          </tr>
+          <tr>
+            <td>One turn at a time per thread</td>
+            <td><code>inflight.ts</code>, a 60&nbsp;s lock known to lose to a 200&ndash;300&nbsp;s measure</td>
+            <td><span class="chip ok">Improves</span>Session concurrency becomes the platform's problem. This bug class disappears.</td>
+          </tr>
+          <tr>
+            <td>Send roof photos and the quote PDF</td>
+            <td><code>roofing-compose.ts</code>, <code>send-quote-pdf.ts</code>, over MMS</td>
+            <td><span class="chip stop">Cannot</span>No media on the SMS channel.</td>
+          </tr>
+          <tr>
+            <td>Receive customer photos into intake</td>
+            <td><code>mms.ts</code>, pulling <code>MediaUrl0..N</code> into the filestore</td>
+            <td><span class="chip stop">Cannot</span>The same limitation, inbound.</td>
+          </tr>
+          <tr>
+            <td>Discard any reply stating an ungrounded figure</td>
+            <td><code>assertGroundedReply</code>, <code>llm-receptionist.ts:291</code></td>
+            <td><span class="chip stop">Cannot</span>No outbound interception point exists.</td>
+          </tr>
+          <tr>
+            <td>Fall back to a deterministic engine on a bad turn</td>
+            <td>Pure state machine, per turn, on any throw or timeout</td>
+            <td><span class="chip stop">Cannot</span>One engine only. A bad turn stays a bad turn.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <p class="label">The blockers in detail</p>
+      <h2>Why a straight replacement fails</h2>
+    </div>
+    <div class="stack">
+
+      <div class="blocker">
+        <span class="chip stop">Blocker</span>
+        <h3>The grounding validator has no equivalent, and it is the load-bearing safety property</h3>
+        <p><code>assertGroundedReply</code> rejects a model turn writing a dollar sign, a money word, a percentage, a spelled-out amount, or a number in a price context. It NFKC-normalises first, so a full-width <code>４５０</code> cannot walk past the numeric checks, and it grounds <em>by category</em>: an area is grounded only by a previously stated area, a count only by a count. A postcode of 4155 therefore cannot ground <em>"your roof is 4155 sqm"</em>. That is deliberately paranoid code, and it is the reason an LLM is allowed to drive your customer conversations at all.</p>
+        <p class="why">ElevenLabs offers no post-generation, pre-send hook. Workflows constrain <em>when</em> an agent may speak about price, since a dispatch-tool node can force the pricing call to succeed first, but not <em>what</em> it says once it is speaking. A hallucinated "around $4,500" in a chatty turn reaches a real customer with nothing standing in front of it.</p>
+      </div>
+
+      <div class="blocker">
+        <span class="chip stop">Blocker</span>
+        <h3>MMS is not on the SMS channel, and your roofing funnel depends on it</h3>
+        <p>After <code>measureAndPriceRoofs</code> returns, the flow texts one image per detected building and asks which one is theirs. That step is the disambiguation; without the pictures the question is unanswerable. The quote PDF is likewise an attachment, and inbound photos feed the vision intake for painting and signage.</p>
+        <p class="why">A link-instead-of-attach workaround exists: host the images on the quote page and text the URL. It works. It is also a real product change, and it deserves to be decided on its own merits rather than adopted silently because a platform forced it.</p>
+      </div>
+
+      <div class="blocker">
+        <span class="chip warn">Blocker</span>
+        <h3>You trade your bugs for someone else's, and lose the ability to fix them</h3>
+        <p>Today a routing bug is a twenty-minute fix, with 62 spec files proving you did not break the other seven trades. On a managed platform the same bug becomes a support ticket. Your send-reliability retry ladder, your inflight lock and your grounding check all turn into another company's uptime commitment.</p>
+        <p class="why">This is not an argument against the move. It is an argument for keeping the money path, the part where being wrong costs a customer real dollars, inside code you own.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <p class="label">The fair case for it</p>
+      <h2>What ElevenLabs would genuinely fix</h2>
+    </div>
+    <p>Your stated complaint is errors and inconsistencies, and most of the documented ones live in code that would simply cease to exist:</p>
+    <ul class="plain">
+      <li><strong>The roofing hijack.</strong> <code>shouldEngageRoofing</code> resumes on an active thread alone and never inspects the inbound text, so on a multi-trade tenant an open roofing thread captures every later turn. Agent transfer between workflow subagents is a first-class primitive, so you would not be hand-rolling this at all.</li>
+      <li><strong>The parsing failures.</strong> <code>y</code>, <code>👍</code> and <code>ya</code> not read as yes, "no worries" parsed as no, "1 and 2" truncated to a single pick. These are keyword-parser bugs in the deterministic fallback net, and a model handles them natively.</li>
+      <li><strong>The concurrency race.</strong> A 60&nbsp;s inflight lock against a worst-case 200&ndash;300&nbsp;s turn lets a second webhook run concurrently and produce duplicate or out-of-order replies. Session management stops being yours.</li>
+      <li><strong>The fleet's whole reason for existing.</strong> One Twilio number, one URL, therefore a router. Gone.</li>
+      <li><strong>Volume.</strong> Roughly 19,000 lines of dialogue orchestration and its tests reduce to one agent configuration plus a set of webhook tool definitions.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="head">
+      <p class="label">Recommendation</p>
+      <h2>Split it at the message, not at the system</h2>
+    </div>
+    <p>The MMS problem and the grounding problem share one solution: <strong>any message containing a price or an image is sent by your service, never by ElevenLabs.</strong> The agent handles conversation. The moment a number is involved, the webhook tool does the sending and returns only a confirmation the agent may repeat.</p>
+
+    <div class="flow">
+      <div class="lane">
+        <div class="node">Customer SMS</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node el">Twilio number imported to ElevenLabs</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node el flex">Agent workflow: subagent per trade, transfer between them</div>
+      </div>
+      <div class="lane">
+        <div class="node el flex">Webhook tool call</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node ours flex">Railway receptionist: measure, price, ground, persist</div>
+      </div>
+      <div class="lane">
+        <div class="node ours flex">Your service sends the priced SMS, roof photos and PDF via Twilio directly</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node">Customer</div>
+      </div>
+      <div class="lane">
+        <div class="node ours flex">Tool returns { sent: true }, carrying no figures</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node el">Agent says "sent that through, anything else?"</div>
+      </div>
+      <div class="legend">
+        <span class="key"><span class="sw el"></span> ElevenLabs owns</span>
+        <span class="key"><span class="sw ours"></span> You own: every number, every image</span>
+      </div>
+    </div>
+
+    <p>This keeps <code>assertGroundedReply</code> exactly where it already sits, because the priced message never passes through a model. It solves MMS, because the send happens on your Twilio credentials where media is fully supported. And it still deletes the front desk, the state machines and the inflight lock.</p>
+  </section>
+
+  <section>
+    <div class="head">
+      <p class="label">If you proceed</p>
+      <h2>Pilot sequence</h2>
+    </div>
+    <ol class="steps">
+      <li><div><h3>Pick one single-trade tenant</h3><p>A roofing-only tenant is the hardest case: address verification, measurement, building disambiguation, MMS. If the hybrid holds there it holds everywhere. Three of your eight tenants are roofing-only.</p></div></li>
+      <li><div><h3>Expose the existing engines as webhook tools</h3><p>The Railway services already speak HTTP with Bearer auth. <code>verify_address</code>, <code>measure_and_price_roof</code>, <code>send_saved_quote</code> and <code>book_inspection</code> become four tool definitions. No new backend code.</p></div></li>
+      <li><div><h3>Build the workflow graph, not a prompt</h3><p>Address, verify, confirm, material, pitch, measure, send. Dispatch-tool nodes with explicit failure paths, expression conditions wherever the rule is deterministic, LLM conditions only where judgement is genuinely required.</p></div></li>
+      <li><div><h3>Move the priced send into the tool</h3><p>The tool sends the SMS, the roof photos and the PDF on your Twilio account, then returns a confirmation carrying no figures. This is the step preserving the money invariant. Do not skip it to save a round trip.</p></div></li>
+      <li><div><h3>Run both in parallel on a test number first</h3><p>Your existing <code>/api/receptionist/simulate</code> channel already replays real turns through the real pipeline. Compare the two receptionists on the same transcripts before a single tenant number moves.</p></div></li>
+      <li><div><h3>Repoint one number, watch it, then decide about the rest</h3><p>Per-number cutover with someone watching, the same discipline the fleet spec already puts on this step.</p></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="head">
+      <p class="label">Cost and open questions</p>
+      <h2>What to confirm before committing</h2>
+    </div>
+    <p>Published agent pricing is $0.08 to $0.12 per minute for voice, with additional text messages quoted at $0.003 each in third-party pricing analyses. At your current volume of 2,597 messages in <code>sms_messages</code>, messaging cost is not a deciding factor either way. The questions below are the ones that matter, and none are answered in the public documentation:</p>
+    <ul class="plain">
+      <li><strong>SMS channel billing.</strong> Per message, per conversation, or per minute of session? The per-message figure comes from pricing write-ups, not from ElevenLabs' own docs.</li>
+      <li><strong>Session lifetime on SMS.</strong> Your <code>await_booking</code> state never expires, so a three-day-late "yes book it" still has to reach the right flow. Ask what happens to an ElevenLabs conversation after hours or days of silence.</li>
+      <li><strong>Webhook tool timeout.</strong> A roofing measure can take 200 to 300 seconds. If the tool timeout is 30 seconds you need an async pattern, and the agent needs something to say while it waits.</li>
+      <li><strong>Multi-tenancy.</strong> Eight tenants with different pricing books and service offerings. Confirm whether dynamic variables at conversation initiation can carry tenant context into one shared agent, or whether you need an agent per tenant.</li>
+      <li><strong>Any pre-send hook at all.</strong> Worth asking directly. If ElevenLabs will let you inspect and reject an outbound message, the calculus changes materially and a fuller migration becomes defensible.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p class="label">Sources</p>
+    <ul>
+      <li><a href="https://elevenlabs.io/blog/new-channels">Introducing new channels in ElevenAgents</a>, SMS as a GA channel, 28 July 2026</li>
+      <li><a href="https://elevenlabs.io/docs/eleven-agents/phone-numbers/twilio-integration/sms-conversations">SMS conversations</a>, setup, number re-import, agent assignment</li>
+      <li><a href="https://elevenlabs.io/docs/eleven-agents/guides/chat-mode">Chat Mode</a>, text-only agents</li>
+      <li><a href="https://elevenlabs.io/docs/eleven-agents/customization/agent-workflows">Agent Workflows</a>, subagent and dispatch-tool nodes, transition conditions</li>
+      <li><a href="https://elevenlabs.io/docs/eleven-agents/customization/tools/webhook-tools">Webhook tools</a>, external API calls and authentication</li>
+      <li><a href="https://elevenlabs.io/docs/eleven-agents/customization/integrations/twilio">Twilio API integration</a>, SMS and MMS as agent tools</li>
+      <li><a href="https://elevenlabs.io/blog/processing-images-and-documents-in-elevenagents">Processing images and documents in ElevenAgents</a>, file input limited to web, mobile and WhatsApp</li>
+      <li><a href="https://releasebot.io/updates/eleven-labs">ElevenLabs release notes</a>, SMSConversationInfo and twilio_sms initiation (13 May 2026), enable_sms on number import (13 July 2026)</li>
+    </ul>
+    <p>Codebase references are to quotemate-automation/lib/sms, app/api/sms/inbound/route.ts, and the receptionist fleet at MaintainOrg/QuoteMax/Receptionists, as of 9 August 2026.</p>
+  </footer>
+
+</div>
+
+</body>
+</html>

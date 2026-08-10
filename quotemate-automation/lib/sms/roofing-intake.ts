@@ -51,6 +51,9 @@ export type RoofingSlots = {
    *  an address, and neither the customer's "no" nor this budget was ever
    *  counted before (specs/address-confirm-loop.md). */
   addr_confirm_rejects?: number
+  /** How many replies to the read-back were neither yes nor no ("Hi Mate").
+   *  See consumeAddressMiss — a verbatim re-ask is the loop itself. */
+  addr_confirm_misses?: number
   material?: RoofMaterial | null
   pitch?: PitchBucket | null
   intent?: RoofJobIntent | null

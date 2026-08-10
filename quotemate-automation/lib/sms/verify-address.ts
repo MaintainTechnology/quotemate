@@ -480,6 +480,16 @@ export function addressRecheckQuestion(address: string): string {
   return `Sorry, I need a yes or no on this one. Is the property "${address}"? Reply YES if that's right, or send the correct address.`
 }
 
+/** The re-ask when the customer's answer to "what's the address?" didn't
+ *  parse as one and we have nothing to read back yet. */
+export const ADDRESS_REASK_REPLY =
+  "Sorry, I didn't catch a property address there. What's the address? Please include the street number, suburb and postcode."
+
+/** The handoff when the budget is spent and we never got an address at all,
+ *  so there is nothing to name back to the customer. */
+export const ADDRESS_HANDOFF_NO_ADDRESS =
+  "No worries, I'll get one of the team to give you a call and take the property address down."
+
 /** PURE — is this outbound body one of OUR address read-backs? The four
  *  wordings above are the only things that ask the customer to confirm an
  *  address, so "did we just ask?" is answerable from the transcript alone.
@@ -565,6 +575,11 @@ export type AddressSlotsLike = {
    *  consumeAddressRejection. Distinct from addr_verify_misses, which counts
    *  the MAP failing to find an address. */
   addr_confirm_rejects?: number
+  /** How many replies to the read-back were neither a yes nor a no ("Hi
+   *  Mate") — see consumeAddressMiss. A third counter because it is a third
+   *  event: the map found the address, the customer neither accepted nor
+   *  refused it, and repeating the read-back at them is the loop itself. */
+  addr_confirm_misses?: number
 }
 
 /**
@@ -602,6 +617,44 @@ export function consumeAddressRejection<S extends AddressSlotsLike>(
     return { slots: cleared, step: 'await_booking', reply: addressHandoffReply(rejected), handoff: true }
   }
   return { slots: cleared, step: 'address', reply: ADDRESS_REJECTED_REPLY }
+}
+
+/**
+ * PURE — consume a reply to the read-back that is NEITHER a yes nor a no.
+ *
+ * Message #3 of the live incident was "Hi Mate", answered with the
+ * byte-identical read-back, and nothing counted it
+ * (specs/address-confirm-loop.md req 4). Recomposing confirmAddressQuestion is
+ * the loop: addressRecheckQuestion asks the same thing in DIFFERENT words, so
+ * the customer can see we did not understand them.
+ *
+ * The address is NOT cleared — nobody rejected it. Only the budget moves, and
+ * at the budget the lead goes to a human, the same exit a spent rejection
+ * budget takes. Bounded by MAX_ADDRESS_VERIFY_REJECTS so there is one number
+ * for "how many goes does this handshake get".
+ *
+ * Covers BOTH unusable answers in the handshake, because they are one event:
+ * a reply to the read-back that is neither yes nor no, and a reply to "what's
+ * the address?" that doesn't parse as one. Painting had a single re-ask string
+ * for the second with no budget at all, so it repeated verbatim forever.
+ */
+export function consumeAddressMiss<S extends AddressSlotsLike>(
+  slots: S,
+): { slots: S; step: 'address' | 'confirm_address' | 'await_booking'; reply: string; handoff?: true } {
+  const address = slots.address ?? ''
+  const misses = (slots.addr_confirm_misses ?? 0) + 1
+  const next = { ...slots, addr_confirm_misses: misses } as S
+  if (misses >= MAX_ADDRESS_VERIFY_REJECTS) {
+    return {
+      slots: next,
+      step: 'await_booking',
+      reply: address ? addressHandoffReply(address) : ADDRESS_HANDOFF_NO_ADDRESS,
+      handoff: true,
+    }
+  }
+  return address
+    ? { slots: next, step: 'confirm_address', reply: addressRecheckQuestion(address) }
+    : { slots: next, step: 'address', reply: ADDRESS_REASK_REPLY }
 }
 
 /**
