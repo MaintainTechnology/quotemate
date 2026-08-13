@@ -304,6 +304,7 @@ function sourceWords(s: PaintingEstimate['measurement']['floor_area_source']): s
     case 'footprint': return 'from footprint'
     case 'beds_estimate': return 'from bedroom count'
     case 'manual': return 'entered by hand'
+    case 'floor_plan': return 'measured from floor plan'
     default: return 'estimated'
   }
 }

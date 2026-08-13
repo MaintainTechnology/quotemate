@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════════
 // Painting — property-data enrichment orchestration.
 //
-// Runs the Geoscape + PropRadar enrichers concurrently and merges their
-// patches onto the base (Solar) PropertyFacts.
+// Runs the Geoscape + PropRadar + Domain enrichers concurrently and merges
+// their patches onto the base (Solar) PropertyFacts.
 //
 // Merge rules:
 //   • non-null only; the Solar footprint is never overwritten — EXCEPT when
@@ -16,6 +16,10 @@
 //   • floor area: PropRadar's listing floor area is set with source 'listing'
 //     (high confidence); resolveFloorArea then prefers it over the footprint
 //     derivation.
+//   • Domain runs LAST and only fills what's still null — PropRadar stays
+//     authoritative wherever it has an answer (beds/baths/car/year/land/
+//     floor area). Domain's floor_plan_urls/has_floor_plan are always applied
+//     when present (no other provider supplies them).
 //
 // The PURE merge (applyEnrichment) is separated from the I/O
 // (enrichPaintingFacts) so it is unit-testable without network.
@@ -32,10 +36,16 @@ import {
   type PropRadarEnrichOpts,
   type PropRadarEnrichResult,
 } from './providers/propradar'
+import {
+  enrichFromDomain,
+  type DomainEnrichOpts,
+  type DomainEnrichResult,
+} from './providers/domain-enrich'
 
 export type EnrichmentSources = {
   geoscape?: GeoscapeEnrichResult
   propradar?: PropRadarEnrichResult
+  domain?: DomainEnrichResult
 }
 
 /** PURE — merge enrichment patches onto base facts (non-null only). With
@@ -83,6 +93,30 @@ export function applyEnrichment(
     notes.push(...pr.notes)
   }
 
+  const dm = sources.domain
+  if (dm && dm.found) {
+    const p = dm.patch
+    // PropRadar stays authoritative wherever it has an answer — this block
+    // runs AFTER the PropRadar block and only fills what's still null.
+    if (p.bedrooms != null && f.bedrooms == null) f.bedrooms = p.bedrooms
+    if (p.bathrooms != null && f.bathrooms == null) f.bathrooms = p.bathrooms
+    if (p.car_spaces != null && f.car_spaces == null) f.car_spaces = p.car_spaces
+    if (p.year_built != null && f.year_built == null) f.year_built = p.year_built
+    if (p.land_size_m2 != null && f.land_size_m2 == null) f.land_size_m2 = p.land_size_m2
+    if (p.storeys != null && !(f.storeys && f.storeys > 0)) f.storeys = p.storeys
+    if (p.property_type != null && f.property_type == null) f.property_type = p.property_type
+    // A Domain listing floor area describes the WHOLE dwelling — same rule
+    // as PropRadar's listing area: never beats a targeted structure's
+    // footprint, and never overrides an area another provider already set.
+    if (p.floor_area_m2 != null && !opts.targeted && !(f.floor_area_m2 && f.floor_area_m2 > 0)) {
+      f.floor_area_m2 = p.floor_area_m2
+      f.floor_area_source = p.floor_area_source ?? 'listing'
+    }
+    if (p.has_floor_plan != null) f.has_floor_plan = p.has_floor_plan
+    if (p.floor_plan_urls != null) f.floor_plan_urls = p.floor_plan_urls
+    notes.push(...dm.notes)
+  }
+
   if (notes.length > 0) {
     f.capture_note = [f.capture_note, ...notes].filter(Boolean).join(' · ')
   }
@@ -92,6 +126,7 @@ export function applyEnrichment(
 export type EnrichPaintingOpts = {
   geoscape?: GeoscapeEnrichOpts
   propradar?: PropRadarEnrichOpts
+  domain?: DomainEnrichOpts
 }
 
 /**
@@ -104,9 +139,10 @@ export async function enrichPaintingFacts(
   base: PropertyFacts,
   opts: EnrichPaintingOpts = {},
 ): Promise<{ facts: PropertyFacts; notes: string[]; structureTargeted: boolean }> {
-  const [geoscape, propradar] = await Promise.all([
+  const [geoscape, propradar, domain] = await Promise.all([
     enrichFromGeoscape(address, opts.geoscape),
     enrichFromPropRadar(address, opts.propradar),
+    enrichFromDomain(address, opts.domain),
   ])
   // Targeted ONLY when the requested structure was actually fetched — a
   // Geoscape miss/failure returns an EMPTY patch with no matched id, and the
@@ -114,6 +150,6 @@ export async function enrichPaintingFacts(
   // override, no "estimating the selected structure" claim).
   const requested = opts.geoscape?.buildingId
   const structureTargeted = !!requested && geoscape.matched_building_id === requested
-  const merged = applyEnrichment(base, { geoscape, propradar }, { targeted: structureTargeted })
+  const merged = applyEnrichment(base, { geoscape, propradar, domain }, { targeted: structureTargeted })
   return { ...merged, structureTargeted }
 }

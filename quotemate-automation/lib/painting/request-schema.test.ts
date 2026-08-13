@@ -47,3 +47,59 @@ describe('PaintInputsSchema — structure selection', () => {
     if (parsed.success) expect(parsed.data.inputs.structure?.building_id).toBe('b0')
   })
 })
+
+describe('PaintInputsSchema — room schedule', () => {
+  const ROOM = {
+    id: 'bedroom-1',
+    name: 'BEDROOM 2',
+    room_type: 'bedroom',
+    width_m: 4.35,
+    length_m: 3.6,
+    floor_area_m2: 15.66,
+    included: true,
+    source: 'plan',
+    confidence: 'high',
+  }
+
+  it('accepts and round-trips a room schedule', () => {
+    const parsed = PaintInputsSchema.safeParse({ ...INPUTS, rooms: [ROOM] })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.rooms).toEqual([ROOM])
+  })
+
+  it('carries rooms through the whole estimate request', () => {
+    const parsed = EstimateRequestSchema.safeParse({
+      address: { address: '670 London Road, Chandler', postcode: '4155', state: 'QLD' },
+      inputs: { ...INPUTS, rooms: [ROOM] },
+    })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.inputs.rooms?.[0].id).toBe('bedroom-1')
+  })
+
+  it('accepts a room with no printed dimensions', () => {
+    const parsed = PaintInputsSchema.safeParse({
+      ...INPUTS,
+      rooms: [{ ...ROOM, width_m: null, length_m: null, floor_area_m2: 16 }],
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rooms is optional (the no-schedule path is unchanged)', () => {
+    const parsed = PaintInputsSchema.safeParse(INPUTS)
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.rooms).toBeUndefined()
+  })
+
+  it('rejects an implausible room dimension', () => {
+    const parsed = PaintInputsSchema.safeParse({ ...INPUTS, rooms: [{ ...ROOM, width_m: 500 }] })
+    expect(parsed.success).toBe(false)
+  })
+
+  it('rejects an unknown room type', () => {
+    const parsed = PaintInputsSchema.safeParse({
+      ...INPUTS,
+      rooms: [{ ...ROOM, room_type: 'ballroom' }],
+    })
+    expect(parsed.success).toBe(false)
+  })
+})

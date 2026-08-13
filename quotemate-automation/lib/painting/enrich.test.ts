@@ -115,6 +115,47 @@ describe('applyEnrichment', () => {
     expect(facts).toEqual(BASE)
     expect(notes).toEqual([])
   })
+
+  it('Domain never overwrites a PropRadar-supplied floor_area_m2', () => {
+    const { facts } = applyEnrichment(BASE, {
+      propradar: {
+        patch: { floor_area_m2: 180, floor_area_source: 'listing' },
+        notes: [],
+        found: true,
+      },
+      domain: {
+        patch: { floor_area_m2: 363, floor_area_source: 'listing' },
+        notes: [],
+        found: true,
+      },
+    })
+    expect(facts.floor_area_m2).toBe(180)
+  })
+
+  it('Domain never overwrites a non-null base bedrooms', () => {
+    const { facts } = applyEnrichment(
+      { ...BASE, bedrooms: 3 },
+      { domain: { patch: { bedrooms: 9 }, notes: [], found: true } },
+    )
+    expect(facts.bedrooms).toBe(3)
+  })
+
+  it('Domain floor area is NOT applied when targeted is true', () => {
+    const { facts } = applyEnrichment(
+      BASE,
+      { domain: { patch: { floor_area_m2: 363, floor_area_source: 'listing' }, notes: [], found: true } },
+      { targeted: true },
+    )
+    expect(facts.floor_area_m2).toBeNull()
+  })
+
+  it('Domain fills bedrooms when the base value is null', () => {
+    const { facts } = applyEnrichment(BASE, {
+      domain: { patch: { bedrooms: 9 }, notes: ['Property attributes from Domain.'], found: true },
+    })
+    expect(facts.bedrooms).toBe(9)
+    expect(facts.capture_note).toContain('Domain')
+  })
 })
 
 describe('area engine — eave height', () => {

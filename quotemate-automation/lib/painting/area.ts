@@ -29,6 +29,11 @@ import type {
   PaintUserInputs,
   PropertyFacts,
 } from './types'
+import { K_SHAPE_EXTERIOR, K_SHAPE_INTERIOR, clamp, roundTo } from './geometry'
+import { measureFromRooms, type RoomMeasurementTotals } from './rooms'
+
+// Re-exported so every existing `from './area'` import keeps working.
+export { K_SHAPE_INTERIOR, clamp, roundTo }
 
 // ── Geometry constants ──────────────────────────────────────────────
 
@@ -51,10 +56,6 @@ const WALL_MULTIPLIER: Record<CeilingHeight, number> = {
   extra_high: 3.6, // indicative only — extra_high routes to inspection before a price commits
   raked: 3.5,
 }
-
-/** Perimeter shape factor — real rooms/houses are oblong, not square. */
-const K_SHAPE_INTERIOR = 1.08
-const K_SHAPE_EXTERIOR = 1.15
 
 /** Exterior wall band (m) painted per storey, to the eaves line. */
 const EXTERIOR_WALL_BAND_M = 2.7
@@ -116,7 +117,7 @@ export function resolveFloorArea(
     // bed-derived number carries the provider's own (lower) confidence.
     const source = facts.floor_area_source ?? 'listing'
     const confidence: PaintConfidence =
-      source === 'listing' || source === 'manual'
+      source === 'listing' || source === 'manual' || source === 'floor_plan'
         ? 'high'
         : source === 'footprint'
           ? 'medium'
@@ -168,11 +169,23 @@ export function measurePaintableArea(
   facts: PropertyFacts,
   inputs: PaintUserInputs,
 ): PaintMeasurement | null {
-  const resolved = resolveFloorArea(facts, inputs)
+  const ceilingHeightM = CEILING_HEIGHT_M[inputs.ceiling_height]
+  const roomTotals = resolveRoomTotals(inputs, ceilingHeightM)
+  // Always resolved: the exterior fallback needs the WHOLE-HOUSE floor area
+  // even when the interior is measured room by room (a partial room schedule
+  // would otherwise shrink the façade).
+  const wholeHouse = resolveFloorArea(facts, inputs)
+  const resolved = roomTotals
+    ? ({
+        floor_area_m2: roomTotals.floor_area_m2,
+        source: 'floor_plan',
+        confidence: roomTotals.all_dimensioned ? 'high' : 'medium',
+        note: `Internal area measured from ${roomTotals.rooms_used.length} rooms on the floor plan.`,
+      } satisfies ResolvedFloorArea)
+    : wholeHouse
   if (!resolved) return null
 
   const storeys = facts.storeys && facts.storeys > 0 ? facts.storeys : 1
-  const ceilingHeightM = CEILING_HEIGHT_M[inputs.ceiling_height]
   const band = CONFIDENCE_BAND[resolved.confidence]
   const floor = resolved.floor_area_m2
 
@@ -187,34 +200,58 @@ export function measurePaintableArea(
   const scopes = new Set(inputs.scopes)
 
   if (scopes.has('walls')) {
-    const wallArea = floor * WALL_MULTIPLIER[inputs.ceiling_height]
+    const wallArea = roomTotals
+      ? roomTotals.wall_area_m2
+      : floor * WALL_MULTIPLIER[inputs.ceiling_height]
     surfaces.push({ scope: 'walls', unit: 'm2', ...withBand(wallArea) })
     notes.push(
-      `Walls ≈ floor area × ${WALL_MULTIPLIER[inputs.ceiling_height]} (${ceilingHeightM} m ceilings, openings deducted).`,
+      roomTotals
+        ? `Walls measured from ${roomTotals.rooms_used.length} rooms on the floor plan — each room's own perimeter × ${ceilingHeightM} m ceilings, openings deducted.`
+        : `Walls ≈ floor area × ${WALL_MULTIPLIER[inputs.ceiling_height]} (${ceilingHeightM} m ceilings, openings deducted).`,
     )
   }
 
   if (scopes.has('ceilings')) {
-    surfaces.push({ scope: 'ceilings', unit: 'm2', ...withBand(floor) })
-    notes.push('Ceilings ≈ internal floor area.')
+    surfaces.push({
+      scope: 'ceilings',
+      unit: 'm2',
+      ...withBand(roomTotals ? roomTotals.ceiling_area_m2 : floor),
+    })
+    notes.push(
+      roomTotals
+        ? `Ceilings measured from ${roomTotals.rooms_used.length} rooms on the floor plan.`
+        : 'Ceilings ≈ internal floor area.',
+    )
   }
 
   if (scopes.has('trim')) {
-    // Skirting/architrave linear metres ≈ internal perimeter, scaled up a
-    // little for door/window architraves and internal partition runs.
-    const perimeter = K_SHAPE_INTERIOR * 4 * Math.sqrt(floor)
-    const trimLm = perimeter * 1.6
-    surfaces.push({ scope: 'trim', unit: 'lm', ...withBand(trimLm) })
-    notes.push('Trim (skirting + architraves) ≈ internal perimeter × 1.6.')
+    if (roomTotals) {
+      // Skirting follows each room's own perimeter — the whole-house
+      // heuristic below sees one box and misses every internal partition.
+      surfaces.push({ scope: 'trim', unit: 'lm', ...withBand(roomTotals.trim_lm) })
+      notes.push(
+        `Trim measured from ${roomTotals.rooms_used.length} rooms on the floor plan — skirting around each room, plus a door architrave set per room.`,
+      )
+    } else {
+      // Skirting/architrave linear metres ≈ internal perimeter, scaled up a
+      // little for door/window architraves and internal partition runs.
+      const perimeter = K_SHAPE_INTERIOR * 4 * Math.sqrt(floor)
+      const trimLm = perimeter * 1.6
+      surfaces.push({ scope: 'trim', unit: 'lm', ...withBand(trimLm) })
+      notes.push('Trim (skirting + architraves) ≈ internal perimeter × 1.6.')
+    }
   }
 
   if (scopes.has('exterior')) {
     // Façade ≈ external perimeter × wall height × gable factor.
     // Recover the per-storey footprint to get the external perimeter.
+    // NB: the fallback uses the whole-house floor area, not `floor` — on the
+    // per-room path `floor` is the room-schedule sum, which may cover only
+    // part of the dwelling and would shrink the façade.
     const footprint =
       facts.footprint_m2 && facts.footprint_m2 > 0
         ? facts.footprint_m2
-        : floor / storeys
+        : (wholeHouse?.floor_area_m2 ?? floor) / storeys
     const extPerimeter = K_SHAPE_EXTERIOR * 4 * Math.sqrt(footprint)
     // Prefer a real ground-to-eave wall height (Geoscape averageEaveHeight):
     // it already spans every storey, so we do NOT multiply by the storey
@@ -233,6 +270,19 @@ export function measurePaintableArea(
     )
   }
 
+  if (!roomTotals && inputs.structure?.building_id && (inputs.rooms?.length ?? 0) > 0) {
+    // Customer-visible (customerMeasurementNotes passes it through to
+    // /q/paint and the PDF), so it states the fact without the internals.
+    notes.push('Measured for the selected building at this address.')
+  }
+
+  if (roomTotals && roomTotals.rooms_without_dimensions > 0) {
+    const n = roomTotals.rooms_without_dimensions
+    notes.push(
+      `${n} room${n === 1 ? '' : 's'} had no printed dimensions and ${n === 1 ? 'was' : 'were'} sized from ${n === 1 ? 'its' : 'their'} plan area.`,
+    )
+  }
+
   return {
     floor_area_m2: floor,
     floor_area_low_m2: roundTo(floor * (1 - band), 1),
@@ -243,19 +293,30 @@ export function measurePaintableArea(
     confidence: resolved.confidence,
     surfaces,
     notes,
+    basis: roomTotals ? 'rooms' : 'whole_house',
+    ...(roomTotals ? { rooms: roomTotals.rooms_used } : {}),
   }
 }
 
-/** PURE — round to N decimal places, predictable. */
-export function roundTo(n: number, dp: number): number {
-  if (!Number.isFinite(n)) return 0
-  const f = Math.pow(10, dp)
-  return Math.round(n * f) / f
-}
-
-/** PURE — clamp n into [min, max]. */
-export function clamp(n: number, min: number, max: number): number {
-  return Math.min(Math.max(n, min), max)
+/**
+ * PURE — the per-room totals, when the room path applies at all.
+ *
+ * A hand-entered floor area still wins (same priority as resolveFloorArea),
+ * and an absent / empty / all-excluded / geometry-free schedule falls
+ * through to the whole-house heuristic unchanged.
+ */
+function resolveRoomTotals(
+  inputs: PaintUserInputs,
+  ceilingHeightM: number,
+): RoomMeasurementTotals | null {
+  const manual = inputs.manual_floor_area_m2
+  if (typeof manual === 'number' && Number.isFinite(manual) && manual > 0) return null
+  // A targeted structure is ONE building at a multi-structure address, but a
+  // plan's room list covers the whole property — measuring every room would
+  // quote the main house when the granny flat was selected.
+  if (inputs.structure?.building_id) return null
+  if (!Array.isArray(inputs.rooms) || inputs.rooms.length === 0) return null
+  return measureFromRooms(inputs.rooms, { ceilingHeightM })
 }
 
 export const __test_only__ = {

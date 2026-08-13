@@ -14,6 +14,31 @@ export const PaintAddressSchema = z.object({
   state: z.enum(['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT']),
 })
 
+/** One room in the interior schedule. Mirrors PaintRoom in ./types.
+ *  Bounds are sanity limits, not business rules — a 288 m² garage is a
+ *  legitimate room, a 500 m wall is not. */
+export const PaintRoomSchema = z.object({
+  id: z.string().min(1).max(120),
+  name: z.string().min(1).max(120),
+  room_type: z.enum([
+    'bedroom',
+    'living',
+    'kitchen',
+    'bathroom',
+    'laundry',
+    'study',
+    'hall',
+    'garage',
+    'other',
+  ]),
+  width_m: z.number().positive().max(100).nullable(),
+  length_m: z.number().positive().max(100).nullable(),
+  floor_area_m2: z.number().positive().max(5000).nullable(),
+  included: z.boolean(),
+  source: z.enum(['plan', 'manual']),
+  confidence: z.enum(['high', 'medium', 'low']),
+})
+
 export const PaintInputsSchema = z.object({
   scopes: z
     .array(z.enum(['walls', 'ceilings', 'trim', 'exterior']))
@@ -24,6 +49,9 @@ export const PaintInputsSchema = z.object({
   colour_change: z.boolean(),
   storeys: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   manual_floor_area_m2: z.number().positive().max(2000).optional().nullable(),
+  /** Per-room schedule for the interior. Absent ⇒ the whole-house
+   *  heuristic, byte-identical to the pre-room-schedule behaviour. */
+  rooms: z.array(PaintRoomSchema).max(200).optional(),
   /** Which structure at the address to measure (Geoscape building id from
    *  /api/painting/structures). Optional — absent ⇒ single-building path. */
   structure: z

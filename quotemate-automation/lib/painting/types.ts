@@ -84,6 +84,45 @@ export type PaintUserInputs = {
    * confidence to HIGH — this is the "paste the floor plan figure" path.
    */
   manual_floor_area_m2?: number | null
+  /**
+   * Per-room schedule for the interior. When present (and it yields any
+   * geometry) the area engine measures walls/ceilings/trim from real
+   * per-room dimensions instead of the whole-house heuristic. Absent ⇒
+   * today's behaviour, byte-identical. `manual_floor_area_m2` still wins.
+   */
+  rooms?: PaintRoom[]
+}
+
+/** How a room's kind reads on a plan. Deliberately the same nine members as
+ *  the aircon extractor's `ExtractedRoomType` (lib/aircon/types.ts) so the
+ *  adapter in plan-rooms.ts is a total mapping with no fallback loss. */
+export type PaintRoomType =
+  | 'bedroom'
+  | 'living'
+  | 'kitchen'
+  | 'bathroom'
+  | 'laundry'
+  | 'study'
+  | 'hall'
+  | 'garage'
+  | 'other'
+
+/** One room in the interior schedule. Dimensions are metres. */
+export type PaintRoom = {
+  /** Stable key so include/exclude survives a round-trip through the UI. */
+  id: string
+  /** Label as printed on the plan, e.g. "BEDROOM 2". */
+  name: string
+  room_type: PaintRoomType
+  /** null when the plan printed no dimensions for this room. */
+  width_m: number | null
+  length_m: number | null
+  /** width × length when both are known, else the plan's own area. */
+  floor_area_m2: number | null
+  /** Whether this room is in this job's scope. */
+  included: boolean
+  source: 'plan' | 'manual'
+  confidence: PaintConfidence
 }
 
 /** Where the floor-area number came from — drives the confidence band. */
@@ -92,6 +131,7 @@ export type FloorAreaSource =
   | 'footprint' // footprint × storeys (Google Solar / Geoscape) → medium
   | 'beds_estimate' // inferred from bedroom count only → low
   | 'manual' // customer/tradie-entered → high
+  | 'floor_plan' // summed from a dimensioned floor plan → high
   | null
 
 /** Which data source produced the facts (for tracing + the UI badge). */
@@ -138,6 +178,9 @@ export type PropertyFacts = {
    *  tradie explicitly picked one (display provenance). Optional. */
   structure_label?: string | null
   structure_role?: 'primary' | 'secondary' | null
+  /** Floor-plan image URLs known for this address (Domain `photos` tagged
+   *  `FloorPlan`). Enrichment-only, optional. */
+  floor_plan_urls?: string[] | null
 }
 
 /** Operator-actionable failure codes from a property-data lookup. */
@@ -190,6 +233,12 @@ export type PaintMeasurement = {
   surfaces: PaintSurfaceArea[]
   /** Notes on how each number was derived (shown in the UI breakdown). */
   notes: string[]
+  /** Which path produced `surfaces`. Optional: rows saved before the room
+   *  schedule shipped have neither this nor `rooms`. */
+  basis?: 'rooms' | 'whole_house'
+  /** The included rooms that contributed geometry, echoed for the UI.
+   *  Only set when `basis === 'rooms'`. */
+  rooms?: PaintRoom[]
 }
 
 /** Routing outcome — identical shape to roofing's decider. */
