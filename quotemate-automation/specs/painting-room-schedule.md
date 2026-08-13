@@ -193,6 +193,19 @@ requirements, not suggestions.
     never the room total. Test it with `footprint_m2: null` and rooms supplied: the exterior
     quantity must equal the no-rooms run exactly.
 
+    **19b — and there is no third fallback.** A `?? floor` safety net still reads the room total
+    whenever `resolveFloorArea` returns null, which is reachable: facts with no listing area, no
+    footprint and no bedrooms used to make `measurePaintableArea` return `null` outright, but a
+    room schedule now carries it past that guard. Measured on the worked-example fixture the
+    façade came out **82 m²** instead of **167.3 m²** — a ~50% under-quote on the money path.
+    So when there is neither a footprint nor a whole-house floor area, **emit no `exterior`
+    surface at all** and push a customer-safe note instead:
+    `The exterior needs an on-site measure — no building outline is available for this address.`
+    Test with `{ floor_area_m2: null, footprint_m2: null, bedrooms: null }` plus rooms and
+    `scopes: ['walls','exterior']`: `basis` is `'rooms'`, walls are present, the `exterior`
+    surface is `undefined`, and the note survives `customerMeasurementNotes`. The existing
+    item-19 test does NOT reach this branch — its fixture still carries `floor_area_m2: 150`.
+
 20. **A targeted structure suppresses the room path.** `inputs.structure` means the tradie picked
     ONE building at a multi-structure address, but a plan's room list covers the whole property.
     Measuring every room would quote the main house when the granny flat was selected. When
@@ -260,8 +273,11 @@ requirements, not suggestions.
       is a positive finite number — it is absent on many records.
     - `floor_plan_urls` = `photos.filter(p => p.imageType === 'FloorPlan').map(p => p.fullUrl)`;
       `has_floor_plan` = that array's length > 0.
-    - Note: `Domain: <address>` plus `internal area <n> m²` when present. `found: true` only when
-      the detail fetch returned a usable object.
+    - Note: the matched address plus the internal area when present. **Item 16 wins on wording** —
+      follow `propradar.ts:122`'s house style (`Property attributes from a PropRadar ${kind}.`),
+      i.e. `Property attributes from Domain (matched "<address>").`, NOT a bare `Domain: <address>`.
+      Only the two facts are mandated, not the literal string. `found: true` only when the detail
+      fetch returned a usable object.
     - **Nothing throws.** Every non-2xx (including 429) and every transport error resolves to
       `EMPTY`, exactly like `propradar.ts`'s `getJson`.
 18. Wire into `lib/painting/enrich.ts`: add `domain?: DomainEnrichOpts` to `EnrichPaintingOpts`,
@@ -285,6 +301,10 @@ requirements, not suggestions.
 - **Byte-identical fallback.** With `inputs.rooms` absent, empty, all-excluded, or yielding no
   geometry, `measurePaintableArea` must return exactly what it returns today for every field
   except the new `basis: 'whole_house'`. A dedicated invariance test enforces this.
+  **One accepted exception:** item 20's targeted-structure note. When `inputs.structure` is set
+  AND rooms were supplied, that note is added even though the schedule yielded no geometry — the
+  tradie and customer are owed the reason. It can only ever appear on a targeted estimate that
+  carried rooms, so the untargeted fallback stays byte-identical.
 - **Do not touch the exterior derivation, `resolveFloorArea`'s priority order, `pricing.ts`,
   `takeoff.ts`, `report-html.ts`, the SMS composers, or any customer-facing template.** Quoted
   numbers move only because the measured quantities are more accurate — no rate, multiplier,

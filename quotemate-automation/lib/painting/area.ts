@@ -242,16 +242,28 @@ export function measurePaintableArea(
     }
   }
 
-  if (scopes.has('exterior')) {
-    // Façade ≈ external perimeter × wall height × gable factor.
-    // Recover the per-storey footprint to get the external perimeter.
-    // NB: the fallback uses the whole-house floor area, not `floor` — on the
-    // per-room path `floor` is the room-schedule sum, which may cover only
-    // part of the dwelling and would shrink the façade.
-    const footprint =
-      facts.footprint_m2 && facts.footprint_m2 > 0
-        ? facts.footprint_m2
-        : (wholeHouse?.floor_area_m2 ?? floor) / storeys
+  // Façade ≈ external perimeter × wall height × gable factor, recovered from
+  // the per-storey footprint. The fallback uses the WHOLE-HOUSE floor area and
+  // never `floor`: on the per-room path `floor` is the room-schedule sum, which
+  // may cover only part of the dwelling. With neither a footprint nor a
+  // whole-house area there is nothing to derive a façade from — before the room
+  // path existed that fact set produced no measurement at all, so inventing one
+  // from the interior schedule would be a silent under-quote.
+  const exteriorFootprint =
+    facts.footprint_m2 && facts.footprint_m2 > 0
+      ? facts.footprint_m2
+      : wholeHouse != null
+        ? wholeHouse.floor_area_m2 / storeys
+        : null
+
+  if (scopes.has('exterior') && exteriorFootprint == null) {
+    notes.push(
+      'The exterior needs an on-site measure — no building outline is available for this address.',
+    )
+  }
+
+  if (scopes.has('exterior') && exteriorFootprint != null) {
+    const footprint = exteriorFootprint
     const extPerimeter = K_SHAPE_EXTERIOR * 4 * Math.sqrt(footprint)
     // Prefer a real ground-to-eave wall height (Geoscape averageEaveHeight):
     // it already spans every storey, so we do NOT multiply by the storey

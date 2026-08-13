@@ -233,6 +233,23 @@ describe('measurePaintableArea — per-room basis', () => {
     expect(ext(withRooms)).toBe(ext(without))
   })
 
+  it('never derives the exterior from the room total when no whole-house area exists', () => {
+    // Before the room path existed this fact set produced NO measurement at
+    // all, so inventing a façade from the interior schedule would be a new,
+    // silent under-quote. Spec item 19.
+    const facts = baseFacts({ floor_area_m2: null, footprint_m2: null, bedrooms: null })
+    const m = measurePaintableArea(
+      facts,
+      baseInputs({ scopes: ['walls', 'exterior'], rooms: workedRooms() }),
+    )
+    expect(m?.basis).toBe('rooms')
+    expect(m?.surfaces.find((s) => s.scope === 'walls')).toBeDefined()
+    expect(m?.surfaces.find((s) => s.scope === 'exterior')).toBeUndefined()
+    const note = m!.notes.find((n) => /on-site measure/i.test(n))
+    expect(note).toBeDefined()
+    expect(customerMeasurementNotes([note!])).toEqual([note])
+  })
+
   it('ignores the room schedule when the tradie targeted one building', () => {
     // A plan's rooms cover the whole property; a targeted structure is one
     // building of several. Measuring every room would quote the wrong one.
