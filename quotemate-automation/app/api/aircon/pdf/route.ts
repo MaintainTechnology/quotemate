@@ -1,8 +1,7 @@
-// POST /api/aircon/pdf — render the current aircon recommendation to a PDF
-// and stream it back. Aircon is a stateless recommender (no saved row, no
-// committable quote — every result routes to "book an assessment"), so the
-// PDF is rendered on demand from the recommendation the dashboard already
-// holds, rather than persisted + token-served like the quote trades.
+// POST /api/aircon/pdf — render a saved, tenant-owned priced aircon
+// recommendation to a PDF and stream it back. The client supplies only the
+// server-owned recommendation id; money is always reloaded from the tenant-
+// scoped database row.
 //
 // Auth: same bearer-token pattern as /api/aircon/recommend. The business
 // name on the document comes from the caller's tenant.
@@ -15,8 +14,10 @@ import { renderPdfFromHtml, gotenbergConfigured } from '@/lib/pdf/gotenberg'
 import { storeQuoteAsset } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildAirconReportHtml } from '@/lib/aircon/report-html'
+import { parseStoredPricedRecommendation } from '@/lib/aircon/recommendation-schema'
+import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { loadTenantBranding } from '@/lib/pdf/branding'
-import type { AcPricedRecommendation } from '@/lib/aircon/types'
+import type { AcPricedRecommendation, AusState } from '@/lib/aircon/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -56,34 +57,19 @@ function buildAirconKbText(rec: AcPricedRecommendation, climateZone: string | nu
   return lines.join('\n')
 }
 
-/** Light structural guard — enough to avoid rendering garbage, without a
- *  full zod schema for the deep AcRecommendation shape. */
-function looksLikeRecommendation(v: unknown): v is AcPricedRecommendation {
-  if (!v || typeof v !== 'object') return false
-  const r = v as Record<string, unknown>
-  return (
-    r.pricing_status === 'priced' &&
-    !!r.sizing &&
-    typeof r.sizing === 'object' &&
-    Array.isArray(r.options) &&
-    r.options.length > 0 &&
-    !!r.routing &&
-    typeof r.routing === 'object'
-  )
-}
-
 export async function POST(req: Request) {
-  // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
-  // optional — the business name falls back to a generic default.
+  // Dual-auth: Clerk session token OR legacy Supabase token. A tenant is
+  // mandatory because the recommendation id is scoped to its owner.
   const resolved = await resolveTenantRequest(supabase, req, 'id, business_name')
   if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
   const tenantRow = resolved.tenant as { id?: string; business_name?: string } | null
-  const tenant = {
-    id: (tenantRow?.id as string | undefined) ?? null,
-    businessName: (tenantRow?.business_name as string | undefined) ?? 'Your installer',
+  const tenantId = (tenantRow?.id as string | undefined) ?? null
+  if (!tenantId) {
+    return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
   }
+  const businessName = (tenantRow?.business_name as string | undefined) ?? 'Your installer'
 
   if (!gotenbergConfigured()) {
     return Response.json({ ok: false, error: 'PDF service not configured' }, { status: 503 })
@@ -95,22 +81,46 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
   }
-  const b = (body ?? {}) as { address?: unknown; recommendation?: unknown; climateZone?: unknown }
-  if (!looksLikeRecommendation(b.recommendation)) {
-    return Response.json({ ok: false, error: 'invalid_recommendation' }, { status: 400 })
+  const recommendationId =
+    body && typeof body === 'object' && typeof (body as { recommendationId?: unknown }).recommendationId === 'string'
+      ? (body as { recommendationId: string }).recommendationId.trim()
+      : ''
+  if (!recommendationId) {
+    return Response.json({ ok: false, error: 'invalid_recommendation_id' }, { status: 400 })
   }
+
+  const { data: stored, error: loadError } = await supabase
+    .from('aircon_recommendations')
+    .select('id, tenant_id, address, postcode, state, recommendation')
+    .eq('id', recommendationId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (loadError) {
+    return Response.json({ ok: false, error: 'recommendation_load_failed' }, { status: 500 })
+  }
+  if (!stored) {
+    return Response.json({ ok: false, error: 'recommendation_not_found' }, { status: 404 })
+  }
+  const recommendation = parseStoredPricedRecommendation(stored.recommendation)
+  if (!recommendation) {
+    return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+  }
+  const address = typeof stored.address === 'string' ? stored.address : ''
+  const postcode = typeof stored.postcode === 'string' ? stored.postcode : ''
+  const state = typeof stored.state === 'string' ? stored.state : ''
+  const climateZone = /^\d{4}$/.test(postcode) && ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'].includes(state)
+    ? climateZoneForPostcode(postcode, state as AusState).zone
+    : null
 
   let pdf: Buffer
   try {
-    const branding = tenant.id
-      ? await loadTenantBranding(supabase, tenant.id, 'aircon')
-      : undefined
+    const branding = await loadTenantBranding(supabase, tenantId, 'aircon')
     const html = buildAirconReportHtml({
-      businessName: branding?.businessName ?? tenant.businessName,
+      businessName: branding?.businessName ?? businessName,
       branding,
-      address: typeof b.address === 'string' ? b.address : '',
-      recommendation: b.recommendation,
-      climateZone: typeof b.climateZone === 'string' ? b.climateZone : null,
+      address,
+      recommendation,
+      climateZone,
     })
     pdf = await renderPdfFromHtml(html)
   } catch (e) {
@@ -118,29 +128,19 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'PDF unavailable right now — try again shortly' }, { status: 503 })
   }
 
-  // Land this recommendation in the tradie's Files tab (best-effort, post-
-  // response). Aircon is stateless (no saved row/token), so we archive the
-  // just-rendered PDF directly under a deterministic id and ingest a PII-
-  // minimized summary. Identical recommendations dedupe via that id +
-  // archiveAndIngestQuote's (tenant_id, display_name) upsert.
+  // Land this server-owned recommendation in the tradie's Files tab
+  // (best-effort, post-response). The database id is the stable archive key.
   const renderedPdf = pdf
-  const tenantId = tenant.id
-  const rec = b.recommendation
-  const climateZone = typeof b.climateZone === 'string' ? b.climateZone : null
-  const addr = typeof b.address === 'string' ? b.address : ''
   after(async () => {
-    if (process.env.TENANT_FILESTORE_ENABLED !== 'true' || !tenantId) return
+    if (process.env.TENANT_FILESTORE_ENABLED !== 'true') return
     try {
-      const sourceId = createHash('sha256')
-        .update(`${tenantId}|${addr}|${JSON.stringify(rec)}`)
-        .digest('hex')
-        .slice(0, 32)
+      const sourceId = recommendationId
       const fullDocPath = await storeQuoteAsset(
         `aircon/${tenantId}/${sourceId}.pdf`,
         renderedPdf,
         'application/pdf',
       )
-      const kbText = buildAirconKbText(rec, climateZone)
+      const kbText = buildAirconKbText(recommendation, climateZone)
       const contentHash = createHash('sha256').update(kbText).digest('hex')
       await archiveAndIngestQuote({
         tenantId,

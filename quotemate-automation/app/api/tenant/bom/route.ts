@@ -84,7 +84,7 @@ export async function GET(req: Request) {
   if (assemblyIds.length > 0) {
     const { data: baselineRows } = await supabase
       .from('shared_assembly_bom')
-      .select('assembly_id, material_category, description, quantity, required, sort')
+      .select('assembly_id, material_category, description, quantity, required, sort, include_when')
       .in('assembly_id', assemblyIds)
       .order('assembly_id', { ascending: true })
       .order('sort', { ascending: true })
@@ -97,6 +97,10 @@ export async function GET(req: Request) {
           quantity: Number(r.quantity),
           required: !!r.required,
           sort: Number(r.sort ?? 0),
+          include_when:
+            r.include_when && typeof r.include_when === 'object'
+              ? (r.include_when as Record<string, unknown>)
+              : null,
         })
         return acc
       },
@@ -104,25 +108,35 @@ export async function GET(req: Request) {
     )
   }
 
-  // Which material categories this tradie actually has a priced, active
-  // product for (their Catalogue). The Recipes UI uses this to badge each
-  // line "priced from your catalogue" vs "no product — generic price", so
-  // the Catalogue↔Recipes join is visible instead of silently breaking.
+  // Which material categories this tradie actually has a finite, active
+  // tenant price for, keyed by trade so a same-named category in another
+  // trade cannot make this recipe look quote-ready.
   // Resilient: absent table (pre-028 prod) / error → [] so GET still
   // returns assemblies + lines (no behaviour change).
   let cq = supabase
     .from('tenant_material_catalogue')
-    .select('category')
+    .select('trade, category, unit_price_ex_gst')
     .eq('tenant_id', tenant.id)
     .eq('active', true)
   if (trades.length > 0) cq = cq.in('trade', trades)
   const { data: catRows } = await cq
-  const catalogueCategories = Array.from(
-    new Set(
-      (catRows ?? [])
-        .map((r: { category: string | null }) => (r.category ?? '').trim().toLowerCase())
-        .filter((c: string) => c !== ''),
-    ),
+  const categorySets = new Map<string, Set<string>>()
+  for (const row of catRows ?? []) {
+    const trade = String(row.trade ?? '').trim().toLowerCase()
+    const category = String(row.category ?? '').trim().toLowerCase()
+    const rawPrice = row.unit_price_ex_gst
+    const price = rawPrice === null || rawPrice === undefined || rawPrice === ''
+      ? Number.NaN
+      : typeof rawPrice === 'string'
+        ? Number.parseFloat(rawPrice)
+        : Number(rawPrice)
+    if (!trade || !category || !Number.isFinite(price)) continue
+    const set = categorySets.get(trade) ?? new Set<string>()
+    set.add(category)
+    categorySets.set(trade, set)
+  }
+  const catalogueCategoriesByTrade = Object.fromEntries(
+    [...categorySets.entries()].map(([trade, categories]) => [trade, [...categories].sort()]),
   )
 
   return Response.json({
@@ -130,7 +144,7 @@ export async function GET(req: Request) {
     assemblies,
     lines: lines ?? [],
     baselines: baselinesByAssembly,
-    catalogue_categories: catalogueCategories,
+    catalogue_categories_by_trade: catalogueCategoriesByTrade,
   })
 }
 
@@ -140,6 +154,7 @@ type BaselineLine = {
   quantity: number
   required: boolean
   sort: number
+  include_when: Record<string, unknown> | null
 }
 
 // ─── POST /api/tenant/bom ──────────────────────────────────────────

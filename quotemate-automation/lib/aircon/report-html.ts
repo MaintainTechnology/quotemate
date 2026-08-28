@@ -17,6 +17,7 @@ import {
   aud0,
   type TenantBranding,
 } from '../pdf/report-chrome'
+import { airconPriceBasis, airconPriceBasisSentence } from './gst-copy'
 
 export type AirconReportInput = {
   businessName: string
@@ -48,7 +49,7 @@ function optionBlock(o: AcOption): string {
     </div>
     <div class="price" style="font-size:18px;margin-top:8px;">${aud0(o.price.low)} – ${aud0(
       o.price.high,
-    )} <span class="caveat" style="font-size:10px;">inc GST (indicative)</span></div>
+    )} <span class="caveat" style="font-size:10px;">${airconPriceBasis(o.pricing.gst_registered)} (indicative)</span></div>
     <div class="opt-cols" style="display:flex;gap:18px;margin-top:8px;">
       <div style="flex:1;">
         <div class="mono" style="font-size:8.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);">Why it fits</div>
@@ -63,10 +64,10 @@ function optionBlock(o: AcOption): string {
 }
 
 /** Per-trade default "Please Note" disclaimers — every aircon result is indicative. */
-const AIRCON_PLEASE_NOTE = [
+const airconPleaseNote = (gstRegistered: boolean) => [
   'These figures are indicative only — sizing and pricing are derived from property data and your inputs, not a fixed quote.',
   'Final system, exact capacity and price are confirmed on site before any work is booked.',
-  'Prices shown include 10% GST and cover indicative supply and installation; electrical, switchboard or building works are quoted separately if required.',
+  airconPriceBasisSentence(gstRegistered),
   'Indicative ranges assume standard access and mounting; roof-space, height or access constraints may change the final price.',
   'An installer reviews every recommendation and completes an on-site assessment before any work proceeds.',
 ]
@@ -79,6 +80,8 @@ export function buildAirconReportHtml(input: AirconReportInput): string {
   })
   const branding = input.branding ?? brandingFromName(input.businessName)
   const r = input.recommendation
+  const gstRegistered = r.options[0]?.pricing.gst_registered === true
+  const priceBasis = airconPriceBasis(gstRegistered)
   const s = r.sizing
   const zone = input.climateZone ? `${esc(input.climateZone)} climate · ` : ''
 
@@ -107,8 +110,8 @@ export function buildAirconReportHtml(input: AirconReportInput): string {
     </div>
   </div>`
 
-  // ── Options (inc GST, indicative) — always two, ordered [ducted, split] ──
-  body += `<h2>Your options (inc GST, indicative)</h2>`
+  // ── Options — always two, ordered [ducted, split] ──
+  body += `<h2>Your options (${priceBasis}, indicative)</h2>`
   body += r.options.map(optionBlock).join('')
 
   // ── Next step — always an on-site assessment ──
@@ -127,7 +130,8 @@ export function buildAirconReportHtml(input: AirconReportInput): string {
       input.address,
     )}</strong>. Below is the indicative sizing and two system options (ducted and split) — an on-site assessment confirms everything before any work is booked.`,
     bodyHtml: body,
-    pleaseNote: AIRCON_PLEASE_NOTE,
+    pleaseNote: airconPleaseNote(gstRegistered),
     closingLine: null,
+    footerPriceNote: gstRegistered ? 'Prices include GST' : 'No GST charged',
   })
 }

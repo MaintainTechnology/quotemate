@@ -12499,7 +12499,7 @@ function RecipesTab({
   // Categories this tradie has a priced, active Catalogue product for —
   // used to badge each recipe line so a Catalogue↔Recipe mismatch is
   // visible instead of silently costing them their real product + price.
-  const [catalogueCats, setCatalogueCats] = useState<string[]>([])
+  const [catalogueCatsByTrade, setCatalogueCatsByTrade] = useState<Record<string, string[]>>({})
   const blank = { material_category: '', quantity: '1', required: true, description: '' }
   const [form, setForm] = useState({ ...blank })
   // Phase 3 — the step checklist, on its own endpoint and its own error
@@ -12538,12 +12538,12 @@ function RecipesTab({
         assemblies: AsmOpt[]
         lines: BomLineRow[]
         baselines?: Record<string, BaselineLine[]>
-        catalogue_categories?: string[]
+        catalogue_categories_by_trade?: Record<string, string[]>
       }
       setAssemblies(json.assemblies)
       setLines(json.lines)
       setBaselines(json.baselines ?? {})
-      setCatalogueCats(json.catalogue_categories ?? [])
+      setCatalogueCatsByTrade(json.catalogue_categories_by_trade ?? {})
       setSelectedId((cur) => {
         // Trade-hub mode: default (and heal) the selection within this
         // trade's recipes only, so an electrical hub never lands on a
@@ -12596,6 +12596,9 @@ function RecipesTab({
   }, [selectedId])
 
   const selectedAsm = assemblies.find((a) => a.id === selectedId) ?? null
+  const catalogueCats = selectedAsm
+    ? catalogueCatsByTrade[(selectedAsm.trade ?? '').toLowerCase()] ?? []
+    : []
   // Trade-hub mode: scope the picker to one trade before the name search.
   const tradeAssemblies = tradeFilter
     ? assemblies.filter((a) => (a.trade ?? '').toLowerCase() === tradeFilter)

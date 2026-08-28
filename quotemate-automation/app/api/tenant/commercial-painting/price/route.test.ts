@@ -48,6 +48,7 @@ const TENANT_ROWS: PaintRateRow[] = [
 type DbState = {
   extractionItems?: PaintTakeoffItem[]
   book?: { id: string; gst_registered: boolean } | null
+  clearError?: { message: string } | null
   extractionUpdates: unknown[]
   runUpdates: unknown[]
 }
@@ -69,7 +70,10 @@ function installDb(state: DbState) {
       }) as Record<string, unknown>
       q.update = vi.fn((payload: unknown) => {
         state.extractionUpdates.push(payload)
-        return chain({ error: null })
+        return chain({
+          data: state.clearError ? null : { id: 'ext-1', priced_bom: null, priced_at: null },
+          error: state.clearError ?? null,
+        })
       })
       return q
     }
@@ -163,5 +167,21 @@ describe('commercial painting price authority route', () => {
       const priced = (update as { priced_bom?: unknown }).priced_bom
       return priced !== null && typeof priced === 'object'
     })).toBe(false)
+  })
+
+  it('fails closed when stale priced state cannot be cleared', async () => {
+    const state: DbState = {
+      book: { id: 'book-1', gst_registered: true },
+      extractionItems: [{ ...ITEM, system: 'textured' as never }],
+      clearError: { message: 'write denied' },
+      extractionUpdates: [],
+      runUpdates: [],
+    }
+    installDb(state)
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toMatchObject({ ok: false, error: 'stale_pricing_clear_failed' })
   })
 })

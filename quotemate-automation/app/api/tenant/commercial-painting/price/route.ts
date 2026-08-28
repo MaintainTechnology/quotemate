@@ -75,17 +75,33 @@ export async function POST(req: Request) {
   const authority = assessPaintPricingAuthority(bom, book, pricingBook != null)
 
   if (!authority.ok) {
-    await Promise.all([
+    const [clearResult, runResetResult] = await Promise.all([
       estimatorSupabase
         .from('plan_extractions')
         .update({ priced_bom: null, priced_at: null, updated_at: new Date().toISOString() })
-        .eq('id', extractionId),
+        .eq('id', extractionId)
+        .eq('paint_run_id', paintRunId)
+        .eq('tenant_id', tenant.id)
+        .select('id, priced_bom, priced_at')
+        .maybeSingle(),
       estimatorSupabase
         .from('paint_runs')
         .update({ status: 'ready', updated_at: new Date().toISOString() })
         .eq('id', paintRunId)
         .eq('tenant_id', tenant.id),
     ])
+    if (
+      clearResult.error ||
+      !clearResult.data ||
+      clearResult.data.priced_bom !== null ||
+      clearResult.data.priced_at !== null ||
+      runResetResult.error
+    ) {
+      return Response.json(
+        { ok: false, error: 'stale_pricing_clear_failed' },
+        { status: 500 },
+      )
+    }
     return Response.json(authority, { status: 422 })
   }
 

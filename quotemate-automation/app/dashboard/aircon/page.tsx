@@ -23,11 +23,11 @@ import { RoofTilesViewer } from '../roofing/_components/RoofTilesViewer'
 import { ZoomableImage } from '../_components/ZoomableImage'
 import { FloorPlanOverlay } from '../_components/FloorPlanOverlay'
 import { StatusPill } from '../_components/quote-ui'
+import { airconPriceBasis } from '@/lib/aircon/gst-copy'
 import type { AcLocationEvidence } from '@/lib/aircon/location'
 import type {
   AcOption,
   AcPlanDesign,
-  AcPricedRecommendation,
   AcRecommendation,
   AcResolvedRoom,
   AcSizing,
@@ -61,6 +61,7 @@ type RecommendResponse =
       climate_note: string
       location: AcLocationEvidence
       recommendation: AcRecommendation
+      saved: { id: string; public_token: string } | null
       plan?: PlanReadout
       design?: AcPlanDesign
     }
@@ -434,7 +435,7 @@ function Result({
   addressInput: { address: string; postcode: string; state: AusState }
   planFile: File | null
 }) {
-  const { recommendation: r, climate_zone, climate_note, location, plan, design } = resp
+  const { recommendation: r, climate_zone, climate_note, location, plan, design, saved } = resp
   return (
     <section className="mt-16 flex flex-col gap-14 sm:mt-20 sm:gap-16">
       <div>
@@ -488,12 +489,10 @@ function Result({
             Book a <span className="text-accent">site assessment</span>
           </p>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-sec">{r.routing.reason}</p>
-          {r.pricing_status === 'priced' && (
+          {r.pricing_status === 'priced' && saved && (
             <AirconPdfButton
               token={token}
-              address={location.geocode.ok ? (location.geocode.formatted_address ?? addressInput.address) : addressInput.address}
-              recommendation={r}
-              climateZone={climate_zone}
+              recommendationId={saved.id}
             />
           )}
         </div>
@@ -502,20 +501,13 @@ function Result({
   )
 }
 
-/** Stateless "Download PDF" — POSTs the current recommendation to
- *  /api/aircon/pdf and triggers a browser download of the streamed PDF.
- *  Aircon has no saved row, so there's nothing to link to — the doc is
- *  rendered on demand from what's on screen. */
+/** Downloads the tenant-scoped recommendation persisted by the server. */
 function AirconPdfButton({
   token,
-  address,
-  recommendation,
-  climateZone,
+  recommendationId,
 }: {
   token: string | null
-  address: string
-  recommendation: AcPricedRecommendation
-  climateZone: string | null
+  recommendationId: string
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -528,7 +520,7 @@ function AirconPdfButton({
       const res = await fetch('/api/aircon/pdf', {
         method: 'POST',
         headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, recommendation, climateZone }),
+        body: JSON.stringify({ recommendationId }),
       })
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: string } | null
@@ -549,7 +541,7 @@ function AirconPdfButton({
     } finally {
       setBusy(false)
     }
-  }, [token, address, recommendation, climateZone])
+  }, [token, recommendationId])
 
   return (
     <div className="mt-5">
@@ -862,7 +854,7 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
         {money(o.price.low)} <span className="text-text-dim">–</span> {money(o.price.high)}
       </p>
       <p className="mt-2 text-[0.68rem] uppercase tracking-[0.08em] text-text-dim">
-        inc GST · indicative · point estimate{' '}
+        {airconPriceBasis(p.gst_registered)} · indicative · point estimate{' '}
         <span className="text-text-sec">{money(p.point_estimate_inc_gst)}</span> ±{p.confidence_band_pct}%
       </p>
 
@@ -902,15 +894,13 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
               <td />
               <td className="whitespace-nowrap py-2 text-right font-mono">{money(p.point_estimate_ex_gst)}</td>
             </tr>
-            {p.gst_registered && (
-              <tr className="font-bold">
-                <td className="py-2 pr-2 uppercase">+ 10% GST</td>
-                <td />
-                <td className="whitespace-nowrap py-2 text-right font-mono text-accent">
-                  {money(p.point_estimate_inc_gst)}
-                </td>
-              </tr>
-            )}
+            <tr className="font-bold">
+              <td className="py-2 pr-2 uppercase">{p.gst_registered ? '+ 10% GST' : 'NO GST CHARGED'}</td>
+              <td />
+              <td className="whitespace-nowrap py-2 text-right font-mono text-accent">
+                {money(p.point_estimate_inc_gst)}
+              </td>
+            </tr>
           </tbody>
         </table>
         <p className="mt-3 text-xs leading-relaxed text-text-dim">{p.band_reason}</p>

@@ -14,6 +14,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { AcPricedRecommendation, AcOption } from '@/lib/aircon/types'
+import { airconPriceBasis } from '@/lib/aircon/gst-copy'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome } from '../../_chrome/QuoteChrome'
 import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
@@ -61,6 +62,7 @@ export default async function AirconQuotePage(props: { params: Promise<{ token: 
   const rec = row.recommendation as AcPricedRecommendation
   const sizing = rec.sizing
   const options = Array.isArray(rec.options) ? rec.options : []
+  const gstRegistered = options[0]?.pricing.gst_registered === true
   const business =
     identity?.business_name ??
     (row.tenants as { business_name?: string } | null)?.business_name ??
@@ -103,7 +105,7 @@ export default async function AirconQuotePage(props: { params: Promise<{ token: 
       recommended: opt.best_fit,
       blurb: `${round1(opt.capacity_kw)} kW ${SYSTEM_LABEL[opt.system_type].toLowerCase()}`,
       priceText: `${aud(opt.price.low)}–${aud(opt.price.high)}`,
-      priceNote: 'inc GST · indicative',
+      priceNote: `${airconPriceBasis(opt.pricing.gst_registered)} · indicative`,
       items,
       ctaLabel: 'Book assessment',
       ctaHref: null,
@@ -152,7 +154,7 @@ export default async function AirconQuotePage(props: { params: Promise<{ token: 
           <TierCards
             eyebrow="Your systems"
             heading={options.length === 1 ? 'Your option' : 'Ducted vs split'}
-            intro="Both prices are indicative inc-GST bands. Nothing is fixed until the on-site assessment — no deposit, no obligation."
+            intro={`Both prices are indicative ${airconPriceBasis(gstRegistered)} bands. Nothing is fixed until the on-site assessment — no deposit, no obligation.`}
             tiers={tiers}
           />
         ) : null}
@@ -168,7 +170,7 @@ export default async function AirconQuotePage(props: { params: Promise<{ token: 
             { k: 'Installer', v: business },
             { k: 'Prepared', v: date },
             ...(locationLine ? [{ k: 'Property', v: `${address} · ${locationLine}` }] : [{ k: 'Property', v: address }]),
-            { k: 'Pricing', v: 'Indicative inc-GST bands · confirmed on site' },
+            { k: 'Pricing', v: `Indicative ${airconPriceBasis(gstRegistered)} bands · confirmed on site` },
           ]}
           tagline="Book the assessment · We confirm the system · You get a fixed price"
         />

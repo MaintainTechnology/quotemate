@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const tableData = new Map<string, unknown[]>()
+  let throwTable: string | null = null
   const generateText = vi.fn()
   const logErr = vi.fn()
   const from = vi.fn((table: string) => {
+    if (table === throwTable) throw new Error(`authority read failed: ${table}`)
     const result = { data: tableData.get(table) ?? [], error: null }
     const q: Record<string, unknown> = {}
     for (const method of ['select', 'eq', 'in', 'order', 'or', 'limit']) {
@@ -14,7 +16,13 @@ const mocks = vi.hoisted(() => {
     q.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve)
     return q
   })
-  return { tableData, generateText, from, logErr }
+  return {
+    tableData,
+    generateText,
+    from,
+    logErr,
+    setThrowTable: (table: string | null) => { throwTable = table },
+  }
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: mocks.from }) }))
@@ -44,6 +52,7 @@ const pricingBook = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.tableData.clear()
+  mocks.setThrowTable(null)
   mocks.generateText.mockResolvedValue({
     text: JSON.stringify({
       good: { line_items: [], subtotal_ex_gst: 100 },
@@ -103,5 +112,25 @@ describe('runEstimation recipe price authority preflight', () => {
 
     expect(mocks.generateText).toHaveBeenCalledTimes(1)
     expect(result.draft.needs_inspection).toBe(true)
+  })
+
+  it('fails closed before Opus when recipe authority cannot be established', async () => {
+    mocks.setThrowTable('shared_assemblies')
+
+    const result = await runEstimation(
+      { id: 'intake-3', tenant_id: 'tenant-1', trade: 'electrical', job_type: 'downlights', scope: {} },
+      pricingBook,
+    )
+
+    expect(mocks.generateText).not.toHaveBeenCalled()
+    expect(result.draft).toMatchObject({
+      good: null,
+      better: null,
+      best: null,
+      needs_inspection: true,
+      pricing_path: 'inspection',
+    })
+    expect(result.draft.risk_flags).toContain('recipe_authority_check_failed')
+    expect(result.downgradedToInspection).toBe(true)
   })
 })

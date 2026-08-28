@@ -75,6 +75,8 @@ const unmatchedBom = pricePaintTakeoff([{ ...ITEM, system: 'textured' as never }
 
 type DbState = {
   bom: PricedPaintBom
+  extractionItems?: PaintTakeoffItem[]
+  correctedItems?: PaintTakeoffItem[] | null
   book?: { id: string; gst_registered: boolean } | null
   inserts: Array<{ table: string; payload: unknown }>
   updates: Array<{ table: string; payload: unknown }>
@@ -93,7 +95,14 @@ function installDb(state: DbState) {
   mocks.from.mockImplementation((table: string) => {
     let result: unknown
     if (table === 'paint_runs') result = { data: { id: 'run-1', job_name: 'Retail repaint', site_address: '1 Test St' }, error: null }
-    else if (table === 'plan_extractions') result = { data: { id: 'ext-1', priced_bom: state.bom, priced_at: '2026-08-28T00:00:00Z', sheets_used: {} }, error: null }
+    else if (table === 'plan_extractions') result = { data: {
+      id: 'ext-1',
+      items: state.extractionItems ?? [ITEM],
+      corrected_items: state.correctedItems ?? null,
+      priced_bom: state.bom,
+      priced_at: '2026-08-28T00:00:00Z',
+      sheets_used: {},
+    }, error: null }
     else if (table === 'pricing_book') result = { data: state.book ?? null, error: null }
     else if (table === 'tenants') result = { data: { business_name: 'Tenant Painting', twilio_sms_number: null }, error: null }
     else if (table === 'intakes') result = { data: { id: 'intake-1' }, error: null }
@@ -113,10 +122,10 @@ function installDb(state: DbState) {
   })
 }
 
-function request() {
+function request(extra: Record<string, unknown> = {}) {
   return new Request('http://localhost/api/tenant/commercial-painting/save-quote', {
     method: 'POST',
-    body: JSON.stringify({ paintRunId: 'run-1', extractionId: 'ext-1' }),
+    body: JSON.stringify({ paintRunId: 'run-1', extractionId: 'ext-1', ...extra }),
   })
 }
 
@@ -165,5 +174,51 @@ describe('commercial painting save quote authority route', () => {
     const quote = state.inserts.find((entry) => entry.table === 'quotes')?.payload as Record<string, unknown>
     expect(quote.routing_decision).toBe('tradie_review')
     expect(quote.needs_inspection).toBe(false)
+  })
+
+  it('saves a valid customer-linked quote as a draft without dispatching it', async () => {
+    const state: DbState = { bom: validBom, book: { id: 'book-1', gst_registered: true }, inserts: [], updates: [] }
+    installDb(state)
+
+    const response = await POST(request({ customerPhone: '0412 345 678', customerName: 'Sam' }))
+
+    expect(response.status).toBe(200)
+    expect(mocks.dispatchQuoteWithPdf).not.toHaveBeenCalled()
+    const quote = state.inserts.find((entry) => entry.table === 'quotes')?.payload as Record<string, unknown>
+    expect(quote.routing_decision).toBe('tradie_review')
+  })
+
+  it('rejects a stale stored BOM when the current confirmed takeoff is now unmatched', async () => {
+    const state: DbState = {
+      bom: validBom,
+      correctedItems: [{ ...ITEM, system: 'textured' as never }],
+      book: { id: 'book-1', gst_registered: true },
+      inserts: [],
+      updates: [],
+    }
+    installDb(state)
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(422)
+    expect(await response.json()).toMatchObject({ ok: false, error: 'inspection_required' })
+    expect(state.inserts).toEqual([])
+  })
+
+  it('rejects a stale stored BOM when the current confirmed quantity changed', async () => {
+    const state: DbState = {
+      bom: validBom,
+      correctedItems: [{ ...ITEM, quantity: ITEM.quantity + 20 }],
+      book: { id: 'book-1', gst_registered: true },
+      inserts: [],
+      updates: [],
+    }
+    installDb(state)
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(422)
+    expect(await response.json()).toMatchObject({ ok: false, error: 'tenant_pricing_required' })
+    expect(state.inserts).toEqual([])
   })
 })

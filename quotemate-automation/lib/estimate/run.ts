@@ -199,10 +199,26 @@ export async function runEstimation(
       }
     }
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
     cacheLog.err(
-      'recipe price-authority preflight errored — continuing existing estimation path',
-      error instanceof Error ? error.message : String(error),
+      'recipe price-authority preflight errored — terminal inspection route',
+      detail,
     )
+    const draft: Record<string, unknown> = {
+      needs_inspection: true,
+      inspection_reason: resolveInspectionReason(
+        'Recipe pricing authority could not be verified. Complete an on-site assessment before quoting.',
+      ),
+      risk_flags: ['recipe_authority_check_failed'],
+    }
+    forceInspectionTiers(draft)
+    trace('estimate', 'warn', {
+      substep: 'route_to_inspection',
+      message: 'recipe price authority could not be established',
+      decisions: { route: 'inspection', cause: 'recipe_authority_check_failed' },
+      duration_ms: totalSw.elapsed(),
+    })
+    return { draft, downgradedToInspection: true }
   }
 
   // RAG: anchor Opus to similar past quotes. Returns null on cold-start
