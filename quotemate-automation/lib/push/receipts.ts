@@ -110,6 +110,19 @@ export async function sweepPushReceipts(
         continue
       }
 
+      if (action.prune) {
+        const { error: pruneError } = await supabase
+          .from('push_tokens')
+          .delete()
+          .eq('tenant_id', action.ticket.tenant_id)
+          .eq('user_id', action.ticket.user_id)
+          .eq('token', action.ticket.token)
+        if (pruneError) {
+          result.retryable++
+          continue
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('push_tickets')
         .update({
@@ -122,16 +135,7 @@ export async function sweepPushReceipts(
       if (updateError) continue
       result.checked++
       if (action.status === 'expired') result.expired++
-
-      if (action.prune) {
-        const { error: pruneError } = await supabase
-          .from('push_tokens')
-          .delete()
-          .eq('tenant_id', action.ticket.tenant_id)
-          .eq('user_id', action.ticket.user_id)
-          .eq('token', action.ticket.token)
-        if (!pruneError) result.pruned++
-      }
+      if (action.prune) result.pruned++
     }
   }
 

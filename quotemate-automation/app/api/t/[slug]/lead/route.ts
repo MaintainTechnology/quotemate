@@ -13,7 +13,7 @@ import { embedIntake } from '@/lib/intake/embed'
 import { findOrCreateCustomer } from '@/lib/customers/lookup'
 import { normaliseAuMobile } from '@/lib/onboard/schema'
 import { randomUUID } from 'node:crypto'
-import { sendPushToTenant } from '@/lib/push/send'
+import { enqueuePushEvent } from '@/lib/push/events'
 
 export const maxDuration = 300
 
@@ -32,6 +32,39 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
+
+export function selectPublicLeadBranch(dialogEnabled: boolean): 'dialog' | 'legacy' {
+  return dialogEnabled ? 'dialog' : 'legacy'
+}
+
+export async function enqueuePublicLeadPush(
+  input: {
+    tenantId: string
+    name: string
+    suburb: string
+    conversationId: string | null
+    intakeId: string | null
+  },
+  deps: { enqueue?: typeof enqueuePushEvent } = {},
+): Promise<boolean> {
+  const sourceId = input.conversationId ?? input.intakeId
+  if (!sourceId) return false
+  const source = input.conversationId ? 'sms' : 'intake'
+  try {
+    return await (deps.enqueue ?? enqueuePushEvent)(supabase, {
+      eventKey: `new-lead:${source}:${sourceId}`,
+      tenantId: input.tenantId,
+      title: 'New lead',
+      body: input.name && input.suburb
+        ? `${input.name} in ${input.suburb} just asked for a quote.`
+        : 'A new enquiry just came in.',
+      url: input.conversationId ? `/chats?chatId=${input.conversationId}` : '/chats',
+    })
+  } catch (error: unknown) {
+    console.warn('[t/lead] push event enqueue failed (non-fatal)', error instanceof Error ? error.message : String(error))
+    return false
+  }
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params
@@ -127,9 +160,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       // flows through /api/sms/inbound → finish → intake → estimate/draft.
       // Flip WEB_LEAD_DIALOG_ENABLED=false to revert to the legacy one-shot path.
       const dialogEnabled = (process.env.WEB_LEAD_DIALOG_ENABLED ?? 'true').toLowerCase() !== 'false'
-      if (dialogEnabled) {
+      if (selectPublicLeadBranch(dialogEnabled) === 'dialog') {
         const { startWebLeadConversation } = await import('@/lib/sms/start-web-lead-conversation')
-        await startWebLeadConversation({
+        const dialog = await startWebLeadConversation({
           supabase,
           tenant: {
             id: tenant.id,
@@ -145,6 +178,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
           photoUrls,
           customerId: customer?.id ?? null,
           fallbackFrom: process.env.TWILIO_SMS_NUMBER ?? null,
+        })
+        await enqueuePublicLeadPush({
+          tenantId: tenant.id,
+          name,
+          suburb,
+          conversationId: dialog.conversationId,
+          intakeId: null,
         })
         console.log('[t/lead] web lead → SMS dialog started', { tenant: tenant.id })
         return
@@ -200,12 +240,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         return
       }
 
-      await sendPushToTenant(supabase, tenant.id, {
-        title: 'New lead',
-        body: name && suburb
-          ? `${name} in ${suburb} just asked for a quote.`
-          : 'A new enquiry just came in.',
-        url: '/chats',
+      await enqueuePublicLeadPush({
+        tenantId: tenant.id,
+        name,
+        suburb,
+        conversationId: null,
+        intakeId: intakeRow.id as string,
       })
 
       // Resolve the base URL for the self-call to /api/estimate/draft.

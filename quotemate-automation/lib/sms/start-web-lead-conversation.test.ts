@@ -17,13 +17,9 @@ vi.mock('./dialog', () => ({
 vi.mock('./dispatch', () => ({
   dispatchQuoteMessage: vi.fn(async () => ({ ok: true, channel: 'sms', sid: 'SM123', status: 'queued' })),
 }))
-vi.mock('@/lib/push/send', () => ({
-  sendPushToTenant: vi.fn(async () => undefined),
-}))
 
 import { decideNextTurn } from './dialog'
 import { dispatchQuoteMessage } from './dispatch'
-import { sendPushToTenant } from '@/lib/push/send'
 import { startWebLeadConversation } from './start-web-lead-conversation'
 
 type RecordedCall = { table: string; op: 'insert' | 'update'; row: Record<string, unknown> }
@@ -115,6 +111,7 @@ describe('startWebLeadConversation', () => {
     expect(outbound.row.body).toContain('downlights')
     const update = callsOf(input).find(c => c.table === 'sms_conversations' && c.op === 'update')!
     expect(update.row.turn_count).toBe(1)
+    expect(update.row).not.toHaveProperty('lead_push_sent_at')
   })
 
   it('alerts the tradie at their owner_mobile', async () => {
@@ -123,17 +120,6 @@ describe('startWebLeadConversation', () => {
     const tradieSend = dispatchCalls().find(c => c[0].to === '+61400000001')!
     expect(tradieSend).toBeTruthy()
     expect(tradieSend[0].text).toContain('Jeph')
-  })
-
-  it('sends exactly one New lead push for a newly-created dialog with its chat deep link', async () => {
-    const input = baseInput()
-    await startWebLeadConversation(input)
-    expect(sendPushToTenant).toHaveBeenCalledTimes(1)
-    expect(sendPushToTenant).toHaveBeenCalledWith(input.supabase, 'tenant-1', {
-      title: 'New lead',
-      body: 'Jeph in Bondi just asked for a quote.',
-      url: '/chats?chatId=conv-1',
-    })
   })
 
   it('NEVER creates an intake', async () => {
@@ -166,6 +152,5 @@ describe('startWebLeadConversation', () => {
     const res = await startWebLeadConversation(input)
     expect(res).toEqual({ conversationId: 'existing-9', reused: true, firstReply: null })
     expect(dispatchCalls().length).toBe(0) // no new SMS on reuse
-    expect(sendPushToTenant).not.toHaveBeenCalled()
   })
 })

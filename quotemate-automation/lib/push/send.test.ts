@@ -119,4 +119,19 @@ describe('sendPushToTenant', () => {
       ['token', 'ExponentPushToken[shared]'],
     ])
   })
+
+  it('reports a transient Expo failure so a durable event can stay retryable', async () => {
+    const db = fakeSupabase([
+      { id: 'row-1', user_id: 'seat-a', token: 'ExponentPushToken[temporary]' },
+    ])
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('unavailable', { status: 503 })))
+
+    const delivered = await sendPushToTenant(db.client as never, 'tenant-1', {
+      title: 'New lead',
+      body: 'A new enquiry just came in.',
+      url: '/chats',
+    })
+
+    expect(delivered).toBe(false)
+  })
 })

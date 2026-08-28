@@ -61,7 +61,7 @@ export async function POST(req: Request) {
   }
 
   // Re-registering the same device refreshes platform/device_name/last_seen_at
-  // (unique (tenant_id, token), migration 191) rather than duplicating.
+  // (unique (tenant_id, user_id, token), migration 191) rather than duplicating.
   const { error } = await supabase.from('push_tokens').upsert(
     {
       tenant_id: tenant.id,

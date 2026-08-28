@@ -75,4 +75,58 @@ describe('push receipt sweep', () => {
     expect(result).toEqual({ scanned: 1, checked: 0, retryable: 1, pruned: 0, expired: 0 })
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps a DNR receipt unchecked when the exact-token delete fails', async () => {
+    const due = ticket('dead-token')
+    const updates: Array<Record<string, unknown>> = []
+    const client = {
+      from(table: string) {
+        if (table === 'push_tickets' && updates.length === 0) {
+          return {
+            select() { return this },
+            is() { return this },
+            lte() { return this },
+            order() { return this },
+            limit: async () => ({ data: [due], error: null }),
+            update(payload: Record<string, unknown>) {
+              updates.push(payload)
+              return { eq: async () => ({ error: null }) }
+            },
+          }
+        }
+        if (table === 'push_tokens') {
+          return {
+            delete() { return this },
+            eq() { return this },
+            then(resolve: (value: unknown) => unknown) {
+              return Promise.resolve({ error: { message: 'temporary delete failure' } }).then(resolve)
+            },
+          }
+        }
+        return {
+          update(payload: Record<string, unknown>) {
+            updates.push(payload)
+            return { eq: async () => ({ error: null }) }
+          },
+        }
+      },
+    }
+    const fetchImpl = vi.fn(async () => Response.json({
+      data: {
+        'dead-token': {
+          status: 'error',
+          message: 'gone',
+          details: { error: 'DeviceNotRegistered' },
+        },
+      },
+    }))
+
+    const result = await sweepPushReceipts(client as never, {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: new Date('2026-08-28T01:00:00.000Z'),
+    })
+
+    expect(result).toEqual({ scanned: 1, checked: 0, retryable: 1, pruned: 0, expired: 0 })
+    expect(updates).not.toContainEqual(expect.objectContaining({ checked_at: expect.any(String) }))
+  })
 })

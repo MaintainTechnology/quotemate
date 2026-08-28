@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   client: { from: vi.fn() },
   sweep: vi.fn(),
+  eventSweep: vi.fn(),
 }))
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
 vi.mock('@/lib/push/receipts', () => ({ sweepPushReceipts: h.sweep }))
+vi.mock('@/lib/push/events', () => ({ sweepPushEvents: h.eventSweep }))
 
 import { GET } from './route'
 
@@ -14,7 +16,9 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'production')
   vi.stubEnv('CRON_SECRET', 'cron-secret')
   h.sweep.mockReset()
+  h.eventSweep.mockReset()
   h.sweep.mockResolvedValue({ scanned: 3, checked: 2, retryable: 1, pruned: 1, expired: 0 })
+  h.eventSweep.mockResolvedValue({ scanned: 1, sent: 1, retryable: 0 })
 })
 
 afterEach(() => vi.unstubAllEnvs())
@@ -34,7 +38,12 @@ describe('/api/cron/push-receipts', () => {
     })
     const ok = await GET(request)
     expect(ok.status).toBe(200)
-    expect(await ok.json()).toMatchObject({ ok: true, scanned: 3, checked: 2, retryable: 1 })
+    expect(await ok.json()).toMatchObject({
+      ok: true,
+      receipts: { scanned: 3, checked: 2, retryable: 1 },
+      events: { scanned: 1, sent: 1, retryable: 0 },
+    })
+    expect(h.eventSweep).toHaveBeenCalledWith(h.client)
 
     h.sweep.mockResolvedValueOnce({ scanned: 0, checked: 0, retryable: 0, pruned: 0, expired: 0, error: 'database unavailable' })
     const failed = await GET(request)

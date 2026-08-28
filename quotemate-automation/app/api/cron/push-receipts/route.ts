@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { isCronAuthorised } from '@/lib/agents/cron'
 import { sweepPushReceipts } from '@/lib/push/receipts'
+import { sweepPushEvents } from '@/lib/push/events'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,11 +15,14 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: 'unauthorised' }, { status: 401 })
   }
 
-  const result = await sweepPushReceipts(supabase)
-  if (result.error) {
-    console.error('[cron/push-receipts] sweep failed', result.error)
+  const [receipts, events] = await Promise.all([
+    sweepPushReceipts(supabase),
+    sweepPushEvents(supabase),
+  ])
+  if (receipts.error || events.error) {
+    console.error('[cron/push-receipts] sweep failed', receipts.error ?? events.error)
     return Response.json({ ok: false, error: 'receipt_sweep_failed' }, { status: 500 })
   }
-  console.log('[cron/push-receipts] sweep complete', result)
-  return Response.json({ ok: true, ...result })
+  console.log('[cron/push-receipts] sweep complete', { receipts, events })
+  return Response.json({ ok: true, receipts, events })
 }

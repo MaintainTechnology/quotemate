@@ -19,7 +19,6 @@ import { seedStateFromKnownFields } from './extract-slots'
 import { dispatchQuoteMessage } from './dispatch'
 import { buildTradieWebLeadAlert } from './templates'
 import { pipelineLog } from '@/lib/log/pipeline'
-import { sendPushToTenant } from '@/lib/push/send'
 
 export type WebLeadTenant = {
   id: string
@@ -162,7 +161,6 @@ export async function startWebLeadConversation(input: StartWebLeadInput): Promis
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       assumptions_made: assumptions,
-      lead_push_sent_at: new Date().toISOString(),
     })
     .eq('id', conversationId)
 
@@ -182,14 +180,6 @@ export async function startWebLeadConversation(input: StartWebLeadInput): Promis
       conversation_id: conversationId,
     })
   }
-
-  await sendPushToTenant(supabase, tenant.id, {
-    title: 'New lead',
-    body: form.name && form.suburb
-      ? `${form.name} in ${form.suburb} just asked for a quote.`
-      : 'A new enquiry just came in.',
-    url: `/chats?chatId=${conversationId}`,
-  })
 
   return { conversationId, reused: false, firstReply }
 }

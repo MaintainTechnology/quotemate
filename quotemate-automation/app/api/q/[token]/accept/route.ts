@@ -69,40 +69,59 @@ export async function POST(
 
       if (readErr || !row) continue
 
-      // First-write wins: never rewrite the original acceptance time, but keep
-      // the tier fresh so a customer who changes their mind before paying
-      // records the tier they actually accepted.
+      // First-write wins at the database, not in this process. The conditional
+      // update's returned row is the sole notification claim winner, so two
+      // requests that both read NULL cannot both enqueue a push.
       const firstAcceptance = !(row as { customer_accepted_at?: string | null }).customer_accepted_at
-      const patch: Record<string, unknown> = { customer_accepted_tier: tier }
       if (firstAcceptance) {
-        patch.customer_accepted_at = new Date().toISOString()
+        const acceptedAt = new Date().toISOString()
+        const { data: claimed, error: claimErr } = await supabase
+          .from(t.table)
+          .update({ customer_accepted_at: acceptedAt, customer_accepted_tier: tier })
+          .eq('id', (row as { id: string }).id)
+          .is('customer_accepted_at', null)
+          .select('id, tenant_id')
+          .maybeSingle()
+
+        if (claimErr) {
+          log.err('accept: record failed (non-fatal — client proceeds)', claimErr.message, {
+            table: t.table,
+            id: (row as { id: string }).id,
+          })
+          return Response.json({ ok: true, recorded: false })
+        }
+
+        if (claimed) {
+          const claimedRow = claimed as { id: string; tenant_id?: string | null }
+          log.ok('customer accepted quote', { table: t.table, id: claimedRow.id, tier })
+          if (claimedRow.tenant_id) {
+            after(() =>
+              sendPushToTenant(supabase, claimedRow.tenant_id!, {
+                title: 'Quote accepted',
+                body: 'The customer accepted their quote.',
+                url: `/quotes?quoteId=${claimedRow.id}`,
+              }),
+            )
+          }
+          return Response.json({ ok: true, recorded: true })
+        }
       }
 
+      // The acceptance already existed or another concurrent request won the
+      // claim. Keep the customer's latest valid tier without touching the
+      // original acceptance timestamp or sending a second notification.
       const { error: writeErr } = await supabase
         .from(t.table)
-        .update(patch)
+        .update({ customer_accepted_tier: tier })
         .eq('id', (row as { id: string }).id)
-
       if (writeErr) {
-        log.err('accept: record failed (non-fatal — client proceeds)', writeErr.message, {
+        log.err('accept: tier update failed (non-fatal — client proceeds)', writeErr.message, {
           table: t.table,
           id: (row as { id: string }).id,
         })
         return Response.json({ ok: true, recorded: false })
       }
-
-      log.ok('customer accepted quote', { table: t.table, id: (row as { id: string }).id, tier })
-      const tenantId = (row as { tenant_id?: string | null }).tenant_id ?? null
-      if (firstAcceptance && tenantId) {
-        const quoteId = (row as { id: string }).id
-        after(() =>
-          sendPushToTenant(supabase, tenantId, {
-            title: 'Quote accepted',
-            body: 'The customer accepted their quote.',
-            url: `/quotes?quoteId=${quoteId}`,
-          }),
-        )
-      }
+      log.ok('customer acceptance tier updated', { table: t.table, id: (row as { id: string }).id, tier })
       return Response.json({ ok: true, recorded: true })
     }
 

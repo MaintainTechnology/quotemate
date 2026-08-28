@@ -3,15 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => {
   const reads: Array<{ data: unknown; error: unknown }> = []
   const writes: Array<{ error: unknown }> = []
+  const claims: Array<{ data: unknown; error: unknown }> = []
   const deferred: Array<() => unknown> = []
   const push = vi.fn()
+  const filters: Array<{ column: string; value: unknown }> = []
   const client = {
     from: vi.fn((table: string) => {
       let mode: 'read' | 'write' = 'read'
       const record = { table, payload: null as unknown }
       const builder = {
         select() {
-          mode = 'read'
           return this
         },
         update(payload: unknown) {
@@ -22,8 +23,16 @@ const h = vi.hoisted(() => {
         eq() {
           return this
         },
+        is(column: string, value: unknown) {
+          filters.push({ column, value })
+          return this
+        },
         maybeSingle() {
-          return Promise.resolve(reads.shift() ?? { data: null, error: null })
+          return Promise.resolve(
+            mode === 'write'
+              ? claims.shift() ?? { data: null, error: null }
+              : reads.shift() ?? { data: null, error: null },
+          )
         },
         then(resolve: (value: unknown) => unknown) {
           const result = mode === 'write'
@@ -35,7 +44,7 @@ const h = vi.hoisted(() => {
       return builder
     }),
   }
-  return { reads, writes, deferred, push, client }
+  return { reads, writes, claims, deferred, push, filters, client }
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
@@ -53,7 +62,9 @@ const context = { params: Promise.resolve({ token: 'share-1' }) }
 beforeEach(() => {
   h.reads.length = 0
   h.writes.length = 0
+  h.claims.length = 0
   h.deferred.length = 0
+  h.filters.length = 0
   h.push.mockReset()
   h.client.from.mockClear()
 })
@@ -64,7 +75,7 @@ describe('customer quote acceptance push', () => {
       data: { id: 'quote-1', tenant_id: 'tenant-1', customer_accepted_at: null },
       error: null,
     })
-    h.writes.push({ error: null })
+    h.claims.push({ data: { id: 'quote-1', tenant_id: 'tenant-1' }, error: null })
 
     const response = await POST(request(), context)
     expect(await response.json()).toEqual({ ok: true, recorded: true })
@@ -105,8 +116,23 @@ describe('customer quote acceptance push', () => {
       data: { id: 'quote-1', tenant_id: 'tenant-1', customer_accepted_at: null },
       error: null,
     })
-    h.writes.push({ error: { message: 'write failed' } })
+    h.claims.push({ data: null, error: { message: 'write failed' } })
     await POST(request(), context)
+    expect(h.deferred).toHaveLength(0)
+  })
+
+  it('does not send when a concurrent request wins the conditional acceptance claim', async () => {
+    h.reads.push({
+      data: { id: 'quote-1', tenant_id: 'tenant-1', customer_accepted_at: null },
+      error: null,
+    })
+    h.claims.push({ data: null, error: null })
+    h.writes.push({ error: null })
+
+    const response = await POST(request(), context)
+
+    expect(await response.json()).toEqual({ ok: true, recorded: true })
+    expect(h.filters).toContainEqual({ column: 'customer_accepted_at', value: null })
     expect(h.deferred).toHaveLength(0)
   })
 })

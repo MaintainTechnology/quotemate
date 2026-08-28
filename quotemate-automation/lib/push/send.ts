@@ -28,7 +28,7 @@ export async function sendPushToTenant(
   supabase: SupabaseClient,
   tenantId: string,
   content: PushContent,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const { data: rows, error } = await supabase
       .from('push_tokens')
@@ -36,13 +36,15 @@ export async function sendPushToTenant(
       .eq('tenant_id', tenantId)
     if (error) {
       console.warn('[push] token read failed (non-fatal)', error.message)
-      return
+      return false
     }
     const recipients = (rows ?? []).filter(
       (row): row is PushRecipient =>
         typeof row.id === 'string' && typeof row.user_id === 'string' && typeof row.token === 'string',
     )
 
+    if (recipients.length === 0) return true
+    let acceptedBatch = false
     for (const batch of chunkPushRecipients(recipients)) {
       let response: Response
       try {
@@ -67,6 +69,7 @@ export async function sendPushToTenant(
         console.warn('[push] Expo request failed (non-fatal)', response.status)
         continue
       }
+      acceptedBatch = true
 
       const json = (await response.json()) as { data?: ExpoTicket[] }
       const tickets = Array.isArray(json.data) ? json.data : []
@@ -102,7 +105,9 @@ export async function sendPushToTenant(
         if (deleteError) console.warn('[push] dead-token delete failed (non-fatal)', deleteError.message)
       }
     }
+    return acceptedBatch
   } catch (error: unknown) {
     console.warn('[push] send failed (non-fatal)', error instanceof Error ? error.message : String(error))
+    return false
   }
 }

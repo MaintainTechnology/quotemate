@@ -12,7 +12,7 @@ import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
 import { buildIncompleteCallSms, buildIntakeRecoverySms, buildPhotoRequestSms, buildQuoteFailureSms, type MissingIntakeField } from '@/lib/sms/templates'
 import { findOrCreateCustomer, updateCustomerFromIntake } from '@/lib/customers/lookup'
 import { isCronAuthorised } from '@/lib/agents/cron'
-import { sendPushToTenant } from '@/lib/push/send'
+import { enqueuePushEvent } from '@/lib/push/events'
 import {
   describeChosenProductDirective,
   chosenProductFromChoice,
@@ -30,6 +30,40 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+type IntakeLeadPushInput = {
+  intakeId: string | null
+  tenantId: string | null
+  leadPushAlreadySent: boolean
+  conversationId: string | null
+  callId: string | null
+  callerName: string | null | undefined
+  suburb: string | null | undefined
+}
+
+export function scheduleIntakeLeadPush(
+  input: IntakeLeadPushInput,
+  deps: {
+    enqueue?: typeof enqueuePushEvent
+    defer?: (callback: () => Promise<unknown>) => void
+  } = {},
+): boolean {
+  if (!input.intakeId || !input.tenantId || input.leadPushAlreadySent) return false
+  const chatId = input.conversationId ?? input.callId
+  const source = input.conversationId ? 'sms' : input.callId ? 'voice' : 'intake'
+  const sourceId = chatId ?? input.intakeId
+  const who = [input.callerName, input.suburb].filter(Boolean).join(' in ')
+  const enqueue = deps.enqueue ?? enqueuePushEvent
+  const defer = deps.defer ?? after
+  defer(() => enqueue(supabase, {
+    eventKey: `new-lead:${source}:${sourceId}`,
+    tenantId: input.tenantId!,
+    title: 'New lead',
+    body: who ? `${who} just asked for a quote.` : 'A new enquiry just came in.',
+    url: chatId ? `/chats?chatId=${chatId}` : '/chats',
+  }))
+  return true
+}
 
 // Channel-agnostic intake handler.
 //   • Voice path: { callId } — loads transcript + photos from `calls` row.
@@ -532,18 +566,15 @@ export async function POST(req: Request) {
   // calls.id for voice — the same ids /api/tenant/chats returns). Deferred
   // via after() and never throws, so it can't touch the intake pipeline.
   // Legacy pre-v6 traffic has no tenant → nobody to notify.
-  if (tenantId && !leadPushAlreadySent) {
-    const pushTenantId = tenantId
-    const pushChatId = conversationId ?? callId
-    const who = [intake.caller?.name, intake.suburb].filter(Boolean).join(' in ')
-    after(() =>
-      sendPushToTenant(supabase, pushTenantId, {
-        title: 'New lead',
-        body: who ? `${who} just asked for a quote.` : 'A new enquiry just came in.',
-        url: pushChatId ? `/chats?chatId=${pushChatId}` : '/chats',
-      }),
-    )
-  }
+  scheduleIntakeLeadPush({
+    intakeId: intakeRow.id as string,
+    tenantId,
+    leadPushAlreadySent,
+    conversationId,
+    callId,
+    callerName: intake.caller?.name,
+    suburb: intake.suburb,
+  })
 
   // Customer-memory write-back. Persists the freshly-extracted name,
   // suburb, address, email onto the customers row so the next inbound
