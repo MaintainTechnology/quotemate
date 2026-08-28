@@ -25,16 +25,22 @@ export function chunkPushRecipients(
   return chunks
 }
 
-async function postExpoMessages(messages: unknown[]): Promise<Response> {
+async function postExpoMessages(messages: unknown[]): Promise<{
+  response: Response
+  json: { data?: ExpoTicket[] } | null
+}> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(new Error('Expo push request timed out')), EXPO_REQUEST_TIMEOUT_MS)
   try {
-    return await fetch(EXPO_PUSH_URL, {
+    const response = await fetch(EXPO_PUSH_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(messages),
       signal: controller.signal,
     })
+    if (!response.ok) return { response, json: null }
+    const json = (await response.json()) as { data?: ExpoTicket[] }
+    return { response, json }
   } finally {
     clearTimeout(timeout)
   }
@@ -93,7 +99,7 @@ export async function sendPushToTenant(
           console.warn('[push] event recipient claim failed (non-fatal)', error?.message)
           return false
         }
-        batch = data.recipients.filter(
+        const claimedBatch = data.recipients.filter(
           (row: unknown): row is PushRecipient => {
             const recipient = row as Partial<PushRecipient>
             return typeof recipient.id === 'string'
@@ -101,19 +107,21 @@ export async function sendPushToTenant(
               && typeof recipient.token === 'string'
           },
         )
-        if (batch.length !== data.recipients.length) return false
+        if (claimedBatch.length !== data.recipients.length) return false
+        batch = claimedBatch
       }
       if (!batch || batch.length === 0) break
 
       let response: Response
+      let json: { data?: ExpoTicket[] } | null
       try {
-        response = await postExpoMessages(batch.map(recipient => ({
+        ({ response, json } = await postExpoMessages(batch.map(recipient => ({
           to: recipient.token,
           title: content.title,
           body: content.body,
           data: { url: content.url },
           sound: 'default',
-        })))
+        }))))
       } catch (error: unknown) {
         console.warn('[push] Expo request threw (non-fatal)', error instanceof Error ? error.message : String(error))
         allBatchesDurable = false
@@ -127,8 +135,7 @@ export async function sendPushToTenant(
         continue
       }
 
-      const json = (await response.json()) as { data?: ExpoTicket[] }
-      const tickets = Array.isArray(json.data) ? json.data : []
+      const tickets = Array.isArray(json?.data) ? json.data : []
       if (tickets.length !== batch.length) {
         console.warn('[push] Expo ticket count did not match recipient count (non-fatal)')
         allBatchesDurable = false

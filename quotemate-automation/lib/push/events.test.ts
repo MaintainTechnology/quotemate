@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enqueuePushEvent, sweepPushEvents, type PushEventInput } from './events'
+import { EXPO_REQUEST_TIMEOUT_MS, sendPushToTenant } from './send'
 
 const event: PushEventInput = {
   eventKey: 'new-lead:sms:conversation-1',
@@ -9,10 +10,18 @@ const event: PushEventInput = {
   url: '/chats?chatId=conversation-1',
 }
 
-function eventClient(options: { insert?: unknown; claim?: boolean; pending?: unknown[] } = {}) {
+function eventClient(options: {
+  insert?: unknown
+  claim?: boolean
+  pending?: unknown[]
+  recipients?: unknown[]
+} = {}) {
   const insert = options.insert ?? { data: { id: 'event-1' }, error: null }
-  const rpc = vi.fn(async (name: string) => {
+  const rpc = vi.fn(async (name: string, _args?: Record<string, unknown>) => {
     if (name === 'claim_push_event') return { data: options.claim ?? true, error: null }
+    if (name === 'claim_push_event_delivery_batch') {
+      return { data: { claimed: true, recipients: options.recipients ?? [] }, error: null }
+    }
     return { data: true, error: null }
   })
   return {
@@ -33,6 +42,8 @@ function eventClient(options: { insert?: unknown; claim?: boolean; pending?: unk
 }
 
 describe('durable push events', () => {
+  afterEach(() => vi.useRealTimers())
+
   it('does not send when the durable event insert fails', async () => {
     const client = eventClient({ insert: { data: null, error: { message: 'write failed' } } })
     const send = vi.fn(async () => true)
@@ -85,5 +96,45 @@ describe('durable push events', () => {
       p_event_id: 'event-1',
       p_claim_token: expect.any(String),
     })
+  })
+
+  it('aborts a stalled Expo response body and releases ownership before the recipient lease', async () => {
+    vi.useFakeTimers({ now: 0 })
+    const client = eventClient({
+      pending: [{
+        id: 'event-1',
+        event_key: event.eventKey,
+        tenant_id: event.tenantId,
+        title: event.title,
+        body: event.body,
+        url: event.url,
+      }],
+      recipients: [{
+        id: 'delivery-1',
+        user_id: 'seat-a',
+        token: 'ExponentPushToken[stalled-body]',
+      }],
+    })
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const response = new Response(null, { status: 200 })
+      vi.spyOn(response, 'json').mockImplementation(() => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+      }))
+      return response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    let settled = false
+    const sweep = sweepPushEvents(client as never, { send: sendPushToTenant, now: new Date(0) })
+    void sweep.finally(() => { settled = true })
+    await vi.advanceTimersByTimeAsync(EXPO_REQUEST_TIMEOUT_MS)
+
+    expect(settled).toBe(true)
+    await expect(sweep).resolves.toEqual({ scanned: 1, sent: 0, retryable: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+    expect(client.rpc.mock.calls.some(([name]) => name === 'release_push_event')).toBe(true)
+    expect(Date.now()).toBe(EXPO_REQUEST_TIMEOUT_MS)
+    expect(EXPO_REQUEST_TIMEOUT_MS).toBeLessThan(60_000)
   })
 })
