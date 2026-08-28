@@ -75,6 +75,6 @@ describe('durable push events', () => {
       title: event.title,
       body: event.body,
       url: event.url,
-    })
+    }, { eventId: 'event-1' })
   })
 })

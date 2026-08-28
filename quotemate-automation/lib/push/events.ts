@@ -40,7 +40,7 @@ async function deliverPushEvent(
     title: event.title,
     body: event.body,
     url: event.url,
-  })
+  }, { eventId: event.id })
   if (!delivered) {
     await supabase.rpc('release_push_event', {
       p_event_id: event.id,
