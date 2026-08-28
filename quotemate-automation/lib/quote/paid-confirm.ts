@@ -12,6 +12,7 @@ import { pipelineLog } from '@/lib/log/pipeline'
 import { bookingStateOnPaid, shouldFinaliseBookingOnPaid } from '@/lib/quote/booking'
 import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
+import { sendPushToTenant } from '@/lib/push/send'
 
 /** The quote fields the finalise sequence needs (caller already read the row). */
 export type PaidQuoteRow = {
@@ -69,6 +70,7 @@ export async function finalisePaidQuote(
   const log = pipelineLog('webhook')
   const { quote, tier, sessionId } = args
   const quoteId = quote.id
+  let notificationSlotIso: string | null = null
 
   // Conditional CLAIM, not a blind write: `.is('paid_at', null)` makes the
   // read-then-write race safe across the webhook, a concurrent webhook
@@ -117,6 +119,7 @@ export async function finalisePaidQuote(
   // committed, so a failure here must not undo the payment.
   try {
     const scheduledAt = quote.scheduled_at ?? null
+    notificationSlotIso = scheduledAt
     const bookingState = bookingStateOnPaid(scheduledAt)
     const finalise = shouldFinaliseBookingOnPaid(scheduledAt)
     const nowIso = new Date().toISOString()
@@ -170,29 +173,6 @@ export async function finalisePaidQuote(
         }
       }
 
-      // Confirmation SMS to customer + tradie. Deferred via after() so the
-      // caller responds fast; notifyBookingConfirmed never throws.
-      after(() =>
-        notifyBookingConfirmed(supabase, {
-          quoteId,
-          intakeId: quote.intake_id,
-          tenantId: quote.tenant_id,
-          shareToken: quote.share_token as string,
-          slotIso: scheduledAt,
-        }),
-      )
-    } else {
-      // Paid with NO slot yet: nudge the customer over SMS to pick a time.
-      // Fires exactly once — the claim above already de-duplicated.
-      after(() =>
-        notifyBookingConfirmed(supabase, {
-          quoteId,
-          intakeId: quote.intake_id,
-          tenantId: quote.tenant_id,
-          shareToken: quote.share_token as string,
-          slotIso: null,
-        }),
-      )
     }
   } catch (e: unknown) {
     log.err(
@@ -205,6 +185,31 @@ export async function finalisePaidQuote(
   // WP7 — advance the lifecycle ladder so the follow-up queue stops chasing
   // a paid customer. Monotonic + non-throwing.
   await advanceQuoteStatus(supabase, quoteId, 'paid')
+
+  // Exactly one deferred callback on the idempotent claim winner. The copy is
+  // valid for both site-visit reservations and deposit flows: payment is
+  // confirmed here, but a job is not necessarily booked yet.
+  after(async () => {
+    const work: Promise<unknown>[] = [
+      notifyBookingConfirmed(supabase, {
+        quoteId,
+        intakeId: quote.intake_id,
+        tenantId: quote.tenant_id,
+        shareToken: quote.share_token as string,
+        slotIso: notificationSlotIso,
+      }),
+    ]
+    if (quote.tenant_id) {
+      work.push(
+        sendPushToTenant(supabase, quote.tenant_id, {
+          title: 'Payment confirmed',
+          body: 'The customer’s payment has been confirmed. Check the quote for the next step.',
+          url: `/quotes?quoteId=${quoteId}`,
+        }),
+      )
+    }
+    await Promise.allSettled(work)
+  })
 
   return { claimed: true }
 }

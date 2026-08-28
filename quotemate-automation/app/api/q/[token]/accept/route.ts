@@ -18,7 +18,9 @@
 // covers them all.
 
 import { createClient } from '@supabase/supabase-js'
+import { after } from 'next/server'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { sendPushToTenant } from '@/lib/push/send'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,7 +63,7 @@ export async function POST(
     for (const t of targets) {
       const { data: row, error: readErr } = await supabase
         .from(t.table)
-        .select('id, customer_accepted_at')
+        .select('id, tenant_id, customer_accepted_at')
         .eq(t.tokenCol, token)
         .maybeSingle()
 
@@ -70,8 +72,9 @@ export async function POST(
       // First-write wins: never rewrite the original acceptance time, but keep
       // the tier fresh so a customer who changes their mind before paying
       // records the tier they actually accepted.
+      const firstAcceptance = !(row as { customer_accepted_at?: string | null }).customer_accepted_at
       const patch: Record<string, unknown> = { customer_accepted_tier: tier }
-      if (!(row as { customer_accepted_at?: string | null }).customer_accepted_at) {
+      if (firstAcceptance) {
         patch.customer_accepted_at = new Date().toISOString()
       }
 
@@ -89,6 +92,17 @@ export async function POST(
       }
 
       log.ok('customer accepted quote', { table: t.table, id: (row as { id: string }).id, tier })
+      const tenantId = (row as { tenant_id?: string | null }).tenant_id ?? null
+      if (firstAcceptance && tenantId) {
+        const quoteId = (row as { id: string }).id
+        after(() =>
+          sendPushToTenant(supabase, tenantId, {
+            title: 'Quote accepted',
+            body: 'The customer accepted their quote.',
+            url: `/quotes?quoteId=${quoteId}`,
+          }),
+        )
+      }
       return Response.json({ ok: true, recorded: true })
     }
 

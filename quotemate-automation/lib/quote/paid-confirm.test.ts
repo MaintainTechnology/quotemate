@@ -17,6 +17,7 @@ const h = vi.hoisted(() => {
   const deferred: Array<() => unknown> = []
   const notify = vi.fn()
   const advance = vi.fn()
+  const push = vi.fn()
 
   function from(table: string) {
     const record = { table, ops: [] as Op[] }
@@ -38,7 +39,7 @@ const h = vi.hoisted(() => {
     return builder
   }
 
-  return { results, queries, deferred, notify, advance, client: { from } }
+  return { results, queries, deferred, notify, advance, push, client: { from } }
 })
 
 vi.mock('next/server', () => ({
@@ -48,6 +49,7 @@ vi.mock('next/server', () => ({
 }))
 vi.mock('@/lib/quote/booking-notify', () => ({ notifyBookingConfirmed: h.notify }))
 vi.mock('@/lib/quote/lifecycle', () => ({ advanceQuoteStatus: h.advance }))
+vi.mock('@/lib/push/send', () => ({ sendPushToTenant: h.push }))
 
 import { confirmPaidFromSession, finalisePaidQuote, sessionConfirmsQuote } from './paid-confirm'
 
@@ -68,6 +70,7 @@ beforeEach(() => {
   h.deferred.length = 0
   h.notify.mockReset()
   h.advance.mockReset()
+  h.push.mockReset()
 })
 
 describe('finalisePaidQuote', () => {
@@ -106,8 +109,13 @@ describe('finalisePaidQuote', () => {
 
     // Confirmation SMS deferred with the slot.
     expect(h.deferred).toHaveLength(1)
-    h.deferred[0]()
+    await h.deferred[0]()
     expect(h.notify).toHaveBeenCalledWith(sb, expect.objectContaining({ quoteId: 'q-1', slotIso: '2026-07-10T02:00:00Z' }))
+    expect(h.push).toHaveBeenCalledWith(sb, 't-1', {
+      title: 'Payment confirmed',
+      body: 'The customer’s payment has been confirmed. Check the quote for the next step.',
+      url: '/quotes?quoteId=q-1',
+    })
     expect(h.advance).toHaveBeenCalledWith(sb, 'q-1', 'paid')
   })
 
@@ -125,8 +133,9 @@ describe('finalisePaidQuote', () => {
     expect(patch.status).toBeUndefined()
 
     expect(h.deferred).toHaveLength(1)
-    h.deferred[0]()
+    await h.deferred[0]()
     expect(h.notify).toHaveBeenCalledWith(sb, expect.objectContaining({ quoteId: 'q-1', slotIso: null }))
+    expect(h.push).toHaveBeenCalledTimes(1)
   })
 
   it('lost the claim race (0 rows) → claimed:false and NO side effects', async () => {
@@ -136,6 +145,7 @@ describe('finalisePaidQuote', () => {
     expect(h.queries).toHaveLength(1) // only the claim ran
     expect(h.deferred).toHaveLength(0)
     expect(h.advance).not.toHaveBeenCalled()
+    expect(h.push).not.toHaveBeenCalled()
   })
 
   it('claim DB error → claimed:false with the error surfaced (webhook 500s so Stripe retries)', async () => {

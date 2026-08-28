@@ -17,9 +17,13 @@ vi.mock('./dialog', () => ({
 vi.mock('./dispatch', () => ({
   dispatchQuoteMessage: vi.fn(async () => ({ ok: true, channel: 'sms', sid: 'SM123', status: 'queued' })),
 }))
+vi.mock('@/lib/push/send', () => ({
+  sendPushToTenant: vi.fn(async () => undefined),
+}))
 
 import { decideNextTurn } from './dialog'
 import { dispatchQuoteMessage } from './dispatch'
+import { sendPushToTenant } from '@/lib/push/send'
 import { startWebLeadConversation } from './start-web-lead-conversation'
 
 type RecordedCall = { table: string; op: 'insert' | 'update'; row: Record<string, unknown> }
@@ -121,6 +125,17 @@ describe('startWebLeadConversation', () => {
     expect(tradieSend[0].text).toContain('Jeph')
   })
 
+  it('sends exactly one New lead push for a newly-created dialog with its chat deep link', async () => {
+    const input = baseInput()
+    await startWebLeadConversation(input)
+    expect(sendPushToTenant).toHaveBeenCalledTimes(1)
+    expect(sendPushToTenant).toHaveBeenCalledWith(input.supabase, 'tenant-1', {
+      title: 'New lead',
+      body: 'Jeph in Bondi just asked for a quote.',
+      url: '/chats?chatId=conv-1',
+    })
+  })
+
   it('NEVER creates an intake', async () => {
     const input = baseInput()
     await startWebLeadConversation(input)
@@ -151,5 +166,6 @@ describe('startWebLeadConversation', () => {
     const res = await startWebLeadConversation(input)
     expect(res).toEqual({ conversationId: 'existing-9', reused: true, firstReply: null })
     expect(dispatchCalls().length).toBe(0) // no new SMS on reuse
+    expect(sendPushToTenant).not.toHaveBeenCalled()
   })
 })

@@ -12,6 +12,7 @@ import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
 import { buildIncompleteCallSms, buildIntakeRecoverySms, buildPhotoRequestSms, buildQuoteFailureSms, type MissingIntakeField } from '@/lib/sms/templates'
 import { findOrCreateCustomer, updateCustomerFromIntake } from '@/lib/customers/lookup'
 import { isCronAuthorised } from '@/lib/agents/cron'
+import { sendPushToTenant } from '@/lib/push/send'
 import {
   describeChosenProductDirective,
   chosenProductFromChoice,
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
   // R17 — the dialog/slot-extractor's job_type, captured at function scope so it
   // can be reconciled against the structurer's job_type after structuring.
   let dialogJobType: string | null = null
+  let leadPushAlreadySent = false
 
   if (sourceChannel === 'sms') {
     // ─────────────── SMS PATH ───────────────
@@ -210,6 +212,7 @@ export async function POST(req: Request) {
     photoRequestToken = (convo.photo_request_token as string | null) ?? null
     photoRequestAlreadySent = !!convo.photo_request_sent_at
     tenantId = (convo.tenant_id as string | null) ?? null
+    leadPushAlreadySent = !!convo.lead_push_sent_at
 
     // v5: derive tradeHint from the SMS dialog's already-classified job_type.
     // The extractor classifies plumbing job_types per v5; passing the hint
@@ -523,6 +526,24 @@ export async function POST(req: Request) {
     return Response.json({ error: 'insert failed' }, { status: 500 })
   }
   log.ok('intakes row inserted', { intake_id: intakeRow.id })
+
+  // Mobile push — a new lead now exists for this tenant. Deep-links to the
+  // conversation the Chats tab lists (sms_conversations.id for SMS,
+  // calls.id for voice — the same ids /api/tenant/chats returns). Deferred
+  // via after() and never throws, so it can't touch the intake pipeline.
+  // Legacy pre-v6 traffic has no tenant → nobody to notify.
+  if (tenantId && !leadPushAlreadySent) {
+    const pushTenantId = tenantId
+    const pushChatId = conversationId ?? callId
+    const who = [intake.caller?.name, intake.suburb].filter(Boolean).join(' in ')
+    after(() =>
+      sendPushToTenant(supabase, pushTenantId, {
+        title: 'New lead',
+        body: who ? `${who} just asked for a quote.` : 'A new enquiry just came in.',
+        url: pushChatId ? `/chats?chatId=${pushChatId}` : '/chats',
+      }),
+    )
+  }
 
   // Customer-memory write-back. Persists the freshly-extracted name,
   // suburb, address, email onto the customers row so the next inbound

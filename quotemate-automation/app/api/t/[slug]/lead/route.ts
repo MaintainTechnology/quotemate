@@ -13,6 +13,7 @@ import { embedIntake } from '@/lib/intake/embed'
 import { findOrCreateCustomer } from '@/lib/customers/lookup'
 import { normaliseAuMobile } from '@/lib/onboard/schema'
 import { randomUUID } from 'node:crypto'
+import { sendPushToTenant } from '@/lib/push/send'
 
 export const maxDuration = 300
 
@@ -198,6 +199,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         console.error('[t/lead] intake insert failed', insErr?.message)
         return
       }
+
+      await sendPushToTenant(supabase, tenant.id, {
+        title: 'New lead',
+        body: name && suburb
+          ? `${name} in ${suburb} just asked for a quote.`
+          : 'A new enquiry just came in.',
+        url: '/chats',
+      })
 
       // Resolve the base URL for the self-call to /api/estimate/draft.
       // Prefer the configured APP_URL (prod), but fall back to the
