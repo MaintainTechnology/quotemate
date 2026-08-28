@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { sendPushToTenant } from './send'
+import { EXPO_REQUEST_TIMEOUT_MS, sendPushToTenant } from './send'
 
 type Query = { table: string; op: string; payload?: unknown; filters: Array<[string, unknown]> }
 
@@ -51,11 +51,28 @@ function fakeSupabase(
   }
 }
 
-function durableEventSupabase(rows: Array<{ id: string; user_id: string; token: string }>) {
+function durableEventSupabase(
+  rows: Array<{ id: string; user_id: string; token: string }>,
+  options: { claimToken?: string } = {},
+) {
   const pending = new Map(rows.map(row => [row.id, row]))
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
-    if (name === 'initialise_push_event_deliveries') return { data: true, error: null }
+    if (name === 'initialise_push_event_deliveries') {
+      return { data: args.p_claim_token === (options.claimToken ?? 'claim-a'), error: null }
+    }
+    if (name === 'claim_push_event_delivery_batch') {
+      if (args.p_claim_token !== (options.claimToken ?? 'claim-a')) {
+        return { data: { claimed: false, recipients: [] }, error: null }
+      }
+      return {
+        data: { claimed: true, recipients: [...pending.values()].slice(0, 100) },
+        error: null,
+      }
+    }
     if (name === 'record_push_delivery_results') {
+      if (args.p_claim_token !== (options.claimToken ?? 'claim-a')) {
+        return { data: null, error: { message: 'stale push event claim' } }
+      }
       const results = args.p_results as Array<{ delivery_id: string }>
       for (const result of results) pending.delete(result.delivery_id)
       return { data: true, error: null }
@@ -66,24 +83,14 @@ function durableEventSupabase(rows: Array<{ id: string; user_id: string; token: 
     pending,
     client: {
       rpc,
-      from(table: string) {
-        if (table !== 'push_event_deliveries') throw new Error(`unexpected table ${table}`)
-        const builder = {
-          select() { return this },
-          eq() { return this },
-          order() { return this },
-          then(resolve: (value: unknown) => unknown) {
-            return Promise.resolve({ data: [...pending.values()], error: null }).then(resolve)
-          },
-        }
-        return builder
-      },
+      from(table: string) { throw new Error(`unexpected direct table read ${table}`) },
     },
   }
 }
 
 describe('sendPushToTenant', () => {
   beforeEach(() => vi.restoreAllMocks())
+  afterEach(() => vi.useRealTimers())
 
   it('fans out in batches of at most 100 and persists exact ticket ownership', async () => {
     const recipients = Array.from({ length: 101 }, (_, i) => ({
@@ -236,9 +243,11 @@ describe('sendPushToTenant', () => {
 
     await expect(sendPushToTenant(db.client as never, 'tenant-1', content, {
       eventId: 'event-1',
+      claimToken: 'claim-a',
     })).resolves.toBe(false)
     await expect(sendPushToTenant(db.client as never, 'tenant-1', content, {
       eventId: 'event-1',
+      claimToken: 'claim-a',
     })).resolves.toBe(true)
 
     const bodies = fetchMock.mock.calls.map(([, init]) =>
@@ -247,5 +256,44 @@ describe('sendPushToTenant', () => {
     expect(bodies.map(body => body.length)).toEqual([100, 1, 1])
     expect(bodies[2]).toEqual(['ExponentPushToken[token-100]'])
     expect(db.pending.size).toBe(0)
+  })
+
+  it('aborts an Expo attempt well before the five-minute event lease', async () => {
+    vi.useFakeTimers()
+    const db = durableEventSupabase([
+      { id: 'delivery-1', user_id: 'seat-a', token: 'ExponentPushToken[slow]' },
+    ])
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const delivery = sendPushToTenant(db.client as never, 'tenant-1', {
+      title: 'New lead',
+      body: 'A new enquiry just came in.',
+      url: '/chats',
+    }, { eventId: 'event-1', claimToken: 'claim-a' })
+
+    await vi.advanceTimersByTimeAsync(EXPO_REQUEST_TIMEOUT_MS)
+
+    await expect(delivery).resolves.toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+    expect(EXPO_REQUEST_TIMEOUT_MS).toBeLessThan(60_000)
+  })
+
+  it('rejects event delivery without its fencing token before selecting recipients', async () => {
+    const db = durableEventSupabase([
+      { id: 'delivery-1', user_id: 'seat-a', token: 'ExponentPushToken[owned]' },
+    ])
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(sendPushToTenant(db.client as never, 'tenant-1', {
+      title: 'New lead', body: 'Body', url: '/chats',
+    }, { eventId: 'event-1' })).resolves.toBe(false)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(db.client.rpc).not.toHaveBeenCalled()
   })
 })

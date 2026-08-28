@@ -75,6 +75,15 @@ describe('durable push events', () => {
       title: event.title,
       body: event.body,
       url: event.url,
-    }, { eventId: 'event-1' })
+    }, {
+      eventId: 'event-1',
+      claimToken: expect.any(String),
+    })
+
+    const claimCall = client.rpc.mock.calls.find(([name]) => name === 'claim_push_event')
+    expect(claimCall?.[1]).toEqual({
+      p_event_id: 'event-1',
+      p_claim_token: expect.any(String),
+    })
   })
 })

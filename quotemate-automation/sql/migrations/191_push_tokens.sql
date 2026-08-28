@@ -156,9 +156,15 @@ create table if not exists public.push_event_deliveries (
   terminal_error  text,
   terminal_message text,
   terminal_at     timestamptz,
+  claim_token     uuid,
+  claim_expires_at timestamptz,
   created_at      timestamptz not null default now(),
   unique (event_id, user_id, token)
 );
+
+alter table public.push_event_deliveries
+  add column if not exists claim_token uuid,
+  add column if not exists claim_expires_at timestamptz;
 
 create index if not exists push_event_deliveries_pending_idx
   on public.push_event_deliveries (event_id, id)
@@ -168,19 +174,24 @@ create index if not exists push_events_due_idx
   on public.push_events (next_attempt_at)
   where sent_at is null;
 
+drop function if exists public.initialise_push_event_deliveries(uuid, timestamptz);
+
 create or replace function public.initialise_push_event_deliveries(
   p_event_id uuid,
-  p_now timestamptz
+  p_claim_token uuid
 ) returns boolean
 language plpgsql
 as $$
 declare
   event_row record;
+  server_now timestamptz := clock_timestamp();
 begin
   select id, tenant_id, sent_at, fanout_started_at
   into event_row
   from public.push_events
   where id = p_event_id
+    and claim_token = p_claim_token
+    and claim_expires_at > server_now
   for update;
 
   if not found or event_row.sent_at is not null then
@@ -195,7 +206,7 @@ begin
     on conflict (event_id, user_id, token) do nothing;
 
     update public.push_events
-    set fanout_started_at = p_now
+    set fanout_started_at = server_now
     where id = event_row.id;
   end if;
 
@@ -203,11 +214,72 @@ begin
 end;
 $$;
 
+-- Atomically renew the event lease and own at most one Expo-sized recipient
+-- batch. A client clock is never consulted. Recipient ownership lasts one
+-- minute, twice the bounded transport attempt and well inside the event lease.
+create or replace function public.claim_push_event_delivery_batch(
+  p_event_id uuid,
+  p_claim_token uuid,
+  p_limit integer default 100
+) returns jsonb
+language plpgsql
+as $$
+declare
+  server_now timestamptz := clock_timestamp();
+  event_expires_at timestamptz;
+  recipients jsonb;
+begin
+  update public.push_events
+  set claim_expires_at = server_now + interval '5 minutes'
+  where id = p_event_id
+    and sent_at is null
+    and claim_token = p_claim_token
+    and claim_expires_at > server_now
+  returning claim_expires_at into event_expires_at;
+
+  if not found then
+    return jsonb_build_object('claimed', false, 'recipients', '[]'::jsonb);
+  end if;
+
+  with candidates as (
+    select delivery.id
+    from public.push_event_deliveries delivery
+    where delivery.event_id = p_event_id
+      and delivery.status = 'pending'
+      and (
+        delivery.claim_token is null
+        or delivery.claim_expires_at <= server_now
+        or delivery.claim_token = p_claim_token
+      )
+    order by delivery.id
+    limit least(greatest(p_limit, 1), 100)
+    for update skip locked
+  ), claimed_deliveries as (
+    update public.push_event_deliveries delivery
+    set claim_token = p_claim_token,
+        claim_expires_at = least(event_expires_at, server_now + interval '1 minute')
+    from candidates
+    where delivery.id = candidates.id
+    returning delivery.id, delivery.user_id, delivery.token
+  )
+  select coalesce(
+    jsonb_agg(jsonb_build_object('id', id, 'user_id', user_id, 'token', token) order by id),
+    '[]'::jsonb
+  ) into recipients
+  from claimed_deliveries;
+
+  return jsonb_build_object('claimed', true, 'recipients', recipients);
+end;
+$$;
+
 -- Atomically persist every accepted ticket (including exact receipt identity)
 -- and terminalise its matching delivery. If any insert/update fails, the RPC
 -- transaction rolls back and the entire batch remains pending for retry.
+drop function if exists public.record_push_delivery_results(uuid, jsonb, timestamptz, timestamptz, timestamptz);
+
 create or replace function public.record_push_delivery_results(
   p_event_id uuid,
+  p_claim_token uuid,
   p_results jsonb,
   p_sent_at timestamptz,
   p_next_check_at timestamptz,
@@ -220,9 +292,22 @@ declare
   delivery_row public.push_event_deliveries%rowtype;
   outcome text;
   ticket_id text;
+  server_now timestamptz := clock_timestamp();
 begin
   if jsonb_typeof(p_results) <> 'array' then
     raise exception 'push delivery results must be an array';
+  end if;
+
+  perform 1
+  from public.push_events event
+  where event.id = p_event_id
+    and event.sent_at is null
+    and event.claim_token = p_claim_token
+    and event.claim_expires_at > server_now
+  for update;
+
+  if not found then
+    raise exception 'stale push event claim';
   end if;
 
   for result_row in select value from jsonb_array_elements(p_results)
@@ -232,6 +317,8 @@ begin
     where id = (result_row ->> 'delivery_id')::uuid
       and event_id = p_event_id
       and status = 'pending'
+      and claim_token = p_claim_token
+      and claim_expires_at > server_now
     for update;
 
     if not found then
@@ -265,7 +352,8 @@ begin
       end if;
 
       update public.push_event_deliveries
-      set status = 'ticketed', expo_ticket_id = ticket_id, terminal_at = p_sent_at
+      set status = 'ticketed', expo_ticket_id = ticket_id, terminal_at = p_sent_at,
+          claim_token = null, claim_expires_at = null
       where id = delivery_row.id;
     elsif outcome = 'device_not_registered' then
       delete from public.push_tokens
@@ -276,14 +364,18 @@ begin
       update public.push_event_deliveries
       set status = 'device_not_registered',
           terminal_error = 'DeviceNotRegistered',
-          terminal_at = p_sent_at
+          terminal_at = p_sent_at,
+          claim_token = null,
+          claim_expires_at = null
       where id = delivery_row.id;
     elsif outcome = 'terminal_error' then
       update public.push_event_deliveries
       set status = 'terminal_error',
           terminal_error = left(result_row ->> 'error', 200),
           terminal_message = left(result_row ->> 'message', 500),
-          terminal_at = p_sent_at
+          terminal_at = p_sent_at,
+          claim_token = null,
+          claim_expires_at = null
       where id = delivery_row.id;
     else
       raise exception 'unsupported push delivery outcome';
@@ -294,41 +386,45 @@ begin
 end;
 $$;
 
+drop function if exists public.claim_push_event(uuid, uuid, timestamptz);
+
 create or replace function public.claim_push_event(
   p_event_id uuid,
-  p_claim_token uuid,
-  p_now timestamptz
+  p_claim_token uuid
 ) returns boolean
 language plpgsql
 as $$
 declare
   claimed boolean;
+  server_now timestamptz := clock_timestamp();
 begin
   update public.push_events
-  set claimed_at = p_now,
-      claim_expires_at = p_now + interval '5 minutes',
+  set claimed_at = server_now,
+      claim_expires_at = server_now + interval '5 minutes',
       claim_token = p_claim_token,
       last_error = null
   where id = p_event_id
     and sent_at is null
-    and (claim_expires_at is null or claim_expires_at <= p_now)
+    and (claim_expires_at is null or claim_expires_at <= server_now)
   returning true into claimed;
   return coalesce(claimed, false);
 end;
 $$;
 
+drop function if exists public.complete_push_event(uuid, uuid, timestamptz);
+
 create or replace function public.complete_push_event(
   p_event_id uuid,
-  p_claim_token uuid,
-  p_sent_at timestamptz
+  p_claim_token uuid
 ) returns boolean
 language plpgsql
 as $$
 declare
   completed boolean;
+  server_now timestamptz := clock_timestamp();
 begin
   update public.push_events
-  set sent_at = p_sent_at,
+  set sent_at = server_now,
       claimed_at = null,
       claim_expires_at = null,
       claim_token = null,
@@ -336,6 +432,11 @@ begin
   where id = p_event_id
     and sent_at is null
     and claim_token = p_claim_token
+    and claim_expires_at > server_now
+    and not exists (
+      select 1 from public.push_event_deliveries delivery
+      where delivery.event_id = p_event_id and delivery.status = 'pending'
+    )
   returning true into completed;
   return coalesce(completed, false);
 end;
@@ -352,6 +453,13 @@ as $$
 declare
   released boolean;
 begin
+  update public.push_event_deliveries
+  set claim_token = null,
+      claim_expires_at = null
+  where event_id = p_event_id
+    and status = 'pending'
+    and claim_token = p_claim_token;
+
   update public.push_events
   set next_attempt_at = p_next_attempt_at,
       claimed_at = null,
@@ -366,16 +474,18 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_push_event(uuid, uuid, timestamptz) from public, anon, authenticated;
-revoke all on function public.complete_push_event(uuid, uuid, timestamptz) from public, anon, authenticated;
+revoke all on function public.claim_push_event(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.complete_push_event(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.release_push_event(uuid, uuid, text, timestamptz) from public, anon, authenticated;
-revoke all on function public.initialise_push_event_deliveries(uuid, timestamptz) from public, anon, authenticated;
-revoke all on function public.record_push_delivery_results(uuid, jsonb, timestamptz, timestamptz, timestamptz) from public, anon, authenticated;
-grant execute on function public.claim_push_event(uuid, uuid, timestamptz) to service_role;
-grant execute on function public.complete_push_event(uuid, uuid, timestamptz) to service_role;
+revoke all on function public.initialise_push_event_deliveries(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.claim_push_event_delivery_batch(uuid, uuid, integer) from public, anon, authenticated;
+revoke all on function public.record_push_delivery_results(uuid, uuid, jsonb, timestamptz, timestamptz, timestamptz) from public, anon, authenticated;
+grant execute on function public.claim_push_event(uuid, uuid) to service_role;
+grant execute on function public.complete_push_event(uuid, uuid) to service_role;
 grant execute on function public.release_push_event(uuid, uuid, text, timestamptz) to service_role;
-grant execute on function public.initialise_push_event_deliveries(uuid, timestamptz) to service_role;
-grant execute on function public.record_push_delivery_results(uuid, jsonb, timestamptz, timestamptz, timestamptz) to service_role;
+grant execute on function public.initialise_push_event_deliveries(uuid, uuid) to service_role;
+grant execute on function public.claim_push_event_delivery_batch(uuid, uuid, integer) to service_role;
+grant execute on function public.record_push_delivery_results(uuid, uuid, jsonb, timestamptz, timestamptz, timestamptz) to service_role;
 
 -- Retain the original marker for rows created during the first Task 01 rollout.
 -- New dialog-first leads dedupe through push_events.event_key instead.

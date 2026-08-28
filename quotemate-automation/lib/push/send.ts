@@ -2,12 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 export const EXPO_MESSAGE_BATCH_SIZE = 100
+export const EXPO_REQUEST_TIMEOUT_MS = 30_000
 export const RECEIPT_DELAY_MS = 15 * 60 * 1000
 export const RECEIPT_TTL_MS = 24 * 60 * 60 * 1000
 
 export type PushContent = { title: string; body: string; url: string }
 export type PushRecipient = { id: string; user_id: string; token: string }
-export type PushSendOptions = { eventId?: string }
+export type PushSendOptions = { eventId?: string; claimToken?: string }
 type ExpoTicket = {
   status?: string
   id?: string
@@ -24,6 +25,21 @@ export function chunkPushRecipients(
   return chunks
 }
 
+async function postExpoMessages(messages: unknown[]): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(new Error('Expo push request timed out')), EXPO_REQUEST_TIMEOUT_MS)
+  try {
+    return await fetch(EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(messages),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 /** Best-effort tenant fan-out. Push plumbing never throws into a business flow. */
 export async function sendPushToTenant(
   supabase: SupabaseClient,
@@ -32,10 +48,12 @@ export async function sendPushToTenant(
   options: PushSendOptions = {},
 ): Promise<boolean> {
   try {
+    if (options.eventId && !options.claimToken) return false
+
     if (options.eventId) {
       const { data: initialised, error: initialiseError } = await supabase.rpc(
         'initialise_push_event_deliveries',
-        { p_event_id: options.eventId, p_now: new Date().toISOString() },
+        { p_event_id: options.eventId, p_claim_token: options.claimToken },
       )
       if (initialiseError || initialised !== true) {
         console.warn('[push] event fan-out initialisation failed (non-fatal)', initialiseError?.message)
@@ -44,52 +62,68 @@ export async function sendPushToTenant(
     }
 
     const recipientQuery = options.eventId
-      ? supabase
-          .from('push_event_deliveries')
-          .select('id, user_id, token')
-          .eq('event_id', options.eventId)
-          .eq('status', 'pending')
-          .order('id', { ascending: true })
+      ? null
       : supabase
           .from('push_tokens')
           .select('id, user_id, token')
           .eq('tenant_id', tenantId)
-    const { data: rows, error } = await recipientQuery
-    if (error) {
-      console.warn('[push] token read failed (non-fatal)', error.message)
-      return false
+    let batches: PushRecipient[][] = []
+    if (recipientQuery) {
+      const { data: rows, error } = await recipientQuery
+      if (error) {
+        console.warn('[push] token read failed (non-fatal)', error.message)
+        return false
+      }
+      const recipients = (rows ?? []).filter(
+        (row): row is PushRecipient =>
+          typeof row.id === 'string' && typeof row.user_id === 'string' && typeof row.token === 'string',
+      )
+      batches = chunkPushRecipients(recipients)
     }
-    const recipients = (rows ?? []).filter(
-      (row): row is PushRecipient =>
-        typeof row.id === 'string' && typeof row.user_id === 'string' && typeof row.token === 'string',
-    )
-
-    if (recipients.length === 0) return true
     let allBatchesDurable = true
-    for (const batch of chunkPushRecipients(recipients)) {
+    for (;;) {
+      let batch = batches.shift()
+      if (options.eventId) {
+        const { data, error } = await supabase.rpc('claim_push_event_delivery_batch', {
+          p_event_id: options.eventId,
+          p_claim_token: options.claimToken,
+          p_limit: EXPO_MESSAGE_BATCH_SIZE,
+        })
+        if (error || data?.claimed !== true || !Array.isArray(data.recipients)) {
+          console.warn('[push] event recipient claim failed (non-fatal)', error?.message)
+          return false
+        }
+        batch = data.recipients.filter(
+          (row: unknown): row is PushRecipient => {
+            const recipient = row as Partial<PushRecipient>
+            return typeof recipient.id === 'string'
+              && typeof recipient.user_id === 'string'
+              && typeof recipient.token === 'string'
+          },
+        )
+        if (batch.length !== data.recipients.length) return false
+      }
+      if (!batch || batch.length === 0) break
+
       let response: Response
       try {
-        response = await fetch(EXPO_PUSH_URL, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', accept: 'application/json' },
-          body: JSON.stringify(
-            batch.map(recipient => ({
-              to: recipient.token,
-              title: content.title,
-              body: content.body,
-              data: { url: content.url },
-              sound: 'default',
-            })),
-          ),
-        })
+        response = await postExpoMessages(batch.map(recipient => ({
+          to: recipient.token,
+          title: content.title,
+          body: content.body,
+          data: { url: content.url },
+          sound: 'default',
+        })))
       } catch (error: unknown) {
         console.warn('[push] Expo request threw (non-fatal)', error instanceof Error ? error.message : String(error))
         allBatchesDurable = false
+        if (options.eventId) break
         continue
       }
       if (!response.ok) {
         console.warn('[push] Expo request failed (non-fatal)', response.status)
         allBatchesDurable = false
+        if (options.eventId) break
         continue
       }
 
@@ -98,6 +132,7 @@ export async function sendPushToTenant(
       if (tickets.length !== batch.length) {
         console.warn('[push] Expo ticket count did not match recipient count (non-fatal)')
         allBatchesDurable = false
+        if (options.eventId) break
         continue
       }
       const sentAt = Date.now()
@@ -134,6 +169,7 @@ export async function sendPushToTenant(
           'record_push_delivery_results',
           {
             p_event_id: options.eventId,
+            p_claim_token: options.claimToken,
             p_results: results,
             p_sent_at: new Date(sentAt).toISOString(),
             p_next_check_at: new Date(sentAt + RECEIPT_DELAY_MS).toISOString(),
@@ -143,6 +179,7 @@ export async function sendPushToTenant(
         if (recordError || recorded !== true) {
           console.warn('[push] event delivery persistence failed (non-fatal)', recordError?.message)
           allBatchesDurable = false
+          break
         }
         continue
       }

@@ -1,9 +1,14 @@
 -- DESTRUCTIVE rollback for migration 191. Back up push token/ticket rows first.
 alter table public.sms_conversations drop column if exists lead_push_sent_at;
 drop function if exists public.release_push_event(uuid, uuid, text, timestamptz);
+drop function if exists public.complete_push_event(uuid, uuid);
 drop function if exists public.complete_push_event(uuid, uuid, timestamptz);
+drop function if exists public.claim_push_event(uuid, uuid);
 drop function if exists public.claim_push_event(uuid, uuid, timestamptz);
+drop function if exists public.record_push_delivery_results(uuid, uuid, jsonb, timestamptz, timestamptz, timestamptz);
 drop function if exists public.record_push_delivery_results(uuid, jsonb, timestamptz, timestamptz, timestamptz);
+drop function if exists public.claim_push_event_delivery_batch(uuid, uuid, integer);
+drop function if exists public.initialise_push_event_deliveries(uuid, uuid);
 drop function if exists public.initialise_push_event_deliveries(uuid, timestamptz);
 drop index if exists public.push_event_deliveries_pending_idx;
 drop table if exists public.push_event_deliveries;

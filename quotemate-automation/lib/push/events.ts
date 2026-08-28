@@ -31,7 +31,6 @@ async function deliverPushEvent(
   const { data: claimed, error: claimError } = await supabase.rpc('claim_push_event', {
     p_event_id: event.id,
     p_claim_token: claimToken,
-    p_now: now.toISOString(),
   })
   if (claimError || claimed !== true) return false
 
@@ -40,7 +39,7 @@ async function deliverPushEvent(
     title: event.title,
     body: event.body,
     url: event.url,
-  }, { eventId: event.id })
+  }, { eventId: event.id, claimToken })
   if (!delivered) {
     await supabase.rpc('release_push_event', {
       p_event_id: event.id,
@@ -54,7 +53,6 @@ async function deliverPushEvent(
   const { data: completed, error: completeError } = await supabase.rpc('complete_push_event', {
     p_event_id: event.id,
     p_claim_token: claimToken,
-    p_sent_at: now.toISOString(),
   })
   return !completeError && completed === true
 }
