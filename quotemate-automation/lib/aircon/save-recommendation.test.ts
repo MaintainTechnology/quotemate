@@ -6,11 +6,12 @@
 
 import { describe, it, expect } from 'vitest'
 import { saveAirconRecommendation, supabaseUserIdFor } from './save-recommendation'
-import type { AcRecommendation } from './types'
+import type { AcPricedRecommendation } from './types'
 
 const recommendation = {
+  pricing_status: 'priced',
   routing: { decision: 'book_assessment', reason: 'indicative only' },
-} as unknown as AcRecommendation
+} as unknown as AcPricedRecommendation
 
 const address = { address: '12 Example St, Sydney', postcode: '2000', state: 'NSW' }
 
@@ -90,6 +91,7 @@ describe('saveAirconRecommendation', () => {
       public_token: saved!.public_token,
     })
     expect(calls.payload!.recommendation).toBe(recommendation)
+    expect((calls.payload!.recommendation as AcPricedRecommendation).pricing_status).toBe('priced')
   })
 
   it('insert failure is swallowed (best-effort) and returns null', async () => {

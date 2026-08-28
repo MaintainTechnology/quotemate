@@ -88,6 +88,28 @@ describe('buildDeterministicTiers — fallback + safe-failure', () => {
     expect(matLine(r.tiers!.good).description).toBe('Generic sundry')
   })
 
+  it('returns a typed authority failure when strict recipe pricing has only a shared price', () => {
+    const r = buildDeterministicTiers({
+      ...BASE,
+      bom: [{ material_category: 'sundry', quantity: 1, required: true }],
+      tenantMaterials: [],
+      requireTenantMaterialAuthority: true,
+    })
+    expect(r).toMatchObject({
+      tiers: null,
+      code: 'missing_tenant_recipe_price',
+    })
+    expect(r.reason).toMatch(/sundry/i)
+  })
+
+  it('builds normally in strict mode when an active tenant row prices the category', () => {
+    const r = buildDeterministicTiers({
+      ...BASE,
+      requireTenantMaterialAuthority: true,
+    })
+    expect(r.tiers).not.toBeNull()
+  })
+
   it('returns null (no recipe) → caller keeps the Opus draft', () => {
     const r = buildDeterministicTiers({ ...BASE, bom: [] })
     expect(r.tiers).toBeNull()

@@ -50,6 +50,14 @@ describe('buildTenderTier', () => {
     expect(tier.subtotal_ex_gst).toBe(bom.subtotalExGst)
     expect(tier.total_inc_gst).toBe(bom.totalIncGst)
   })
+
+  it('preserves an unregistered tenant BOM without adding GST', () => {
+    const unregistered = pricePaintTakeoff(items, resolvePaintRates(ROWS), { gstRegistered: false })
+    const unregisteredTier = buildTenderTier(unregistered)
+    expect(unregisteredTier.subtotal_ex_gst).toBe(unregistered.subtotalExGst)
+    expect(unregisteredTier.total_inc_gst).toBe(unregistered.subtotalExGst)
+    expect(unregistered.gst).toBe(0)
+  })
 })
 
 describe('buildPaintQuotePayloads', () => {
@@ -115,5 +123,17 @@ describe('buildPaintTenderReportHtml', () => {
     expect(html).toContain(bom.totalIncGst.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' }))
     expect(html).toContain(`${bom.labour.crewSize} painters`)
     expect(html).toContain('June 2026')
+  })
+
+  it('uses no-GST copy for an unregistered tenant', () => {
+    const unregistered = pricePaintTakeoff(items, resolvePaintRates(ROWS), { gstRegistered: false })
+    const unregisteredHtml = buildPaintTenderReportHtml({
+      businessName: 'Pilot Painters',
+      bom: unregistered,
+      generatedAt: new Date('2026-06-12T00:00:00Z'),
+    })
+    expect(unregisteredHtml).toContain('Tender total — no GST charged')
+    expect(unregisteredHtml).toContain('No GST charged')
+    expect(unregisteredHtml).not.toContain('Prices include 10% GST')
   })
 })

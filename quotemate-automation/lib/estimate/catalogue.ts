@@ -386,6 +386,21 @@ export function chooseMaterial(input: ChooseMaterialInput): ChosenMaterial {
   return { source: 'shared', row: pick.r, price: money(pick.price) }
 }
 
+/** Recipe-only price resolver. Shared rows remain available to suggestion and
+ * legacy paths, but a customer-priceable recipe category must resolve to an
+ * active row in this tenant's persisted catalogue. */
+export function chooseTenantMaterial(input: ChooseMaterialInput): ChosenMaterial {
+  const tenantRows = input.tenantRows.filter(
+    (row) => (row.active ?? true) && Number.isFinite(num(row.unit_price_ex_gst)),
+  )
+  const chosen = chooseMaterial({
+    ...input,
+    tenantRows,
+    sharedRows: [],
+  })
+  return chosen?.source === 'tenant' ? chosen : null
+}
+
 // ── global-vs-local override resolution ─────────────────────────────
 export interface ResolvedParam<T> {
   value: T

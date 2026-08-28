@@ -25,6 +25,9 @@ import { generateShareToken } from '@/lib/stripe/checkout'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { provisionSessionStore } from '@/lib/filestore/provision'
 import type { PricedPaintBom } from '@/lib/commercial-painting/types'
+import { loadPaintRates, resolvePaintRates } from '@/lib/commercial-painting/rates'
+import { assessPaintPricingAuthority } from '@/lib/commercial-painting/price'
+import { findCommercialPaintPricingBook } from '@/lib/commercial-painting/pricing-context'
 
 /** Customer-delivery outcome returned to the dashboard (best-effort send). */
 type PaintDelivery =
@@ -85,6 +88,36 @@ export async function POST(req: Request) {
   if (!bom) {
     return Response.json(
       { ok: false, error: 'not_priced', detail: 'Price the confirmed takeoff before saving a quote.' },
+      { status: 422 },
+    )
+  }
+
+  let rows
+  try {
+    rows = await loadPaintRates(estimatorSupabase, tenant.id)
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'rates_load_failed',
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+  const pricingBook = await findCommercialPaintPricingBook(estimatorSupabase, tenant)
+  const currentBook = resolvePaintRates(rows)
+  const authority = assessPaintPricingAuthority(bom, currentBook, pricingBook != null)
+  if (!authority.ok) {
+    return Response.json(authority, { status: 422 })
+  }
+  if (bom.gstRegistered !== (pricingBook?.gst_registered === true)) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'tenant_pricing_required',
+        detail: 'GST registration changed after pricing. Re-price before saving the customer quote.',
+      },
       { status: 422 },
     )
   }
@@ -250,6 +283,7 @@ export async function POST(req: Request) {
         customerName,
         jobName: run.job_name as string | null,
         totalIncGst: bom.totalIncGst,
+        gstRegistered: bom.gstRegistered,
         quoteUrl: quoteViewUrl,
         pdfUrl: pdfReady ? `${appUrl}/api/q/${shareToken}/pdf` : null,
       })

@@ -14,12 +14,13 @@ import { saveAirconRecommendation, supabaseUserIdFor } from '@/lib/aircon/save-r
 import { AcAddressSchema, AcInputsSchema } from '@/lib/aircon/request-schema'
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { sizeAircon } from '@/lib/aircon/sizing'
-import { recommendAircon, mergeAcRateCard, DEFAULT_AC_RATE_CARD } from '@/lib/aircon/recommend'
+import { recommendAircon, recommendAirconUnpriced } from '@/lib/aircon/recommend'
+import { loadTenantAcRateCard } from '@/lib/aircon/pricing-context'
 import { resolveAcLocationEvidence } from '@/lib/aircon/location'
 import { runPlanExtraction, PLAN_MEDIA_TYPES, type PlanMediaType } from '@/lib/aircon/plan-extract'
 import { resolveRoomAreas } from '@/lib/aircon/plan-scale'
 import { designAcLayout } from '@/lib/aircon/design'
-import type { AcPlanAreaEvidence, AcRateCard, RoomType } from '@/lib/aircon/types'
+import type { AcPlanAreaEvidence, RoomType } from '@/lib/aircon/types'
 
 export const dynamic = 'force-dynamic'
 // The vision read of a full plan can take minutes (Vercel Pro / Railway).
@@ -32,26 +33,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-/** Best-effort — read overlays.aircon_rate_card for this tenant. */
-async function loadAcOverlay(tenantId: string, primaryTrade: string | null): Promise<unknown> {
-  try {
-    let q = supabase.from('pricing_book').select('overlays').eq('tenant_id', tenantId)
-    if (primaryTrade) q = q.eq('trade', primaryTrade)
-    const { data } = await q.limit(1).maybeSingle()
-    const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
-    return overlays?.aircon_rate_card ?? null
-  } catch {
-    return null
-  }
-}
-
 function bad(error: string, status: number, extra?: Record<string, unknown>) {
   return Response.json({ ok: false, error, ...(extra ?? {}) }, { status })
 }
 
 export async function POST(req: Request) {
   // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
-  // optional — no tenant just means the default aircon rate card.
+  // optional — without tenant-authorised rates the response remains unpriced.
   const authResolved = await resolveTenantRequest(supabase, req, 'id, trade, owner_user_id')
   if (!authResolved) return bad('unauthorized', 401)
   const tenantRow = authResolved.tenant as
@@ -100,11 +88,9 @@ export async function POST(req: Request) {
   const address = addressParsed.data
   const inputs = inputsParsed.data
 
-  let rateCard: AcRateCard = DEFAULT_AC_RATE_CARD
-  if (auth.tenantId) {
-    const overlayJson = await loadAcOverlay(auth.tenantId, auth.primaryTrade)
-    if (overlayJson != null) rateCard = mergeAcRateCard(overlayJson)
-  }
+  const rateCard = auth.tenantId
+    ? await loadTenantAcRateCard(supabase, auth.tenantId, auth.primaryTrade)
+    : null
 
   const { zone, note } = climateZoneForPostcode(address.postcode, address.state)
 
@@ -171,16 +157,21 @@ export async function POST(req: Request) {
     ceiling_height: inputs.ceiling_height,
     storeys: sizing.storeys,
   })
-  const recommendation = recommendAircon({ sizing, inputs, rateCard })
+  const recommendation = rateCard
+    ? recommendAircon({ sizing, inputs, rateCard })
+    : recommendAirconUnpriced({ sizing, inputs })
 
   // Persist for the Quotes tab + customer share page (migration 144) — the
   // plan branch surfaces on the dashboard exactly like the form-only branch.
-  const saved = await saveAirconRecommendation(supabase, {
-    tenantId: auth.tenantId,
-    createdBy: auth.createdBy,
-    address,
-    recommendation,
-  })
+  const saved =
+    recommendation.pricing_status === 'priced'
+      ? await saveAirconRecommendation(supabase, {
+          tenantId: auth.tenantId,
+          createdBy: auth.createdBy,
+          address,
+          recommendation,
+        })
+      : null
 
   return Response.json(
     {

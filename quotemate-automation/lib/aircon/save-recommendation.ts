@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateShareToken } from '@/lib/stripe/checkout'
-import type { AcRecommendation } from './types'
+import type { AcPricedRecommendation } from './types'
 
 export type SavedAirconRecommendation = { id: string; public_token: string } | null
 
@@ -27,7 +27,7 @@ export async function saveAirconRecommendation(
     tenantId: string | null
     createdBy: string | null
     address: { address: string; postcode: string; state: string }
-    recommendation: AcRecommendation
+    recommendation: AcPricedRecommendation
   },
 ): Promise<SavedAirconRecommendation> {
   // Tenant-less callers (no tenants row yet) still get their in-memory

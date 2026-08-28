@@ -14,9 +14,10 @@ import type {
   AcPriceRange,
   AcPropertyInputs,
   AcRateCard,
-  AcRecommendation,
+  AcPricedRecommendation,
   AcRoutingDecision,
   AcSizing,
+  AcUnpricedRecommendation,
 } from './types'
 
 export const DEFAULT_AC_RATE_CARD: AcRateCard = {
@@ -270,7 +271,7 @@ export function recommendAircon(args: {
   sizing: AcSizing
   inputs: AcPropertyInputs
   rateCard?: AcRateCard
-}): AcRecommendation {
+}): AcPricedRecommendation {
   const rateCard = args.rateCard ?? DEFAULT_AC_RATE_CARD
   const { sizing, inputs } = args
   const band = CONFIDENCE_BAND[sizing.confidence]
@@ -289,7 +290,88 @@ export function recommendAircon(args: {
 
   const routing = decideRouting(sizing, inputs, { ducted, split })
 
-  return { sizing, options: [ducted, split], routing, confidence: sizing.confidence }
+  return {
+    pricing_status: 'priced',
+    sizing,
+    options: [ducted, split],
+    routing,
+    confidence: sizing.confidence,
+  }
+}
+
+export function recommendAirconUnpriced(args: {
+  sizing: AcSizing
+  inputs: AcPropertyInputs
+}): AcUnpricedRecommendation {
+  const { sizing, inputs } = args
+  let reason =
+    'Tenant air-conditioning rates are not configured. Book a site assessment and complete the pricing catalogue before quoting.'
+  if (inputs.ceiling_height === 'raked') {
+    reason =
+      'Raked/cathedral ceilings need an on-site load and duct-routing check. Tenant rates must also be configured before quoting.'
+  } else if (sizing.storeys >= 3) {
+    reason =
+      'Homes with 3+ levels need on-site duct-routing and riser checks. Tenant rates must also be configured before quoting.'
+  }
+
+  return {
+    pricing_status: 'tenant_pricing_required',
+    sizing,
+    routing: { decision: 'book_assessment', reason },
+    confidence: sizing.confidence,
+    pricing_setup_reason: 'Complete the air-conditioning rate card in the pricing catalogue.',
+  }
+}
+
+const REQUIRED_HEAD_BANDS = ['2.5', '3.5', '5', '7', '8'] as const
+
+function isPositiveFinite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+/** Accepts only a complete tenant-authored rate card. Never fills gaps from seed defaults. */
+export function parseTenantAcRateCard(value: unknown): AcRateCard | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<AcRateCard>
+  const perHead = candidate.split?.per_head
+  const discount = candidate.split?.multi_head_discount_pct
+  const ducted = candidate.ducted
+  if (!perHead || typeof perHead !== 'object') return null
+  if (!REQUIRED_HEAD_BANDS.every((band) => isPositiveFinite(perHead[band]))) return null
+  if (
+    typeof discount !== 'number' ||
+    !Number.isFinite(discount) ||
+    discount < 0 ||
+    discount > 1
+  ) {
+    return null
+  }
+  if (
+    !ducted ||
+    !isPositiveFinite(ducted.rate_per_kw) ||
+    !isPositiveFinite(ducted.base_ex_gst) ||
+    !isPositiveFinite(ducted.per_zone) ||
+    !isPositiveFinite(ducted.min_ex_gst) ||
+    typeof candidate.gst_registered !== 'boolean'
+  ) {
+    return null
+  }
+
+  return {
+    split: {
+      per_head: Object.fromEntries(
+        REQUIRED_HEAD_BANDS.map((band) => [band, perHead[band]]),
+      ),
+      multi_head_discount_pct: discount,
+    },
+    ducted: {
+      rate_per_kw: ducted.rate_per_kw,
+      base_ex_gst: ducted.base_ex_gst,
+      per_zone: ducted.per_zone,
+      min_ex_gst: ducted.min_ex_gst,
+    },
+    gst_registered: candidate.gst_registered,
+  }
 }
 
 /** PURE — shallow-merge a pricing_book overlay onto the default card. */

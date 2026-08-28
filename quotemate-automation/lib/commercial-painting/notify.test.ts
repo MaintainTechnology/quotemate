@@ -35,6 +35,7 @@ describe('buildPaintCustomerSms', () => {
   const base = {
     businessName: 'Coastline Painting',
     totalIncGst: 18450.4,
+    gstRegistered: true,
     quoteUrl: 'https://www.quotemax.com.au/q/abc123',
   }
 
@@ -61,5 +62,11 @@ describe('buildPaintCustomerSms', () => {
   it('falls back to a generic greeting and no job clause', () => {
     const body = buildPaintCustomerSms(base)
     expect(body.startsWith('Hi, your painting quote from Coastline Painting is ready:')).toBe(true)
+  })
+
+  it('states no GST is charged for an unregistered tenant', () => {
+    const body = buildPaintCustomerSms({ ...base, gstRegistered: false })
+    expect(body).toContain('$18,450 — no GST charged.')
+    expect(body).not.toContain('inc GST')
   })
 })

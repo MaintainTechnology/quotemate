@@ -8,7 +8,7 @@
 // so the document is framed as indicative throughout — never a final price.
 // Pure — no I/O, unit-tested.
 
-import type { AcRecommendation, AcOption, AcSystemType } from './types'
+import type { AcPricedRecommendation, AcOption, AcSystemType } from './types'
 import {
   renderReportDocument,
   renderBullets,
@@ -23,7 +23,7 @@ export type AirconReportInput = {
   /** Full white-label branding; when omitted, derived from businessName. */
   branding?: TenantBranding
   address: string
-  recommendation: AcRecommendation
+  recommendation: AcPricedRecommendation
   climateZone?: string | null
   generatedAt?: Date
 }

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   resolveTierForBrandRange,
   chooseMaterial,
+  chooseTenantMaterial,
   resolveParam,
   effectiveAssembly,
   buildBomQuoteLines,
@@ -155,6 +156,36 @@ describe('chooseMaterial', () => {
       tierLadder: [{ category: 'gpo', tier: 'good', catalogue_id: 'pick-me' }],
     })
     expect(r && 'row' in r && (r.row as TenantMaterial).name).toBe('Pick me')
+  })
+})
+
+describe('chooseTenantMaterial — recipe pricing authority', () => {
+  const shared = [{ name: 'Generic GPO', category: 'gpo', default_unit_price_ex_gst: 9 }]
+
+  it('returns null when only a shared/global price exists', () => {
+    expect(chooseTenantMaterial({ tenantRows: [], sharedRows: shared, category: 'gpo' })).toBeNull()
+  })
+
+  it('returns an active finite tenant price', () => {
+    const row: TenantMaterial = {
+      id: 'tenant-gpo',
+      category: 'gpo',
+      name: 'Tenant GPO',
+      unit_price_ex_gst: 22,
+      active: true,
+    }
+    expect(chooseTenantMaterial({ tenantRows: [row], sharedRows: shared, category: 'gpo' })).toMatchObject({
+      source: 'tenant',
+      price: 22,
+    })
+  })
+
+  it('rejects inactive and non-finite tenant rows', () => {
+    const rows: TenantMaterial[] = [
+      { id: 'inactive', category: 'gpo', name: 'Inactive', unit_price_ex_gst: 10, active: false },
+      { id: 'nan', category: 'gpo', name: 'Bad price', unit_price_ex_gst: Number.NaN, active: true },
+    ]
+    expect(chooseTenantMaterial({ tenantRows: rows, sharedRows: shared, category: 'gpo' })).toBeNull()
   })
 })
 

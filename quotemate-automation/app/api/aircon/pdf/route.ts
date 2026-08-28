@@ -16,7 +16,7 @@ import { storeQuoteAsset } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildAirconReportHtml } from '@/lib/aircon/report-html'
 import { loadTenantBranding } from '@/lib/pdf/branding'
-import type { AcRecommendation } from '@/lib/aircon/types'
+import type { AcPricedRecommendation } from '@/lib/aircon/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,7 +31,7 @@ const supabase = createClient(
 // Sizing + product names + climate zone only — never the address or prices
 // (aircon always routes to an on-site assessment, so there is no committable
 // price to leak anyway).
-function buildAirconKbText(rec: AcRecommendation, climateZone: string | null): string {
+function buildAirconKbText(rec: AcPricedRecommendation, climateZone: string | null): string {
   const r = rec as unknown as Record<string, unknown>
   const lines: string[] = ['# Air-conditioning recommendation', '']
   if (climateZone) lines.push(`Climate zone: ${climateZone}`, '')
@@ -58,10 +58,11 @@ function buildAirconKbText(rec: AcRecommendation, climateZone: string | null): s
 
 /** Light structural guard — enough to avoid rendering garbage, without a
  *  full zod schema for the deep AcRecommendation shape. */
-function looksLikeRecommendation(v: unknown): v is AcRecommendation {
+function looksLikeRecommendation(v: unknown): v is AcPricedRecommendation {
   if (!v || typeof v !== 'object') return false
   const r = v as Record<string, unknown>
   return (
+    r.pricing_status === 'priced' &&
     !!r.sizing &&
     typeof r.sizing === 'object' &&
     Array.isArray(r.options) &&

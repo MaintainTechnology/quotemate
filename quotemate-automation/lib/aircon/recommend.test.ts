@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { sizeAircon } from './sizing'
-import { recommendAircon, DEFAULT_AC_RATE_CARD, mergeAcRateCard } from './recommend'
+import {
+  recommendAircon,
+  recommendAirconUnpriced,
+  DEFAULT_AC_RATE_CARD,
+  mergeAcRateCard,
+  parseTenantAcRateCard,
+} from './recommend'
 import type { AcPropertyInputs } from './types'
 
 function inputs(overrides: Partial<AcPropertyInputs> = {}): AcPropertyInputs {
@@ -23,6 +29,9 @@ function recommend(overrides: Partial<AcPropertyInputs> = {}) {
 }
 
 describe('recommendAircon', () => {
+  it('marks a tenant-card recommendation as priced', () => {
+    expect(recommend().pricing_status).toBe('priced')
+  })
   it('always returns both options, ordered ducted then split', () => {
     const r = recommend()
     expect(r.options.map((o) => o.system_type)).toEqual(['ducted', 'split'])
@@ -101,6 +110,59 @@ describe('recommendAircon', () => {
     expect(ducted.price.low).toBe(0)
     expect(ducted.price.high).toBe(0)
     expect(split.price.low).toBe(0)
+  })
+})
+
+describe('tenant aircon pricing authority', () => {
+  const complete = {
+    split: {
+      per_head: { '2.5': 1200, '3.5': 1500, '5': 2000, '7': 2700, '8': 3200 },
+      multi_head_discount_pct: 0.05,
+    },
+    ducted: { rate_per_kw: 1250, base_ex_gst: 4500, per_zone: 400, min_ex_gst: 8500 },
+    gst_registered: false,
+  }
+
+  it('accepts only a complete finite tenant card and preserves GST state', () => {
+    expect(parseTenantAcRateCard(complete)).toEqual(complete)
+    expect(parseTenantAcRateCard({ ...complete, gst_registered: true })?.gst_registered).toBe(true)
+  })
+
+  it('uses the tenant GST state in deterministic point-price maths', () => {
+    const i = inputs()
+    const sizing = sizeAircon('temperate', i)
+    const registered = recommendAircon({
+      sizing,
+      inputs: i,
+      rateCard: { ...complete, gst_registered: true },
+    })
+    const unregistered = recommendAircon({
+      sizing,
+      inputs: i,
+      rateCard: { ...complete, gst_registered: false },
+    })
+    expect(registered.options[0].pricing.point_estimate_inc_gst).toBeGreaterThan(
+      registered.options[0].pricing.point_estimate_ex_gst,
+    )
+    expect(unregistered.options[0].pricing.point_estimate_inc_gst).toBe(
+      unregistered.options[0].pricing.point_estimate_ex_gst,
+    )
+  })
+
+  it('rejects absent, partial and malformed overlays instead of filling defaults', () => {
+    expect(parseTenantAcRateCard(null)).toBeNull()
+    expect(parseTenantAcRateCard({ ducted: { rate_per_kw: 1300 } })).toBeNull()
+    expect(parseTenantAcRateCard({ ...complete, ducted: { ...complete.ducted, per_zone: Number.NaN } })).toBeNull()
+  })
+
+  it('returns sizing and assessment advice with no monetary options when unpriced', () => {
+    const i = inputs()
+    const sizing = sizeAircon('temperate', i)
+    const result = recommendAirconUnpriced({ sizing, inputs: i })
+    expect(result.pricing_status).toBe('tenant_pricing_required')
+    expect('options' in result).toBe(false)
+    expect(JSON.stringify(result)).not.toMatch(/point_estimate|rate_ex_gst|"price"/)
+    expect(result.routing.decision).toBe('book_assessment')
   })
 })
 

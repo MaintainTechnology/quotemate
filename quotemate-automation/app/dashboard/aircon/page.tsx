@@ -27,6 +27,7 @@ import type { AcLocationEvidence } from '@/lib/aircon/location'
 import type {
   AcOption,
   AcPlanDesign,
+  AcPricedRecommendation,
   AcRecommendation,
   AcResolvedRoom,
   AcSizing,
@@ -466,11 +467,18 @@ function Result({
 
       <div>
         <SectionHeader num="03" title="System options" sub="Both systems priced from the same load" />
-        <div className="grid gap-5 lg:grid-cols-2">
-          {r.options.map((o) => (
-            <OptionCard key={o.system_type} option={o} rooms={r.sizing.rooms} />
-          ))}
-        </div>
+        {r.pricing_status === 'priced' ? (
+          <div className="grid gap-5 lg:grid-cols-2">
+            {r.options.map((o) => (
+              <OptionCard key={o.system_type} option={o} rooms={r.sizing.rooms} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-card border border-warning/40 bg-ink-card p-6">
+            <p className="font-mono text-xs font-bold uppercase tracking-wider text-warning">Price needed</p>
+            <p className="mt-2 text-sm leading-relaxed text-text-sec">{r.pricing_setup_reason}</p>
+          </div>
+        )}
       </div>
 
       <div>
@@ -480,12 +488,14 @@ function Result({
             Book a <span className="text-accent">site assessment</span>
           </p>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-sec">{r.routing.reason}</p>
-          <AirconPdfButton
-            token={token}
-            address={location.geocode.ok ? (location.geocode.formatted_address ?? addressInput.address) : addressInput.address}
-            recommendation={r}
-            climateZone={climate_zone}
-          />
+          {r.pricing_status === 'priced' && (
+            <AirconPdfButton
+              token={token}
+              address={location.geocode.ok ? (location.geocode.formatted_address ?? addressInput.address) : addressInput.address}
+              recommendation={r}
+              climateZone={climate_zone}
+            />
+          )}
         </div>
       </div>
     </section>
@@ -504,7 +514,7 @@ function AirconPdfButton({
 }: {
   token: string | null
   address: string
-  recommendation: AcRecommendation
+  recommendation: AcPricedRecommendation
   climateZone: string | null
 }) {
   const [busy, setBusy] = useState(false)

@@ -13,9 +13,9 @@ import { saveAirconRecommendation, supabaseUserIdFor } from '@/lib/aircon/save-r
 import { RecommendRequestSchema } from '@/lib/aircon/request-schema'
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { sizeAircon } from '@/lib/aircon/sizing'
-import { recommendAircon, mergeAcRateCard, DEFAULT_AC_RATE_CARD } from '@/lib/aircon/recommend'
+import { recommendAircon, recommendAirconUnpriced } from '@/lib/aircon/recommend'
+import { loadTenantAcRateCard } from '@/lib/aircon/pricing-context'
 import { resolveAcLocationEvidence } from '@/lib/aircon/location'
-import type { AcRateCard } from '@/lib/aircon/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,25 +24,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-/** Best-effort — read overlays.aircon_rate_card for this tenant. */
-async function loadAcOverlay(
-  tenantId: string,
-  primaryTrade: string | null,
-): Promise<unknown> {
-  try {
-    let q = supabase.from('pricing_book').select('overlays').eq('tenant_id', tenantId)
-    if (primaryTrade) q = q.eq('trade', primaryTrade)
-    const { data } = await q.limit(1).maybeSingle()
-    const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
-    return overlays?.aircon_rate_card ?? null
-  } catch {
-    return null
-  }
-}
-
 export async function POST(req: Request) {
   // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
-  // optional — no tenant just means the default aircon rate card.
+  // optional — without tenant-authorised rates the response remains unpriced.
   const resolved = await resolveTenantRequest(supabase, req, 'id, trade, owner_user_id')
   if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
@@ -75,11 +59,9 @@ export async function POST(req: Request) {
 
   const { address, inputs } = parsed.data
 
-  let rateCard: AcRateCard = DEFAULT_AC_RATE_CARD
-  if (auth.tenantId) {
-    const overlayJson = await loadAcOverlay(auth.tenantId, auth.primaryTrade)
-    if (overlayJson != null) rateCard = mergeAcRateCard(overlayJson)
-  }
+  const rateCard = auth.tenantId
+    ? await loadTenantAcRateCard(supabase, auth.tenantId, auth.primaryTrade)
+    : null
 
   const { zone, note } = climateZoneForPostcode(address.postcode, address.state)
   const location = await resolveAcLocationEvidence(address, {
@@ -99,15 +81,20 @@ export async function POST(req: Request) {
         }
       : null
   const sizing = sizeAircon(zone, inputs, areaEvidence)
-  const recommendation = recommendAircon({ sizing, inputs, rateCard })
+  const recommendation = rateCard
+    ? recommendAircon({ sizing, inputs, rateCard })
+    : recommendAirconUnpriced({ sizing, inputs })
 
   // Persist for the Quotes tab + customer share page (migration 144).
-  const saved = await saveAirconRecommendation(supabase, {
-    tenantId: auth.tenantId,
-    createdBy: auth.createdBy,
-    address,
-    recommendation,
-  })
+  const saved =
+    recommendation.pricing_status === 'priced'
+      ? await saveAirconRecommendation(supabase, {
+          tenantId: auth.tenantId,
+          createdBy: auth.createdBy,
+          address,
+          recommendation,
+        })
+      : null
 
   return Response.json(
     { ok: true, climate_zone: zone, climate_note: note, location, recommendation, saved },

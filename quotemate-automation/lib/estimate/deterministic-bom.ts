@@ -34,6 +34,7 @@
 
 import {
   chooseMaterial,
+  chooseTenantMaterial,
   buildBomQuoteLines,
   type TenantMaterial,
   type SharedMaterial,
@@ -75,6 +76,9 @@ export interface DeterministicTierInput {
    *  own. Optional — absent means unchanged legacy behaviour, which is also
    *  what a pre-R3 intake row (no tier recorded) gets. */
   chosenProduct?: ChosenProductAnchor | null
+  /** Present-recipe authority gate: required categories may only consume an
+   * active tenant catalogue price, never a shared/global fallback. */
+  requireTenantMaterialAuthority?: boolean
 }
 
 export interface DeterministicTier {
@@ -94,7 +98,7 @@ export interface DeterministicTiers {
 
 export type DeterministicResult =
   | { tiers: DeterministicTiers; reason?: undefined }
-  | { tiers: null; reason: string }
+  | { tiers: null; reason: string; code?: 'missing_tenant_recipe_price' }
 
 /**
  * Build good/better/best deterministically from a recipe × catalogue.
@@ -129,7 +133,10 @@ export function buildDeterministicTiers(
     // `properties` returned below).
     const resolveMaterial = (line: BomLine) => {
       const category = line.material_category
-      const chosen = chooseMaterial({
+      const choose = input.requireTenantMaterialAuthority
+        ? chooseTenantMaterial
+        : chooseMaterial
+      const chosen = choose({
         tenantRows: input.tenantMaterials,
         sharedRows: input.sharedMaterials,
         category,
@@ -179,6 +186,9 @@ export function buildDeterministicTiers(
       return {
         tiers: null,
         reason: `required categories not priceable: ${built.missingRequired.join(', ')}`,
+        ...(input.requireTenantMaterialAuthority
+          ? { code: 'missing_tenant_recipe_price' as const }
+          : {}),
       }
     }
 

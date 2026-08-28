@@ -24,6 +24,7 @@ import type {
   PaintMaterialSummary,
   PaintEquipmentLine,
   PaintMethod,
+  PaintPricingAuthority,
 } from './types'
 import {
   DEFAULT_METHOD_BY_SYSTEM,
@@ -293,4 +294,26 @@ export function pricePaintTakeoff(
     assumptions,
     exclusions,
   }
+}
+
+export function assessPaintPricingAuthority(
+  bom: PricedPaintBom,
+  book: PaintRateBook,
+  hasPricingBook: boolean,
+): PaintPricingAuthority {
+  if (bom.unmatched.length > 0) {
+    return {
+      ok: false,
+      error: 'inspection_required',
+      detail: `${bom.unmatched.length} included surface${bom.unmatched.length === 1 ? '' : 's'} require an on-site assessment before a customer quote can be saved.`,
+    }
+  }
+  if (!hasPricingBook || book.usesSeedDefaults) {
+    return {
+      ok: false,
+      error: 'tenant_pricing_required',
+      detail: 'Adopt or set tenant commercial-paint rates before saving a customer quote.',
+    }
+  }
+  return { ok: true }
 }

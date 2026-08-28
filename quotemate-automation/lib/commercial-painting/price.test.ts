@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pricePaintTakeoff } from './price'
+import { assessPaintPricingAuthority, pricePaintTakeoff } from './price'
 import { resolvePaintRates, heightMultiplier, applyLabourRateOverride } from './rates'
 import type { PaintRateRow, PaintTakeoffItem } from './types'
 
@@ -299,5 +299,49 @@ describe('pricePaintTakeoff — discipline', () => {
     const bom = pricePaintTakeoff([item({})], book)
     expect(bom.exclusions.some((e) => e.toLowerCase().includes('tiled'))).toBe(true)
     expect(bom.exclusions.some((e) => e.toLowerCase().includes('colours tbc'))).toBe(true)
+  })
+})
+
+describe('assessPaintPricingAuthority', () => {
+  const tenantBook = resolvePaintRates(
+    SEED_ROWS.map((row) => ({ ...row, tenant_id: 'T1', is_default: false })),
+  )
+
+  it('accepts a fully matched BOM priced from an applicable tenant book', () => {
+    const bom = pricePaintTakeoff([item({})], tenantBook, { gstRegistered: false })
+
+    expect(assessPaintPricingAuthority(bom, tenantBook, true)).toEqual({ ok: true })
+    expect(bom.gstRegistered).toBe(false)
+    expect(bom.gst).toBe(0)
+  })
+
+  it('requires inspection when any included surface is unmatched', () => {
+    const bom = pricePaintTakeoff(
+      [item({ system: 'textured' as never, surface: 'Textured feature wall' })],
+      tenantBook,
+    )
+
+    expect(assessPaintPricingAuthority(bom, tenantBook, true)).toMatchObject({
+      ok: false,
+      error: 'inspection_required',
+    })
+  })
+
+  it('requires tenant pricing when consumed rates are seed defaults', () => {
+    const bom = pricePaintTakeoff([item({})], book)
+
+    expect(assessPaintPricingAuthority(bom, book, true)).toMatchObject({
+      ok: false,
+      error: 'tenant_pricing_required',
+    })
+  })
+
+  it('requires tenant pricing when no applicable pricing book exists', () => {
+    const bom = pricePaintTakeoff([item({})], tenantBook)
+
+    expect(assessPaintPricingAuthority(bom, tenantBook, false)).toMatchObject({
+      ok: false,
+      error: 'tenant_pricing_required',
+    })
   })
 })

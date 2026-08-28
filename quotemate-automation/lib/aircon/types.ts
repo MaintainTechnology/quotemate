@@ -121,13 +121,24 @@ export type AcRoutingDecision = {
   reason: string
 }
 
-export type AcRecommendation = {
+export type AcPricedRecommendation = {
+  pricing_status: 'priced'
   sizing: AcSizing
   /** Always two options, ordered [ducted, split]. */
   options: AcOption[]
   routing: AcRoutingDecision
   confidence: AcConfidence
 }
+
+export type AcUnpricedRecommendation = {
+  pricing_status: 'tenant_pricing_required'
+  sizing: AcSizing
+  routing: AcRoutingDecision
+  confidence: AcConfidence
+  pricing_setup_reason: string
+}
+
+export type AcRecommendation = AcPricedRecommendation | AcUnpricedRecommendation
 
 // ── Rate card (per-tenant overridable via pricing_book.overlays) ──────
 

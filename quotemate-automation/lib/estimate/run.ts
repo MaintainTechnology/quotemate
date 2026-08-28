@@ -159,6 +159,52 @@ export async function runEstimation(
     },
   })
 
+  // Price-authority preflight. A PRESENT recipe is a commitment to use the
+  // tenant's own catalogue for every required included category. If that
+  // authority is missing, inspection is terminal before RAG, prompt hints or
+  // Opus can reintroduce a shared/model price. A job with no recipe remains on
+  // the existing model path.
+  let recipeAuthorityLoaded: Awaited<ReturnType<typeof loadDeterministicInputs>> | null = null
+  let recipeAuthorityBuild: ReturnType<typeof buildDeterministicTiers> | null = null
+  try {
+    recipeAuthorityLoaded = await loadDeterministicInputs(intake, pricingBook)
+    if (recipeAuthorityLoaded.input) {
+      recipeAuthorityBuild = buildDeterministicTiers(recipeAuthorityLoaded.input)
+      if (
+        !recipeAuthorityBuild.tiers &&
+        recipeAuthorityBuild.code === 'missing_tenant_recipe_price'
+      ) {
+        const draft: Record<string, unknown> = {
+          needs_inspection: true,
+          inspection_reason: resolveInspectionReason(
+            'Required recipe materials need a tenant catalogue price and an on-site assessment.',
+          ),
+          risk_flags: ['missing_tenant_recipe_price'],
+        }
+        forceInspectionTiers(draft)
+        cacheLog.err('recipe price authority missing — terminal inspection route', recipeAuthorityBuild.reason, {
+          assembly: recipeAuthorityLoaded.assemblyName,
+        })
+        trace('estimate', 'warn', {
+          substep: 'route_to_inspection',
+          message: 'present recipe has a required category without an active tenant catalogue price',
+          decisions: {
+            route: 'inspection',
+            cause: 'missing_tenant_recipe_price',
+            assembly: recipeAuthorityLoaded.assemblyName,
+          },
+          duration_ms: totalSw.elapsed(),
+        })
+        return { draft, downgradedToInspection: true }
+      }
+    }
+  } catch (error) {
+    cacheLog.err(
+      'recipe price-authority preflight errored — continuing existing estimation path',
+      error instanceof Error ? error.message : String(error),
+    )
+  }
+
   // RAG: anchor Opus to similar past quotes. Returns null on cold-start
   // (no usable matches), all-inspection results, or if RAG_DISABLED=true.
   // The block goes in the user message — keeps the system message
@@ -391,7 +437,7 @@ export async function runEstimation(
   // without turning the engine off for the other seven.
   if (deterministicBomEnabled(intake?.tenant_id ?? null)) {
     try {
-      const loaded = await loadDeterministicInputs(intake, pricingBook)
+      const loaded = recipeAuthorityLoaded ?? await loadDeterministicInputs(intake, pricingBook)
       if (loaded.input) {
         // Phase 5 — keep the recipe for the coverage check further down.
         // Captured BEFORE the build so it survives a build that BAILS: that is
@@ -401,7 +447,7 @@ export async function runEstimation(
         // already reports missingRequired); on an Opus draft it is the only
         // thing that can see an omitted part or an invented one.
         phase5Recipe = loaded.input.bom
-        const built = buildDeterministicTiers(loaded.input)
+        const built = recipeAuthorityBuild ?? buildDeterministicTiers(loaded.input)
         if (built.tiers) {
           for (const tier of ['good', 'better', 'best'] as const) {
             const prev =
@@ -2356,6 +2402,7 @@ async function loadDeterministicInputs(
     tierLadder: (ladderRows ?? []) as TierLadderEntry[],
     // Phase 4 R3 — the customer's pick, if one was recorded WITH its tier.
     chosenProduct: readChosenProductAnchor(intake),
+    requireTenantMaterialAuthority: true,
   }
 
   // Phase 4 R9, the task half — the tradie's step checklist for this job.

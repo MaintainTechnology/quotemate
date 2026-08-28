@@ -245,3 +245,11 @@ export type PricedPaintBom = {
   assumptions: string[]
   exclusions: string[]
 }
+
+export type PaintPricingAuthority =
+  | { ok: true }
+  | {
+      ok: false
+      error: 'inspection_required' | 'tenant_pricing_required'
+      detail: string
+    }

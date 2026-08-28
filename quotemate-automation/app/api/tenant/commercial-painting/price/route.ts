@@ -12,7 +12,8 @@
 
 import { tenantFromBearer, estimatorSupabase } from '@/lib/estimation/auth'
 import { loadPaintRates, resolvePaintRates, applyLabourRateOverride } from '@/lib/commercial-painting/rates'
-import { pricePaintTakeoff } from '@/lib/commercial-painting/price'
+import { assessPaintPricingAuthority, pricePaintTakeoff } from '@/lib/commercial-painting/price'
+import { findCommercialPaintPricingBook } from '@/lib/commercial-painting/pricing-context'
 import { MAX_LABOUR_RATE_PER_HR, type PaintTakeoffItem } from '@/lib/commercial-painting/types'
 
 export const dynamic = 'force-dynamic'
@@ -58,9 +59,6 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'no_items' }, { status: 422 })
   }
 
-  // GST: commercial painting tenants are assumed registered (the seeded
-  // rate card is ex-GST trade pricing); tenant pricing_book overlays can
-  // change this when a real unregistered tenant appears.
   let rows
   try {
     rows = await loadPaintRates(estimatorSupabase, tenant.id)
@@ -70,8 +68,26 @@ export async function POST(req: Request) {
       { status: 500 },
     )
   }
+  const pricingBook = await findCommercialPaintPricingBook(estimatorSupabase, tenant)
   const book = applyLabourRateOverride(resolvePaintRates(rows), labourRateOverride)
-  const bom = pricePaintTakeoff(items, book, { gstRegistered: true })
+  const gstRegistered = pricingBook?.gst_registered === true
+  const bom = pricePaintTakeoff(items, book, { gstRegistered })
+  const authority = assessPaintPricingAuthority(bom, book, pricingBook != null)
+
+  if (!authority.ok) {
+    await Promise.all([
+      estimatorSupabase
+        .from('plan_extractions')
+        .update({ priced_bom: null, priced_at: null, updated_at: new Date().toISOString() })
+        .eq('id', extractionId),
+      estimatorSupabase
+        .from('paint_runs')
+        .update({ status: 'ready', updated_at: new Date().toISOString() })
+        .eq('id', paintRunId)
+        .eq('tenant_id', tenant.id),
+    ])
+    return Response.json(authority, { status: 422 })
+  }
 
   const { error: upErr } = await estimatorSupabase
     .from('plan_extractions')
@@ -89,6 +105,7 @@ export async function POST(req: Request) {
   return Response.json({
     ok: true,
     bom,
+    gst_registered: gstRegistered,
     rateRows: rows.length,
     usesSeedDefaults: book.usesSeedDefaults,
   })

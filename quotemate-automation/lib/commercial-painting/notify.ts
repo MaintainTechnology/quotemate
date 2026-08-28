@@ -48,15 +48,17 @@ export function buildPaintCustomerSms(args: {
   customerName?: string | null
   jobName?: string | null
   totalIncGst: number
+  gstRegistered: boolean
   quoteUrl: string
   pdfUrl?: string | null
 }): string {
   const hi = args.customerName ? `Hi ${args.customerName}, ` : 'Hi, '
   const job = args.jobName ? ` for ${args.jobName}` : ''
   const pdf = args.pdfUrl ? ` · PDF copy: ${args.pdfUrl}` : ''
+  const gstLabel = args.gstRegistered ? 'inc GST' : '— no GST charged'
   return (
     `${hi}your painting quote from ${args.businessName}${job} is ready: ` +
-    `${aud(args.totalIncGst)} inc GST. ` +
+    `${aud(args.totalIncGst)} ${gstLabel}. ` +
     `View the full quote: ${args.quoteUrl}${pdf} — reply to confirm.`
   )
 }

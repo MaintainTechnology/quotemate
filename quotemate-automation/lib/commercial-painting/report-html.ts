@@ -20,9 +20,11 @@ function aud(n: number): string {
 }
 
 /** Per-trade default "Please Note" disclaimers for a commercial paint tender. */
-const PAINT_PLEASE_NOTE = [
+const PAINT_PLEASE_NOTE_BEFORE_GST = [
   'This tender is valid for 30 days and is subject to site verification of access and substrate condition.',
-  'Prices include 10% GST; the line tables above are shown ex GST.',
+]
+
+const PAINT_PLEASE_NOTE_AFTER_GST = [
   'Quantities are taken off the supplied plans and measurements; final pricing is confirmed on site and variations to the scope are quoted separately.',
   'Paint products are supplied to equivalent specification where a named brand or colour is unavailable.',
   'Separate prices listed are optional and are NOT included in the tender total unless accepted in writing.',
@@ -96,6 +98,7 @@ export function buildPaintTenderReportHtml(input: {
     .join('')
 
   const list = (items: string[]) => items.map((i) => `<li>${esc(i)}</li>`).join('')
+  const totalLabel = bom.gstRegistered ? 'Tender total inc GST' : 'Tender total — no GST charged'
 
   let body = ''
 
@@ -105,7 +108,7 @@ export function buildPaintTenderReportHtml(input: {
     <div class="stat"><div class="v">${bom.labour.hours} <small>h</small></div><div class="l">Labour</div></div>
     <div class="stat"><div class="v">${bom.labour.crewSize} painters</div><div class="l">Crew</div></div>
     <div class="stat"><div class="v">≈ ${bom.labour.estimatedDays} <small>day${bom.labour.estimatedDays === 1 ? '' : 's'}</small></div><div class="l">On site</div></div>
-    <div class="stat stat-selected"><div class="v">${aud(bom.totalIncGst)}</div><div class="l">Tender inc GST</div></div>
+    <div class="stat stat-selected"><div class="v">${aud(bom.totalIncGst)}</div><div class="l">${totalLabel}</div></div>
   </div>`
 
   // Scope of works.
@@ -153,8 +156,8 @@ export function buildPaintTenderReportHtml(input: {
       <tr><td>Materials</td><td class="num">${aud(bom.materialsExGst)}</td></tr>
       <tr><td>Equipment</td><td class="num">${aud(bom.equipmentExGst)}</td></tr>
       <tr><td>Subtotal ex GST</td><td class="num">${aud(bom.subtotalExGst)}</td></tr>
-      <tr><td>GST</td><td class="num">${aud(bom.gst)}</td></tr>
-      <tr><td><strong>Tender total inc GST</strong></td><td class="num"><strong>${aud(bom.totalIncGst)}</strong></td></tr>
+      <tr><td>${bom.gstRegistered ? 'GST' : 'No GST charged'}</td><td class="num">${aud(bom.gst)}</td></tr>
+      <tr><td><strong>${totalLabel}</strong></td><td class="num"><strong>${aud(bom.totalIncGst)}</strong></td></tr>
     </tbody>
   </table>`
 
@@ -178,7 +181,14 @@ export function buildPaintTenderReportHtml(input: {
       jobLabel,
     )}</strong>. The scope of works, materials, access and priced summary for this <strong>Painting tender</strong> are set out below.`,
     bodyHtml: body,
-    pleaseNote: PAINT_PLEASE_NOTE,
+    pleaseNote: [
+      ...PAINT_PLEASE_NOTE_BEFORE_GST,
+      bom.gstRegistered
+        ? 'Prices include 10% GST; the line tables above are shown ex GST.'
+        : 'No GST is charged; the line tables and tender total are shown ex GST.',
+      ...PAINT_PLEASE_NOTE_AFTER_GST,
+    ],
+    footerPriceNote: bom.gstRegistered ? 'Prices include GST' : 'No GST charged',
     closingLine,
   })
 }

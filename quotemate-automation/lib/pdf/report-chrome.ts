@@ -83,6 +83,8 @@ export type ReportDocument = {
   pleaseNote?: string[] | null
   /** Closing line under the body, e.g. a live-quote URL note (plain text). */
   closingLine?: string | null
+  /** Point-of-use GST basis for the repeating footer. */
+  footerPriceNote?: string | null
 }
 
 function wordmark(b: TenantBranding): string {
@@ -397,7 +399,7 @@ export function renderReportDocument(branding: TenantBranding, doc: ReportDocume
   <div class="accentbar">${esc(
     branding.licenceLine ? branding.licenceLine : branding.businessName,
   )}</div>
-  <div class="footline">${esc(branding.businessName)} · Prices include GST</div>
+  <div class="footline">${esc(branding.businessName)} · ${esc(doc.footerPriceNote ?? 'Prices include GST')}</div>
 </body>
 </html>`
 }

@@ -93,6 +93,17 @@ beforeEach(() => {
 })
 
 const OWNER_UUID = 'b0000000-0000-4000-8000-000000000001'
+const completeRateCard = {
+  split: {
+    per_head: { '2.5': 1200, '3.5': 1500, '5': 2000, '7': 2700, '8': 3200 },
+    multi_head_discount_pct: 0.05,
+  },
+  ducted: { rate_per_kw: 1250, base_ex_gst: 4500, per_zone: 400, min_ex_gst: 8500 },
+  gst_registered: true,
+}
+const overlayRow = (gstRegistered: boolean) => ({
+  overlays: { aircon_rate_card: { ...completeRateCard, gst_registered: gstRegistered } },
+})
 
 function planRequest() {
   const fd = new FormData()
@@ -127,17 +138,19 @@ describe('POST /api/aircon/plan', () => {
       tenant: { id: 'tenant-1', trade: 'electrical', owner_user_id: OWNER_UUID },
     } as never)
     h.results.push(
-      { data: null, error: null }, // pricing_book overlay read
+      { data: overlayRow(true), error: null }, // pricing_book overlay read
       { data: { id: 'rec-7' }, error: null }, // aircon_recommendations insert
     )
     const res = await POST(planRequest())
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
       ok: boolean
-      recommendation: unknown
+      recommendation: { pricing_status: string; options: { pricing: { gst_registered: boolean } }[] }
       saved: { id: string; public_token: string } | null
     }
     expect(json.ok).toBe(true)
+    expect(json.recommendation.pricing_status).toBe('priced')
+    expect(json.recommendation.options.every((o) => o.pricing.gst_registered)).toBe(true)
     expect(json.saved?.id).toBe('rec-7')
     expect(typeof json.saved?.public_token).toBe('string')
 
@@ -158,9 +171,49 @@ describe('POST /api/aircon/plan', () => {
     } as never)
     const res = await POST(planRequest())
     expect(res.status).toBe(200)
-    const json = (await res.json()) as { ok: boolean; saved: unknown }
+    const json = (await res.json()) as { ok: boolean; saved: unknown; recommendation: Record<string, unknown> }
     expect(json.ok).toBe(true)
     expect(json.saved).toBeNull()
+    expect(json.recommendation.pricing_status).toBe('tenant_pricing_required')
+    expect('options' in json.recommendation).toBe(false)
     expect(h.queries.some((q) => q.table === 'aircon_recommendations')).toBe(false)
+  })
+
+  it('returns sizing/design without money or persistence when the tenant overlay is absent', async () => {
+    vi.mocked(resolveTenantRequest).mockResolvedValue({
+      identity: { provider: 'clerk', userId: 'user_2abc', email: null },
+      tenant: { id: 'tenant-1', trade: 'electrical', owner_user_id: OWNER_UUID },
+    } as never)
+    h.results.push({ data: null, error: null })
+    const res = await POST(planRequest())
+    const json = (await res.json()) as {
+      recommendation: Record<string, unknown>
+      design: unknown
+      saved: unknown
+    }
+    expect(json.recommendation.pricing_status).toBe('tenant_pricing_required')
+    expect('options' in json.recommendation).toBe(false)
+    expect(json.design).toBeTruthy()
+    expect(json.saved).toBeNull()
+    expect(h.queries.some((q) => q.table === 'aircon_recommendations')).toBe(false)
+  })
+
+  it('uses a complete GST-unregistered tenant overlay and persists the priced plan result', async () => {
+    vi.mocked(resolveTenantRequest).mockResolvedValue({
+      identity: { provider: 'clerk', userId: 'user_2abc', email: null },
+      tenant: { id: 'tenant-1', trade: 'electrical', owner_user_id: OWNER_UUID },
+    } as never)
+    h.results.push(
+      { data: overlayRow(false), error: null },
+      { data: { id: 'rec-no-gst' }, error: null },
+    )
+    const res = await POST(planRequest())
+    const json = (await res.json()) as {
+      recommendation: { pricing_status: string; options: { pricing: { gst_registered: boolean } }[] }
+      saved: { id: string } | null
+    }
+    expect(json.recommendation.pricing_status).toBe('priced')
+    expect(json.recommendation.options.every((o) => !o.pricing.gst_registered)).toBe(true)
+    expect(json.saved?.id).toBe('rec-no-gst')
   })
 })

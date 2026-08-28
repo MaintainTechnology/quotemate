@@ -13,7 +13,7 @@
 // unchanged — this is presentation only.
 
 import { createClient } from '@supabase/supabase-js'
-import type { AcRecommendation, AcOption } from '@/lib/aircon/types'
+import type { AcPricedRecommendation, AcOption } from '@/lib/aircon/types'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome } from '../../_chrome/QuoteChrome'
 import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
@@ -57,7 +57,8 @@ export default async function AirconQuotePage(props: { params: Promise<{ token: 
     (row as { tenant_id?: string | null }).tenant_id ?? null,
   )
 
-  const rec = row.recommendation as AcRecommendation
+  // Only priced recommendations can be persisted by the API.
+  const rec = row.recommendation as AcPricedRecommendation
   const sizing = rec.sizing
   const options = Array.isArray(rec.options) ? rec.options : []
   const business =

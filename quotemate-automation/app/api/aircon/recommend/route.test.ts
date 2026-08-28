@@ -88,6 +88,17 @@ function post(body: unknown = validBody) {
 // a valid uuid, so the route must stamp the tenant's owner_user_id instead —
 // the trap app/api/roofing/save/route.ts documents.
 const OWNER_UUID = 'b0000000-0000-4000-8000-000000000001'
+const completeRateCard = {
+  split: {
+    per_head: { '2.5': 1200, '3.5': 1500, '5': 2000, '7': 2700, '8': 3200 },
+    multi_head_discount_pct: 0.05,
+  },
+  ducted: { rate_per_kw: 1250, base_ex_gst: 4500, per_zone: 400, min_ex_gst: 8500 },
+  gst_registered: true,
+}
+const overlayRow = (gstRegistered: boolean) => ({
+  overlays: { aircon_rate_card: { ...completeRateCard, gst_registered: gstRegistered } },
+})
 
 function authedWithTenant() {
   vi.mocked(resolveTenantRequest).mockResolvedValue({
@@ -106,18 +117,20 @@ describe('POST /api/aircon/recommend', () => {
   it('persists an aircon_recommendations row for a tenant-linked caller', async () => {
     authedWithTenant()
     h.results.push(
-      { data: null, error: null }, // pricing_book overlay read
+      { data: overlayRow(true), error: null }, // pricing_book overlay read
       { data: { id: 'rec-1' }, error: null }, // aircon_recommendations insert
     )
     const res = await post()
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
       ok: boolean
-      recommendation: unknown
+      recommendation: { pricing_status: string; options: { pricing: { gst_registered: boolean } }[] }
       saved: { id: string; public_token: string } | null
     }
     expect(json.ok).toBe(true)
     expect(json.recommendation).toBeTruthy()
+    expect(json.recommendation.pricing_status).toBe('priced')
+    expect(json.recommendation.options.every((o) => o.pricing.gst_registered)).toBe(true)
     expect(json.saved?.id).toBe('rec-1')
     expect(typeof json.saved?.public_token).toBe('string')
     expect(json.saved!.public_token.length).toBeGreaterThan(10)
@@ -140,7 +153,7 @@ describe('POST /api/aircon/recommend', () => {
   it('still returns the recommendation when the insert fails (best-effort)', async () => {
     authedWithTenant()
     h.results.push(
-      { data: null, error: null }, // pricing_book overlay read
+      { data: overlayRow(true), error: null }, // pricing_book overlay read
       { data: null, error: { message: 'boom' } }, // insert fails
     )
     const res = await post()
@@ -156,7 +169,7 @@ describe('POST /api/aircon/recommend', () => {
       tenant: { id: 'tenant-1', trade: 'electrical', owner_user_id: null },
     } as never)
     h.results.push(
-      { data: null, error: null }, // pricing_book overlay read
+      { data: overlayRow(true), error: null }, // pricing_book overlay read
       { data: { id: 'rec-2' }, error: null }, // insert
     )
     const res = await post()
@@ -173,10 +186,39 @@ describe('POST /api/aircon/recommend', () => {
     } as never)
     const res = await post()
     expect(res.status).toBe(200)
-    const json = (await res.json()) as { ok: boolean; saved: unknown }
+    const json = (await res.json()) as { ok: boolean; saved: unknown; recommendation: Record<string, unknown> }
     expect(json.ok).toBe(true)
     expect(json.saved).toBeNull()
+    expect(json.recommendation.pricing_status).toBe('tenant_pricing_required')
+    expect('options' in json.recommendation).toBe(false)
     expect(h.queries.some((q) => q.table === 'aircon_recommendations')).toBe(false)
+  })
+
+  it('returns an unpriced recommendation and skips persistence when the overlay is absent', async () => {
+    authedWithTenant()
+    h.results.push({ data: null, error: null })
+    const res = await post()
+    const json = (await res.json()) as { recommendation: Record<string, unknown>; saved: unknown }
+    expect(json.recommendation.pricing_status).toBe('tenant_pricing_required')
+    expect('options' in json.recommendation).toBe(false)
+    expect(json.saved).toBeNull()
+    expect(h.queries.some((q) => q.table === 'aircon_recommendations')).toBe(false)
+  })
+
+  it('uses the complete tenant card GST-unregistered state and persists the priced result', async () => {
+    authedWithTenant()
+    h.results.push(
+      { data: overlayRow(false), error: null },
+      { data: { id: 'rec-no-gst' }, error: null },
+    )
+    const res = await post()
+    const json = (await res.json()) as {
+      recommendation: { pricing_status: string; options: { pricing: { gst_registered: boolean } }[] }
+      saved: { id: string } | null
+    }
+    expect(json.recommendation.pricing_status).toBe('priced')
+    expect(json.recommendation.options.every((o) => !o.pricing.gst_registered)).toBe(true)
+    expect(json.saved?.id).toBe('rec-no-gst')
   })
 
   it('400 on an invalid body — nothing persisted', async () => {
