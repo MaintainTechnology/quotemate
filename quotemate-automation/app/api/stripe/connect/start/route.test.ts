@@ -73,10 +73,11 @@ beforeEach(() => {
   vi.stubEnv('APP_URL', 'https://app.test')
 })
 
-function req(withAuth = true) {
+function req(withAuth = true, body?: unknown) {
   return new Request('http://localhost/api/stripe/connect/start', {
     method: 'POST',
     headers: withAuth ? { authorization: 'Bearer token-1' } : {},
+    body: body === undefined ? undefined : JSON.stringify(body),
   })
 }
 
@@ -150,7 +151,32 @@ describe('POST /api/stripe/connect/start', () => {
       stripe_connect_details_submitted: false,
     })
     expect(updates[1]).toMatchObject({ stripe_connect_account_id: 'acct_new' })
-    expect(linkMock).toHaveBeenCalledWith({ accountId: 'acct_new', appUrl: 'https://app.test' })
+    expect(linkMock).toHaveBeenCalledWith({
+      accountId: 'acct_new',
+      appUrl: 'https://app.test',
+      returnClient: 'web',
+    })
+  })
+
+  it('requests verified app-link returns for the mobile client', async () => {
+    authedUser()
+    h.results.push({ data: tenantRow('acct_mobile'), error: null })
+    statusMock.mockResolvedValue({
+      ok: true,
+      chargesEnabled: true,
+      payoutsEnabled: true,
+      detailsSubmitted: true,
+    })
+    linkMock.mockResolvedValue({ ok: true, url: 'https://connect.stripe.com/setup/mobile' })
+
+    const res = await POST(req(true, { client: 'mobile' }))
+
+    expect(res.status).toBe(200)
+    expect(linkMock).toHaveBeenCalledWith({
+      accountId: 'acct_mobile',
+      appUrl: 'https://app.test',
+      returnClient: 'mobile',
+    })
   })
 
   it('also treats the literal account-link error message as stale', async () => {

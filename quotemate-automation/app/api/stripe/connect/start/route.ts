@@ -55,6 +55,9 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }
 
+  const body = await req.json().catch(() => null)
+  const returnClient = body?.client === 'mobile' ? 'mobile' : 'web'
+
   const appUrl =
     process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? null
   if (!appUrl) {
@@ -182,7 +185,7 @@ export async function POST(req: Request) {
   }
 
   // ─── 2. Mint a fresh hosted onboarding link ─────────────────────
-  const link = await createConnectOnboardingLink({ accountId, appUrl })
+  const link = await createConnectOnboardingLink({ accountId, appUrl, returnClient })
   if (!link.ok) {
     return Response.json(
       { ok: false, error: 'link_create_failed', detail: link.reason },

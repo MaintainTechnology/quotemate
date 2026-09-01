@@ -25,7 +25,6 @@ import type {
 import { combinedTotalsForIndices } from '@/lib/roofing/selection'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
-import { applySolarToTiers, narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '../_components/RoofMap'
 import { AddressAutocomplete } from '../_components/AddressAutocomplete'
 import { GoogleStaticMap } from '../_components/GoogleStaticMap'
@@ -39,6 +38,16 @@ import { StatusPill } from '../../_components/quote-ui'
 type MultiResponse =
   | {
       ok: true
+      pricing_status: 'priced'
+      pricing_authority: {
+        source: 'tenant_pricing_book'
+        tenant_id: string
+        pricing_book_id: string
+        revision: string
+      }
+      run_token: string
+      run_id: string
+      run_expires_at: string
       provider: 'geoscape' | 'lidar' | 'mock' | 'manual'
       quote: MultiRoofQuote
       warnings: string[]
@@ -121,6 +130,7 @@ function RoofingMeasurePageInner() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [savedMeasureToken, setSavedMeasureToken] = useState<string | null>(null)
   // Wave 2b — "Send as customer quote" persists into the `quotes` table
   // and returns a /q/[token] link the tradie can copy + share.
   const [quoteState, setQuoteState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -155,6 +165,7 @@ function RoofingMeasurePageInner() {
       setErrMsg(null)
       setSaveState('idle')
       setSavedId(null)
+      setSavedMeasureToken(null)
       // A fresh measurement invalidates any quote sent from the previous
       // one — clear the "customer quote created" panel + its PDF link so
       // they can't point at a stale (different) job's document.
@@ -276,23 +287,10 @@ function RoofingMeasurePageInner() {
    *  single quote; metrics + inputs come from the first included
    *  structure (the "primary" one). */
   const onSendAsQuote = useCallback(async () => {
-    if (!token || !resp || resp.ok !== true) return
-    // Narrow to the tradie's include toggles so the deposit page total matches
-    // the combined preview, the customer quote page and the PDF — never the
-    // full all-structures total.
-    const indices = includedIndices1Based(resp.quote, included)
-    if (indices.length === 0) {
-      setErrMsg('Include at least one structure before saving.')
+    if (!token || !resp || resp.ok !== true || !savedMeasureToken) {
+      setErrMsg('Save the verified measurement before creating a customer quote.')
       return
     }
-    const includedStructures = indices.map((i) => resp.quote.structures[i - 1])
-    const primary = includedStructures.find((s) => s.role === 'primary') ?? includedStructures[0]
-    const narrowed = narrowQuoteToStructures(resp.quote, indices)
-    const combined = narrowed.combined
-    // Job-level solar detach & reinstate goes into the promoted tiers — the
-    // same one code path (applySolarToTiers) the /m promote flow and the
-    // customer page use, so the quotes row can never read lower than the page.
-    const tiersWithSolar = applySolarToTiers(narrowed.combined.tiers, narrowed.solar ?? null)
     setQuoteState('saving')
     setQuoteShareUrl(null)
     setQuoteShareToken(null)
@@ -306,36 +304,8 @@ function RoofingMeasurePageInner() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          address: { address, postcode, state },
-          inputs: {
-            material: primary.inputs.material,
-            pitch: primary.inputs.pitch,
-            intent: primary.inputs.intent,
-            building_year_built: primary.inputs.building_year_built ?? null,
-          },
-          metrics: {
-            footprint_m2: primary.metrics.footprint_m2,
-            sloped_area_m2: combined.area_m2,
-            storeys: primary.metrics.storeys,
-            form: primary.metrics.form,
-            hips: primary.metrics.hips,
-            valleys: primary.metrics.valleys,
-            ridge_lm: primary.metrics.ridge_lm ?? null,
-            polygon_geojson: primary.metrics.polygon_geojson ?? null,
-            capture_date: primary.metrics.capture_date ?? null,
-          },
-          price: {
-            area_m2: combined.area_m2,
-            effective_rate_per_m2: primary.price.effective_rate_per_m2,
-            tiers: tiersWithSolar,
-            // `combined` carries only area + tiers; routing + loadings
-            // live per-structure. Take them from the primary structure
-            // — its routing decision propagates to the whole job
-            // (inspection_required on any structure forces the whole
-            // quote to inspection).
-            loadings_applied: primary.price.loadings_applied,
-            routing: primary.price.routing,
-          },
+          measure_token: savedMeasureToken,
+          expected_pricing_revision: resp.pricing_authority.revision,
         }),
       })
       const json = (await res.json()) as
@@ -353,7 +323,7 @@ function RoofingMeasurePageInner() {
       setQuoteState('error')
       setErrMsg(e instanceof Error ? e.message : String(e))
     }
-  }, [token, resp, included, address, postcode, state])
+  }, [token, resp, savedMeasureToken])
 
   const onSave = useCallback(async () => {
     if (!token || !resp || resp.ok !== true) return
@@ -370,6 +340,7 @@ function RoofingMeasurePageInner() {
         method: 'POST',
         headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          run_token: resp.run_token,
           address: { address, postcode, state },
           provider: resp.provider,
           // Persist EVERY measured structure in the payload, but record the
@@ -391,6 +362,7 @@ function RoofingMeasurePageInner() {
         | { ok: false; error: string; detail?: string }
       if (json.ok) {
         setSavedId(json.id)
+        setSavedMeasureToken(json.measure_token)
         setSaveState('saved')
         // The measurement is now its own first-class entity — open its review
         // page so the tradie can see every structure on its own link.
@@ -417,9 +389,9 @@ function RoofingMeasurePageInner() {
   //     measurement — onSave flips it to 'saving' immediately, and an
   //     'error' result leaves the manual button as a retry rather than looping.
   useEffect(() => {
-    if (resp?.ok === true && saveState === 'idle' && !busy) {
-      void onSave()
-    }
+    if (resp?.ok !== true || saveState !== 'idle' || busy) return
+    const timer = window.setTimeout(() => void onSave(), 0)
+    return () => window.clearTimeout(timer)
   }, [resp, saveState, busy, onSave])
 
   return (
@@ -573,6 +545,9 @@ function RoofingMeasurePageInner() {
             accessToken={token}
             address={address}
             intent={intent}
+            expectedPricingRevision={
+              resp && resp.ok === true ? resp.pricing_authority.revision : ''
+            }
             betterIncGst={solarTotals.incGst[1]}
             bestIncGst={solarTotals.incGst[2]}
           />

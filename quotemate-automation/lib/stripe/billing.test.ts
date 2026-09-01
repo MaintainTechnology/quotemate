@@ -20,6 +20,9 @@ const h = vi.hoisted(() => {
   const subscriptionsUpdate = vi.fn(async (_id: string, _params: Record<string, any>) => ({}))
   const customersRetrieve = vi.fn(async (id: string) => ({ id })) // exists, not deleted
   const customersCreate = vi.fn(async (_p: Record<string, any>) => ({ id: 'cus_new_1' }))
+  const portalCreate = vi.fn(async (_p: Record<string, any>) => ({
+    url: 'https://billing.stripe.com/p/session/test',
+  }))
   return {
     pricesList,
     sessionsCreate,
@@ -27,6 +30,7 @@ const h = vi.hoisted(() => {
     subscriptionsUpdate,
     customersRetrieve,
     customersCreate,
+    portalCreate,
   }
 })
 
@@ -36,6 +40,7 @@ vi.mock('./client', () => ({
     checkout: { sessions: { create: h.sessionsCreate } },
     subscriptions: { retrieve: h.subscriptionsRetrieve, update: h.subscriptionsUpdate },
     customers: { retrieve: h.customersRetrieve, create: h.customersCreate },
+    billingPortal: { sessions: { create: h.portalCreate } },
   }),
 }))
 
@@ -47,6 +52,7 @@ import {
   lookupKey,
   parseLookupKey,
   subscriptionToTenantPatch,
+  createPortalSession,
 } from './billing'
 
 beforeEach(() => {
@@ -56,6 +62,25 @@ beforeEach(() => {
   h.subscriptionsUpdate.mockClear()
   h.customersRetrieve.mockClear()
   h.customersCreate.mockClear()
+  h.portalCreate.mockClear()
+})
+
+describe('createPortalSession return context', () => {
+  it('uses the verified billing app link for the mobile client', async () => {
+    await createPortalSession('cus_1', 'mobile')
+    expect(h.portalCreate).toHaveBeenCalledWith({
+      customer: 'cus_1',
+      return_url: expect.stringMatching(/\/app\/sections\/billing\?stripe=return$/),
+    })
+  })
+
+  it('keeps the dashboard return for browser callers', async () => {
+    await createPortalSession('cus_1')
+    expect(h.portalCreate).toHaveBeenCalledWith({
+      customer: 'cus_1',
+      return_url: expect.stringMatching(/\/dashboard\?tab=billing$/),
+    })
+  })
 })
 
 const base = { tenantId: 'tenant-1', customerId: 'cus_1' }

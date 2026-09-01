@@ -24,11 +24,16 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { generateShareToken } from '@/lib/stripe/checkout'
-import { buildTierObjects, splitAddress } from '@/lib/roofing/save-as-quote-helpers'
+import {
+  buildSaveAsQuoteRequest,
+  buildTierObjects,
+  splitAddress,
+} from '@/lib/roofing/save-as-quote-helpers'
 import { roofingScopeShort, stampScopeShort } from '@/lib/quote/scope-short'
 import { SaveAsQuoteRequestSchema } from '@/lib/roofing/save-as-quote-schema'
 import type { RoofMetrics, RoofingQuotePrice } from '@/lib/roofing/types'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { loadTenantRoofingPricingContext } from '@/lib/roofing/pricing-authority'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,11 +45,15 @@ const supabase = createClient(
 export async function POST(req: Request) {
   // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
   // (→ owner_user_id). This route needs a tenant to attribute the quote to.
-  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name')
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name, trade')
   if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const tenant = resolved.tenant as { id: string; business_name: string | null } | null
+  const tenant = resolved.tenant as {
+    id: string
+    business_name: string | null
+    trade: string | null
+  } | null
   if (!tenant) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }
@@ -55,9 +64,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
   }
-  // Request contract lives in lib/roofing/save-as-quote-schema.ts so the /m
-  // promotion flattening (buildSaveAsQuoteRequest) validates against the ONE
-  // schema this route enforces.
+  // The external contract accepts only the saved-measurement capability and
+  // expected server pricing revision. Every scope and money field is reloaded.
   const parsed = SaveAsQuoteRequestSchema.safeParse(body)
   if (!parsed.success) {
     return Response.json(
@@ -66,9 +74,81 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, inputs, metrics, price, customer, measure_token } = parsed.data
+  const { measure_token, expected_pricing_revision } = parsed.data
+  const pricing = await loadTenantRoofingPricingContext(supabase, tenant.id, tenant.trade)
+  if (!pricing) {
+    return Response.json(
+      { ok: false, error: 'tenant_pricing_required' },
+      { status: 422 },
+    )
+  }
+
+  const { data: measurement, error: measurementError } = await supabase
+    .from('roofing_measurements')
+    .select(
+      'id, quote_id, quote_share_token, address, postcode, state, quote, included_indices, customer_name, customer_phone',
+    )
+    .eq('measure_token', measure_token)
+    .eq('tenant_id', tenant.id)
+    .maybeSingle()
+  if (measurementError || !measurement) {
+    return Response.json({ ok: false, error: 'measurement_not_found' }, { status: 404 })
+  }
+  const storedAuthority =
+    measurement.quote && typeof measurement.quote === 'object'
+      ? (measurement.quote as { pricing_authority?: unknown }).pricing_authority
+      : null
+  const authority =
+    storedAuthority && typeof storedAuthority === 'object'
+      ? (storedAuthority as {
+          source?: unknown
+          tenant_id?: unknown
+          pricing_book_id?: unknown
+          revision?: unknown
+        })
+      : null
+  if (
+    authority?.source !== 'tenant_pricing_book' ||
+    authority.tenant_id !== tenant.id ||
+    authority.pricing_book_id !== pricing.authority.pricing_book_id ||
+    authority.revision !== expected_pricing_revision ||
+    authority.revision !== pricing.authority.revision
+  ) {
+    return Response.json({ ok: false, error: 'pricing_stale' }, { status: 409 })
+  }
+  const trusted = buildSaveAsQuoteRequest({
+    address: measurement.address as string | null,
+    postcode: measurement.postcode as string | null,
+    state: measurement.state as string | null,
+    quote: measurement.quote as import('@/lib/roofing/types').MultiRoofQuote | null,
+    included_indices: measurement.included_indices as number[] | null,
+  })
+  if (!trusted) {
+    return Response.json({ ok: false, error: 'measurement_unpriceable' }, { status: 422 })
+  }
+  const { address, inputs, metrics, price } = trusted
+  const customer = {
+    name: typeof measurement.customer_name === 'string' ? measurement.customer_name : '',
+    phone: typeof measurement.customer_phone === 'string' ? measurement.customer_phone : '',
+    email: '',
+  }
   const m = metrics as RoofMetrics
   const p = price as RoofingQuotePrice
+  if (p.routing.decision === 'inspection_required') {
+    return Response.json({ ok: false, error: 'inspection_required' }, { status: 422 })
+  }
+  if (
+    p.tiers.length !== 3 ||
+    p.tiers.some(
+      (tier) =>
+        !Number.isFinite(tier.ex_gst) ||
+        !Number.isFinite(tier.inc_gst) ||
+        tier.ex_gst <= 0 ||
+        tier.inc_gst <= 0,
+    )
+  ) {
+    return Response.json({ ok: false, error: 'unpriced_measurement' }, { status: 422 })
+  }
   const { street, suburb } = splitAddress(address.address)
 
   // Generated up front: the claim below stamps this token on the measurement
@@ -117,21 +197,13 @@ export async function POST(req: Request) {
       )
     }
   }
-  if (measure_token) {
-    const { data: measurement } = await supabase
-      .from('roofing_measurements')
-      .select('id, quote_id, quote_share_token')
-      .eq('measure_token', measure_token)
-      .eq('tenant_id', tenant.id)
-      .maybeSingle()
-    if (measurement?.quote_share_token) {
-      return existingResponse(
-        (measurement.quote_id as string | null) ?? null,
-        measurement.quote_share_token as string,
-      )
-    }
-    if (measurement) {
-      const { data: won } = await supabase
+  if (measurement.quote_share_token) {
+    return existingResponse(
+      (measurement.quote_id as string | null) ?? null,
+      measurement.quote_share_token as string,
+    )
+  }
+  const { data: won } = await supabase
         .from('roofing_measurements')
         .update({ quote_share_token: shareToken })
         .eq('measure_token', measure_token)
@@ -157,9 +229,7 @@ export async function POST(req: Request) {
           { status: 409 },
         )
       }
-      claimed = true
-    }
-  }
+  claimed = true
 
   // ── 1. Insert intake ─────────────────────────────────────────────
   // Roofing intakes carry their measurement payload in scope jsonb
@@ -174,6 +244,7 @@ export async function POST(req: Request) {
     scope: {
       ...inputs,
       ...m,
+      pricing_authority: pricing.authority,
       polygon_geojson: m.polygon_geojson ?? null,
       state: address.state,
       postcode: address.postcode,
@@ -184,7 +255,7 @@ export async function POST(req: Request) {
       year_built: inputs.building_year_built ?? null,
     },
     risks: [],
-    inspection_required: p.routing.decision === 'inspection_required',
+    inspection_required: false,
     caller: {
       name: customer?.name ?? '',
       phone: customer?.phone ?? '',
@@ -208,18 +279,11 @@ export async function POST(req: Request) {
   }
 
   // ── 2. Insert quote ──────────────────────────────────────────────
-  // INTENTIONAL: roofing keeps the REAL computed tiers in good/better/best
-  // even when the job routes to inspection. The roofing engine is
-  // deterministic (priced from the satellite measurement), so an on-site-
-  // flagged roof still has grounded numbers — the customer quote pages show
-  // them as an INDICATIVE estimate ("subject to on-site confirmation") rather
-  // than a blank/$0 quote. Do NOT null these tiers on inspection the way the
-  // ungroundable-estimate path (estimate/draft → forceInspectionTiers) does —
-  // that would re-introduce the blank-roofing-quote bug. (Genuinely unpriceable
-  // roofs — asbestos / unknown material — already compute $0 tiers from the
-  // pricer, and the pages fall back to the $99 inspection-only state for those.)
+  // Inspection-routed and unpriced measurements are rejected before any
+  // promotion side effect. Only the server-reconstructed, tenant-authorised
+  // tiers reach this point.
   const tiers = buildTierObjects(p)
-  const inspection = p.routing.decision === 'inspection_required'
+  const inspection = false
   const selectedTier =
     p.tiers[1].ex_gst > 0 ? 'better' : p.tiers[2].ex_gst > 0 ? 'best' : 'good'
   const tierTotalEx = p.tiers.find((t) => t.tier === selectedTier)?.ex_gst ?? 0

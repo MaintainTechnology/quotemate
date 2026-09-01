@@ -91,6 +91,21 @@ const PropertyFilters = z.object({
 
 type PropertyFilters = z.infer<typeof PropertyFilters>
 
+/**
+ * The EV assembly prices installation work only; charger ownership affects the
+ * optional unit, not which install assembly applies. Keep every other filter,
+ * but do not let the generic supply-mode filter hide that assembly.
+ */
+export function assemblyPropertyFiltersForJob(
+  jobType: string | null | undefined,
+  filters: PropertyFilters,
+): PropertyFilters {
+  if (jobType !== 'ev_charger') return filters
+  const installationFilters = { ...filters }
+  delete installationFilters.supplied_by
+  return installationFilters
+}
+
 function applyPropertyFilters(query: any, f: PropertyFilters) {
   // color_temp — special-case: row supports the requested temp via the
   // color_options array, OR the row has no color_options set (generic).
@@ -168,7 +183,7 @@ export function applyCustomerSupplyMode(
 // migrated to the factory yet (scripts, tests).
 // ─────────────────────────────────────────────────────────────────
 
-function makeLookupAssembly(tenantId: string | null) {
+function makeLookupAssembly(tenantId: string | null, jobType: string | null) {
   return tool({
     description:
       'Search the assembly library by name plus optional filters. Results are ' +
@@ -191,6 +206,7 @@ function makeLookupAssembly(tenantId: string | null) {
       supplied_by: z.enum(['tradie', 'customer']).optional(),
     }),
     execute: async ({ query, trade, ...filters }) => {
+      const assemblyFilters = assemblyPropertyFiltersForJob(jobType, filters)
       // Shared catalogue lookup. The name search is synonym + token
       // expanded (buildAssemblyOrFilter) so a customer-worded query
       // ("power point") still finds a trade-named assembly ("Replace
@@ -206,7 +222,7 @@ function makeLookupAssembly(tenantId: string | null) {
         .or(buildAssemblyOrFilter(query))
         .eq('always_inspection', false)
       if (trade) sharedQ = sharedQ.eq('trade', trade)
-      sharedQ = applyPropertyFilters(sharedQ, filters)
+      sharedQ = applyPropertyFilters(sharedQ, assemblyFilters)
       const sharedRes = await sharedQ.limit(FETCH_LIMIT)
       const sharedRows = (sharedRes.data ?? []).map((r: any) => ({
         ...r,
@@ -227,7 +243,7 @@ function makeLookupAssembly(tenantId: string | null) {
           .eq('enabled', true)
           .eq('always_inspection', false)
         if (trade) customQ = customQ.eq('trade', trade)
-        customQ = applyPropertyFilters(customQ, filters)
+        customQ = applyPropertyFilters(customQ, assemblyFilters)
         const customRes = await customQ.limit(FETCH_LIMIT)
         customRows = (customRes.data ?? []).map((r: any) => ({
           ...r,
@@ -255,9 +271,12 @@ function makeLookupAssembly(tenantId: string | null) {
  * is shaped exactly like the static module exports below so callers
  * can drop it into `generateText({ tools })`.
  */
-export function makeTools(tenantId: string | null) {
+export function makeTools(
+  tenantId: string | null,
+  context: { jobType?: string | null } = {},
+) {
   return {
-    lookupAssembly: makeLookupAssembly(tenantId),
+    lookupAssembly: makeLookupAssembly(tenantId, context.jobType ?? null),
     lookupMaterial: makeLookupMaterial(tenantId),
     applyMarkup,
     flagInspectionNeeded,
@@ -267,7 +286,7 @@ export function makeTools(tenantId: string | null) {
 // Backward-compat static export — used by any caller that doesn't
 // (yet) thread tenantId through. Behaves like the pre-023 tool:
 // shared catalogue only.
-export const lookupAssembly = makeLookupAssembly(null)
+export const lookupAssembly = makeLookupAssembly(null, null)
 
 // WP2 — factory variant. When the intake carries a tenant_id, lookupMaterial
 // UNIONs shared_materials with this tenant's active tenant_material_catalogue

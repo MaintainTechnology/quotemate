@@ -11,8 +11,8 @@ import { createClient } from '@supabase/supabase-js'
 import { MeasureRequestSchema } from '@/lib/roofing/request-schema'
 import { measureAndPriceRoof } from '@/lib/roofing/measure'
 import { MockRoofingProvider } from '@/lib/roofing/providers/mock'
-import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { loadTenantRoofingPricingContext } from '@/lib/roofing/pricing-authority'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,11 +66,31 @@ export async function POST(req: Request) {
   // receptionist) must resolve the SAME card for the same tenant. Local
   // copies of this lookup are how the /m path drifted onto default rates.
   // Forward-only: existing quotes are not re-priced.
-  const rateCard = await loadRoofingRateCard(supabase, auth.tenantId, auth.primaryTrade)
+  if (!auth.tenantId) {
+    return Response.json(
+      { ok: false, code: 'tenant_pricing_required', detail: 'Complete roofing pricing setup.' },
+      { status: 200 },
+    )
+  }
+  const pricing = await loadTenantRoofingPricingContext(
+    supabase,
+    auth.tenantId,
+    auth.primaryTrade,
+  )
+  if (!pricing) {
+    return Response.json(
+      {
+        ok: false,
+        code: 'tenant_pricing_required',
+        detail: 'Complete every roofing rate and GST setting before measuring a customer price.',
+      },
+      { status: 200 },
+    )
+  }
 
   const result = await measureAndPriceRoof(address, inputs, {
     provider: use_mock_provider ? new MockRoofingProvider() : undefined,
-    rateCard,
+    rateCard: pricing.rateCard,
   })
 
   if (!result.ok) {
@@ -80,6 +100,8 @@ export async function POST(req: Request) {
   return Response.json(
     {
       ok: true,
+      pricing_status: 'priced',
+      pricing_authority: pricing.authority,
       provider: result.provider,
       metrics: result.metrics,
       price: result.price,

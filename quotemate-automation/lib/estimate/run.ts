@@ -33,6 +33,10 @@ import { specGuardMode, evaluateSpecGuard, evaluateDraftSpecGuard } from './spec
 import { resolveInspectionReason } from './inspection-reason'
 import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
 import {
+  CUSTOMER_SUPPLIES_EV_CHARGER,
+  enforceEvChargerCustomerSupplyFence,
+} from './ev-charger-supply'
+import {
   checkSanityBounds,
   checkTierMonotonicity,
   boundForJob,
@@ -158,6 +162,38 @@ export async function runEstimation(
           : 0,
     },
   })
+
+  // EV inspection routing is terminal. When the portal's exact three-phase
+  // answer (or the structurer) marks this job inspection-required, no
+  // downstream recipe, retrieval or model path may turn it back into a priced
+  // quote. Keep the early return EV-scoped so this feature does not silently
+  // change another job type's established routing contract.
+  if (intake?.job_type === 'ev_charger' && intake?.inspection_required === true) {
+    const inspectionSignals = [
+      intake?.property?.phase === 'three' ? 'three-phase switchboard work' : null,
+      intake?.job_type,
+      intake?.confidence_reason,
+      Array.isArray(intake?.risks) ? intake.risks.join(' ') : null,
+    ]
+      .filter((signal): signal is string => typeof signal === 'string' && signal.trim().length > 0)
+      .join(' ')
+    const draft: Record<string, unknown> = {
+      needs_inspection: true,
+      inspection_reason: resolveInspectionReason(inspectionSignals || 'on-site inspection required'),
+      risk_flags: ['intake_inspection_required'],
+    }
+    forceInspectionTiers(draft)
+    cacheLog.ok('structured intake requires inspection — estimator paths skipped', {
+      job_type: intake?.job_type ?? null,
+    })
+    trace('estimate', 'warn', {
+      substep: 'route_to_inspection',
+      message: 'structured intake requires inspection; recipe, retrieval and model paths skipped',
+      decisions: { route: 'inspection', cause: 'intake_inspection_required' },
+      duration_ms: totalSw.elapsed(),
+    })
+    return { draft, downgradedToInspection: true }
+  }
 
   // Price-authority preflight. A PRESENT recipe is a commitment to use the
   // tenant's own catalogue for every required included category. If that
@@ -321,7 +357,9 @@ export async function runEstimation(
   // shared_assemblies AND this tenant's tenant_custom_assemblies
   // (migration 023). Legacy intakes without tenant_id get the
   // shared catalogue only — same behaviour as pre-023.
-  const tools = makeTools((intake?.tenant_id as string | null) ?? null)
+  const tools = makeTools((intake?.tenant_id as string | null) ?? null, {
+    jobType: (intake?.job_type as string | null) ?? null,
+  })
 
   // Anthropic prompt caching: the system prompt + pricing-book derivation
   // is identical across estimations until pricing_book changes, so we mark
@@ -377,7 +415,7 @@ export async function runEstimation(
     })
   }
 
-  const draft = parseJsonFromText(result.text)
+  let draft = parseJsonFromText(result.text)
 
   // Phase 7 — record the LLM-call outcome.
   trace('estimate', 'ok', {
@@ -828,6 +866,7 @@ export async function runEstimation(
     // Loaded once and reused by both WP4 enrichment and the WP9
     // live-product re-resolve below.
     let catalogueRefs: CatalogueProductRef[] = []
+    let chosenProductApplied = false
     try {
       catalogueRefs = await loadCatalogueProductRefs(
         (intake?.tenant_id as string | null) ?? null,
@@ -926,6 +965,7 @@ export async function runEstimation(
             ? { applied: [] as string[] }
             : applyChosenProduct(draft, chosenLive)
           if (r.applied.length > 0) {
+            chosenProductApplied = true
             const keep = (r.applied.includes('good')
               ? 'good'
               : r.applied[0]) as 'good' | 'better' | 'best'
@@ -1110,9 +1150,13 @@ export async function runEstimation(
       // (unit_price_ex_gst, unit) no longer matches a grounded candidate
       // — i.e. reconciliation arithmetic somehow introduced an ungrounded
       // number — downgrade the whole quote to inspection (existing
-      // behaviour) and log. Only runs when at least one reconcile op
-      // actually changed the draft, so a clean quote pays nothing.
-      if (corrections.length > 0 || labour.corrections.length > 0) {
+      // behaviour) and log. Runs whenever reconciliation changed the draft
+      // OR a chosen product was applied after the primary grounding pass.
+      if (
+        chosenProductApplied ||
+        corrections.length > 0 ||
+        labour.corrections.length > 0
+      ) {
         const recheck = validateQuoteGrounding(
           draft,
           pricingBook as PricingBookForValidation,
@@ -1260,6 +1304,62 @@ export async function runEstimation(
       cacheLog.err(
         'main-path spec guard failed (non-fatal — quote unaffected)',
         err?.message ?? String(err),
+      )
+    }
+
+    // EV customer-supply fence — the install assembly explicitly excludes the
+    // charger unit. Grounding proves a material price exists, but cannot prove
+    // the customer did not already buy that material, so remove only
+    // category-anchored EV unit rows and fail closed on anything ambiguous.
+    try {
+      const supplyMode = intake?.scope?.specs?.supplied_by
+      const fence = enforceEvChargerCustomerSupplyFence({
+        jobType: intake?.job_type,
+        chargerSupply:
+          supplyMode === 'customer' ? CUSTOMER_SUPPLIES_EV_CHARGER : null,
+        draft,
+        candidates,
+      })
+      if (fence.status === 'inspection_required') {
+        forcedInspection = {
+          reason:
+            `Customer-supplied EV charger safety check failed (${fence.violation.code}). ` +
+            'A site visit is needed before we can confirm an installation-only price.',
+        }
+        cacheLog.err(
+          'EV customer-supply fence found an ambiguous or incomplete installation; downgrading to inspection',
+          fence.violation.code,
+          fence.violation,
+        )
+      } else if (fence.status === 'stripped') {
+        draft = fence.draft
+        const recheck = validateQuoteGrounding(
+          draft,
+          pricingBook as PricingBookForValidation,
+          candidates,
+        )
+        if (!recheck.valid) {
+          forcedInspection = {
+            reason:
+              `Customer-supplied EV charger installation failed the post-removal grounding check. ` +
+              'A site visit is needed before we can quote accurately.',
+            groundingFailures: recheck.failures,
+          }
+        } else {
+          cacheLog.ok('EV customer-supply fence removed charger unit lines', {
+            removed: fence.removed.length,
+          })
+        }
+      }
+    } catch (err: unknown) {
+      forcedInspection = {
+        reason:
+          'Customer-supplied EV charger pricing could not be verified safely. ' +
+          'A site visit is needed before we can quote accurately.',
+      }
+      cacheLog.err(
+        'EV customer-supply fence errored; downgrading to inspection',
+        err instanceof Error ? err.message : String(err),
       )
     }
 

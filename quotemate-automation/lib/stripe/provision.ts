@@ -158,6 +158,7 @@ export async function provisionStripeConnectAccount(opts: {
 export async function createConnectOnboardingLink(opts: {
   accountId: string
   appUrl: string
+  returnClient?: 'web' | 'mobile'
 }): Promise<{ ok: true; url: string } | { ok: false; reason: string; code?: string | null }> {
   if (process.env.STRIPE_PROVISIONING_ENABLED !== 'true') {
     return {
@@ -167,6 +168,7 @@ export async function createConnectOnboardingLink(opts: {
   }
   try {
     const stripe = getStripe()
+    const mobileReturn = opts.returnClient === 'mobile'
     const link = await stripe.v2.core.accountLinks.create({
       account: opts.accountId,
       use_case: {
@@ -178,8 +180,12 @@ export async function createConnectOnboardingLink(opts: {
           // controller.requirement_collection field): merchant unlocks
           // card_payments, recipient unlocks transfers/payouts.
           configurations: ['merchant', 'recipient'],
-          refresh_url: `${opts.appUrl}/onboard/stripe/refresh`,
-          return_url: `${opts.appUrl}/onboard/stripe/return`,
+          refresh_url: mobileReturn
+            ? `${opts.appUrl}/app/sections/payouts?stripe=refresh`
+            : `${opts.appUrl}/onboard/stripe/refresh`,
+          return_url: mobileReturn
+            ? `${opts.appUrl}/app/sections/payouts?stripe=return`
+            : `${opts.appUrl}/onboard/stripe/return`,
         },
       },
     })

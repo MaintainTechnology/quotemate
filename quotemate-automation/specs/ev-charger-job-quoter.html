@@ -1,0 +1,335 @@
+<title>EV Charger Quoting</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --canvas: #16120F;
+    --panel: #1E1813;
+    --panel-2: #241D16;
+    --line: #3A3128;
+    --ink: #F2EDE6;
+    --muted: #A89E92;
+    --accent: #FFC400;
+    --accent-ink: #FFC400;
+    --accent-dim: rgba(255, 196, 0, 0.14);
+    --mono-bg: #2A221A;
+    --ok: #7BC47F;
+    --warn: #E0A458;
+  }
+  :root:not([data-theme="dark"]) { }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --canvas: #F7F3EC;
+      --panel: #FFFFFF;
+      --panel-2: #F1EBE1;
+      --line: #D8CFC2;
+      --ink: #1C1712;
+      --muted: #6E6357;
+      --accent: #FFC400;
+      --accent-ink: #7A5E00;
+      --accent-dim: rgba(255, 196, 0, 0.22);
+      --mono-bg: #EFE8DB;
+      --ok: #2E7D32;
+      --warn: #9A6200;
+    }
+  }
+  :root[data-theme="light"] {
+    --canvas: #F7F3EC;
+    --panel: #FFFFFF;
+    --panel-2: #F1EBE1;
+    --line: #D8CFC2;
+    --ink: #1C1712;
+    --muted: #6E6357;
+    --accent: #FFC400;
+    --accent-ink: #7A5E00;
+    --accent-dim: rgba(255, 196, 0, 0.22);
+    --mono-bg: #EFE8DB;
+    --ok: #2E7D32;
+    --warn: #9A6200;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0 20px 96px;
+    font-size: 16px;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  code, .mono {
+    font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+    font-size: 0.82em;
+    background: var(--mono-bg);
+    padding: 1px 5px;
+    border: 1px solid var(--line);
+  }
+  header { padding: 56px 0 28px; border-bottom: 2px solid var(--accent); }
+  .eyebrow {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .standfirst { color: var(--muted); font-size: 17px; max-width: 62ch; margin: 0; }
+  .standfirst strong { color: var(--ink); }
+  h2 {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin: 56px 0 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  p { max-width: 68ch; }
+  .quote {
+    border-left: 2px solid var(--accent); /* standard blockquote rule, kept deliberately slim */
+    background: var(--panel);
+    padding: 14px 18px;
+    margin: 26px 0 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .quote strong { color: var(--ink); }
+
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .fact { background: var(--panel); padding: 16px 18px; }
+  .fact .k { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); display: block; margin-bottom: 6px; }
+  .fact p { margin: 0; font-size: 14.5px; color: var(--muted); max-width: none; }
+  .fact p strong { color: var(--ink); }
+  @media (max-width: 620px) { .facts { grid-template-columns: 1fr; } }
+
+  .req { display: flex; gap: 0; border: 1px solid var(--line); background: var(--panel); margin: 0 0 14px; }
+  .req-id {
+    flex: 0 0 64px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--accent-ink);
+    padding: 16px 0 0 16px;
+  }
+  .req-body { padding: 14px 18px 14px 0; min-width: 0; }
+  .req-body h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
+  .req-body p { margin: 0 0 8px; font-size: 14.5px; color: var(--muted); max-width: none; }
+  .req-body p:last-child { margin-bottom: 0; }
+  .req-body strong { color: var(--ink); }
+  .req--data .req-id { color: var(--ok); }
+  .tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    margin-left: 8px;
+    vertical-align: 2px;
+    background: var(--accent-dim);
+    color: var(--accent-ink);
+    border: 1px solid var(--line);
+  }
+  .req--data .tag { background: transparent; color: var(--ok); }
+
+  .qlist { border: 1px solid var(--line); background: var(--panel); padding: 0; margin: 14px 0 0; list-style: none; counter-reset: q; }
+  .qlist li { counter-increment: q; display: flex; gap: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+  .qlist li:last-child { border-bottom: none; }
+  .qlist li::before {
+    content: "Q" counter(q);
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-ink);
+    font-weight: 600;
+    flex: 0 0 30px;
+  }
+  .qlist .opts { display: block; color: var(--muted); margin-top: 3px; }
+
+  ul.plain { padding-left: 0; list-style: none; margin: 0; }
+  ul.plain li { padding: 10px 0 10px 22px; position: relative; border-bottom: 1px solid var(--line); font-size: 14.5px; color: var(--muted); }
+  ul.plain li::before { content: ""; position: absolute; left: 4px; top: 19px; width: 8px; height: 2px; background: var(--accent); }
+  ul.plain li strong { color: var(--ink); }
+  ul.plain li:last-child { border-bottom: none; }
+
+  .edge { display: grid; grid-template-columns: minmax(180px, 2fr) 3fr; gap: 1px; background: var(--line); border: 1px solid var(--line); font-size: 14px; }
+  .edge > div { background: var(--panel); padding: 12px 16px; }
+  .edge .s { color: var(--ink); font-weight: 600; }
+  .edge .b { color: var(--muted); }
+  @media (max-width: 620px) {
+    .edge { grid-template-columns: 1fr; }
+    .edge .s { padding-bottom: 2px; }
+    .edge .b { padding-top: 2px; border-top: none; }
+  }
+
+  .dod { border: 1px solid var(--line); background: var(--panel); padding: 6px 0; }
+  .dod label { display: flex; gap: 12px; align-items: flex-start; padding: 10px 18px; font-size: 14.5px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .dod label:last-child { border-bottom: none; }
+  .dod input { margin-top: 4px; accent-color: var(--accent); flex-shrink: 0; }
+  .dod strong { color: var(--ink); }
+
+  .openq { list-style: none; padding: 0; margin: 0; counter-reset: oq; }
+  .openq li { counter-increment: oq; padding: 12px 0 12px 44px; position: relative; border-bottom: 1px solid var(--line); font-size: 14.5px; color: var(--muted); }
+  .openq li:last-child { border-bottom: none; }
+  .openq li::before {
+    content: counter(oq);
+    position: absolute; left: 0; top: 12px;
+    width: 26px; height: 26px;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600; font-size: 13px;
+    background: var(--accent-dim);
+    color: var(--accent-ink);
+    border: 1px solid var(--line);
+  }
+  .openq strong { color: var(--ink); }
+
+  .footnote { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .footnote code { font-size: 12px; }
+  a { color: var(--accent-ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Spec · Electrical Job Quote Tool · QuoteMax</p>
+    <h1>EV Charger Quoting</h1>
+    <p class="standfirst">Make an EV charger enquiry a first-class, demo-able job on the dashboard quoter: ask the qualifying questions a sparky actually needs, propose a grounded Good/Better/Best price that includes the charger unit when the tradie supplies it, and hand off to the existing $99 site-visit booking funnel. <strong>Tesla and BYD are the worked examples.</strong></p>
+    <div class="quote"><strong>Jon's brief:</strong> "a customer requests a new EV charger for their car — maybe try Tesla and BYD — it should ask the questions, then propose the price, then allow them to book."</div>
+  </header>
+
+  <h2>What already exists</h2>
+  <p style="color: var(--muted); font-size: 14.5px;">The plumbing is live — the content is thin. This spec closes the gap without rebuilding anything.</p>
+  <div class="facts">
+    <div class="fact"><span class="k">Job type</span><p><code>ev_charger</code> is first-class across the intake enum, the dashboard form, the SMS extractor and the grounding validator — but the form asks only <strong>two questions</strong> (location + phase).</p></div>
+    <div class="fact"><span class="k">Assembly</span><p>One shared row, <strong>"Install EV charger"</strong>: $120 ex-GST sundries + 3.0h labour, single-phase 7 kW, <strong>charger unit excluded</strong>. Toggled OFF for every electrical tenant.</p></div>
+    <div class="fact"><span class="k">Pricing data</span><p><strong>Zero charger products anywhere.</strong> No Tesla, no BYD, no brand registry, no sanity bounds row. 0 of 241 historical intakes mention a charger — genuinely new in prod.</p></div>
+    <div class="fact"><span class="k">Booking</span><p>The funnel needs nothing EV-specific: quote SMS → <code>/q/[token]</code> → flat $99 refundable site visit → calendar → confirmation texts. Prices display; the $99 is the only charge.</p></div>
+  </div>
+
+  <h2>Requirements</h2>
+
+  <div class="req">
+    <div class="req-id">R1</div>
+    <div class="req-body">
+      <h3>Five qualifying questions <span class="tag">code</span></h3>
+      <p>Replace the two-field <code>ev_charger</code> entry in <code>lib/quote/job-fields.ts</code>. Option strings land verbatim in the transcript — they are the model's contract.</p>
+      <ol class="qlist">
+        <li><span>What car is the charger for? <span class="opts">Tesla · BYD · another EV · not sure</span></span></li>
+        <li><span>Who supplies the charger unit? <span class="opts">customer already has it · we supply it · not sure</span></span></li>
+        <li><span>Where is the charger going? <span class="opts">free text — garage, carport, external wall</span></span></li>
+        <li><span>Roughly how far is the switchboard from the charger spot? <span class="opts">under 5 m · 5–10 m · over 10 m · not sure</span></span></li>
+        <li><span>Single phase or three phase? <span class="opts">unchanged — three phase routes to the site visit</span></span></li>
+      </ol>
+      <p style="margin-top: 10px;">Hard rule: no new field code may collide with <code>RECIPE_SLOT_CODES</code> — those are filtered out of the transcript and the answer silently vanishes (this field's own bug history). Extend the guard tests.</p>
+    </div>
+  </div>
+
+  <div class="req">
+    <div class="req-id">R2</div>
+    <div class="req-body">
+      <h3>Deterministic three-phase gate <span class="tag">code</span></h3>
+      <p>Today "three phase → inspection" is a prompt rule only. Stamp <code>inspection_required = true</code> in <code>/api/tenant/job-quote</code> when the three-phase option is picked, so routing never depends on model discretion.</p>
+    </div>
+  </div>
+
+  <div class="req req--data">
+    <div class="req-id">R3</div>
+    <div class="req-body">
+      <h3>Stock the charger products <span class="tag">data</span></h3>
+      <p>Demo tenant stocks two active catalogue rows in category <code>ev_charger</code> with <strong>Jon-confirmed prices</strong>: a Tesla Wall Connector (7 kW) and a BYD-compatible Type 2 wallbox. The form's existing product picker surfaces them automatically and pins the choice into the quote. No invented prices in shared data — the pricing book is built with the tradie.</p>
+    </div>
+  </div>
+
+  <div class="req req--data">
+    <div class="req-id">R4</div>
+    <div class="req-body">
+      <h3>Flip the service toggle <span class="tag">data</span></h3>
+      <p>"Install EV charger" → enabled in the demo tenant's Services tab. The dashboard prices regardless, but the toggle governs the SMS path and keeps the pipeline coherent.</p>
+    </div>
+  </div>
+
+  <div class="req">
+    <div class="req-id">R5</div>
+    <div class="req-body">
+      <h3>Fix the contradictory copy <span class="tag">code</span></h3>
+      <p>The Services tab still lists "EV charger install" as inspection-only. Remove it from <code>ELECTRICAL_INSPECTION_ONLY</code> so the UI stops contradicting the tool.</p>
+    </div>
+  </div>
+
+  <div class="req">
+    <div class="req-id">R6</div>
+    <div class="req-body">
+      <h3>Sanity bounds <span class="tag">code</span></h3>
+      <p>New migration seeding a <code>job_type_bounds</code> row for <code>ev_charger</code> — drafted at max 10 labour hours, $400–$6,000 total ex-GST, provisional pending Jon. Today an absurd EV total sails through unbounded.</p>
+    </div>
+  </div>
+
+  <div class="req">
+    <div class="req-id">R7</div>
+    <div class="req-body">
+      <h3>Priced draft, held for review</h3>
+      <p>Tesla + single phase + pinned Wall Connector → non-null G/B/B grounded on the install assembly plus the charger-unit line when the tradie supplies it; install-only when the customer does. Dashboard drafts always hold for tradie review before sending — by design, and it demos well.</p>
+    </div>
+  </div>
+
+  <div class="req">
+    <div class="req-id">R8</div>
+    <div class="req-body">
+      <h3>Booking — verify, don't build</h3>
+      <p>Confirm &amp; Send → customer SMS → quote page with prices + the single $99 CTA → Stripe (test mode) → calendar → thanks page, with both confirmation texts. Verify the demo tenant has booking windows and an owner mobile set.</p>
+    </div>
+  </div>
+
+  <h2>Demo prerequisites — config only, no deploy</h2>
+  <ul class="plain">
+    <li><strong>Toggle the EV service on</strong> in the demo tenant's Services tab (R4).</li>
+    <li><strong>Stock the two chargers</strong> in the tenant catalogue with Jon's prices (R3).</li>
+    <li><strong>Check booking windows</strong> and the tenant's owner mobile — a held quote with no mobile notifies nobody.</li>
+    <li><strong>Stripe test card ready</strong> (4242 4242 4242 4242) — payments are test mode.</li>
+    <li><strong>Answer "single phase"</strong> in the walkthrough to stay on the priced path; three phase correctly detours to the $99 visit.</li>
+  </ul>
+
+  <h2>Edge cases</h2>
+  <div class="edge">
+    <div class="s">Three phase selected</div><div class="b">Deterministic inspection quote — tiers nulled, $99-only. Expected, not a failure.</div>
+    <div class="s">"We supply" but no product pinned</div><div class="b">Nothing grounded to price the unit against — validator may downgrade to inspection. Demo always pins a product.</div>
+    <div class="s">Distance over 10 m</div><div class="b">Model may scope extra labour (grounds against the book rate); invented material lines downgrade to $99. Demo uses under 5 m.</div>
+    <div class="s">Customer-supplied unknown charger</div><div class="b">Install-only quote; the assembly's exclusions already cover the unit.</div>
+    <div class="s">Property has solar</div><div class="b">Existing load-assessment risk flag already fires for EV work. Leave as is.</div>
+    <div class="s">Absurd model total</div><div class="b">Caught by the new R6 bounds → inspection route, visible at tradie review, never sent silently.</div>
+  </div>
+
+  <h2>Definition of done</h2>
+  <div class="dod">
+    <label><input type="checkbox"> The electrical quoter shows the five R1 questions in order.</label>
+    <label><input type="checkbox"> New field codes provably aren't recipe slots — guard tests extended and green; all five answers reach the transcript.</label>
+    <label><input type="checkbox"> <strong>Draft A</strong> — Tesla, we-supply, Wall Connector pinned, under 5 m, single phase → priced G/B/B with the charger-unit line, held for review.</label>
+    <label><input type="checkbox"> <strong>Draft B</strong> — BYD, customer-supplies, single phase → priced install-only draft, no unit line.</label>
+    <label><input type="checkbox"> <strong>Draft C</strong> — three phase → inspection quote, asserted by unit test on the R2 stamp, not model behaviour.</label>
+    <label><input type="checkbox"> Bounds row live in prod; sanity check returns it for <code>ev_charger</code>.</label>
+    <label><input type="checkbox"> Services tab: toggle on, inspection-only label gone.</label>
+    <label><input type="checkbox"> Full demo pass: send → SMS → quote page → $99 test payment → slot booked → thanks → tradie booking text received.</label>
+    <label><input type="checkbox"> Test suite green; types and lint clean.</label>
+  </div>
+
+  <h2>Open questions for Jon</h2>
+  <ol class="openq">
+    <li><strong>Charger prices</strong> — supply cost + sell price for the Tesla Wall Connector and a BYD-compatible unit. R3 blocks on this; we don't invent prices.</li>
+    <li><strong>Supply model</strong> — does he normally supply the unit, or does the customer buy it? Sets the default answer order.</li>
+    <li><strong>Three phase</strong> — keep it inspection-only, or build a priced three-phase path later?</li>
+    <li><strong>Labour</strong> — is 3.0 h + $120 sundries right for a clean single-phase install, and are 10 h / $400–$6,000 sane bounds?</li>
+    <li><strong>Demo tenant</strong> — Sparky ($110/h) or Atomic Electrical ($120/h + $350 call-out minimum)? The book rate changes the demo numbers.</li>
+    <li><strong>Distance pricing</strong> — confirm cable-run cost on the $99 visit for now (default), or make distance move the quoted price deterministically (a bigger phase-2 job)?</li>
+  </ol>
+
+  <p class="footnote">Spec of record: <code>quotemate-automation/specs/ev-charger-job-quoter.md</code> — includes exact file references, non-goals (SMS parity, price-recipe distance bands, product-attribute widening) and constraints. Grounded against the live codebase and Supabase data, 1&nbsp;September&nbsp;2026.</p>
+</div>

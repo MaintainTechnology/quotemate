@@ -24,7 +24,11 @@ import { requireFeature } from '@/lib/features/guard'
 import { structureIntake } from '@/lib/intake/structure'
 import { embedIntake } from '@/lib/intake/embed'
 import { deriveTradeFromJobType, IntakeSchema } from '@/lib/intake/schema'
-import { fieldsForJobType } from '@/lib/quote/job-fields'
+import {
+  allowsPinnedCatalogueProduct,
+  EV_CHARGER_TRADIE_SUPPLY_ANSWER,
+  fieldsForJobType,
+} from '@/lib/quote/job-fields'
 import { RECIPE_SLOT_CODES, recipeSlotsFrom } from '@/lib/quote/recipe-slots'
 import { normaliseAuMobile } from '@/lib/phone/au'
 import { findOrCreateCustomer } from '@/lib/customers/lookup'
@@ -60,6 +64,61 @@ const BodySchema = z.object({
   product_id: z.string().uuid().optional(),
 })
 
+const THREE_PHASE_INSPECTION_ANSWER = 'three phase (on-site inspection)'
+const CUSTOMER_SUPPLIES_EV_CHARGER = 'customer already has the charger'
+
+type IntakeWithScope = {
+  scope: Record<string, unknown> & { specs?: Record<string, unknown> }
+}
+
+/**
+ * The phase option is a routing contract, not a suggestion to the structuring
+ * model. Preserve the model's decision for every other answer, including
+ * "not sure", but make the explicit three-phase choice inspection-only.
+ */
+export function enforceThreePhaseInspection<T extends { inspection_required: boolean }>(
+  intake: T,
+  answers: Record<string, string>,
+): T {
+  if (answers.phase !== THREE_PHASE_INSPECTION_ANSWER) return intake
+  return { ...intake, inspection_required: true }
+}
+
+/**
+ * The select value is authoritative portal data. Canonicalise it after the
+ * model structures the transcript so quote safety never depends on the model
+ * inferring the supply enum from prose. "Not sure" deliberately unsets it.
+ */
+export function canonicaliseEvChargerSupply<T extends IntakeWithScope>(
+  intake: T,
+  jobType: string,
+  answers: Record<string, string>,
+): T {
+  if (jobType !== 'ev_charger') return intake
+  const specs = { ...(intake.scope.specs ?? {}) }
+  delete specs.supplied_by
+  if (answers.charger_supply === CUSTOMER_SUPPLIES_EV_CHARGER) {
+    specs.supplied_by = 'customer'
+  } else if (answers.charger_supply === EV_CHARGER_TRADIE_SUPPLY_ANSWER) {
+    specs.supplied_by = 'tradie'
+  }
+  return { ...intake, scope: { ...intake.scope, specs } }
+}
+
+type PinnedProductRequest = {
+  product_id?: string
+  product_name?: string
+}
+
+/** Defense in depth for stale/tampered EV requests at the API boundary. */
+export function filterPinnedProductRequest(
+  jobType: string,
+  answers: Record<string, string>,
+  request: PinnedProductRequest,
+): PinnedProductRequest {
+  return allowsPinnedCatalogueProduct(jobType, answers) ? request : {}
+}
+
 export async function POST(req: Request) {
   let body: z.infer<typeof BodySchema>
   try {
@@ -75,10 +134,20 @@ export async function POST(req: Request) {
   const gate = await requireFeature(req, trade)
   if (!gate.ok) return Response.json(gate.body, { status: gate.status })
   const tenant = gate.tenant
+  const pinnedProductRequest = filterPinnedProductRequest(body.job_type, body.answers, {
+    product_id: body.product_id,
+    product_name: body.product_name,
+  })
 
   try {
     const transcript = buildTranscript(body, trade)
-    const intake = await structureIntake(transcript, [], trade)
+    const structuredIntake = await structureIntake(transcript, [], trade)
+    const inspectionRoutedIntake = enforceThreePhaseInspection(structuredIntake, body.answers)
+    const intake = canonicaliseEvChargerSupply(
+      inspectionRoutedIntake,
+      body.job_type,
+      body.answers,
+    )
 
     // The tradie explicitly chose the job type. Opus classifies it again from
     // the transcript and can disagree (e.g. reading "replacing a leaking
@@ -103,20 +172,19 @@ export async function POST(req: Request) {
     // The prose directive alone is a hint Opus can override, so nothing
     // guaranteed the quote used the row the tradie picked. Writing
     // scope.chosen_product hands the estimator the same structured channel the
-    // SMS picker uses: applyChosenProduct then overwrites the headline line's
-    // price with THIS row's, stamps source='material:<uuid>' and the
-    // catalogue_id, and the strict-UUID grounding check anchors it to the
-    // trade-scoped candidate set.
+    // SMS picker uses: applyChosenProduct locks THIS row's price and UUID. For
+    // a tradie-pinned EV unit it adds a distinct qty-1 material line; other
+    // categories retain the existing headline-replacement behaviour.
     //
     // Re-read server-side by (id, tenant_id, trade). The client already holds
     // the price, but trusting it would let a tampered request price a job at
     // any figure — and the trade scope is what makes the row resolvable to the
     // validator's candidate set at all.
-    if (body.product_id) {
+    if (pinnedProductRequest.product_id) {
       const { data: row } = await supabase
         .from('tenant_material_catalogue')
         .select('id, name, unit_price_ex_gst, image_path, description, category, trade, properties, active')
-        .eq('id', body.product_id)
+        .eq('id', pinnedProductRequest.product_id)
         .eq('tenant_id', tenant.id)
         .eq('trade', trade)
         .maybeSingle()
@@ -144,7 +212,7 @@ export async function POST(req: Request) {
         // Wrong tenant, wrong trade, archived or unpriced. Fall through to the
         // prose directive rather than failing the whole draft.
         console.warn('[job-quote] pinned product not resolvable; falling back to prose', {
-          product_id: body.product_id,
+          product_id: pinnedProductRequest.product_id,
         })
       }
     }
@@ -285,7 +353,7 @@ export async function POST(req: Request) {
       // entire purpose is "force THIS price" — the tradie saw the price in the
       // picker and would have no reason to doubt it.
       pinned: !!(intake.scope as { chosen_product?: unknown } | null)?.chosen_product,
-      pinRequested: !!body.product_id,
+      pinRequested: !!pinnedProductRequest.product_id,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
@@ -346,10 +414,13 @@ export function buildTranscript(body: z.infer<typeof BodySchema>, trade: string)
     lines.push(...extras.map(([k, v]) => `- ${k.replace(/_/g, ' ')}: ${v.trim()}`))
   }
 
-  if (body.product_name) {
+  const pinnedProductRequest = filterPinnedProductRequest(body.job_type, body.answers, {
+    product_name: body.product_name,
+  })
+  if (pinnedProductRequest.product_name) {
     lines.push(
       ``,
-      `The tradie has specified this exact product from their own catalogue: ${body.product_name}. Quote THIS product and price it from the operator catalogue.`,
+      `The tradie has specified this exact product from their own catalogue: ${pinnedProductRequest.product_name}. Quote THIS product and price it from the operator catalogue.`,
     )
   }
 

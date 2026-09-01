@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v19 (2026-08-05).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers; v17 makes the roofing + painting SMS receptionists **LLM-driven conversations** (`SMS_LLM_RECEPTIONIST_ENABLED`, now default ON) while keeping the money path deterministic, superseding v10's "zero LLM in the customer-facing flow"; v18 records that the SMS route does **not** pick a receptionist per message — an active roofing thread captures every turn — and that the intake handoff had no trade guard, so roofing enquiries were minting electrical intakes and charging real $99 electrical inspections; **v19** makes the flat **$99 refundable site visit** painting's ONLY customer payment (roofing's model), retiring the 30% tier deposits from every customer surface — v16's pay-first ordering is unchanged; v19 only removes painting from the deposit-tier set it applied to. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v19 rationale.
+> **Current iteration: v22 (2026-09-01).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 added **commercial painting**; v12 extended **solar** to Path B auto-send; v13–v15 refined roofing structure/source gates; v16–v20 converged residential trades on a pay-first flat **$99 refundable site visit**; v17–v18 recorded the LLM receptionist and its route-level trade boundaries; v21 moved residential painting to auto-release; **v22 replaces v3's blanket EV-charger inspection rule with a narrow, tenant-enabled, tradie-reviewed single-phase pricing path while keeping explicit three-phase work inspection-only and forbidding guessed charger-unit prices.** The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v22 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -1533,5 +1533,58 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   - The auto-send failure alert starts firing regularly → the fault is in the
     send, not the policy; fix delivery rather than reinstating a human
     checkpoint that was itself dropping a third of its sends.
+
+- **v22** (2026-09-01): **EV charger installs gain a narrow priced path for the electrical pilot; the blanket v3 inspection-only rule is retired for grounded single-phase jobs.** Owner-requested demo and receptionist correction.
+
+  **What changed:**
+
+  An electrical tenant may now draft a Good/Better/Best EV charger
+  installation quote when the intake identifies the vehicle, charger supplier,
+  location, switchboard distance and phase. The existing install assembly
+  remains the labour/sundries authority. When the tradie supplies the charger,
+  the selected tenant-catalogue unit is additive to that assembly; it never
+  replaces the installation line. The dashboard draft remains held for tradie
+  review, and the customer's only payment action remains the $99 refundable
+  site visit recorded in v20.
+
+  **The safety and pricing boundaries:**
+
+  Explicit `three phase (on-site inspection)` answers are deterministically
+  inspection-routed even if the structuring model disagrees. Existing danger,
+  switchboard-capacity and explicit three-phase language remains inspection
+  evidence. Charger-unit prices must come from the tenant's catalogue and be
+  confirmed by the tradie; QuoteMax does not seed or infer Tesla, BYD or generic
+  wallbox prices. A customer-supplied charger can therefore receive an
+  install-only draft, while a tradie-supplied unit cannot be priced until an
+  approved catalogue product is selected.
+
+  **Why the previous rule changed:**
+
+  v3 treated every EV charger enquiry as high-risk before the product had a
+  five-question intake, deterministic phase gate, tenant service toggle or EV
+  sanity bounds. Those controls now separate the bounded single-phase case from
+  work that genuinely needs an inspection. The production symptom was more
+  basic: Atomic Electrical's EV offering was disabled, so its SMS receptionist
+  told an interested customer that EV installs were not offered. Enabling that
+  tenant's offering keeps the demo coherent: SMS asks the existing mandatory
+  charger questions instead of rejecting the job by name. The dashboard tool
+  still prices independently of service toggles, as it did before; widening
+  that gate to every tenant is outside this iteration.
+
+  **What this does not change:**
+
+  EV remains part of the existing electrical trade; this is not a fourth-trade
+  expansion. Quotes never bypass the tradie's review, three-phase work never
+  becomes priceable through this exception, and no deterministic EV BOM or
+  charger market-price feed is introduced.
+
+  **Trigger for the next iteration:**
+
+  - The pilot electrician supplies approved unit prices and distance/cable-run
+    rules → replace provisional bounds and prose-driven labour with a reviewed
+    EV recipe/BOM.
+  - Review edits or site visits show the bounded single-phase path is poorly
+    calibrated → return the affected configuration to inspection routing rather
+    than widening model discretion.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

@@ -123,6 +123,12 @@ export type AcRoutingDecision = {
 
 export type AcPricedRecommendation = {
   pricing_status: 'priced'
+  pricing_authority: {
+    source: 'tenant_pricing_book'
+    tenant_id: string
+    pricing_book_id: string
+    revision: string
+  }
   sizing: AcSizing
   /** Always two options, ordered [ducted, split]. */
   options: AcOption[]

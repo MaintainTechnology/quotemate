@@ -13,8 +13,7 @@
 // conversation thread; voice seeds one).
 //
 // Behaviour notes preserved verbatim from the route:
-//   • per-tenant rate card, or the SMS channel prices off the defaults and
-//     disagrees with the dashboard for the same address
+//   • complete per-tenant pricing card only; missing setup stops before save/send
 //   • BOTH capability tokens minted as a pair (public_token + measure_token)
 //     or the tradie gets no Measurement Results page
 //   • roof-photo MMS goes BEFORE the confirm SMS, is fully guarded, and
@@ -33,7 +32,7 @@ import { toRoofingRequest, type RoofingSlots } from './roofing-intake'
 import type { RoofingConversationState } from './roofing-receptionist'
 import { sendSms } from './twilio'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
-import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import { loadTenantRoofingPricingContext } from '@/lib/roofing/pricing-authority'
 import { newMeasurementTokens } from '@/lib/roofing/tokens'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 
@@ -108,10 +107,18 @@ export async function measureAndDispatchRoofing(args: {
 }): Promise<RoofingMeasureDispatchResult> {
   const reqInput = toRoofingRequest(args.slots)
   if (!reqInput) return { ok: false, reason: 'incomplete brief — nothing to measure' }
+  if (!args.tenantId) return { ok: false, reason: 'tenant pricing setup required' }
 
   try {
-    const rateCard = await loadRoofingRateCard(args.supabase, args.tenantId, args.tenantTrade ?? null)
-    const result = await measureAndPriceRoofs(reqInput.address, reqInput.inputs, { rateCard })
+    const pricing = await loadTenantRoofingPricingContext(
+      args.supabase,
+      args.tenantId,
+      args.tenantTrade ?? null,
+    )
+    if (!pricing) return { ok: false, reason: 'tenant roofing pricing setup required' }
+    const result = await measureAndPriceRoofs(reqInput.address, reqInput.inputs, {
+      rateCard: pricing.rateCard,
+    })
     if (!result.ok) {
       console.error('[roofing-measure-dispatch] measure failed', {
         code: result.code,
@@ -129,15 +136,19 @@ export async function measureAndDispatchRoofing(args: {
     // The SMS caller always supplies the gate's own reason; the fallback
     // only guards a caller that flags an inspection without one (the field
     // is rendered on the page + message, so it can't be blank).
+    const authorisedQuote = {
+      ...result.quote,
+      pricing_authority: pricing.authority,
+    }
     const quote: MultiRoofQuote = args.isInspection
       ? {
-          ...result.quote,
+          ...authorisedQuote,
           routing: {
             decision: 'inspection_required',
             reason: args.inspectionReason ?? 'this one needs a closer look on site',
           },
         }
-      : result.quote
+      : authorisedQuote
 
     await args.supabase.from('roofing_measurements').insert({
       tenant_id: args.tenantId,

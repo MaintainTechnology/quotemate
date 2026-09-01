@@ -11,7 +11,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import { getReportAdapter, tradeRendersOwnQuotePdf } from '@/lib/quote/report-adapters/registry'
-import { resolveCustomerContact } from '@/lib/quote/send-customer'
+import { confirmSendCta, resolveCustomerContact } from '@/lib/quote/send-customer'
 import { buildDefaultReportDoc } from '@/lib/quote/report-doc/seed'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
 import type { ReportStyle } from '@/lib/quote/report-doc/style'
@@ -34,7 +34,7 @@ export default async function DashboardQuoteViewerPage({
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at, selected_tier, scope_of_works, assumptions, risk_flags, report_doc, report_style',
+      'id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at, deposit_paid, status, selected_tier, scope_of_works, assumptions, risk_flags, report_doc, report_style',
     )
     .eq('share_token', token)
     .maybeSingle()
@@ -50,6 +50,10 @@ export default async function DashboardQuoteViewerPage({
         .maybeSingle()
     : { data: null }
   const trade = ((intake?.trade as string | null | undefined) ?? 'electrical').trim() || 'electrical'
+  const sendCta = confirmSendCta(
+    (quote.status as string | null | undefined) ?? null,
+    !!quote.deposit_paid,
+  )
 
   // Customer contact on file for the "Send to Customer" panel.
   const contact = await resolveCustomerContact(supabase, {
@@ -97,6 +101,7 @@ export default async function DashboardQuoteViewerPage({
       paid={!!quote.paid_at}
       customerPhone={contact.phone}
       customerEmail={contact.email}
+      sendLabel={sendCta.label || undefined}
       // Tradie-only. Strings only — legacy rows stored objects here before the
       // shape settled, and rendering one would print "[object Object]".
       riskFlags={

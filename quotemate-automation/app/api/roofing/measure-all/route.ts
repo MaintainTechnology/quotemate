@@ -10,8 +10,12 @@ import { createClient } from '@supabase/supabase-js'
 import { MeasureAllRequestSchema } from '@/lib/roofing/request-schema'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { MockRoofingProvider } from '@/lib/roofing/providers/mock'
-import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import {
+  createRoofPricingRun,
+  loadTenantRoofingPricingContext,
+  roofRunRequestDigest,
+} from '@/lib/roofing/pricing-authority'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,13 +63,38 @@ export async function POST(req: Request) {
 
   const { address, inputs, perBuilding, perBuildingEdges, use_mock_provider } = parsed.data
 
-  // Shared loader — same card resolution as measure/save//m/SMS, so every
-  // surface prices the same tenant identically.
-  const rateCard = await loadRoofingRateCard(supabase, auth.tenantId, auth.primaryTrade)
+  if (!auth.tenantId) {
+    return Response.json(
+      { ok: false, code: 'tenant_pricing_required', detail: 'Complete roofing pricing setup.' },
+      { status: 200 },
+    )
+  }
+  const pricing = await loadTenantRoofingPricingContext(
+    supabase,
+    auth.tenantId,
+    auth.primaryTrade,
+  )
+  if (!pricing) {
+    return Response.json(
+      {
+        ok: false,
+        code: 'tenant_pricing_required',
+        detail: 'Complete every roofing rate and GST setting before measuring a customer price.',
+      },
+      { status: 200 },
+    )
+  }
+  const runSecret = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!runSecret) {
+    return Response.json(
+      { ok: false, code: 'pricing_authority_unavailable', detail: 'Pricing proof is not configured.' },
+      { status: 200 },
+    )
+  }
 
   const result = await measureAndPriceRoofs(address, inputs, {
     provider: use_mock_provider ? new MockRoofingProvider() : undefined,
-    rateCard,
+    rateCard: pricing.rateCard,
     perBuilding,
     perBuildingEdges,
   })
@@ -74,9 +103,25 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, code: result.code, detail: result.detail }, { status: 200 })
   }
 
+  const digest = roofRunRequestDigest({
+    address,
+    provider: result.provider,
+    quote: result.quote,
+  })
+  const run = createRoofPricingRun({
+    context: pricing,
+    requestDigest: digest,
+    secret: runSecret,
+  })
+
   return Response.json(
     {
       ok: true,
+      pricing_status: 'priced',
+      pricing_authority: pricing.authority,
+      run_token: run.token,
+      run_id: run.proof.run_id,
+      run_expires_at: new Date(run.proof.expires_at).toISOString(),
       provider: result.provider,
       quote: result.quote,
       warnings: result.warnings,

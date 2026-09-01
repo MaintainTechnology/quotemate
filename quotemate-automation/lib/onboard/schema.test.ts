@@ -67,6 +67,21 @@ describe('OnboardActivateSchema — optional advanced-pricing fields', () => {
     }
   })
 
+  it('treats whitespace-only input as blank rather than coercing it to zero', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...baseValidPayload,
+      apprentice_rate: '   ',
+      min_labour_hours: '\t',
+      risk_buffer_pct: ' \n ',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.apprentice_rate).toBeUndefined()
+      expect(result.data.min_labour_hours).toBeUndefined()
+      expect(result.data.risk_buffer_pct).toBeUndefined()
+    }
+  })
+
   it('coerces numeric strings to numbers when present', () => {
     const result = OnboardActivateSchema.safeParse({
       ...baseValidPayload,

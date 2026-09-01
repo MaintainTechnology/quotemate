@@ -130,7 +130,7 @@ export function MeasurementReview({
   /** Set once this measurement was promoted to an editable quotes row (R6). */
   quoteShareToken: string | null
   /** Server-flattened save-as-quote body; null when the row can't produce one. */
-  saveAsQuoteBody: Omit<SaveAsQuoteRequest, 'measure_token'> | null
+  saveAsQuoteBody: Pick<SaveAsQuoteRequest, 'expected_pricing_revision'> | null
 }) {
   const [included, setIncluded] = useState<number[]>(initialIncluded)
   // Broadcast the live selection to sibling client islands — the roof layout

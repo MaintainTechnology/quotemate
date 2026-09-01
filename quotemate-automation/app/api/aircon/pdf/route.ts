@@ -18,6 +18,10 @@ import { parseStoredPricedRecommendation } from '@/lib/aircon/recommendation-sch
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { loadTenantBranding } from '@/lib/pdf/branding'
 import type { AcPricedRecommendation, AusState } from '@/lib/aircon/types'
+import {
+  acPricingAuthorityMatches,
+  loadTenantAcPricingContext,
+} from '@/lib/aircon/pricing-context'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -60,11 +64,15 @@ function buildAirconKbText(rec: AcPricedRecommendation, climateZone: string | nu
 export async function POST(req: Request) {
   // Dual-auth: Clerk session token OR legacy Supabase token. A tenant is
   // mandatory because the recommendation id is scoped to its owner.
-  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name')
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name, trade')
   if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const tenantRow = resolved.tenant as { id?: string; business_name?: string } | null
+  const tenantRow = resolved.tenant as {
+    id?: string
+    business_name?: string
+    trade?: string | null
+  } | null
   const tenantId = (tenantRow?.id as string | undefined) ?? null
   if (!tenantId) {
     return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
@@ -82,7 +90,11 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
   }
   const recommendationId =
-    body && typeof body === 'object' && typeof (body as { recommendationId?: unknown }).recommendationId === 'string'
+    body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    Object.keys(body).every((key) => key === 'recommendationId') &&
+    typeof (body as { recommendationId?: unknown }).recommendationId === 'string'
       ? (body as { recommendationId: string }).recommendationId.trim()
       : ''
   if (!recommendationId) {
@@ -104,6 +116,14 @@ export async function POST(req: Request) {
   const recommendation = parseStoredPricedRecommendation(stored.recommendation)
   if (!recommendation) {
     return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+  }
+  const currentPricing = await loadTenantAcPricingContext(
+    supabase,
+    tenantId,
+    tenantRow?.trade ?? null,
+  )
+  if (!acPricingAuthorityMatches(recommendation.pricing_authority, currentPricing, tenantId)) {
+    return Response.json({ ok: false, error: 'pricing_stale' }, { status: 409 })
   }
   const address = typeof stored.address === 'string' ? stored.address : ''
   const postcode = typeof stored.postcode === 'string' ? stored.postcode : ''

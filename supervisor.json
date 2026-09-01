@@ -1,0 +1,9 @@
+{
+  "processes": {
+    "worker": {
+      "pid": 22232,
+      "type": "worker",
+      "startedAt": "2026-08-25T05:59:46.882Z"
+    }
+  }
+}

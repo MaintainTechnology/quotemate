@@ -238,7 +238,9 @@ describe('Phase 5 — run.ts actually calls it', () => {
     // and we still know what the job was meant to contain. Capturing after the
     // build would lose exactly that.
     const capture = runTs.indexOf('phase5Recipe = loaded.input.bom')
-    const build = runTs.indexOf('const built = buildDeterministicTiers(loaded.input)')
+    // The preflight may reuse an already-built authority result; either way,
+    // this exact call is the fallback build point whose ordering matters.
+    const build = runTs.indexOf('buildDeterministicTiers(loaded.input)')
     expect(capture).toBeGreaterThan(-1)
     expect(build).toBeGreaterThan(-1)
     expect(capture).toBeLessThan(build)

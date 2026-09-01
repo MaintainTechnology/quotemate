@@ -69,6 +69,9 @@ export default function QuoteReportViewerClient(props: {
   /** Customer contact on file (resolved server-side) for the send panel. */
   customerPhone?: string | null
   customerEmail?: string | null
+  /** Held portal drafts use the same explicit confirmation copy as the
+   * dashboard Quotes tab. */
+  sendLabel?: string
   /** quotes.risk_flags — the assumptions the pricing engine made on its own
    *  (cable-run length, switchboard spare way, pricing-book fallbacks). Written
    *  on every quote since migration 074 and, until now, rendered nowhere: the
@@ -86,6 +89,7 @@ export default function QuoteReportViewerClient(props: {
     paid,
     customerPhone,
     customerEmail,
+    sendLabel,
     docEditorEnabled,
     reportDoc,
     reportStyle,
@@ -215,6 +219,7 @@ export default function QuoteReportViewerClient(props: {
               customerPhone={customerPhone ?? null}
               customerEmail={customerEmail ?? null}
               paid={paid}
+              label={sendLabel}
             />
           </div>
         </div>

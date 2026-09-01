@@ -23,13 +23,16 @@ import { OnboardActivateSchema } from '@/lib/onboard/schema'
 import { buildPricingRows } from '@/lib/onboard/pricing-rows'
 import { defaultAvailabilityForState } from '@/lib/quote/availability'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
-import { markIntentUsed } from '@/lib/onboard/intent-tokens'
+import { inspectIntentToken, markIntentUsed } from '@/lib/onboard/intent-tokens'
 import { seedTenantServiceOfferings } from '@/lib/onboard/seed-tenant-defaults'
 import { checkInvitationCode, consumeInvitationCode } from '@/lib/onboard/invitation-codes'
 import { stampFeatureProvenance } from '@/lib/features/access'
 import { computePreflight } from '@/lib/onboard/preflight-logic'
 import { ensureClerkUser } from '@/lib/clerk/ensure-user'
 import { autoGenerateTrustVideos } from '@/lib/videos/trust-video'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
+import { deriveActivationOwnership } from '@/lib/onboard/activation-identity'
+import { isStubTwilioNumber, isStubVapiId } from '@/lib/onboard/health'
 
 // Deferred trust-video generation polls Veo after the response; a platform
 // cut-off mid-poll is harmless (resumable) but headroom lets most finish here.
@@ -40,6 +43,10 @@ export const maxDuration = 300
 // instead of swallowing failures silently. (spec A1)
 type StepResult = { step: string; ok: boolean; detail?: string }
 
+function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -49,6 +56,14 @@ export async function POST(req: Request) {
   let tenantId: string | null = null
   const steps: StepResult[] = []
   try {
+    // This is a public-facing mutation backed by a service-role client. The
+    // bearer is therefore the first gate: no payload parsing, invitation
+    // lookup, or service-role write happens until its signature is verified.
+    const identity = await resolveIdentityRequest(supabase, req)
+    if (!identity) {
+      return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+    }
+
     const raw = await req.json()
     const parsed = OnboardActivateSchema.safeParse(raw)
     if (!parsed.success) {
@@ -62,14 +77,91 @@ export async function POST(req: Request) {
       )
     }
     const form = parsed.data
+
+    // Older clients still send identity fields. Treat them only as assertions
+    // for a compatible rollout; the verified bearer subject is the value that
+    // selects and is written as the tenant owner.
+    const ownership = deriveActivationOwnership(identity, form)
+    if (!ownership.ok) {
+      return Response.json(
+        {
+          ok: false,
+          error: 'identity_mismatch',
+          fieldErrors: { [ownership.field]: [ownership.message] },
+          message: ownership.message,
+        },
+        { status: 403 },
+      )
+    }
+    const resolvedOwnerUserId = ownership.ownerUserId
+    const resolvedClerkUserId = ownership.clerkUserId
+
+    // Idempotent retry: an activation already owned by this authenticated
+    // subject is the same activation, never permission to insert another
+    // tenant or buy another number. This also makes a lost HTTP response safe.
+    const existing = await findExistingActivation(identity.provider, identity.userId)
+    if (existing.error) {
+      return Response.json(
+        { ok: false, error: `tenant lookup failed: ${existing.error}` },
+        { status: 500 },
+      )
+    }
+    if (existing.tenant) return existingActivationResponse(existing.tenant)
+
     // Mobile is optional (user clarification 2026-07-17): null when the
     // tradie onboarded without one — the welcome SMS is skipped downstream.
-    const normalisedMobile = form.owner_mobile ? normaliseAuMobile(form.owner_mobile) : null
+    let normalisedMobile = form.owner_mobile ? normaliseAuMobile(form.owner_mobile) : null
     // Primary trade — used to populate the legacy `tenants.trade` scalar
     // column for back-compat, to seed the Vapi assistant prompt, and as
     // the first row inserted into pricing_book. Multi-trade tenants get
     // additional pricing_book rows for each extra trade further down.
     const primaryTrade = form.trades[0]
+
+    // An SMS intent adds verified-phone context; it is never authentication.
+    // Bearer auth already succeeded above, and the server-side row must also be
+    // unused + unexpired before it can be linked. If a mobile was supplied it
+    // must agree with the verified SMS source; otherwise use that source.
+    if (form.intent_token) {
+      const inspected = await inspectIntentToken(supabase, form.intent_token)
+      if (inspected.status === 'unavailable') {
+        return Response.json(
+          {
+            ok: false,
+            error: 'intent_unavailable',
+            message: 'Could not verify that SMS signup link just now. Try again.',
+          },
+          { status: 503 },
+        )
+      }
+      if (inspected.status !== 'verified') {
+        return Response.json(
+          {
+            ok: false,
+            error: `intent_${inspected.status}`,
+            message:
+              inspected.status === 'expired'
+                ? 'That SMS signup link has expired.'
+                : inspected.status === 'used'
+                  ? 'That SMS signup link was already used.'
+                  : 'That SMS signup link is invalid.',
+          },
+          { status: 422 },
+        )
+      }
+      const intent = inspected.intent
+      const intentMobile = normaliseAuMobile(intent.owner_mobile)
+      if (normalisedMobile && normalisedMobile !== intentMobile) {
+        return Response.json(
+          {
+            ok: false,
+            error: 'intent_mobile_mismatch',
+            message: 'The mobile number does not match the verified SMS signup link.',
+          },
+          { status: 403 },
+        )
+      }
+      normalisedMobile = intentMobile
+    }
 
     // Re-validate the invitation code at the last moment. Cheap insurance
     // against a code that was revoked or exhausted between Step-0 and submit.
@@ -81,65 +173,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Resolve owner_user_id authoritatively. The wizard CAN drop this value if
-    // URL params got lost or the session backfill didn't fire.
-    //
-    // ⚠ This comment used to say a NULL owner_user_id means the tradie can never
-    // sign back in. That stopped being true when dual-auth landed (migration 163,
-    // 2026-07-07): /api/tenant/me resolves EITHER provider
-    // (lib/tenant/current.ts:97), and a Clerk-native signup legitimately has
-    // owner_user_id NULL with sign-in carried by clerk_user_id. The A9 guard
-    // below is what actually enforces "linked to something".
-    //
-    // The lookup is still worth doing: a tradie who tried /signup first has a
-    // real auth.users row, and stamping it lands the tenant usefully dual-linked.
-    let resolvedOwnerUserId: string | null = form.owner_user_id || null
-    if (!resolvedOwnerUserId) {
-      const looked = await lookupUserIdByEmail(form.owner_email)
-      if (looked) {
-        resolvedOwnerUserId = looked
-        console.log('[activate] owner_user_id missing in payload — resolved from email', {
-          email: form.owner_email,
-          userId: looked,
-        })
-      } else if (form.clerk_user_id) {
-        // EXPECTED on the Clerk funnel: a Clerk-native signup has no auth.users
-        // row at all, so the lookup is meant to miss and clerk_user_id carries
-        // sign-in. Warning here fired on every correct Clerk activation and
-        // trained operators to ignore a message that IS diagnostic below.
-        // The lookup itself is kept: a tradie who tried /signup first genuinely
-        // hits it, and the row lands usefully dual-linked.
-        console.log('[activate] clerk-native signup — no supabase auth user, linking by clerk_user_id', {
-          email: form.owner_email,
-        })
-      } else {
-        console.warn('[activate] owner_user_id missing AND no auth user matches email', {
-          email: form.owner_email,
-        })
-      }
-    }
-
-    // A9 — guarantee a sign-in-able tenant for web onboarding. A Clerk signup
-    // is sign-in-able via clerk_user_id (dual-auth resolver); a Supabase signup
-    // via owner_user_id. SMS-initiated onboarding (intent_token present) has no
-    // auth user yet so it stays exempt; every other path must resolve ONE of
-    // these or we refuse, rather than create a tenant no one can sign into.
-    if (!resolvedOwnerUserId && !form.clerk_user_id && !form.intent_token) {
-      return Response.json(
-        {
-          ok: false,
-          error: 'owner_user_id_unresolved',
-          // "Sign in again" was wrong advice for a Clerk tradie: they ARE signed
-          // in — the id just never reached this request (lost URL param, or
-          // clerk-js not hydrated at submit). Reloading re-runs the wizard's
-          // session backfill, which is what actually fixes it.
-          message:
-            'Could not link this onboarding to your account. Reload this page so we can read your signed-in session, then activate again.',
-        },
-        { status: 422 },
-      )
-    }
-
     // ─── 1. Insert tenants row ─────────────────────────────────
     // Note: `trade` (singular) is kept in sync with trades[0] so legacy
     // pipeline code that still reads tenant.trade keeps working.
@@ -147,9 +180,9 @@ export async function POST(req: Request) {
       .from('tenants')
       .insert({
         owner_user_id: resolvedOwnerUserId,
-        // Clerk-created signups link by clerk_user_id (owner_user_id is null for
-        // them); the dual-auth resolver reads this. Empty for Supabase signups.
-        clerk_user_id: form.clerk_user_id || null,
+        // Both ownership columns are derived from the verified bearer above.
+        // Payload ids never select the owner of a service-role insert.
+        clerk_user_id: resolvedClerkUserId,
         business_name: form.business_name,
         owner_first_name: form.owner_first_name,
         owner_last_name: form.owner_last_name || null,
@@ -180,6 +213,13 @@ export async function POST(req: Request) {
 
     if (tErr || !tenant) {
       const errMsg = tErr?.message ?? 'tenant insert failed'
+      // Two requests can pass the pre-insert lookup together. The unique
+      // owner constraint decides the race; return the row owned by this same
+      // verified subject rather than surfacing an error or inserting again.
+      if (tErr && isUniqueViolation(tErr)) {
+        const raced = await findExistingActivation(identity.provider, identity.userId)
+        if (raced.tenant) return existingActivationResponse(raced.tenant)
+      }
       const friendly = errMsg.toLowerCase().includes('owner_email')
         ? 'An account with that email already exists. Sign in instead.'
         : errMsg
@@ -253,8 +293,8 @@ export async function POST(req: Request) {
       try {
         await seedTenantServiceOfferings({ supabase, tenantId: id, trades: form.trades })
         offeringsSeeded = true
-      } catch (seedErr: any) {
-        offeringsErr = seedErr?.message ?? String(seedErr)
+      } catch (seedErr: unknown) {
+        offeringsErr = errorDetail(seedErr)
         console.warn(`[activate] seedTenantServiceOfferings attempt ${attempt} failed`, {
           tenantId: id,
           message: offeringsErr,
@@ -292,9 +332,9 @@ export async function POST(req: Request) {
         features: form.trades,
         source: 'onboarding',
       })
-    } catch (e: any) {
+    } catch (e: unknown) {
       provenanceOk = false
-      provenanceErr = e?.message ?? String(e)
+      provenanceErr = errorDetail(e)
       console.warn('[activate] stampFeatureProvenance failed (non-fatal)', {
         tenantId: id,
         message: provenanceErr,
@@ -306,13 +346,13 @@ export async function POST(req: Request) {
     // The web funnel (/signup) creates a SUPABASE auth user only, so without
     // this every web-onboarded tenant landed with clerk_user_id = NULL and never
     // appeared in Clerk — it had to be backfilled by hand with
-    // scripts/link-accounts-clerk.ts. A Clerk-native signup already carries
-    // clerk_user_id (stamped on the insert above), so we skip those.
+    // scripts/link-accounts-clerk.ts. A Clerk-native signup is already linked
+    // by the verified bearer subject stamped on the insert above, so we skip it.
     // Non-fatal by design: a Clerk outage must never roll back a tenant that is
     // otherwise complete — the backfill script remains the repair path.
     let clerkOk = true
     let clerkDetail: string | undefined
-    if (!form.clerk_user_id) {
+    if (!resolvedClerkUserId) {
       try {
         // Admin status is keyed off admin_users (the DB source of truth), the
         // same rule the backfill script applies. A fresh signup is never admin,
@@ -337,9 +377,9 @@ export async function POST(req: Request) {
           await supabase.from('tenants').update({ clerk_user_id: ensured.id }).eq('id', id)
           clerkDetail = ensured.created ? 'clerk user created' : 'linked to existing clerk user'
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         clerkOk = false
-        clerkDetail = e?.message ?? String(e)
+        clerkDetail = errorDetail(e)
         console.warn('[activate] ensureClerkUser failed (non-fatal)', {
           tenantId: id,
           message: clerkDetail,
@@ -373,22 +413,29 @@ export async function POST(req: Request) {
     // Done before provisioning so a Twilio failure doesn't strand the
     // intent in unused state.
     if (form.intent_token) {
+      let marked: Awaited<ReturnType<typeof markIntentUsed>> | null = null
       try {
-        const marked = await markIntentUsed(supabase, {
+        marked = await markIntentUsed(supabase, {
           token: form.intent_token,
           tenantId: id,
         })
-        if (!marked.ok) {
-          console.warn(
-            '[activate] markIntentUsed returned ok=false (token already consumed or missing)',
-            { tenantId: id, token: form.intent_token },
-          )
-        }
-      } catch (e: any) {
-        console.warn('[activate] markIntentUsed threw — non-fatal', {
-          tenantId: id,
-          message: e?.message ?? String(e),
-        })
+      } catch {
+        // Handled by the required-step failure below.
+      }
+      if (!marked?.ok) {
+        // The intent was valid at preflight but another activation consumed it
+        // first (or the claim write failed). Do not leave a second tenant.
+        await supabase.from('pricing_book').delete().eq('tenant_id', id)
+        await supabase.from('tenants').delete().eq('id', id)
+        tenantId = null
+        return Response.json(
+          {
+            ok: false,
+            error: 'intent_used',
+            message: 'That SMS signup link was already used. Sign in to continue.',
+          },
+          { status: 422 },
+        )
       }
     }
 
@@ -471,7 +518,7 @@ export async function POST(req: Request) {
           ? 'Provisioning ran in STUB mode — this tenant has no real phone line. Enable live provisioning (TWILIO/VAPI_PROVISIONING_ENABLED) and retry.'
           : undefined),
     })
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Catch-all rollback if we created a tenant but threw afterwards.
     if (tenantId) {
       try {
@@ -481,7 +528,7 @@ export async function POST(req: Request) {
       }
     }
     return Response.json(
-      { ok: false, error: err?.message ?? String(err) },
+      { ok: false, error: errorDetail(err) },
       { status: 500 },
     )
   }
@@ -501,30 +548,48 @@ function normaliseAuMobile(input: string): string {
   return stripped // fall through — Zod already validated shape
 }
 
-/**
- * Resolve a Supabase auth user_id from an email via the admin listUsers
- * API. Used as a fallback when the wizard didn't send owner_user_id, so
- * the tenant row always lands with a valid user link. Returns null when
- * no auth.users row matches (legitimate for SMS-only signups that never
- * created a Supabase auth user yet).
- */
-async function lookupUserIdByEmail(email: string): Promise<string | null> {
-  const target = email.trim().toLowerCase()
-  try {
-    // listUsers is paginated; tradie volume during pilot is tiny so a
-    // single page is plenty. If we ever grow past ~1000 active auth users
-    // this needs to switch to admin.getUserByEmail (Supabase v2.40+).
-    const { data, error } = await supabase.auth.admin.listUsers({ perPage: 200 })
-    if (error) {
-      console.warn('[activate] admin.listUsers failed', error.message)
-      return null
-    }
-    const match = data.users.find(
-      (u) => (u.email ?? '').trim().toLowerCase() === target,
-    )
-    return match?.id ?? null
-  } catch (e: any) {
-    console.warn('[activate] lookupUserIdByEmail threw', e?.message ?? String(e))
-    return null
+type ExistingActivation = {
+  id: string
+  status: string | null
+  twilio_sms_number: string | null
+  vapi_assistant_id: string | null
+}
+
+async function findExistingActivation(provider: 'clerk' | 'supabase', userId: string) {
+  const column = provider === 'clerk' ? 'clerk_user_id' : 'owner_user_id'
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('id, status, twilio_sms_number, vapi_assistant_id')
+    .eq(column, userId)
+    .maybeSingle()
+  return {
+    tenant: (data as ExistingActivation | null) ?? null,
+    error: error?.message ?? null,
   }
+}
+
+function existingActivationResponse(tenant: ExistingActivation) {
+  const hasRealLine =
+    !!tenant.twilio_sms_number &&
+    !!tenant.vapi_assistant_id &&
+    !isStubTwilioNumber(tenant.twilio_sms_number) &&
+    !isStubVapiId(tenant.vapi_assistant_id)
+  const setupComplete = tenant.status === 'active' && hasRealLine
+  return Response.json({
+    ok: true,
+    tenantId: tenant.id,
+    setupComplete,
+    phoneNumber: tenant.twilio_sms_number,
+    vapiAssistantId: tenant.vapi_assistant_id,
+    alreadyActivated: true,
+    idempotent: true,
+    retryable: !setupComplete,
+    warning: setupComplete
+      ? undefined
+      : 'This account is already activated but setup is incomplete. Retry provisioning from the dashboard.',
+  })
+}
+
+function isUniqueViolation(error: { code?: string; message?: string }): boolean {
+  return error.code === '23505' || /duplicate key|unique constraint/i.test(error.message ?? '')
 }

@@ -21,7 +21,7 @@ import {
   solarAllowanceConfigFromCard,
   SOLAR_DETECTION_SCHEMA,
 } from '@/lib/roofing/solar'
-import { loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import { loadTenantRoofingPricingContext } from '@/lib/roofing/pricing-authority'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +36,7 @@ const supabase = createClient(
 
 const BodySchema = z.object({
   address: z.string().min(3).max(300),
+  expected_pricing_revision: z.string().regex(/^[a-f0-9]{64}$/),
   center: z.object({ lat: z.number(), lng: z.number() }).optional(),
   intent: z
     .enum(['full_reroof', 'patch_repair', 'leak_trace', 'gutter_replace', 'ridge_cap', 'flashing_repair', 'unknown'])
@@ -47,11 +48,11 @@ const BodySchema = z.object({
     .array(z.object({ base64: z.string().min(1), mime: z.string().min(3).max(60) }))
     .max(6)
     .optional(),
-})
+}).strict()
 
 // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
-// (→ owner_user_id). Tenant is optional — a missing tenant just means no
-// rate-card overrides, not an auth failure, so we never 404.
+// (→ owner_user_id). A tenant is required because a monetary allowance must
+// be derived from a persisted tenant pricing book.
 async function userAndTenantFromBearer(
   req: Request,
 ): Promise<{ userId: string; tenantId: string | null; primaryTrade: string | null } | null> {
@@ -70,6 +71,9 @@ export async function POST(req: Request) {
   if (!auth) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+  if (!auth.tenantId) {
+    return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+  }
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return Response.json({ ok: false, code: 'maps_key_missing' }, { status: 200 })
   }
@@ -87,11 +91,20 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return Response.json({ ok: false, error: 'invalid_request', issues: parsed.error.issues }, { status: 400 })
   }
-  const { address, center, intent, photos } = parsed.data
+  const { address, center, intent, photos, expected_pricing_revision } = parsed.data
 
-  // Resolve the tenant's rate card for the (configurable) allowance — via
-  // the ONE shared loader, so this surface can't drift from measure/save/SMS.
-  const rateCard = await loadRoofingRateCard(supabase, auth.tenantId, auth.primaryTrade)
+  const pricing = await loadTenantRoofingPricingContext(
+    supabase,
+    auth.tenantId,
+    auth.primaryTrade,
+  )
+  if (!pricing) {
+    return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+  }
+  if (pricing.authority.revision !== expected_pricing_revision) {
+    return Response.json({ ok: false, error: 'pricing_stale' }, { status: 409 })
+  }
+  const rateCard = pricing.rateCard
 
   try {
     // 1. Fetch the satellite aerial (same source the measure tool shows).
@@ -149,7 +162,10 @@ export async function POST(req: Request) {
       gstRegistered: rateCard.gst_registered,
     })
 
-    return Response.json({ ok: true, detection, allowance }, { status: 200 })
+    return Response.json(
+      { ok: true, detection, allowance, pricing_authority: pricing.authority },
+      { status: 200 },
+    )
   } catch (e) {
     return Response.json(
       { ok: false, code: 'detect_failed', detail: e instanceof Error ? e.message : String(e) },

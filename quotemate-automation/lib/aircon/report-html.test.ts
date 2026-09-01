@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { buildAirconReportHtml } from './report-html'
-import { recommendAircon, DEFAULT_AC_RATE_CARD } from './recommend'
+import { recommendAircon } from './recommend'
 import { sizeAircon } from './sizing'
-import type { AcPropertyInputs } from './types'
+import type { AcPropertyInputs, AcRateCard } from './types'
+
+const TEST_RATE_CARD: AcRateCard = {
+  split: {
+    per_head: { '2.5': 1100, '3.5': 1400, '5': 1900, '7': 2600, '8': 3000 },
+    multi_head_discount_pct: 0.08,
+  },
+  ducted: { rate_per_kw: 1100, base_ex_gst: 4000, per_zone: 350, min_ex_gst: 8000 },
+  gst_registered: true,
+}
 
 const inputs: AcPropertyInputs = {
   bedrooms: 3,
@@ -15,15 +24,24 @@ const inputs: AcPropertyInputs = {
 }
 
 function html(gstRegistered: boolean) {
+  const recommendation = recommendAircon({
+    sizing: sizeAircon('subtropical', inputs),
+    inputs,
+    rateCard: { ...TEST_RATE_CARD, gst_registered: gstRegistered },
+  })
   return buildAirconReportHtml({
     businessName: 'Tenant Air',
     address: '1 Test St',
     generatedAt: new Date('2026-08-28T00:00:00Z'),
-    recommendation: recommendAircon({
-      sizing: sizeAircon('subtropical', inputs),
-      inputs,
-      rateCard: { ...DEFAULT_AC_RATE_CARD, gst_registered: gstRegistered },
-    }),
+    recommendation: {
+      ...recommendation,
+      pricing_authority: {
+        source: 'tenant_pricing_book',
+        tenant_id: 'tenant-1',
+        pricing_book_id: 'book-1',
+        revision: 'a'.repeat(64),
+      },
+    },
   })
 }
 

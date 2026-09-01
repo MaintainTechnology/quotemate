@@ -130,6 +130,27 @@ describe('createConnectOnboardingLink', () => {
     })
   })
 
+  it('returns mobile onboarding to the verified payouts app link', async () => {
+    h.accountLinksCreate.mockResolvedValue({ url: 'https://connect.stripe.com/setup/mobile' })
+
+    await createConnectOnboardingLink({
+      accountId: 'acct_new',
+      appUrl: 'https://app.test',
+      returnClient: 'mobile',
+    })
+
+    expect(h.accountLinksCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        use_case: expect.objectContaining({
+          account_onboarding: expect.objectContaining({
+            refresh_url: 'https://app.test/app/sections/payouts?stripe=refresh',
+            return_url: 'https://app.test/app/sections/payouts?stripe=return',
+          }),
+        }),
+      }),
+    )
+  })
+
   it('refuses (no Stripe call) when provisioning is disabled', async () => {
     vi.stubEnv('STRIPE_PROVISIONING_ENABLED', 'false')
     const res = await createConnectOnboardingLink({ accountId: 'acct_x', appUrl: 'https://app.test' })

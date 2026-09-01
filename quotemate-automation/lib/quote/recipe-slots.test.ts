@@ -128,10 +128,17 @@ describe('RECIPE_SLOT_CODES', () => {
     ).toEqual([])
   })
 
-  it("ev_charger's phase question is not a recipe slot code", () => {
+  it("keeps every EV charger answer out of the recipe-slot namespace", () => {
     const codes = JOB_FIELDS.ev_charger.fields.map((f) => f.code)
-    expect(codes).toContain('phase')
-    expect(codes).not.toContain('circuit_required')
+    expect(codes).toEqual([
+      'vehicle',
+      'charger_supply',
+      'room',
+      'switchboard_distance',
+      'phase',
+    ])
+    expect(codes.filter((code) => (RECIPE_SLOT_CODES as readonly string[]).includes(code)))
+      .toEqual([])
   })
 
   it('covers every code recipeSlotsFrom actually reads', () => {

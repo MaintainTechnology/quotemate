@@ -1,8 +1,6 @@
-// Spec tradie-onsite-quote-editing R6b — buildSaveAsQuoteRequest flattens a
-// stored roofing_measurements row into the exact body POST
-// /api/roofing/save-as-quote accepts, so /m can promote a saved measurement
-// to an editable quotes row after the fact (mirrors the measure page's
-// onSendAsQuote flattening).
+// buildSaveAsQuoteRequest is now server-internal: it flattens only the
+// tenant-owned persisted measurement after the external capability request
+// has been authenticated and freshness-checked.
 
 import { describe, expect, it } from 'vitest'
 import type { MultiRoofQuote } from './types'
@@ -77,11 +75,23 @@ const row = {
 }
 
 describe('buildSaveAsQuoteRequest', () => {
-  it('produces a body the save-as-quote schema accepts', () => {
+  it('keeps the trusted snapshot out of the strict external request contract', () => {
     const body = buildSaveAsQuoteRequest(row)
     expect(body).not.toBeNull()
-    const parsed = SaveAsQuoteRequestSchema.safeParse(body)
-    expect(parsed.success, JSON.stringify(parsed.success ? null : parsed.error.issues)).toBe(true)
+    expect(SaveAsQuoteRequestSchema.safeParse(body).success).toBe(false)
+    expect(
+      SaveAsQuoteRequestSchema.safeParse({
+        measure_token: 'measure-token-1',
+        expected_pricing_revision: 'a'.repeat(64),
+      }).success,
+    ).toBe(true)
+    expect(
+      SaveAsQuoteRequestSchema.safeParse({
+        measure_token: 'measure-token-1',
+        expected_pricing_revision: 'a'.repeat(64),
+        price: body?.price,
+      }).success,
+    ).toBe(false)
   })
 
   it('narrows to the included structures: primary-only selection uses its own totals', () => {

@@ -5,7 +5,11 @@
 // tenant.owner_user_id — the exact trap app/api/roofing/save documents.
 
 import { describe, it, expect } from 'vitest'
-import { saveAirconRecommendation, supabaseUserIdFor } from './save-recommendation'
+import {
+  airconIdempotencyToken,
+  saveAirconRecommendation,
+  supabaseUserIdFor,
+} from './save-recommendation'
 import type { AcPricedRecommendation } from './types'
 
 const recommendation = {
@@ -29,6 +33,23 @@ function stubClient(result: { data: unknown; error: unknown }) {
     },
   }
   return { client: client as never, calls }
+}
+
+function sequenceClient(results: Array<{ data: unknown; error: unknown }>) {
+  const operations: string[] = []
+  const from = () => {
+    const query: Record<string, unknown> = {}
+    for (const op of ['select', 'eq', 'maybeSingle', 'insert', 'single']) {
+      query[op] = () => {
+        operations.push(op)
+        return query
+      }
+    }
+    query.then = (resolve: (result: { data: unknown; error: unknown }) => unknown) =>
+      Promise.resolve(results.shift() ?? { data: null, error: null }).then(resolve)
+    return query
+  }
+  return { client: { from } as never, operations }
 }
 
 describe('supabaseUserIdFor', () => {
@@ -103,5 +124,77 @@ describe('saveAirconRecommendation', () => {
       recommendation,
     })
     expect(saved).toBeNull()
+  })
+
+  it('returns null before I/O when a retry id cannot be bound to a server secret', async () => {
+    const { client, operations } = sequenceClient([])
+    const saved = await saveAirconRecommendation(client, {
+      tenantId: 'tenant-1',
+      createdBy: null,
+      address,
+      recommendation,
+      requestId: 'ac_request_1234',
+    })
+    expect(saved).toBeNull()
+    expect(operations).toEqual([])
+  })
+
+  it('repeated taps/refetch return the same tenant-bound persisted row without inserting', async () => {
+    const token = airconIdempotencyToken({
+      tenantId: 'tenant-1',
+      requestId: 'ac_request_1234',
+      secret: 'test-secret',
+    })
+    expect(token).toBe(
+      airconIdempotencyToken({
+        tenantId: 'tenant-1',
+        requestId: 'ac_request_1234',
+        secret: 'test-secret',
+      }),
+    )
+    expect(token).not.toBe(
+      airconIdempotencyToken({
+        tenantId: 'tenant-2',
+        requestId: 'ac_request_1234',
+        secret: 'test-secret',
+      }),
+    )
+    const { client, operations } = sequenceClient([
+      { data: { id: 'rec-existing', public_token: token }, error: null },
+    ])
+    await expect(
+      saveAirconRecommendation(client, {
+        tenantId: 'tenant-1',
+        createdBy: null,
+        address,
+        recommendation,
+        requestId: 'ac_request_1234',
+        idempotencySecret: 'test-secret',
+      }),
+    ).resolves.toEqual({ id: 'rec-existing', public_token: token })
+    expect(operations).not.toContain('insert')
+  })
+
+  it('resolves the winner when a concurrent retry wins the insert race', async () => {
+    const token = airconIdempotencyToken({
+      tenantId: 'tenant-1',
+      requestId: 'ac_request_1234',
+      secret: 'test-secret',
+    })
+    const { client } = sequenceClient([
+      { data: null, error: null },
+      { data: null, error: { message: 'duplicate' } },
+      { data: { id: 'rec-winner', public_token: token }, error: null },
+    ])
+    await expect(
+      saveAirconRecommendation(client, {
+        tenantId: 'tenant-1',
+        createdBy: null,
+        address,
+        recommendation,
+        requestId: 'ac_request_1234',
+        idempotencySecret: 'test-secret',
+      }),
+    ).resolves.toEqual({ id: 'rec-winner', public_token: token })
   })
 })

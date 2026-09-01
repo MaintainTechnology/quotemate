@@ -102,6 +102,8 @@ const completeRateCard = {
   gst_registered: true,
 }
 const overlayRow = (gstRegistered: boolean) => ({
+  id: 'book-electrical',
+  trade: 'electrical',
   overlays: { aircon_rate_card: { ...completeRateCard, gst_registered: gstRegistered } },
 })
 
@@ -138,7 +140,7 @@ describe('POST /api/aircon/plan', () => {
       tenant: { id: 'tenant-1', trade: 'electrical', owner_user_id: OWNER_UUID },
     } as never)
     h.results.push(
-      { data: overlayRow(true), error: null }, // pricing_book overlay read
+      { data: [overlayRow(true)], error: null }, // tenant pricing-book read
       { data: { id: 'rec-7' }, error: null }, // aircon_recommendations insert
     )
     const res = await POST(planRequest())
@@ -184,7 +186,7 @@ describe('POST /api/aircon/plan', () => {
       identity: { provider: 'clerk', userId: 'user_2abc', email: null },
       tenant: { id: 'tenant-1', trade: 'electrical', owner_user_id: OWNER_UUID },
     } as never)
-    h.results.push({ data: null, error: null })
+    h.results.push({ data: [], error: null })
     const res = await POST(planRequest())
     const json = (await res.json()) as {
       recommendation: Record<string, unknown>
@@ -204,7 +206,7 @@ describe('POST /api/aircon/plan', () => {
       tenant: { id: 'tenant-1', trade: 'electrical', owner_user_id: OWNER_UUID },
     } as never)
     h.results.push(
-      { data: overlayRow(false), error: null },
+      { data: [overlayRow(false)], error: null },
       { data: { id: 'rec-no-gst' }, error: null },
     )
     const res = await POST(planRequest())

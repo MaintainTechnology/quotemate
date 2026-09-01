@@ -16,8 +16,11 @@ export async function POST(req: Request) {
     return Response.json({ error: 'no_customer' }, { status: 400 })
   }
 
+  const body = await req.json().catch(() => null)
+  const returnClient = body?.client === 'mobile' ? 'mobile' : 'web'
+
   try {
-    const url = await createPortalSession(auth.tenant.stripe_customer_id)
+    const url = await createPortalSession(auth.tenant.stripe_customer_id, returnClient)
     return Response.json({ url })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)

@@ -1028,6 +1028,12 @@ export interface ChosenProductInput {
   catalogue_id: string
   name: string
   price_ex_gst: number
+  /** Category is needed for the EV install exception: the charger unit is an
+   *  additive product, not a replacement for the install assembly. */
+  category?: string | null
+  /** Dashboard pins are held for tradie review; customer SMS picks retain the
+   *  existing headline-replacement behaviour. */
+  pinned_by?: string | null
   image_path?: string | null
   /** Operator's own product blurb (render-only context for WP4). */
   description?: string | null
@@ -1037,7 +1043,7 @@ export interface ChosenProductInput {
 }
 export interface ApplyChosenResult {
   draft: any
-  /** Tiers whose headline line was set to the chosen product. */
+  /** Tiers where the chosen product was applied. */
   applied: string[]
 }
 
@@ -1089,6 +1095,8 @@ export function applyChosenProduct(
   if (!Number.isFinite(price) || price < 0 || !chosen.name) return { draft, applied: [] }
   const unitPrice = +price.toFixed(2)
   const applied: string[] = []
+  const additiveEvPin =
+    isTradiePin(chosen) && normaliseCategory(chosen.category) === 'ev_charger'
 
   // Helper: does this line already reference the chosen catalogue product?
   // Same key (catalogue_id OR a "material:<uuid>" source ending in the
@@ -1113,6 +1121,27 @@ export function applyChosenProduct(
     return false
   }
 
+  const stampChosenProductLine = (li: Record<string, unknown>, quantity: number): void => {
+    li.description = chosen.name
+    li.unit = li.unit || 'each'
+    li.quantity = quantity
+    li.unit_price_ex_gst = unitPrice
+    li.total_ex_gst = +(unitPrice * quantity).toFixed(2)
+    // Emit the SAME UUID-anchored source shape the validator's strict path
+    // expects, so a future regression that reintroduces a duplicate would
+    // be caught by D-1 on the first validate pass (defense in depth).
+    li.source = chosen.catalogue_id ? `material:${chosen.catalogue_id}` : 'material'
+    li.catalogue_id = chosen.catalogue_id
+    if (chosen.image_path) li.image_path = chosen.image_path
+    // Render-only product blurb (same guarantee as image_path /
+    // catalogue_id: never read by the validator or any price math).
+    // Fed to the WP4 image prompt so Gemini knows WHAT the product is,
+    // not just its photo.
+    if (chosen.description && String(chosen.description).trim() !== '') {
+      li.product_description = String(chosen.description).trim()
+    }
+  }
+
   for (const tierKey of ['good', 'better', 'best'] as const) {
     const tier = draft[tierKey] as
       | { line_items?: Array<Record<string, any>>; subtotal_ex_gst?: number | string; label?: string }
@@ -1120,6 +1149,40 @@ export function applyChosenProduct(
       | undefined
     if (!tier || !Array.isArray(tier.line_items) || tier.line_items.length === 0) continue
     const items = tier.line_items
+
+    // An EV charger unit is additive to the install assembly. A dashboard
+    // tradie pin therefore gets its own qty-1 material row; replacing the
+    // headline would erase the assembly/sundries that price the installation.
+    // This exception is intentionally gated by BOTH category and pin origin so
+    // customer SMS picks and every other catalogue category keep the existing
+    // headline-replacement contract.
+    if (additiveEvPin) {
+      let idx = items.findIndex(refsChosenProduct)
+      if (idx < 0) {
+        const firstLabour = items.findIndex(
+          (li) => li?.source === 'labour' || li?.source === 'call_out',
+        )
+        idx = firstLabour >= 0 ? firstLabour : items.length
+        items.splice(idx, 0, {})
+      }
+      stampChosenProductLine(items[idx], 1)
+
+      // A retry or model-emitted duplicate still resolves to one SKU row.
+      for (let j = items.length - 1; j >= 0; j--) {
+        if (j === idx) continue
+        if (refsChosenProduct(items[j])) {
+          items.splice(j, 1)
+          if (j < idx) idx--
+        }
+      }
+
+      tier.subtotal_ex_gst = +items
+        .reduce((sum, line) => sum + (Number(line?.total_ex_gst) || 0), 0)
+        .toFixed(2)
+      applied.push(tierKey)
+      continue
+    }
+
     // IDEMPOTENCY (2026-05-29) — if Opus has already emitted the chosen
     // product (typical happy path now that the tool returns the UUID-
     // anchored source), overwrite THAT line in place. Otherwise the
@@ -1136,24 +1199,7 @@ export function applyChosenProduct(
     const li = items[idx]
     const qty = Number(li.quantity)
     const q = Number.isFinite(qty) && qty > 0 ? qty : 1
-    li.description = chosen.name
-    li.unit = li.unit || 'each'
-    li.quantity = q
-    li.unit_price_ex_gst = unitPrice
-    li.total_ex_gst = +(unitPrice * q).toFixed(2)
-    // Emit the SAME UUID-anchored source shape the validator's strict path
-    // expects, so a future regression that reintroduces a duplicate would
-    // be caught by D-1 on the first validate pass (defense in depth).
-    li.source = chosen.catalogue_id ? `material:${chosen.catalogue_id}` : 'material'
-    li.catalogue_id = chosen.catalogue_id
-    if (chosen.image_path) li.image_path = chosen.image_path
-    // Render-only product blurb (same guarantee as image_path /
-    // catalogue_id: never read by the validator or any price math).
-    // Fed to the WP4 image prompt so Gemini knows WHAT the product is,
-    // not just its photo.
-    if (chosen.description && String(chosen.description).trim() !== '') {
-      li.product_description = String(chosen.description).trim()
-    }
+    stampChosenProductLine(li, q)
 
     // Keep the tier label consistent with the headline line we just
     // rewrote. Opus generated the label around the DEFAULT tier product;

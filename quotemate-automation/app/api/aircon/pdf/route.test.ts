@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   after: vi.fn(),
   buildAirconReportHtml: vi.fn(() => '<html>server recommendation</html>'),
   from: vi.fn(),
+  loadTenantAcPricingContext: vi.fn(),
   renderPdfFromHtml: vi.fn(async () => Buffer.from('pdf')),
   resolveTenantRequest: vi.fn(),
 }))
@@ -16,14 +17,29 @@ vi.mock('@/lib/pdf/gotenberg', () => ({
   renderPdfFromHtml: mocks.renderPdfFromHtml,
 }))
 vi.mock('@/lib/aircon/report-html', () => ({ buildAirconReportHtml: mocks.buildAirconReportHtml }))
+vi.mock('@/lib/aircon/pricing-context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/aircon/pricing-context')>()
+  return {
+    ...actual,
+    loadTenantAcPricingContext: mocks.loadTenantAcPricingContext,
+  }
+})
 vi.mock('@/lib/pdf/branding', () => ({ loadTenantBranding: vi.fn(async () => ({ businessName: 'Tenant Air' })) }))
 vi.mock('@/lib/quote/pdf', () => ({ storeQuoteAsset: vi.fn() }))
 vi.mock('@/lib/filestore/ingest-quote', () => ({ archiveAndIngestQuote: vi.fn() }))
 
 import { POST } from './route'
 
+const AUTHORITY = {
+  source: 'tenant_pricing_book' as const,
+  tenant_id: 'tenant-1',
+  pricing_book_id: 'book-1',
+  revision: 'a'.repeat(64),
+}
+
 const storedRecommendation = {
   pricing_status: 'priced',
+  pricing_authority: AUTHORITY,
   sizing: {
     rooms: [], conditioned_zones: 3, total_floor_area_m2: 120,
     floor_area_source: 'entered', total_volume_m3: 288, ceiling_height_m: 2.4,
@@ -64,7 +80,11 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.resolveTenantRequest.mockResolvedValue({
     identity: { provider: 'clerk', userId: 'user-1' },
-    tenant: { id: 'tenant-1', business_name: 'Tenant Air' },
+    tenant: { id: 'tenant-1', business_name: 'Tenant Air', trade: 'aircon' },
+  })
+  mocks.loadTenantAcPricingContext.mockResolvedValue({
+    rateCard: {},
+    authority: AUTHORITY,
   })
   installRecommendationRow(null)
 })
@@ -113,6 +133,27 @@ describe('aircon PDF pricing authority', () => {
 
     expect(response.status).toBe(404)
     expect(await response.json()).toMatchObject({ ok: false, error: 'recommendation_not_found' })
+    expect(mocks.renderPdfFromHtml).not.toHaveBeenCalled()
+  })
+
+  it('blocks refetch/reopen after the tenant pricing revision changes or disappears', async () => {
+    installRecommendationRow({
+      id: 'rec-1', tenant_id: 'tenant-1', address: '1 Server St',
+      postcode: '4000', state: 'QLD', recommendation: storedRecommendation,
+    })
+    mocks.loadTenantAcPricingContext.mockResolvedValueOnce({
+      rateCard: {},
+      authority: { ...AUTHORITY, revision: 'b'.repeat(64) },
+    })
+    const stale = await POST(request({ recommendationId: 'rec-1' }))
+    expect(stale.status).toBe(409)
+    expect(await stale.json()).toEqual({ ok: false, error: 'pricing_stale' })
+    expect(mocks.renderPdfFromHtml).not.toHaveBeenCalled()
+
+    mocks.loadTenantAcPricingContext.mockResolvedValueOnce(null)
+    const missing = await POST(request({ recommendationId: 'rec-1' }))
+    expect(missing.status).toBe(409)
+    expect(await missing.json()).toEqual({ ok: false, error: 'pricing_stale' })
     expect(mocks.renderPdfFromHtml).not.toHaveBeenCalled()
   })
 

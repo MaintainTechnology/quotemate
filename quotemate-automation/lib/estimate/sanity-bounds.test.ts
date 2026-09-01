@@ -9,6 +9,7 @@ import { resolveMinLabourHours } from './min-labour'
 
 const BOUNDS: JobTypeBound[] = [
   { trade: 'electrical', job_type: 'downlights', max_labour_hours: 11, min_total_ex_gst: 300, max_total_ex_gst: 4000, per_unit_labour_hours: 1.0 },
+  { trade: 'electrical', job_type: 'ev_charger', max_labour_hours: 10, min_total_ex_gst: 400, max_total_ex_gst: 6000, per_unit_labour_hours: null },
   { trade: 'plumbing', job_type: 'hot_water', max_labour_hours: 6, min_total_ex_gst: 800, max_total_ex_gst: 6000, per_unit_labour_hours: null },
 ]
 
@@ -117,6 +118,32 @@ describe('checkSanityBounds (R9)', () => {
       boundForJob(BOUNDS, 'electrical', 'downlights'),
     )
     expect(v.ok).toBe(true)
+  })
+
+  it('passes a realistic EV charger install inside the provisional band', () => {
+    const result = checkSanityBounds(
+      {
+        jobType: 'ev_charger',
+        trade: 'electrical',
+        totalLabourHours: 3,
+        totalExGst: 1400,
+      },
+      boundForJob(BOUNDS, 'electrical', 'ev_charger'),
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it.each([
+    { totalLabourHours: 10.01, totalExGst: 1400, failure: /labour .* > max 10h/ },
+    { totalLabourHours: 3, totalExGst: 399.99, failure: /< min/ },
+    { totalLabourHours: 3, totalExGst: 6000.01, failure: /> max/ },
+  ])('rejects an EV quote outside the provisional band', (input) => {
+    const result = checkSanityBounds(
+      { jobType: 'ev_charger', trade: 'electrical', ...input },
+      boundForJob(BOUNDS, 'electrical', 'ev_charger'),
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.failures.join(' ')).toMatch(input.failure)
   })
 
   it('FAILS the canonical 6-downlight 17.5h defect (the audit case)', () => {

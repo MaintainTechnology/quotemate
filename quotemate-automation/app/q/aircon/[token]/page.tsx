@@ -13,7 +13,12 @@
 // unchanged — this is presentation only.
 
 import { createClient } from '@supabase/supabase-js'
-import type { AcPricedRecommendation, AcOption } from '@/lib/aircon/types'
+import type { AcOption } from '@/lib/aircon/types'
+import { parseStoredPricedRecommendation } from '@/lib/aircon/recommendation-schema'
+import {
+  acPricingAuthorityMatches,
+  loadTenantAcPricingContext,
+} from '@/lib/aircon/pricing-context'
 import { airconPriceBasis } from '@/lib/aircon/gst-copy'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome } from '../../_chrome/QuoteChrome'
@@ -44,28 +49,36 @@ export default async function AirconQuotePage(props: { params: Promise<{ token: 
 
   const { data: row, error } = await supabase
     .from('aircon_recommendations')
-    .select('address, postcode, state, recommendation, created_at, tenant_id, tenants:tenant_id(business_name)')
+    .select('address, postcode, state, recommendation, created_at, tenant_id, tenants:tenant_id(business_name, trade)')
     .eq('public_token', token)
     .maybeSingle()
 
   if (error || !row || !row.recommendation) return <NotFound />
+
+  const tenantId = (row as { tenant_id?: string | null }).tenant_id ?? null
+  const rec = parseStoredPricedRecommendation(row.recommendation)
+  const tenantJoin = row.tenants as { business_name?: string; trade?: string | null } | null
+  const currentPricing = tenantId
+    ? await loadTenantAcPricingContext(supabase, tenantId, tenantJoin?.trade ?? null)
+    : null
+  if (!rec || !tenantId || !acPricingAuthorityMatches(rec.pricing_authority, currentPricing, tenantId)) {
+    return <PricingUnavailable />
+  }
 
   // Tradie identity for the letterhead (logo + Contact / Phone / Email),
   // matching the reference quote surface. Best-effort: degrades to the joined
   // business_name when identity columns are absent or tenant_id is null.
   const identity = await loadTenantIdentity(
     supabase,
-    (row as { tenant_id?: string | null }).tenant_id ?? null,
+    tenantId,
   )
 
-  // Only priced recommendations can be persisted by the API.
-  const rec = row.recommendation as AcPricedRecommendation
   const sizing = rec.sizing
   const options = Array.isArray(rec.options) ? rec.options : []
   const gstRegistered = options[0]?.pricing.gst_registered === true
   const business =
     identity?.business_name ??
-    (row.tenants as { business_name?: string } | null)?.business_name ??
+    tenantJoin?.business_name ??
     'Your installer'
   const date = new Date(row.created_at as string).toLocaleDateString('en-AU', {
     day: 'numeric',
@@ -197,6 +210,26 @@ function NotFound() {
           </h1>
           <p style={{ margin: '16px 0 0', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
             This link is invalid or has expired. Get in touch if you need it re-sent.
+          </p>
+        </section>
+      </QuoteSheet>
+    </QuoteChrome>
+  )
+}
+
+function PricingUnavailable() {
+  return (
+    <QuoteChrome trade={{ label: 'Air-con', icon: tradeIcon('aircon') }}>
+      <QuoteSheet label="Air-con recommendation">
+        <section style={{ padding: '40px 24px', borderBottom: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--warning-bright)' }}>
+            Pricing refresh required
+          </div>
+          <h1 style={{ margin: '14px 0 0', fontFamily: 'var(--font-sans)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.02em', fontSize: 28, lineHeight: 1.02, color: 'var(--text-pri)' }}>
+            This recommendation needs updated rates
+          </h1>
+          <p style={{ margin: '16px 0 0', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+            The installer&apos;s pricing setup has changed or is incomplete. Ask them to refresh the recommendation before relying on a price.
           </p>
         </section>
       </QuoteSheet>

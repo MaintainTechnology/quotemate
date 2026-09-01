@@ -30,7 +30,10 @@ export const AcInputsSchema = z
     path: ['living_spaces'],
   })
 
+export const AcRequestIdSchema = z.string().min(8).max(120).regex(/^[A-Za-z0-9_-]+$/)
+
 export const RecommendRequestSchema = z.object({
+  request_id: AcRequestIdSchema.optional(),
   address: AcAddressSchema,
   inputs: AcInputsSchema,
 })

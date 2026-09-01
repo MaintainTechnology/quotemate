@@ -20,15 +20,6 @@ import type {
   AcUnpricedRecommendation,
 } from './types'
 
-export const DEFAULT_AC_RATE_CARD: AcRateCard = {
-  split: {
-    per_head: { '2.5': 1100, '3.5': 1400, '5': 1900, '7': 2600, '8': 3000 },
-    multi_head_discount_pct: 0.08,
-  },
-  ducted: { rate_per_kw: 1100, base_ex_gst: 4000, per_zone: 350, min_ex_gst: 8000 },
-  gst_registered: true,
-}
-
 /** PURE — round a dollar figure to the nearest $100 (indicative). */
 function roundMoney(n: number): number {
   if (!Number.isFinite(n) || n <= 0) return 0
@@ -270,10 +261,18 @@ function decideRouting(
 export function recommendAircon(args: {
   sizing: AcSizing
   inputs: AcPropertyInputs
-  rateCard?: AcRateCard
-}): AcPricedRecommendation {
-  const rateCard = args.rateCard ?? DEFAULT_AC_RATE_CARD
+  rateCard: AcRateCard
+}): Omit<AcPricedRecommendation, 'pricing_authority'> {
+  const rateCard = args.rateCard
   const { sizing, inputs } = args
+  if (
+    !Number.isFinite(sizing.connected_kw) ||
+    sizing.connected_kw <= 0 ||
+    !Number.isInteger(sizing.conditioned_zones) ||
+    sizing.conditioned_zones <= 0
+  ) {
+    throw new Error('Air-conditioning pricing requires at least one positive conditioned load.')
+  }
   const band = CONFIDENCE_BAND[sizing.confidence]
 
   const ducted = buildDuctedOption(sizing, rateCard, band)
@@ -371,24 +370,5 @@ export function parseTenantAcRateCard(value: unknown): AcRateCard | null {
       min_ex_gst: ducted.min_ex_gst,
     },
     gst_registered: candidate.gst_registered,
-  }
-}
-
-/** PURE — shallow-merge a pricing_book overlay onto the default card. */
-export function mergeAcRateCard(overlay: unknown): AcRateCard {
-  const base = DEFAULT_AC_RATE_CARD
-  if (!overlay || typeof overlay !== 'object') return base
-  const o = overlay as Partial<AcRateCard>
-  return {
-    split: {
-      per_head: { ...base.split.per_head, ...(o.split?.per_head ?? {}) },
-      multi_head_discount_pct:
-        typeof o.split?.multi_head_discount_pct === 'number'
-          ? o.split.multi_head_discount_pct
-          : base.split.multi_head_discount_pct,
-    },
-    ducted: { ...base.ducted, ...(o.ducted ?? {}) },
-    gst_registered:
-      typeof o.gst_registered === 'boolean' ? o.gst_registered : base.gst_registered,
   }
 }

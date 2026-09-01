@@ -15,7 +15,10 @@ import { getAuthToken } from '@/lib/auth/client-token'
 import { AddressAutocomplete } from '@/app/dashboard/roofing/_components/AddressAutocomplete'
 import { IntakeSchema, deriveTradeFromJobType } from '@/lib/intake/schema'
 import { formatJobType } from '@/lib/historical-quotes/job-types'
-import { fieldsForJobType } from '@/lib/quote/job-fields'
+import {
+  allowsPinnedCatalogueProduct,
+  fieldsForJobType,
+} from '@/lib/quote/job-fields'
 
 const INPUT =
   'w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none'
@@ -125,6 +128,27 @@ function priceLabel(v: number | string | null): string | null {
   return n != null && Number.isFinite(n) ? `$${Math.round(n)}` : null
 }
 
+/**
+ * Clear a stale EV unit whenever supply changes away from the exact tradie-
+ * supplied contract. Exported so the state transition is unit-testable without
+ * rendering the authenticated form.
+ */
+export function productNameAfterAnswerChange(
+  jobType: string,
+  fieldCode: string,
+  nextValue: string,
+  currentProductName: string,
+): string {
+  if (
+    jobType === 'ev_charger' &&
+    fieldCode === 'charger_supply' &&
+    !allowsPinnedCatalogueProduct(jobType, { charger_supply: nextValue })
+  ) {
+    return ''
+  }
+  return currentProductName
+}
+
 export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbing' }) {
   const router = useRouter()
 
@@ -164,6 +188,15 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
     setProductName('')
   }
 
+  function updateAnswer(fieldCode: string, nextValue: string) {
+    setAnswers((current) => ({ ...current, [fieldCode]: nextValue }))
+    if (jobType === 'ev_charger' && fieldCode === 'charger_supply') {
+      setProductName((current) =>
+        productNameAfterAnswerChange(jobType, fieldCode, nextValue, current),
+      )
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -191,8 +224,9 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   // must not be offerable. Shown from ONE match, not two: the SMS picker offers
   // a single product as a "we use X" confirmation, and gating at two hid the
   // picker entirely for every tenant holding one product per category.
+  const productSelectionAllowed = allowsPinnedCatalogueProduct(jobType, answers)
   const products = useMemo(() => {
-    if (!spec.catalogueCategory) return []
+    if (!productSelectionAllowed || !spec.catalogueCategory) return []
     return catalogue
       .filter((c) => c.category === spec.catalogueCategory && c.active !== false)
       .sort((a, b) => {
@@ -201,7 +235,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
         return (Number.isFinite(pa as number) ? (pa as number) : Infinity) -
           (Number.isFinite(pb as number) ? (pb as number) : Infinity)
       })
-  }, [catalogue, spec.catalogueCategory])
+  }, [catalogue, productSelectionAllowed, spec.catalogueCategory])
 
   const chosenProduct = useMemo(
     () => products.find((p) => p.name === productName) ?? null,
@@ -262,10 +296,10 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
           customer_name: customerName.trim(),
           customer_mobile: customerMobile.trim(),
           customer_email: customerEmail.trim(),
-          ...(productName ? { product_name: productName } : {}),
+          ...(productSelectionAllowed && productName ? { product_name: productName } : {}),
           // The id is what makes the pin binding: the server re-reads the row
           // and forces its price. The name alone is only a prompt hint.
-          ...(chosenProduct ? { product_id: chosenProduct.id } : {}),
+          ...(productSelectionAllowed && chosenProduct ? { product_id: chosenProduct.id } : {}),
         }),
       })
       // .catch(() => ({})) because a platform timeout or gateway error returns
@@ -357,7 +391,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                   <select
                     id={`f-${f.code}`}
                     value={answers[f.code] ?? ''}
-                    onChange={(e) => setAnswers((a) => ({ ...a, [f.code]: e.target.value }))}
+                    onChange={(e) => updateAnswer(f.code, e.target.value)}
                     className={`${INPUT} mt-2`}
                   >
                     <option value="">Not specified</option>
@@ -373,14 +407,14 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                     type={f.type === 'number' ? 'number' : 'text'}
                     min={f.type === 'number' ? 1 : undefined}
                     value={answers[f.code] ?? ''}
-                    onChange={(e) => setAnswers((a) => ({ ...a, [f.code]: e.target.value }))}
+                    onChange={(e) => updateAnswer(f.code, e.target.value)}
                     className={`${INPUT} mt-2`}
                   />
                 )}
               </div>
             ))}
 
-            {products.length >= 1 && (
+            {productSelectionAllowed && products.length >= 1 && (
               <div>
                 <label htmlFor="product" className={LABEL}>
                   Product from your catalogue (optional)

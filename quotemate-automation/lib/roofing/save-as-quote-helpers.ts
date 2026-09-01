@@ -1,9 +1,8 @@
 // Pure helpers used by app/api/roofing/save-as-quote — extracted so
 // vitest can test them without dragging in Supabase / Next runtime.
 
-import type { MultiRoofQuote } from './types'
+import type { MultiRoofQuote, RoofingPriceTier } from './types'
 import { applySolarToTiers, narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
-import type { SaveAsQuoteRequest } from './save-as-quote-schema'
 
 /** PURE — split "27 Smith Street, Penrith" → { street, suburb }. */
 export function splitAddress(full: string): { street: string; suburb: string } {
@@ -97,6 +96,13 @@ type StoredMeasurementRow = {
   included_indices: number[] | null
 }
 
+export type TrustedRoofPromotionSnapshot = {
+  address: { address: string; postcode: string; state: string }
+  inputs: MultiRoofQuote['structures'][number]['inputs']
+  metrics: MultiRoofQuote['structures'][number]['metrics']
+  price: MultiRoofQuote['structures'][number]['price']
+}
+
 /** PURE (spec tradie-onsite-quote-editing R6b) — flatten a stored
  *  roofing_measurements row into the exact body POST /api/roofing/save-as-quote
  *  accepts, so /m can promote a saved measurement to an editable quotes row
@@ -108,7 +114,7 @@ type StoredMeasurementRow = {
  *  valid request (no quote, no structures, unusable address). */
 export function buildSaveAsQuoteRequest(
   row: StoredMeasurementRow,
-): Omit<SaveAsQuoteRequest, 'measure_token'> | null {
+): TrustedRoofPromotionSnapshot | null {
   const quote = row.quote
   if (!quote || !Array.isArray(quote.structures) || quote.structures.length === 0) return null
   const address = (row.address ?? '').trim()
@@ -155,7 +161,11 @@ export function buildSaveAsQuoteRequest(
     price: {
       area_m2: narrowed.combined.area_m2,
       effective_rate_per_m2: primary.price.effective_rate_per_m2,
-      tiers: applySolarToTiers(narrowed.combined.tiers, narrowed.solar),
+      tiers: applySolarToTiers(narrowed.combined.tiers, narrowed.solar) as [
+        RoofingPriceTier,
+        RoofingPriceTier,
+        RoofingPriceTier,
+      ],
       loadings_applied: primary.price.loadings_applied,
       routing: narrowed.routing,
     },

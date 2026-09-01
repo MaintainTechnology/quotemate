@@ -189,11 +189,17 @@ export function isUpdatableStatus(status: string | null | undefined): boolean {
 }
 
 /** Create a Customer Portal session for self-service management. */
-export async function createPortalSession(customerId: string): Promise<string> {
+export async function createPortalSession(
+  customerId: string,
+  returnClient: 'web' | 'mobile' = 'web',
+): Promise<string> {
   const stripe = getStripe()
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
-    return_url: `${APP_URL}/dashboard?tab=billing`,
+    return_url:
+      returnClient === 'mobile'
+        ? `${APP_URL}/app/sections/billing?stripe=return`
+        : `${APP_URL}/dashboard?tab=billing`,
   })
   return session.url
 }

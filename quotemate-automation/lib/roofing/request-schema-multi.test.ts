@@ -44,6 +44,7 @@ describe('MeasureAllRequestSchema', () => {
 })
 
 describe('SaveRoofMeasurementSchema', () => {
+  const run_token = 'signed-roof-run-token-long-enough'
   const structure = {
     buildingId: 'bld-house',
     role: 'primary' as const,
@@ -53,6 +54,7 @@ describe('SaveRoofMeasurementSchema', () => {
 
   it('accepts a valid save with one or more structures', () => {
     const r = SaveRoofMeasurementSchema.safeParse({
+      run_token,
       address: ADDR,
       provider: 'geoscape',
       structures: [structure, { ...structure, buildingId: 'bld-shed', role: 'secondary', label: 'Secondary structure 1' }],
@@ -63,18 +65,22 @@ describe('SaveRoofMeasurementSchema', () => {
 
   it('rejects an empty structures array', () => {
     const r = SaveRoofMeasurementSchema.safeParse({
+      run_token,
       address: ADDR,
       provider: 'geoscape',
       structures: [],
+      quote: { combined: { area_m2: 0 } },
     })
     expect(r.success).toBe(false)
   })
 
   it('allows a null buildingId (manual / sub-polygon structure)', () => {
     const r = SaveRoofMeasurementSchema.safeParse({
+      run_token,
       address: ADDR,
       provider: 'mock',
       structures: [{ ...structure, buildingId: null }],
+      quote: { combined: { area_m2: 120 } },
     })
     expect(r.success).toBe(true)
   })

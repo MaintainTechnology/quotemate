@@ -15,8 +15,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { buildStaticMapUrl } from './google-maps'
 import { polygonCentroid } from './map-utils'
-import { effectiveRateCardFromOverlay } from './rate-card-overlay'
-import { DEFAULT_ROOFING_RATE_CARD } from './pricing'
+import { loadTenantRoofingPricingContext } from './pricing-authority'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 import {
   aggregateSolarDetections,
@@ -46,47 +45,16 @@ export const MAX_SOLAR_STRUCTURES = 4
 
 export type RoofPhoto = { base64: string; mime: string }
 
-/** Read the tenant's roofing rate card (for the allowance config + GST),
- *  falling back to defaults. Best-effort — any miss returns the defaults.
- *
- *  The card is per-tenant and trade-agnostic: the writer
- *  (/api/tenant/roofing-rates PATCH) targets the primary-trade row but
- *  falls back to ANY pricing_book row when the primary trade has none —
- *  "it doesn't matter which row holds it". So this reader SEARCHES every
- *  row rather than addressing one. The old single-row read had two live
- *  failure modes: primaryTrade=null degenerated to an unordered limit(1)
- *  (the /m reprice priced Atomic off its card-less plumbing row), and a
- *  tenant whose primary trade has no row (Sparky: commercial_painting)
- *  could save rates that were then never read.
- *
- *  primaryTrade is a PREFERENCE for the rare multi-card tenant, not an
- *  address: primary-trade row first, then a 'roofing' row, then the first
- *  carded row by trade name (deterministic, never row-order-dependent). */
+/** Back-compatible strict reader for internal detection callers. Missing,
+ * incomplete or tenant-less configuration returns null; customer money paths
+ * must stop instead of substituting seed prices. */
 export async function loadRoofingRateCard(
   supabase: SupabaseClient,
   tenantId: string | null,
   primaryTrade: string | null,
-): Promise<RoofingRateCard> {
-  if (!tenantId) return DEFAULT_ROOFING_RATE_CARD
-  try {
-    const { data } = await supabase
-      .from('pricing_book')
-      .select('trade, overlays')
-      .eq('tenant_id', tenantId)
-    const rows = (Array.isArray(data) ? data : []) as Array<{
-      trade: string | null
-      overlays: Record<string, unknown> | null
-    }>
-    const carded = rows.filter((r) => r.overlays?.roofing_rate_card != null)
-    if (carded.length === 0) return DEFAULT_ROOFING_RATE_CARD
-    const pick =
-      (primaryTrade ? carded.find((r) => r.trade === primaryTrade) : undefined) ??
-      carded.find((r) => r.trade === 'roofing') ??
-      [...carded].sort((a, b) => String(a.trade).localeCompare(String(b.trade)))[0]
-    return effectiveRateCardFromOverlay(pick.overlays!.roofing_rate_card)
-  } catch {
-    return DEFAULT_ROOFING_RATE_CARD
-  }
+): Promise<RoofingRateCard | null> {
+  if (!tenantId) return null
+  return (await loadTenantRoofingPricingContext(supabase, tenantId, primaryTrade))?.rateCard ?? null
 }
 
 /** Run one structure's centre-aerial through Gemini vision. Best-effort —

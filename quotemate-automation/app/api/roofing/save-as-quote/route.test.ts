@@ -1,196 +1,269 @@
-// Spec tradie-onsite-quote-editing R6c — POST /api/roofing/save-as-quote
-// accepts an optional measure_token so /m can promote a saved measurement to
-// an editable quotes row: the created quote is linked back onto the
-// roofing_measurements row, and a second promotion returns the existing
-// quote instead of inserting a duplicate.
-
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => {
   type Result = { data: unknown; error: unknown }
   type Op = { op: string; args: unknown[] }
   const results: Result[] = []
   const queries: { table: string; ops: Op[] }[] = []
-  const getUser = vi.fn()
+  const loadTenantRoofingPricingContext = vi.fn()
+  const resolveTenantRequest = vi.fn()
 
   function from(table: string) {
     const record = { table, ops: [] as Op[] }
     const builder: Record<string, unknown> = {}
-    for (const op of ['select', 'insert', 'update', 'eq', 'is', 'maybeSingle', 'single', 'limit', 'order']) {
+    for (const op of ['select', 'insert', 'update', 'eq', 'is', 'maybeSingle', 'single']) {
       builder[op] = (...args: unknown[]) => {
         record.ops.push({ op, args })
         return builder
       }
     }
-    builder.then = (resolve: (r: Result) => unknown, reject?: (e: unknown) => unknown) => {
+    builder.then = (
+      resolve: (result: Result) => unknown,
+      reject?: (error: unknown) => unknown,
+    ) => {
       queries.push(record)
-      const r = results.shift() ?? { data: null, error: null }
-      return Promise.resolve(r).then(resolve, reject)
+      return Promise.resolve(results.shift() ?? { data: null, error: null }).then(resolve, reject)
     }
     return builder
   }
 
-  return { results, queries, getUser, client: { auth: { getUser }, from } }
+  return {
+    client: { from },
+    loadTenantRoofingPricingContext,
+    queries,
+    resolveTenantRequest,
+    results,
+  }
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
+vi.mock('@/lib/tenant/from-request', () => ({ resolveTenantRequest: h.resolveTenantRequest }))
+vi.mock('@/lib/roofing/pricing-authority', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/roofing/pricing-authority')>()
+  return {
+    ...actual,
+    loadTenantRoofingPricingContext: h.loadTenantRoofingPricingContext,
+  }
+})
 vi.mock('@/lib/stripe/checkout', () => ({ generateShareToken: () => 'share-new' }))
+vi.mock('@/lib/quote/scope-short', () => ({
+  roofingScopeShort: () => 'Server scope.',
+  stampScopeShort: vi.fn(async () => undefined),
+}))
 
 import { POST } from './route'
+
+const AUTHORITY = {
+  source: 'tenant_pricing_book' as const,
+  tenant_id: 'tenant-1',
+  pricing_book_id: 'book-1',
+  revision: 'a'.repeat(64),
+}
+
+function tier(tier: 'good' | 'better' | 'best', ex_gst: number) {
+  return {
+    tier,
+    label: tier,
+    ex_gst,
+    inc_gst: ex_gst * 1.1,
+    scope: `${tier} server scope.`,
+  }
+}
+
+function storedQuote(authority = AUTHORITY) {
+  const price = {
+    area_m2: 120,
+    effective_rate_per_m2: 100,
+    tiers: [tier('good', 8_000), tier('better', 12_000), tier('best', 15_000)],
+    loadings_applied: [],
+    routing: { decision: 'tradie_review', reason: 'Review the measured roof.' },
+  }
+  return {
+    pricing_authority: authority,
+    structures: [{
+      buildingId: 'roof-1',
+      role: 'primary',
+      label: 'Main dwelling',
+      metrics: {
+        footprint_m2: 100,
+        sloped_area_m2: 120,
+        storeys: 1,
+        form: 'gable',
+        hips: 0,
+        valleys: 0,
+        ridge_lm: 10,
+        polygon_geojson: null,
+        capture_date: null,
+      },
+      inputs: {
+        material: 'colorbond_corrugated',
+        pitch: 'standard',
+        intent: 'full_reroof',
+        building_year_built: null,
+      },
+      price,
+    }],
+    combined: { area_m2: 120, tiers: price.tiers },
+    routing: price.routing,
+    inspection_structures: [],
+  }
+}
+
+function measurement(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'measurement-1',
+    quote_id: null,
+    quote_share_token: null,
+    address: '1 Test Street, Brisbane',
+    postcode: '4000',
+    state: 'QLD',
+    quote: storedQuote(),
+    included_indices: [1],
+    customer_name: 'Customer',
+    customer_phone: '0400000000',
+    ...overrides,
+  }
+}
+
+function request(body: unknown = {
+  measure_token: 'measure-token-1',
+  expected_pricing_revision: AUTHORITY.revision,
+}) {
+  return new Request('http://localhost/api/roofing/save-as-quote', {
+    method: 'POST',
+    headers: { authorization: 'Bearer token', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
 
 beforeEach(() => {
   h.results.length = 0
   h.queries.length = 0
-  h.getUser.mockReset()
-  h.getUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+  h.resolveTenantRequest.mockReset()
+  h.loadTenantRoofingPricingContext.mockReset()
+  h.resolveTenantRequest.mockResolvedValue({
+    identity: { provider: 'clerk', userId: 'user-1' },
+    tenant: { id: 'tenant-1', business_name: 'Roof Co', trade: 'roofing' },
+  })
+  h.loadTenantRoofingPricingContext.mockResolvedValue({
+    rateCard: {},
+    authority: AUTHORITY,
+  })
 })
 
-function tier(t: 'good' | 'better' | 'best', ex: number) {
-  return { tier: t, label: `${t} label`, ex_gst: ex, inc_gst: ex * 1.1, scope: `${t} scope.` }
-}
-
-function body(measureToken?: string) {
-  return {
-    ...(measureToken ? { measure_token: measureToken } : {}),
-    address: { address: '27 Smith Street, Penrith', postcode: '2750', state: 'NSW' },
-    inputs: { material: 'colorbond', pitch: '22-30', intent: 'full_reroof', building_year_built: null },
-    metrics: {
-      footprint_m2: 180,
-      sloped_area_m2: 200,
-      storeys: 1,
-      form: 'hip',
-      hips: 2,
-      valleys: 1,
-    },
-    price: {
-      area_m2: 200,
-      effective_rate_per_m2: 95,
-      tiers: [tier('good', 4000), tier('better', 20000), tier('best', 24000)],
-      loadings_applied: [],
-      routing: { decision: 'tradie_review', reason: 'ok' },
-    },
-  }
-}
-
-function post(payload: unknown) {
-  return POST(
-    new Request('http://localhost/api/roofing/save-as-quote', {
-      method: 'POST',
-      headers: { authorization: 'Bearer token-1', 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
-  )
-}
-
-describe('POST /api/roofing/save-as-quote with measure_token', () => {
-  it('claims the measurement atomically, then links the created quote back', async () => {
-    h.results.push(
-      { data: { id: 'tenant-1', business_name: 'Biz' }, error: null }, // tenants
-      { data: { id: 'm1', quote_id: null, quote_share_token: null }, error: null }, // measurement lookup
-      { data: [{ id: 'm1' }], error: null }, // atomic claim update wins
-      { data: { id: 'intake-1' }, error: null }, // intake insert
-      { data: { id: 'quote-1', share_token: 'share-new' }, error: null }, // quote insert
-      { data: null, error: null }, // quote_id link update
-    )
-    const res = await post(body('tok-m'))
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ ok: true, shareToken: 'share-new' })
-
-    // Mig 175 (five-sections R2) — the recommended tier's scope line is
-    // persisted as quotes.scope_short. selected_tier resolves to 'better'
-    // (better.ex_gst > 0), so the Better tierScopeLine is the sentence.
-    const scopeStamp = h.queries.find(
-      (q) => q.table === 'quotes' && q.ops.some((o) => o.op === 'update'),
-    )
-    expect(scopeStamp, 'expected the quotes.scope_short stamp').toBeTruthy()
-    expect(scopeStamp!.ops.find((o) => o.op === 'update')!.args[0]).toEqual({
-      scope_short: 'better scope.',
-    })
-    expect(scopeStamp!.ops).toContainEqual({ op: 'eq', args: ['id', 'quote-1'] })
-
-    const updates = h.queries.filter(
-      (q) => q.table === 'roofing_measurements' && q.ops.some((o) => o.op === 'update'),
-    )
-    expect(updates, 'expected claim + link-back updates').toHaveLength(2)
-
-    // The claim flips the NULL token conditionally — only one racer can win.
-    const [claim, link] = updates
-    expect(claim.ops.find((o) => o.op === 'update')!.args[0]).toMatchObject({
-      quote_share_token: 'share-new',
-    })
-    expect(claim.ops).toContainEqual({ op: 'is', args: ['quote_share_token', null] })
-    expect(claim.ops).toContainEqual({ op: 'eq', args: ['measure_token', 'tok-m'] })
-    expect(claim.ops).toContainEqual({ op: 'eq', args: ['tenant_id', 'tenant-1'] })
-
-    expect(link.ops.find((o) => o.op === 'update')!.args[0]).toMatchObject({
-      quote_id: 'quote-1',
-    })
-    expect(link.ops).toContainEqual({ op: 'eq', args: ['quote_share_token', 'share-new'] })
+describe('POST /api/roofing/save-as-quote pricing authority', () => {
+  it('rejects caller-authored price, GST, routing or provenance fields', async () => {
+    const response = await POST(request({
+      measure_token: 'measure-token-1',
+      expected_pricing_revision: AUTHORITY.revision,
+      price: { tiers: [tier('better', 1)] },
+      gst: 0,
+      routing: { decision: 'auto_quote' },
+      pricing_authority: AUTHORITY,
+    }))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ ok: false, error: 'invalid_request' })
+    expect(h.queries).toEqual([])
   })
 
-  // Spec quote-sync-and-roofing-workflow-fix F2 — two concurrent promotions
-  // of the same measurement: the loser's conditional claim matches 0 rows, so
-  // it returns the winner's quote and writes nothing. Whatever the
-  // interleaving, exactly one quote exists afterwards.
-  it('a promotion that loses the claim race returns the winner without inserting', async () => {
-    h.results.push(
-      { data: { id: 'tenant-1', business_name: 'Biz' }, error: null }, // tenants
-      { data: { id: 'm1', quote_id: null, quote_share_token: null }, error: null }, // read: not yet promoted
-      { data: [], error: null }, // claim matched 0 rows — another promotion won
-      { data: { quote_id: 'quote-0', quote_share_token: 'share-old' }, error: null }, // re-read winner
-    )
-    const res = await post(body('tok-m'))
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ ok: true, existing: true, shareToken: 'share-old' })
-
-    const inserted = h.queries.filter((q) => q.table === 'intakes' || q.table === 'quotes')
-    expect(inserted, 'the losing promotion must not insert').toHaveLength(0)
+  it('fails closed when pricing setup is missing', async () => {
+    h.loadTenantRoofingPricingContext.mockResolvedValue(null)
+    const response = await POST(request())
+    expect(response.status).toBe(422)
+    expect(await response.json()).toEqual({ ok: false, error: 'tenant_pricing_required' })
+    expect(h.queries).toEqual([])
   })
 
-  it('rolls the claim back when the insert fails, so a retry can promote', async () => {
-    h.results.push(
-      { data: { id: 'tenant-1', business_name: 'Biz' }, error: null }, // tenants
-      { data: { id: 'm1', quote_id: null, quote_share_token: null }, error: null }, // measurement lookup
-      { data: [{ id: 'm1' }], error: null }, // claim wins
-      { data: null, error: { message: 'boom' } }, // intake insert fails
-      { data: null, error: null }, // claim rollback update
-    )
-    const res = await post(body('tok-m'))
-    expect(res.status).toBe(500)
+  it.each([
+    ['stale expected revision', measurement(), 'b'.repeat(64)],
+    [
+      'wrong tenant authority',
+      measurement({ quote: storedQuote({ ...AUTHORITY, tenant_id: 'tenant-2' }) }),
+      AUTHORITY.revision,
+    ],
+    [
+      'wrong pricing-book authority',
+      measurement({ quote: storedQuote({ ...AUTHORITY, pricing_book_id: 'book-2' }) }),
+      AUTHORITY.revision,
+    ],
+  ])('blocks %s before any promotion write', async (_label, row, expectedRevision) => {
+    h.results.push({ data: row, error: null })
+    const response = await POST(request({
+      measure_token: 'measure-token-1',
+      expected_pricing_revision: expectedRevision,
+    }))
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ ok: false, error: 'pricing_stale' })
+    expect(h.queries.some((query) => query.ops.some((op) => op.op === 'insert'))).toBe(false)
+  })
 
-    const updates = h.queries.filter(
-      (q) => q.table === 'roofing_measurements' && q.ops.some((o) => o.op === 'update'),
-    )
-    const rollback = updates[updates.length - 1]
-    expect(rollback.ops.find((o) => o.op === 'update')!.args[0]).toMatchObject({
-      quote_share_token: null,
+  it.each([
+    ['zero price', () => {
+      const quote = storedQuote()
+      quote.structures[0]!.price.tiers[1]!.ex_gst = 0
+      return measurement({ quote })
+    }],
+    ['non-finite price', () => {
+      const quote = storedQuote()
+      quote.structures[0]!.price.tiers[1]!.inc_gst = Number.NaN
+      return measurement({ quote })
+    }],
+    ['inspection route', () => {
+      const quote = storedQuote()
+      quote.structures[0]!.price.routing.decision = 'inspection_required'
+      return measurement({ quote })
+    }],
+  ])('does not promote an authoritative snapshot with %s', async (_label, makeRow) => {
+    h.results.push({ data: makeRow(), error: null })
+    const response = await POST(request())
+    expect(response.status).toBe(422)
+    expect(h.queries.some((query) => query.ops.some((op) => op.op === 'insert'))).toBe(false)
+  })
+
+  it('reopen/repeated taps return the existing tenant-scoped promotion', async () => {
+    h.results.push({
+      data: measurement({ quote_id: 'quote-existing', quote_share_token: 'share-existing' }),
+      error: null,
     })
-    // Scoped to OUR token — never clobbers a claim another promotion stamped.
-    expect(rollback.ops).toContainEqual({ op: 'eq', args: ['quote_share_token', 'share-new'] })
+    const response = await POST(request())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      existing: true,
+      quoteId: 'quote-existing',
+      shareToken: 'share-existing',
+    })
+    expect(h.queries.some((query) => query.ops.some((op) => op.op === 'insert'))).toBe(false)
+    expect(h.queries[0]!.ops).toContainEqual({ op: 'eq', args: ['tenant_id', 'tenant-1'] })
   })
 
-  it('returns the existing quote on a second promotion instead of duplicating', async () => {
+  it('reconstructs and promotes the persisted server snapshot only', async () => {
     h.results.push(
-      { data: { id: 'tenant-1', business_name: 'Biz' }, error: null }, // tenants
-      { data: { id: 'm1', quote_id: 'quote-0', quote_share_token: 'share-old' }, error: null },
+      { data: measurement(), error: null },
+      { data: [{ id: 'measurement-1' }], error: null },
+      { data: { id: 'intake-1' }, error: null },
+      { data: { id: 'quote-1', share_token: 'share-new' }, error: null },
+      { data: null, error: null },
     )
-    const res = await post(body('tok-m'))
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ ok: true, existing: true, shareToken: 'share-old' })
+    const response = await POST(request())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, quoteId: 'quote-1' })
 
-    const inserted = h.queries.filter((q) => q.table === 'intakes' || q.table === 'quotes')
-    expect(inserted, 'no intakes/quotes writes on an existing promotion').toHaveLength(0)
-  })
-
-  it('still works without a measure_token (legacy measure-page flow)', async () => {
-    h.results.push(
-      { data: { id: 'tenant-1', business_name: 'Biz' }, error: null }, // tenants
-      { data: { id: 'intake-1' }, error: null }, // intake insert
-      { data: { id: 'quote-1', share_token: 'share-new' }, error: null }, // quote insert
+    const intakeInsert = h.queries.find(
+      (query) => query.table === 'intakes' && query.ops.some((op) => op.op === 'insert'),
     )
-    const res = await post(body())
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ ok: true, shareToken: 'share-new' })
-    expect(h.queries.some((q) => q.table === 'roofing_measurements')).toBe(false)
+    const intake = intakeInsert?.ops.find((op) => op.op === 'insert')?.args[0] as {
+      tenant_id: string
+      scope: { pricing_authority: unknown }
+    }
+    expect(intake.tenant_id).toBe('tenant-1')
+    expect(intake.scope.pricing_authority).toEqual(AUTHORITY)
+    const quoteInsert = h.queries.find(
+      (query) => query.table === 'quotes' && query.ops.some((op) => op.op === 'insert'),
+    )
+    const quote = quoteInsert?.ops.find((op) => op.op === 'insert')?.args[0] as {
+      total_inc_gst: number
+    }
+    expect(quote.total_inc_gst).toBe(13_200)
   })
 })

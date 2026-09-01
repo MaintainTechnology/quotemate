@@ -24,6 +24,11 @@ export type IntentRow = {
   created_at: string
 }
 
+export type IntentInspection =
+  | { status: 'verified'; intent: IntentRow }
+  | { status: 'used' | 'expired' | 'invalid' }
+  | { status: 'unavailable'; error: string }
+
 /** 6-char URL-safe slug (~36 bits, plenty for a 24h-TTL token). */
 export function generateIntentToken(): string {
   // 5 bytes → 8 base64url chars; trim to 6 for shorter SMS link.
@@ -129,6 +134,33 @@ export async function resolveActiveIntent(
 }
 
 /**
+ * Resolve an inbound capability without collapsing every failure into a 404.
+ * The mobile acquisition adapter needs to distinguish an already-consumed link
+ * from an expired one, while database failures must remain retryable rather
+ * than being misreported as a bad token.
+ */
+export async function inspectIntentToken(
+  supabase: SupabaseClient,
+  token: string,
+  now = new Date(),
+): Promise<IntentInspection> {
+  const { data, error } = await supabase
+    .from('tradie_signup_intents')
+    .select('*')
+    .eq('token', token)
+    .maybeSingle()
+
+  if (error) return { status: 'unavailable', error: error.message }
+  if (!data) return { status: 'invalid' }
+
+  const intent = data as IntentRow
+  if (intent.used_at) return { status: 'used' }
+  const expiry = new Date(intent.expires_at).getTime()
+  if (!Number.isFinite(expiry) || expiry <= now.getTime()) return { status: 'expired' }
+  return { status: 'verified', intent }
+}
+
+/**
  * Mark an intent as consumed. Idempotent — already-used intents
  * return ok=false silently so concurrent activate retries don't fail.
  */
@@ -136,18 +168,24 @@ export async function markIntentUsed(
   supabase: SupabaseClient,
   args: { token: string; tenantId: string },
 ): Promise<{ ok: boolean; conversationId: string | null }> {
+  const usedAt = new Date().toISOString()
   const { data, error } = await supabase
     .from('tradie_signup_intents')
     .update({
-      used_at: new Date().toISOString(),
+      used_at: usedAt,
       resulting_tenant_id: args.tenantId,
     })
     .eq('token', args.token)
     .is('used_at', null)
+    .gt('expires_at', usedAt)
     .select('sms_conversation_id')
     .maybeSingle()
 
-  if (error) return { ok: false, conversationId: null }
+  // PostgREST returns { data: null, error: null } when the guarded update
+  // matched no row (already used, expired/deleted, or wrong token). Treat that
+  // as a failed claim; otherwise two concurrent activations could both report
+  // the same one-time intent as consumed.
+  if (error || !data) return { ok: false, conversationId: null }
 
   // Back-link the originating SMS conversation to the new tenant.
   const conversationId = (data?.sms_conversation_id as string | null) ?? null

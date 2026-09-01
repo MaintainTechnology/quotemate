@@ -1,0 +1,6 @@
+{
+  "CLAUDE_MEM_RUNTIME": "worker",
+  "CLAUDE_MEM_PROVIDER": "claude",
+  "CLAUDE_MEM_CLAUDE_AUTH_METHOD": "subscription",
+  "CLAUDE_MEM_MODEL": "claude-opus-4-7"
+}

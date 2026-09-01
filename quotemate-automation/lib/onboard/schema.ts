@@ -47,7 +47,7 @@ const positivePct = z.coerce
 // `.min(1)` on after_hours_multiplier. Applied to every *optional* number
 // field below via `optionalNumber(...)`.
 const emptyToUndef = (val: unknown) =>
-  val === '' || val === null ? undefined : val
+  val === null || (typeof val === 'string' && val.trim() === '') ? undefined : val
 const optionalNumber = (schema: z.ZodTypeAny) =>
   z.preprocess(emptyToUndef, schema.optional())
 
@@ -62,11 +62,12 @@ export const OnboardActivateSchema = z.object({
   // skipped and tenants.owner_mobile stores null (migration 176 dropped the
   // NOT NULL). A non-empty value must still be a valid AU mobile.
   owner_mobile: auMobile.optional().or(z.literal('')),
-  // owner_user_id passed by the wizard after Supabase Auth sign up
+  // Backward-compatible client assertions only. The activate route verifies
+  // them against the bearer and derives the ownership values server-side.
+  // New clients omit both ids.
   owner_user_id: z.string().uuid().optional().or(z.literal('')),
-  // clerk_user_id passed by the wizard after Clerk sign up (a `user_…` string,
-  // NOT a uuid). Stamped onto tenants.clerk_user_id so the dual-auth resolver
-  // links the tenant to its Clerk identity.
+  // Clerk ids are `user_…` strings, not UUIDs. A matching value is tolerated
+  // for already-shipped clients; it is never trusted as the insert owner.
   clerk_user_id: z.string().optional().or(z.literal('')),
 
   // ── Page 2: Trade & licence ────────────────────────────────

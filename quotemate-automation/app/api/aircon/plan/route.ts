@@ -11,11 +11,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { saveAirconRecommendation, supabaseUserIdFor } from '@/lib/aircon/save-recommendation'
-import { AcAddressSchema, AcInputsSchema } from '@/lib/aircon/request-schema'
+import { AcAddressSchema, AcInputsSchema, AcRequestIdSchema } from '@/lib/aircon/request-schema'
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { sizeAircon } from '@/lib/aircon/sizing'
 import { recommendAircon, recommendAirconUnpriced } from '@/lib/aircon/recommend'
-import { loadTenantAcRateCard } from '@/lib/aircon/pricing-context'
+import { loadTenantAcPricingContext } from '@/lib/aircon/pricing-context'
 import { resolveAcLocationEvidence } from '@/lib/aircon/location'
 import { runPlanExtraction, PLAN_MEDIA_TYPES, type PlanMediaType } from '@/lib/aircon/plan-extract'
 import { resolveRoomAreas } from '@/lib/aircon/plan-scale'
@@ -87,9 +87,16 @@ export async function POST(req: Request) {
   }
   const address = addressParsed.data
   const inputs = inputsParsed.data
+  const requestIdRaw = form.get('request_id')
+  const requestIdParsed =
+    typeof requestIdRaw === 'string' && requestIdRaw.length > 0
+      ? AcRequestIdSchema.safeParse(requestIdRaw)
+      : null
+  if (requestIdParsed && !requestIdParsed.success) return bad('invalid_request_id', 400)
+  const requestId = requestIdParsed?.success ? requestIdParsed.data : undefined
 
-  const rateCard = auth.tenantId
-    ? await loadTenantAcRateCard(supabase, auth.tenantId, auth.primaryTrade)
+  const pricing = auth.tenantId
+    ? await loadTenantAcPricingContext(supabase, auth.tenantId, auth.primaryTrade)
     : null
 
   const { zone, note } = climateZoneForPostcode(address.postcode, address.state)
@@ -157,8 +164,11 @@ export async function POST(req: Request) {
     ceiling_height: inputs.ceiling_height,
     storeys: sizing.storeys,
   })
-  const recommendation = rateCard
-    ? recommendAircon({ sizing, inputs, rateCard })
+  const recommendation = pricing
+    ? {
+        ...recommendAircon({ sizing, inputs, rateCard: pricing.rateCard }),
+        pricing_authority: pricing.authority,
+      }
     : recommendAirconUnpriced({ sizing, inputs })
 
   // Persist for the Quotes tab + customer share page (migration 144) — the
@@ -170,12 +180,19 @@ export async function POST(req: Request) {
           createdBy: auth.createdBy,
           address,
           recommendation,
+          requestId,
+          idempotencySecret: process.env.SUPABASE_SERVICE_ROLE_KEY,
         })
       : null
+
+  if (recommendation.pricing_status === 'priced' && !saved) {
+    return bad('pricing_persistence_failed', 503)
+  }
 
   return Response.json(
     {
       ok: true,
+      request_id: requestId ?? null,
       climate_zone: zone,
       climate_note: note,
       location,

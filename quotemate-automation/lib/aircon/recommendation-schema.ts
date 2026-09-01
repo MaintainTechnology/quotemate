@@ -33,6 +33,12 @@ const optionSchema = z.looseObject({
 
 const pricedRecommendationSchema = z.looseObject({
   pricing_status: z.literal('priced'),
+  pricing_authority: z.object({
+    source: z.literal('tenant_pricing_book'),
+    tenant_id: z.string().min(1),
+    pricing_book_id: z.string().min(1),
+    revision: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
   sizing: z.looseObject({
     rooms: z.array(z.unknown()),
     conditioned_zones: finite,

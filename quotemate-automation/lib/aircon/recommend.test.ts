@@ -3,11 +3,18 @@ import { sizeAircon } from './sizing'
 import {
   recommendAircon,
   recommendAirconUnpriced,
-  DEFAULT_AC_RATE_CARD,
-  mergeAcRateCard,
   parseTenantAcRateCard,
 } from './recommend'
-import type { AcPropertyInputs } from './types'
+import type { AcPropertyInputs, AcRateCard } from './types'
+
+const TEST_RATE_CARD: AcRateCard = {
+  split: {
+    per_head: { '2.5': 1100, '3.5': 1400, '5': 1900, '7': 2600, '8': 3000 },
+    multi_head_discount_pct: 0.08,
+  },
+  ducted: { rate_per_kw: 1100, base_ex_gst: 4000, per_zone: 350, min_ex_gst: 8000 },
+  gst_registered: true,
+}
 
 function inputs(overrides: Partial<AcPropertyInputs> = {}): AcPropertyInputs {
   return {
@@ -25,7 +32,7 @@ function inputs(overrides: Partial<AcPropertyInputs> = {}): AcPropertyInputs {
 function recommend(overrides: Partial<AcPropertyInputs> = {}) {
   const i = inputs(overrides)
   const sizing = sizeAircon('temperate', i)
-  return recommendAircon({ sizing, inputs: i })
+  return recommendAircon({ sizing, inputs: i, rateCard: TEST_RATE_CARD })
 }
 
 describe('recommendAircon', () => {
@@ -101,15 +108,12 @@ describe('recommendAircon', () => {
     }
   })
 
-  it('does not invent a ducted price for a home with zero conditioned rooms', () => {
+  it('refuses to price a home with zero conditioned rooms', () => {
     const i = inputs({ bedrooms: 0, living_spaces: 0, floor_area_m2: null })
     const sizing = sizeAircon('temperate', i)
-    const r = recommendAircon({ sizing, inputs: i })
-    const ducted = r.options.find((o) => o.system_type === 'ducted')!
-    const split = r.options.find((o) => o.system_type === 'split')!
-    expect(ducted.price.low).toBe(0)
-    expect(ducted.price.high).toBe(0)
-    expect(split.price.low).toBe(0)
+    expect(() =>
+      recommendAircon({ sizing, inputs: i, rateCard: TEST_RATE_CARD }),
+    ).toThrow(/positive conditioned load/i)
   })
 })
 
@@ -163,16 +167,5 @@ describe('tenant aircon pricing authority', () => {
     expect('options' in result).toBe(false)
     expect(JSON.stringify(result)).not.toMatch(/point_estimate|rate_ex_gst|"price"/)
     expect(result.routing.decision).toBe('book_assessment')
-  })
-})
-
-describe('mergeAcRateCard', () => {
-  it('returns the default when overlay is missing', () => {
-    expect(mergeAcRateCard(null)).toEqual(DEFAULT_AC_RATE_CARD)
-  })
-  it('shallow-merges a ducted override', () => {
-    const merged = mergeAcRateCard({ ducted: { rate_per_kw: 1300 } })
-    expect(merged.ducted.rate_per_kw).toBe(1300)
-    expect(merged.ducted.base_ex_gst).toBe(DEFAULT_AC_RATE_CARD.ducted.base_ex_gst)
   })
 })

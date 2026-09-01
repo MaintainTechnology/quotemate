@@ -2,7 +2,7 @@
 -- QuoteMate · Database initialiser
 -- Paste this entire file into Supabase SQL Editor and click Run.
 --
--- Creates: 7 tables, the match_intakes function, the pgvector extension,
+-- Creates: 8 core tables, the match_intakes function, the pgvector extension,
 --          and seed data for the "easy 5" electrical jobs + AU pricing book.
 --
 -- This is idempotent on the function and seed inserts but NOT on table
@@ -59,6 +59,21 @@ create table if not exists pricing_book (
   -- (per-trade). Resolver: lib/quote/tier-visibility.ts.
   quote_tier_mode text not null default 'single'
     check (quote_tier_mode in ('good_better_best', 'single', 'good', 'better', 'best'))
+);
+
+-- R9 gross-error guard (migration 126; EV row added by migration 192).
+create table if not exists job_type_bounds (
+  id                    uuid primary key default gen_random_uuid(),
+  trade                 text not null check (trade in ('electrical', 'plumbing')),
+  job_type              text not null,
+  max_labour_hours      numeric(6,2),
+  min_total_ex_gst      numeric(10,2),
+  max_total_ex_gst      numeric(10,2),
+  per_unit_labour_hours numeric(6,2),
+  notes                 text,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  unique (trade, job_type)
 );
 
 -- ──────────────────────────────────────────────
@@ -195,6 +210,28 @@ where not exists (select 1 from shared_materials);
 insert into pricing_book (hourly_rate, default_markup_pct, licence_type, licence_state)
 select 110, 28, 'NECA', 'NSW'
 where not exists (select 1 from pricing_book);
+
+-- PROVISIONAL gross-error band only; tenant product prices are never seeded.
+-- Existing or Jon-adjusted rows win via ON CONFLICT DO NOTHING.
+insert into job_type_bounds (
+  trade,
+  job_type,
+  max_labour_hours,
+  min_total_ex_gst,
+  max_total_ex_gst,
+  per_unit_labour_hours,
+  notes
+)
+values (
+  'electrical',
+  'ev_charger',
+  10.0,
+  400.0,
+  6000.0,
+  null,
+  'PROVISIONAL_EV_CHARGER_BOUNDS_V1_2026-09-01 — confirm 10h / $400-$6,000 ex-GST with Jon before relying on this gate.'
+)
+on conflict (trade, job_type) do nothing;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Per-tenant file store (migration 134) — representative snapshot.
@@ -371,6 +408,7 @@ alter table tenants add column if not exists twilio_number_sid text;
 -- drop table if exists quotes cascade;
 -- drop table if exists intakes cascade;
 -- drop table if exists calls cascade;
+-- drop table if exists job_type_bounds cascade;
 -- drop table if exists pricing_book cascade;
 -- drop table if exists shared_materials cascade;
 -- drop table if exists shared_assemblies cascade;

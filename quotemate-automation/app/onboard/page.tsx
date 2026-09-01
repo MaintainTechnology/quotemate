@@ -31,10 +31,11 @@ type FormState = {
   business_name: string
   owner_first_name: string
   owner_email: string
+  /** Backward-compatible identity assertions only. The activate route derives
+   *  ownership from the verified bearer and rejects conflicting values. */
   owner_user_id: string
-  /** Clerk user id (user_…) for Clerk-created signups. The activate route
-   *  stamps it onto tenants.clerk_user_id so the dual-auth resolver finds the
-   *  tenant. Empty for legacy Supabase signups (which use owner_user_id). */
+  /** Clerk user id (user_…) for Clerk-created signups; empty for legacy
+   *  Supabase signups. Never authoritative on the server. */
   clerk_user_id: string
   owner_mobile: string
   /** Multi-select. At least one trade is required. A tradie who holds
@@ -258,7 +259,7 @@ function OnboardWizardInner() {
   // Clerk session id — the fallback for a Clerk signup that reached /onboard
   // without the clerk_user_id URL param (e.g. a returning Clerk user with no
   // tenant yet). Stamped into the form once Clerk hydrates, unless already set.
-  const { userId: clerkSessionUserId } = useAuth()
+  const { userId: clerkSessionUserId, getToken: getClerkToken } = useAuth()
   useEffect(() => {
     if (!clerkSessionUserId) return
     setForm((prev) => (prev.clerk_user_id ? prev : { ...prev, clerk_user_id: clerkSessionUserId }))
@@ -464,9 +465,27 @@ function OnboardWizardInner() {
         intent_token: intentToken || undefined,
         invitation_code: invitationCode.trim(),
       }
+      // Activation is a service-role mutation, so the server derives ownership
+      // from a verified bearer. Prefer Clerk; retain the legacy Supabase token
+      // for users who entered through the older /signup funnel. A missing token
+      // is still sent to the route so it can return the canonical 401 envelope
+      // (and so intercepted browser tests exercise the request shape).
+      let activationToken = await getClerkToken().catch(() => null)
+      if (!activationToken) {
+        try {
+          const { getBrowserSupabase } = await import('@/lib/supabase/client')
+          const { data } = await getBrowserSupabase().auth.getSession()
+          activationToken = data.session?.access_token ?? null
+        } catch {
+          activationToken = null
+        }
+      }
       const res = await fetch('/api/onboard/activate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(activationToken ? { Authorization: `Bearer ${activationToken}` } : {}),
+        },
         body: JSON.stringify(payload),
       })
       const data = await res.json()

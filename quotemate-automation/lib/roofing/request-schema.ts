@@ -83,11 +83,12 @@ export const SaveStructureSchema = z.object({
 
 /** Persist a confirmed multi-structure roofing measurement. */
 export const SaveRoofMeasurementSchema = z.object({
+  run_token: z.string().min(20),
   address: MeasureAddressSchema,
   provider: z.enum(['geoscape', 'lidar', 'mock', 'manual']),
-  structures: z.array(SaveStructureSchema).min(1).max(12),
+  structures: z.array(SaveStructureSchema).min(1).max(12).optional(),
   /** Whole-measurement payload as returned by measure-all, stored verbatim. */
-  quote: z.unknown().optional(),
+  quote: z.unknown(),
   /**
    * The tradie's 1-based structure selection from the dashboard include
    * toggles. Persisted as the authoritative `included_indices` so the saved
@@ -107,6 +108,6 @@ export const SaveRoofMeasurementSchema = z.object({
     .array(z.object({ base64: z.string().min(1), mime: z.string().min(3).max(60) }))
     .max(6)
     .optional(),
-})
+}).strict()
 
 export type SaveRoofMeasurementRequest = z.infer<typeof SaveRoofMeasurementSchema>

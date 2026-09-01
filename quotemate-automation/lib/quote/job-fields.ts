@@ -189,7 +189,29 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
   ev_charger: {
     catalogueCategory: 'ev_charger',
     fields: [
-      { code: 'room', label: 'Where is the charger going?', type: 'text' },
+      {
+        code: 'vehicle',
+        label: 'What car is the charger for?',
+        type: 'select',
+        options: ['Tesla', 'BYD', 'another EV', 'not sure'],
+      },
+      {
+        code: 'charger_supply',
+        label: 'Who supplies the charger unit?',
+        type: 'select',
+        options: ['customer already has the charger', 'we supply the charger', 'not sure'],
+      },
+      {
+        code: 'room',
+        label: 'Where is the charger going (garage, carport, external wall)?',
+        type: 'text',
+      },
+      {
+        code: 'switchboard_distance',
+        label: 'Roughly how far is the switchboard from the charger spot?',
+        type: 'select',
+        options: ['under 5 m', '5–10 m', 'over 10 m', 'not sure'],
+      },
       {
         // NOT `circuit_required`. That code is a RECIPE SLOT
         // (lib/quote/recipe-slots.ts), and the job-quote route filters recipe
@@ -388,4 +410,22 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
  *  rather than rendering nothing. */
 export function fieldsForJobType(jobType: string | null | undefined): JobFormSpec {
   return JOB_FIELDS[(jobType ?? '').trim()] ?? { fields: GENERIC, usuallyInspection: true }
+}
+
+/** Exact portal/API contract for adding a tenant-stocked charger unit. */
+export const EV_CHARGER_TRADIE_SUPPLY_ANSWER = 'we supply the charger'
+
+/**
+ * Non-EV jobs retain the existing optional catalogue picker. EV installs may
+ * carry a unit pin only when the tradie explicitly says their business supplies
+ * it; customer-supplied and uncertain installs remain installation-only.
+ */
+export function allowsPinnedCatalogueProduct(
+  jobType: string | null | undefined,
+  answers: Record<string, string> | null | undefined,
+): boolean {
+  return (
+    jobType !== 'ev_charger' ||
+    answers?.charger_supply === EV_CHARGER_TRADIE_SUPPLY_ANSWER
+  )
 }

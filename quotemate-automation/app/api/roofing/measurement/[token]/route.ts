@@ -13,8 +13,9 @@ import { z } from 'zod'
 import type { MultiRoofQuote, RoofJobIntent } from '@/lib/roofing/types'
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
 import { denormFromSelection, sanitizeIndices, structureCount } from '@/lib/roofing/selection'
-import { detectSolarForJob, loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import { detectSolarForJob } from '@/lib/roofing/solar-detect'
 import { repriceWithEdgeOverrides } from '@/lib/roofing/reprice'
+import { loadTenantRoofingPricingContext } from '@/lib/roofing/pricing-authority'
 
 export const dynamic = 'force-dynamic'
 // The POST re-scan runs Gemini (per structure) + an Anthropic photo pass
@@ -98,8 +99,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
     if (!row.quote || structureCount(row.quote) === 0) {
       return Response.json({ ok: false, error: 'no_quote' }, { status: 400 })
     }
-    const rateCard = await loadRoofingRateCard(supabase, row.tenant_id, null)
-    const updatedQuote = repriceWithEdgeOverrides(row.quote, parsed.data.edges, rateCard)
+    if (!row.tenant_id) {
+      return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+    }
+    const pricing = await loadTenantRoofingPricingContext(supabase, row.tenant_id, null)
+    if (!pricing) {
+      return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+    }
+    const repriced = repriceWithEdgeOverrides(row.quote, parsed.data.edges, pricing.rateCard)
+    const updatedQuote = { ...repriced, pricing_authority: pricing.authority }
     const total = structureCount(updatedQuote)
     const included = sanitizeIndices(
       row.included_indices ?? Array.from({ length: total }, (_, i) => i + 1),
@@ -217,7 +225,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const primary =
     fullQuote.structures.find((s) => s.role === 'primary') ?? fullQuote.structures[0]
   const primaryIntent = (primary?.inputs?.intent ?? 'full_reroof') as RoofJobIntent
-  const rateCard = await loadRoofingRateCard(supabase, row.tenant_id, null)
+  if (!row.tenant_id) {
+    return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+  }
+  const pricing = await loadTenantRoofingPricingContext(supabase, row.tenant_id, null)
+  if (!pricing) {
+    return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
+  }
+  const rateCard = pricing.rateCard
 
   let solarAddon: SolarQuoteAddon | null = null
   try {
@@ -241,7 +256,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     )
   }
 
-  const updatedQuote = { ...fullQuote, solar: solarAddon }
+  const updatedQuote = { ...fullQuote, solar: solarAddon, pricing_authority: pricing.authority }
   // Recompute the denormalised summary from the solar-attached quote (same
   // pattern as the PATCH branches) — the allowance changes the better total,
   // and leaving the old value stranded the dashboard list price below what

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { explainFailure, suburbFromAddress } from './JobQuoteForm'
+import {
+  explainFailure,
+  productNameAfterAnswerChange,
+  suburbFromAddress,
+} from './JobQuoteForm'
 
 // ════════════════════════════════════════════════════════════════════
 // The two pure helpers behind the form's failure handling. Both exist because
@@ -70,5 +74,51 @@ describe('suburbFromAddress', () => {
     expect(suburbFromAddress('')).toBeNull()
     // Nothing left after stripping state + postcode.
     expect(suburbFromAddress('12 Smith St, NSW 2750', 'NSW', '2750')).toBeNull()
+  })
+})
+
+describe('productNameAfterAnswerChange', () => {
+  it('clears a stale EV pin when the customer supplies the charger', () => {
+    expect(
+      productNameAfterAnswerChange(
+        'ev_charger',
+        'charger_supply',
+        'customer already has the charger',
+        'Tesla Wall Connector',
+      ),
+    ).toBe('')
+  })
+
+  it('clears a stale EV pin when supply is uncertain', () => {
+    expect(
+      productNameAfterAnswerChange(
+        'ev_charger',
+        'charger_supply',
+        'not sure',
+        'Tesla Wall Connector',
+      ),
+    ).toBe('')
+  })
+
+  it('retains the EV pin only for the exact tradie-supplied answer', () => {
+    expect(
+      productNameAfterAnswerChange(
+        'ev_charger',
+        'charger_supply',
+        'we supply the charger',
+        'Tesla Wall Connector',
+      ),
+    ).toBe('Tesla Wall Connector')
+  })
+
+  it('preserves non-EV catalogue selections', () => {
+    expect(
+      productNameAfterAnswerChange(
+        'downlights',
+        'supplied_by',
+        'customer supplied',
+        'Clipsal Downlight',
+      ),
+    ).toBe('Clipsal Downlight')
   })
 })

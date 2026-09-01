@@ -15,20 +15,38 @@ import type { RoofJobIntent } from '@/lib/roofing/types'
 import type { SolarAllowance, SolarDetection } from '@/lib/roofing/solar'
 
 type DetectResponse =
-  | { ok: true; detection: SolarDetection; allowance: SolarAllowance | null }
+  | {
+      ok: true
+      detection: SolarDetection
+      allowance: SolarAllowance | null
+      pricing_authority: {
+        source: 'tenant_pricing_book'
+        tenant_id: string
+        pricing_book_id: string
+        revision: string
+      }
+    }
   | { ok: false; code?: string; detail?: string; error?: string }
 
 type Props = {
   accessToken: string | null
   address: string
   intent: RoofJobIntent
+  expectedPricingRevision: string
   /** Current combined re-roof (Better) inc-GST total, pre-solar. */
   betterIncGst: number
   /** Current combined upgrade (Best) inc-GST total, pre-solar. */
   bestIncGst: number
 }
 
-export function SolarCheck({ accessToken, address, intent, betterIncGst, bestIncGst }: Props) {
+export function SolarCheck({
+  accessToken,
+  address,
+  intent,
+  expectedPricingRevision,
+  betterIncGst,
+  bestIncGst,
+}: Props) {
   const [stage, setStage] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle')
   const [detection, setDetection] = useState<SolarDetection | null>(null)
   const [allowance, setAllowance] = useState<SolarAllowance | null>(null)
@@ -54,22 +72,25 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
       const res = await fetch('/api/roofing/detect-solar', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, intent }),
+        body: JSON.stringify({ address, intent, expected_pricing_revision: expectedPricingRevision }),
       })
       const json = (await res.json()) as DetectResponse
-      if (json.ok) {
+      if (json.ok && json.pricing_authority.revision === expectedPricingRevision) {
         setDetection(json.detection)
         setAllowance(json.allowance)
         setStage('done')
-      } else {
+      } else if (!json.ok) {
         setErrMsg(json.detail ?? json.code ?? json.error ?? 'Solar scan failed.')
+        setStage('error')
+      } else {
+        setErrMsg('Pricing changed while the roof was open. Measure again before adding solar.')
         setStage('error')
       }
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : String(e))
       setStage('error')
     }
-  }, [accessToken, address, intent])
+  }, [accessToken, address, expectedPricingRevision, intent])
 
   const applies = allowance?.applies === true
   const betterWithSolar = applies ? betterIncGst + (allowance?.inc_gst ?? 0) : betterIncGst

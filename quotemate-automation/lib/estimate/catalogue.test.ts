@@ -496,6 +496,185 @@ describe('applyChosenProduct (WP9 — chosen product gates the quote)', () => {
   })
 })
 
+describe('applyChosenProduct — tradie-pinned EV charger unit', () => {
+  const charger = {
+    catalogue_id: 'ev-unit-1',
+    name: 'Tesla Wall Connector (single-phase 7kW)',
+    price_ex_gst: 800,
+    image_path: 'tenant/ev-unit-1.jpg',
+    description: 'Tenant-stocked wall connector',
+    category: 'ev_charger',
+    pinned_by: 'tradie',
+  }
+
+  it('adds a qty-1 unit line without replacing install assembly, sundries, labour, or label', () => {
+    const draft = {
+      good: {
+        label: 'Good — standard EV charger installation',
+        subtotal_ex_gst: 500,
+        line_items: [
+          {
+            description: 'Install EV charger',
+            source: 'assembly:ev-install',
+            quantity: 1,
+            unit: 'job',
+            unit_price_ex_gst: 120,
+            total_ex_gst: 120,
+          },
+          {
+            description: 'Electrical sundries',
+            source: 'material:sundries',
+            quantity: 1,
+            unit: 'allowance',
+            unit_price_ex_gst: 20,
+            total_ex_gst: 20,
+          },
+          {
+            description: 'Licensed electrician labour',
+            source: 'labour',
+            quantity: 3,
+            unit: 'hr',
+            unit_price_ex_gst: 120,
+            total_ex_gst: 360,
+          },
+        ],
+      },
+    }
+
+    const result = applyChosenProduct(draft, charger)
+    const items = result.draft.good.line_items
+    expect(result.applied).toEqual(['good'])
+    expect(items).toHaveLength(4)
+    expect(items[0]).toMatchObject({
+      description: 'Install EV charger',
+      source: 'assembly:ev-install',
+      total_ex_gst: 120,
+    })
+    expect(items[1]).toMatchObject({
+      description: 'Electrical sundries',
+      source: 'material:sundries',
+      total_ex_gst: 20,
+    })
+    expect(items[3]).toMatchObject({
+      description: 'Licensed electrician labour',
+      source: 'labour',
+      quantity: 3,
+      total_ex_gst: 360,
+    })
+    expect(items[2]).toMatchObject({
+      description: charger.name,
+      source: `material:${charger.catalogue_id}`,
+      catalogue_id: charger.catalogue_id,
+      quantity: 1,
+      unit: 'each',
+      unit_price_ex_gst: 800,
+      total_ex_gst: 800,
+      image_path: charger.image_path,
+      product_description: charger.description,
+    })
+    expect(result.draft.good.label).toBe('Good — standard EV charger installation')
+    expect(result.draft.good.subtotal_ex_gst).toBe(1300)
+  })
+
+  it('leaves a customer-supplied installation-only draft unchanged when no pin is accepted', () => {
+    const draft = {
+      good: {
+        subtotal_ex_gst: 480,
+        line_items: [
+          {
+            description: 'Install EV charger',
+            source: 'assembly:ev-install',
+            quantity: 1,
+            total_ex_gst: 120,
+          },
+          {
+            description: 'Licensed electrician labour',
+            source: 'labour',
+            quantity: 3,
+            total_ex_gst: 360,
+          },
+        ],
+      },
+    }
+    const result = applyChosenProduct(draft, null)
+    expect(result.applied).toEqual([])
+    expect(result.draft).toBe(draft)
+    expect(result.draft.good.line_items).toEqual([
+      expect.objectContaining({ description: 'Install EV charger', total_ex_gst: 120 }),
+      expect.objectContaining({ description: 'Licensed electrician labour', total_ex_gst: 360 }),
+    ])
+    expect(result.draft.good.line_items.some((line: { catalogue_id?: string }) => line.catalogue_id))
+      .toBe(false)
+  })
+
+  it('updates an existing same-product row to qty 1 without appending a duplicate', () => {
+    const draft = {
+      better: {
+        line_items: [
+          {
+            description: 'Install EV charger',
+            source: 'assembly:ev-install',
+            quantity: 1,
+            total_ex_gst: 120,
+          },
+          {
+            description: 'Stale charger line',
+            source: `material:${charger.catalogue_id}`,
+            catalogue_id: charger.catalogue_id,
+            quantity: 2,
+            unit_price_ex_gst: 999,
+            total_ex_gst: 1998,
+          },
+          { description: 'Sundries', source: 'material:sundries', quantity: 1, total_ex_gst: 20 },
+          { description: 'Labour', source: 'labour', quantity: 3, total_ex_gst: 360 },
+        ],
+      },
+    }
+
+    const result = applyChosenProduct(draft, { ...charger, price_ex_gst: 850 })
+    const items = result.draft.better.line_items
+    expect(result.applied).toEqual(['better'])
+    expect(items).toHaveLength(4)
+    const matches = items.filter(
+      (line: { catalogue_id?: string }) => line.catalogue_id === charger.catalogue_id,
+    )
+    expect(matches).toHaveLength(1)
+    expect(matches[0]).toMatchObject({
+      description: charger.name,
+      quantity: 1,
+      unit_price_ex_gst: 850,
+      total_ex_gst: 850,
+    })
+    expect(items[0]).toMatchObject({ description: 'Install EV charger', total_ex_gst: 120 })
+    expect(items[2]).toMatchObject({ description: 'Sundries', total_ex_gst: 20 })
+    expect(items[3]).toMatchObject({ description: 'Labour', total_ex_gst: 360 })
+    expect(result.draft.better.subtotal_ex_gst).toBe(1350)
+  })
+
+  it('retains headline replacement for tradie pins in non-EV categories', () => {
+    const draft = {
+      good: {
+        line_items: [
+          { description: 'Generic downlight', source: 'material', quantity: 2, total_ex_gst: 60 },
+          { description: 'Labour', source: 'labour', quantity: 1, total_ex_gst: 120 },
+        ],
+      },
+    }
+    const result = applyChosenProduct(draft, {
+      ...charger,
+      category: 'downlight',
+      name: 'Clipsal downlight',
+      price_ex_gst: 40,
+    })
+    expect(result.draft.good.line_items).toHaveLength(2)
+    expect(result.draft.good.line_items[0]).toMatchObject({
+      description: 'Clipsal downlight',
+      quantity: 2,
+      total_ex_gst: 80,
+    })
+  })
+})
+
 // PROOF for the exact real-world case Jon reported: a generic Opus
 // draft (all tiers ~$759) + the customer's catalogue pick must produce
 // the CATALOGUE price, not the generic number.

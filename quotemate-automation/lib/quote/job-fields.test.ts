@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { JOB_FIELDS, fieldsForJobType } from './job-fields'
+import {
+  JOB_FIELDS,
+  allowsPinnedCatalogueProduct,
+  fieldsForJobType,
+} from './job-fields'
 import { IntakeSchema } from '@/lib/intake/schema'
 import { normaliseSystemType } from '@/lib/intake/structure'
 
@@ -106,6 +110,62 @@ describe('JOB_FIELDS', () => {
         `"${option}" forces a $99 inspection but does not say so`,
       ).toContain('inspection')
     }
+  })
+
+  it('keeps the EV charger intake contract in the required order with exact options', () => {
+    const spec = fieldsForJobType('ev_charger')
+    expect(spec.catalogueCategory).toBe('ev_charger')
+    expect(spec.fields).toEqual([
+      {
+        code: 'vehicle',
+        label: 'What car is the charger for?',
+        type: 'select',
+        options: ['Tesla', 'BYD', 'another EV', 'not sure'],
+      },
+      {
+        code: 'charger_supply',
+        label: 'Who supplies the charger unit?',
+        type: 'select',
+        options: ['customer already has the charger', 'we supply the charger', 'not sure'],
+      },
+      {
+        code: 'room',
+        label: 'Where is the charger going (garage, carport, external wall)?',
+        type: 'text',
+      },
+      {
+        code: 'switchboard_distance',
+        label: 'Roughly how far is the switchboard from the charger spot?',
+        type: 'select',
+        options: ['under 5 m', '5–10 m', 'over 10 m', 'not sure'],
+      },
+      {
+        code: 'phase',
+        label: 'Single phase or three phase?',
+        type: 'select',
+        options: ['single phase', 'three phase (on-site inspection)', 'not sure'],
+      },
+    ])
+  })
+
+  it('allows an EV unit pin only for the exact tradie-supplied answer', () => {
+    expect(
+      allowsPinnedCatalogueProduct('ev_charger', {
+        charger_supply: 'we supply the charger',
+      }),
+    ).toBe(true)
+    expect(
+      allowsPinnedCatalogueProduct('ev_charger', {
+        charger_supply: 'customer already has the charger',
+      }),
+    ).toBe(false)
+    expect(
+      allowsPinnedCatalogueProduct('ev_charger', { charger_supply: 'not sure' }),
+    ).toBe(false)
+    expect(
+      allowsPinnedCatalogueProduct('ev_charger', { charger_supply: 'we supply' }),
+    ).toBe(false)
+    expect(allowsPinnedCatalogueProduct('downlights', {})).toBe(true)
   })
 
   it('falls back to a usable generic spec for an unknown job type', () => {

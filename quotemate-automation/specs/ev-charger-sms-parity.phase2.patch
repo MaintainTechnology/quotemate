@@ -1,0 +1,491 @@
+﻿diff --git a/quotemate-automation/app/api/sms/inbound/route.ts b/quotemate-automation/app/api/sms/inbound/route.ts
+index ccd31cf8..09a740bf 100644
+--- a/quotemate-automation/app/api/sms/inbound/route.ts
++++ b/quotemate-automation/app/api/sms/inbound/route.ts
+@@ -141,6 +141,7 @@ import {
+   buildProductOptionsSms,
+   buildChoiceHoldSms,
+   categoryForJobType,
++  productChoiceAllowedForSupply,
+   weatherproofAdvisory,
+   type ProductChoiceState,
+ } from '@/lib/sms/product-options'
+@@ -2700,41 +2701,56 @@ export async function POST(req: Request) {
+             .maybeSingle()
+           const pending = (pcRow?.product_choice ?? null) as ProductChoiceState | null
+           if (pending && pending.status === 'pending') {
+-            const lastInbound = [...turns].reverse().find((t) => t.direction === 'inbound')
+-            const reply = lastInbound?.body ?? ''
+-            const next = applyChoiceSelection(pending, { reply })
+-            if (next && next.status === 'chosen' && next.chosen_catalogue_id) {
+-              await supabase
++            const choiceAllowed = productChoiceAllowedForSupply(
++              pending.category,
++              initialConversationState.slots.supplied_by as string | undefined,
++            )
++            if (!choiceAllowed) {
++              const { error: clearChoiceError } = await supabase
+                 .from('sms_conversations')
+-                .update({ product_choice: next, updated_at: new Date().toISOString() })
++                .update({ product_choice: null, updated_at: new Date().toISOString() })
+                 .eq('id', conversationId)
+-              // Make the dialog acknowledge the pick naturally instead
+-              // of being confused by a bare "1".
+-              if (lastInbound) {
+-                lastInbound.body = `I'd like the ${next.chosen_name}, thanks.`
+-              }
+-              console.log('[sms/inbound:after] WP9 CAPTURE — product choice recorded', {
++              if (clearChoiceError) throw clearChoiceError
++              console.log('[sms/inbound:after] WP9 CAPTURE — cleared EV unit choice for customer-supplied charger', {
+                 conversationId,
+-                chosen: next.chosen_name,
+-                catalogueId: next.chosen_catalogue_id,
+               })
+-            } else if (next && next.status === 'declined') {
+-              // Customer opted OUT of catalogue options. Resolve the
+-              // choice with no chosen product and rewrite the turn so
+-              // the dialog reads a clear "standard quote" intent and
+-              // proceeds to finish — the estimator then does a
+-              // conventional Good/Better/Best from the base assemblies.
+-              await supabase
+-                .from('sms_conversations')
+-                .update({ product_choice: next, updated_at: new Date().toISOString() })
+-                .eq('id', conversationId)
+-              if (lastInbound) {
+-                lastInbound.body =
+-                  'No catalogue options for me thanks — just do me a standard quote.'
++            } else {
++              const lastInbound = [...turns].reverse().find((t) => t.direction === 'inbound')
++              const reply = lastInbound?.body ?? ''
++              const next = applyChoiceSelection(pending, { reply })
++              if (next && next.status === 'chosen' && next.chosen_catalogue_id) {
++                await supabase
++                  .from('sms_conversations')
++                  .update({ product_choice: next, updated_at: new Date().toISOString() })
++                  .eq('id', conversationId)
++                // Make the dialog acknowledge the pick naturally instead
++                // of being confused by a bare "1".
++                if (lastInbound) {
++                  lastInbound.body = `I'd like the ${next.chosen_name}, thanks.`
++                }
++                console.log('[sms/inbound:after] WP9 CAPTURE — product choice recorded', {
++                  conversationId,
++                  chosen: next.chosen_name,
++                  catalogueId: next.chosen_catalogue_id,
++                })
++              } else if (next && next.status === 'declined') {
++                // Customer opted OUT of catalogue options. Resolve the
++                // choice with no chosen product and rewrite the turn so
++                // the dialog reads a clear "standard quote" intent and
++                // proceeds to finish — the estimator then does a
++                // conventional Good/Better/Best from the base assemblies.
++                await supabase
++                  .from('sms_conversations')
++                  .update({ product_choice: next, updated_at: new Date().toISOString() })
++                  .eq('id', conversationId)
++                if (lastInbound) {
++                  lastInbound.body =
++                    'No catalogue options for me thanks — just do me a standard quote.'
++                }
++                console.log('[sms/inbound:after] WP9 CAPTURE — customer declined catalogue options (conventional GBB)', {
++                  conversationId,
++                })
+               }
+-              console.log('[sms/inbound:after] WP9 CAPTURE — customer declined catalogue options (conventional GBB)', {
+-                conversationId,
+-              })
+             }
+           }
+         } catch (e: any) {
+@@ -2906,6 +2922,32 @@ export async function POST(req: Request) {
+         })
+       }
+ 
++      // A correction such as "I already have the charger" can arrive after
++      // an EV product offer. Clear the persisted choice immediately so a
++      // stale pending/chosen unit cannot leak into this or the next quote.
++      if (
++        WP9_ENABLED &&
++        !productChoiceAllowedForSupply(
++          conversationState.slots.job_type as string | undefined,
++          conversationState.slots.supplied_by as string | undefined,
++        )
++      ) {
++        const { error: clearEvChoiceError } = await supabase
++          .from('sms_conversations')
++          .update({ product_choice: null, updated_at: new Date().toISOString() })
++          .eq('id', conversationId)
++        if (clearEvChoiceError) {
++          console.warn('[sms/inbound:after] failed to clear EV unit choice after customer-supply correction', {
++            conversationId,
++            error: clearEvChoiceError.message,
++          })
++        } else {
++          console.log('[sms/inbound:after] cleared EV unit choice after customer-supply correction', {
++            conversationId,
++          })
++        }
++      }
++
+       console.log('[sms/inbound:after] step 6 — calling Sonnet dialog agent', {
+         turnCount: turns.length,
+         inboundCount,
+@@ -3839,8 +3881,25 @@ export async function POST(req: Request) {
+             .eq('id', conversationId)
+             .maybeSingle()
+           const already = (existing?.product_choice ?? null) as ProductChoiceState | null
+-          const category = categoryForJobType(decision.job_type_guess)
+-          if (already) {
++          const productJobType =
++            (conversationState.slots.job_type as string | undefined) ?? decision.job_type_guess
++          const choiceAllowed = productChoiceAllowedForSupply(
++            productJobType,
++            conversationState.slots.supplied_by as string | undefined,
++          )
++          const category = categoryForJobType(productJobType)
++          if (!choiceAllowed) {
++            if (already) {
++              const { error: clearChoiceError } = await supabase
++                .from('sms_conversations')
++                .update({ product_choice: null, updated_at: new Date().toISOString() })
++                .eq('id', conversationId)
++              if (clearChoiceError) throw clearChoiceError
++            }
++            console.log('[sms/inbound:after] WP9 OFFER — skipped EV unit for customer-supplied charger', {
++              conversationId,
++            })
++          } else if (already) {
+             // Pending = customer hasn't picked yet → keep holding the
+             // quote. Chosen = let the normal finish flow proceed.
+             if (already.status === 'pending') {
+@@ -3853,7 +3912,7 @@ export async function POST(req: Request) {
+             })
+           } else if (!category) {
+             console.log('[sms/inbound:after] WP9 OFFER — no catalogue category for job type, skipping', {
+-              jobType: decision.job_type_guess,
++              jobType: productJobType,
+             })
+           } else {
+             const { data: catRows } = await supabase
+diff --git a/quotemate-automation/lib/sms/assumptions.test.ts b/quotemate-automation/lib/sms/assumptions.test.ts
+index 25322b1f..2ed09729 100644
+--- a/quotemate-automation/lib/sms/assumptions.test.ts
++++ b/quotemate-automation/lib/sms/assumptions.test.ts
+@@ -109,6 +109,23 @@ describe('Phase 5: universal layers untouched by power_points cleanup', () => {
+     expect(UNIVERSAL_INSPECTION_TRIGGERS).toContain('rewire')
+   })
+ 
++  it('does not treat an EV charger request itself as an inspection trigger', () => {
++    for (const phrase of [
++      'ev charger',
++      'ev charging',
++      'electric vehicle charger',
++      'tesla charger',
++      'wallbox',
++      'wall charger',
++    ]) {
++      expect(UNIVERSAL_INSPECTION_TRIGGERS).not.toContain(phrase)
++    }
++    // The safety boundary stays deterministic: an explicitly three-phase or
++    // switchboard-constrained EV job is still inspection-only.
++    expect(UNIVERSAL_INSPECTION_TRIGGERS).toContain('three-phase')
++    expect(UNIVERSAL_INSPECTION_TRIGGERS).toContain('switchboard at capacity')
++  })
++
+   it('UNIVERSAL_MUST_ASK includes the conversation-wide questions', () => {
+     // Sanity check — these have been stable for many migrations and
+     // tests touching adjacent code shouldn't perturb them.
+diff --git a/quotemate-automation/lib/sms/assumptions.ts b/quotemate-automation/lib/sms/assumptions.ts
+index 21cf5ade..943e0c46 100644
+--- a/quotemate-automation/lib/sms/assumptions.ts
++++ b/quotemate-automation/lib/sms/assumptions.ts
+@@ -371,11 +371,11 @@ export const UNIVERSAL_INSPECTION_TRIGGERS = [
+   'no spare ways on switchboard',
+   'fuse box', 'ceramic fuse', 'old fuses',
+   'rewire', 'three-phase', 'three phase',
+-  // EV chargers are explicit inspection-only per strategy.md v3 (mains
+-  // current, load calcs, switchboard interaction, dedicated circuit
+-  // required). The parity harness asserts this trigger set covers them.
+-  'ev charger', 'ev charging', 'electric vehicle charger', 'tesla charger',
+-  'wallbox', 'wall charger',
++  // EV charger enquiries are a priced, review-required service when the
++  // tenant has enabled "Install EV charger". Do not make the job name itself
++  // an inspection trigger: the enabled service's MUST-ASK answers decide the
++  // route. Genuine three-phase/switchboard/danger language above still forces
++  // an inspection.
+   // ── Plumbing (v5) ───────────────────────────────────────
+   'smell gas', 'gas leak', 'gas smell', 'leaking gas',
+   'burst pipe', 'pipe burst', 'water everywhere',
+diff --git a/quotemate-automation/lib/sms/extract-slots.test.ts b/quotemate-automation/lib/sms/extract-slots.test.ts
+index 275c2b7e..6590d6e2 100644
+--- a/quotemate-automation/lib/sms/extract-slots.test.ts
++++ b/quotemate-automation/lib/sms/extract-slots.test.ts
+@@ -18,9 +18,33 @@ import {
+   mergeSlotUpdates,
+   normaliseState,
+   extractJsonObject,
++  SYSTEM_PROMPT,
+   type ConversationState,
+ } from './extract-slots'
+ 
++describe('EV charger classification contract', () => {
++  it('accepts EV charger as its own job type with grounded product specs', () => {
++    const r = SlotsSchema.safeParse({
++      job_type: 'ev_charger',
++      room: 'garage',
++      requested_specs: {
++        charger_model: 'Tesla Wall Connector',
++        switchboard_distance: '15 metres',
++      },
++    })
++    expect(r.success).toBe(true)
++  })
++
++  it('never tells the extractor to turn a Tesla charger into a GPO or invent three-phase', () => {
++    expect(SYSTEM_PROMPT).toContain('Extract: job_type="ev_charger"')
++    expect(SYSTEM_PROMPT).toContain('never infer three-phase')
++    expect(SYSTEM_PROMPT).not.toMatch(
++      /Tesla wall charger[\s\S]{0,350}Extract: job_type="power_points"/,
++    )
++    expect(SYSTEM_PROMPT).not.toContain('"Tesla wall connector" → \'three-phase\'')
++  })
++})
++
+ describe('Phase 4: SlotsSchema accepts the new recipe slots', () => {
+   it('accepts a numeric distance_to_existing_power', () => {
+     const r = SlotsSchema.safeParse({ distance_to_existing_power: 8 })
+diff --git a/quotemate-automation/lib/sms/extract-slots.ts b/quotemate-automation/lib/sms/extract-slots.ts
+index 48cd310b..76271915 100644
+--- a/quotemate-automation/lib/sms/extract-slots.ts
++++ b/quotemate-automation/lib/sms/extract-slots.ts
+@@ -253,7 +253,7 @@ export function mergeSlotUpdates(
+   }
+ }
+ 
+-const SYSTEM_PROMPT = `Extract structured slot values from a customer SMS message in an Australian trade-quoting conversation (electrical or plumbing — both share this SMS line).
++export const SYSTEM_PROMPT = `Extract structured slot values from a customer SMS message in an Australian trade-quoting conversation (electrical or plumbing — both share this SMS line).
+ 
+ You are NOT writing a reply. You only extract WHAT THE CUSTOMER JUST SAID.
+ 
+@@ -345,13 +345,13 @@ EXTRACTION RULES:
+        to 10A.)
+ 
+        Customer: "Installing a Tesla wall charger in the garage, the
+-                  switchboard is on the other side of the house — must
+-                  be 15 metres away."
+-       Extract: job_type="power_points", count=1, room="garage",
+-                replace_or_new="new", distance_to_existing_power=15,
+-                circuit_required="three-phase"
+-       (Tesla wall charger → three-phase implied even though the
+-       customer didn't say "three-phase".)
++                   switchboard is on the other side of the house — must
++                   be 15 metres away."
++       Extract: job_type="ev_charger", room="garage",
++                requested_specs={"charger_model":"Tesla Wall Connector",
++                                 "switchboard_distance":"15 metres"}
++       (An EV charger is its own job type. Never reclassify it as a GPO and
++       never infer three-phase when the customer did not state it.)
+ 
+        Customer: "Bathroom exhaust fan needs replacing, ducted to the eave."
+        Extract: job_type="ceiling_fans", room="bathroom",
+@@ -516,16 +516,15 @@ EXTRACTION RULES:
+           "standard power point" / "regular 10A" / "10 amp" → '10A'
+           "dedicated circuit for the dryer" / "20A circuit" /
+             "20-amp" / "high-current outlet" → '20A'
+-          "three-phase outlet" / "3 phase" / "3φ" / "EV charger" /
+-            "Tesla wall connector" → 'three-phase'
++          "three-phase outlet" / "3 phase" / "3φ" → 'three-phase'
+           "not sure what amperage" / "don't know" → 'unknown'
+       - Default: when the customer doesn't mention amperage, OMIT this
+         slot (don't write '10A' speculatively). The recipe's
+         default_when_unanswered will fill it in.
+-      - Context clue: an EV charger / wall charger / Tesla mention
+-        almost always means three-phase even if the customer doesn't
+-        say so explicitly — extract circuit_required='three-phase' in
+-        that case.
++      - This slot is for job_type='power_points'. Never set it merely because
++        an EV charger / wall charger / Tesla is mentioned. EV chargers are
++        job_type='ev_charger'; only explicit three-phase words may establish
++        three-phase, and the downstream EV inspection gate handles those.
+       - DO NOT confuse with the existing supplied_by slot: "I'll supply
+         my own GPO" → supplied_by='customer', NOT circuit_required.
+   10e. REQUESTED_SPECS (open spec bag — captures ANY product spec verbatim):
+diff --git a/quotemate-automation/lib/sms/product-options.test.ts b/quotemate-automation/lib/sms/product-options.test.ts
+index b74c6424..347c4a09 100644
+--- a/quotemate-automation/lib/sms/product-options.test.ts
++++ b/quotemate-automation/lib/sms/product-options.test.ts
+@@ -11,6 +11,7 @@ import {
+   recommendedOption,
+   applyChoiceSelection,
+   categoryForJobType,
++  productChoiceAllowedForSupply,
+   describeChosenProductDirective,
+   chosenProductFromChoice,
+   isDeclineReply,
+@@ -273,6 +274,7 @@ describe('categoryForJobType', () => {
+     expect(categoryForJobType('toilet_repair')).toBe('toilet')
+     expect(categoryForJobType('downlights')).toBe('downlight')
+     expect(categoryForJobType('power_points')).toBe('gpo')
++    expect(categoryForJobType('ev_charger')).toBe('ev_charger')
+     expect(categoryForJobType('hot_water')).toBe('hot_water')
+   })
+   it('returns null for unknown / empty (→ no offer, safe default)', () => {
+@@ -282,6 +284,19 @@ describe('categoryForJobType', () => {
+   })
+ })
+ 
++describe('productChoiceAllowedForSupply', () => {
++  it('suppresses EV charger unit choices when the customer already owns the unit', () => {
++    expect(productChoiceAllowedForSupply('ev_charger', 'customer')).toBe(false)
++    expect(productChoiceAllowedForSupply(' EV_CHARGER ', ' CUSTOMER ')).toBe(false)
++  })
++
++  it('allows a tradie-supplied EV unit and preserves all non-EV product flows', () => {
++    expect(productChoiceAllowedForSupply('ev_charger', 'tradie')).toBe(true)
++    expect(productChoiceAllowedForSupply('ev_charger', undefined)).toBe(true)
++    expect(productChoiceAllowedForSupply('ceiling_fans', 'customer')).toBe(true)
++  })
++})
++
+ describe('describeChosenProductDirective', () => {
+   const chosen = (): ProductChoiceState => ({
+     category: 'tap',
+diff --git a/quotemate-automation/lib/sms/product-options.ts b/quotemate-automation/lib/sms/product-options.ts
+index bd00514d..8b6af0f0 100644
+--- a/quotemate-automation/lib/sms/product-options.ts
++++ b/quotemate-automation/lib/sms/product-options.ts
+@@ -470,6 +470,7 @@ const JOB_TYPE_CATEGORY: Record<string, string> = {
+   ceiling_fans: 'fan',
+   smoke_alarms: 'smoke_alarm',
+   outdoor_lighting: 'outdoor_light',
++  ev_charger: 'ev_charger',
+   // plumbing
+   blocked_drain: 'drain',
+   hot_water: 'hot_water',
+@@ -483,6 +484,20 @@ export function categoryForJobType(jobType: string | null | undefined): string |
+   return JOB_TYPE_CATEGORY[k] ?? null
+ }
+ 
++/**
++ * EV charger units are an optional, tradie-supplied catalogue item. When the
++ * customer already owns the charger, WP9 must neither offer nor retain a unit
++ * choice. Other jobs keep their existing product-option behaviour.
++ */
++export function productChoiceAllowedForSupply(
++  jobType: string | null | undefined,
++  suppliedBy: string | null | undefined,
++): boolean {
++  const job = (jobType ?? '').trim().toLowerCase()
++  const supply = (suppliedBy ?? '').trim().toLowerCase()
++  return job !== 'ev_charger' || supply !== 'customer'
++}
++
+ /**
+  * One-line, grounded directive describing the customer's chosen product
+  * — appended to the intake scope so the estimator quotes THAT product
+diff --git a/quotemate-automation/lib/sms/quote-readiness.test.ts b/quotemate-automation/lib/sms/quote-readiness.test.ts
+index bf0fa494..3937a56f 100644
+--- a/quotemate-automation/lib/sms/quote-readiness.test.ts
++++ b/quotemate-automation/lib/sms/quote-readiness.test.ts
+@@ -139,6 +139,54 @@ describe('evaluateQuoteReadiness', () => {
+     })
+     expect(r.ready).toBe(true)
+   })
++
++  it('keeps an enabled EV charger service in its MUST-ASK flow until every answer is gathered', () => {
++    const service = {
++      name: 'Install EV charger',
++      description: 'Single-phase 7kW home charger install',
++      always_inspection: false,
++      category: 'ev_charger',
++      clarifying_questions: [
++        'Is the charger on-site, and which model is it?',
++        'Roughly how far is the parking spot from the switchboard?',
++        'Single or three-phase supply, and any idea of spare switchboard capacity?',
++      ],
++    }
++    const conversationState = state({
++      first_name: 'Jon',
++      suburb: 'Chandler',
++      job_type: 'ev_charger',
++      room: 'garage',
++    })
++
++    const blocked = evaluateQuoteReadiness({
++      action: 'finish',
++      jobTypeGuess: 'ev_charger',
++      conversationState,
++      services: [service],
++      history: [{ direction: 'inbound', body: 'Install an EV charger in my garage' }],
++    })
++    expect(blocked.ready).toBe(false)
++    expect(blocked.reply).toMatch(/charger on-site/i)
++
++    const complete = evaluateQuoteReadiness({
++      action: 'finish',
++      jobTypeGuess: 'ev_charger',
++      conversationState,
++      services: [service],
++      history: [
++        { direction: 'inbound', body: 'Install an EV charger in my garage' },
++        { direction: 'outbound', body: 'Is the charger on-site, and which model is it?' },
++        { direction: 'inbound', body: 'Yes, a Tesla Wall Connector is here' },
++        { direction: 'outbound', body: 'Roughly how far is the parking spot from the switchboard?' },
++        { direction: 'inbound', body: 'Under 5 metres' },
++        { direction: 'outbound', body: 'Single or three-phase supply, and any idea of spare switchboard capacity?' },
++        { direction: 'inbound', body: 'Single phase and there is spare capacity' },
++      ],
++    })
++    expect(complete.ready).toBe(true)
++    expect(complete.missing).toEqual([])
++  })
+ })
+ 
+ // ════════════════════════════════════════════════════════════════════
+diff --git a/quotemate-automation/lib/sms/quote-readiness.ts b/quotemate-automation/lib/sms/quote-readiness.ts
+index 0976e3c1..a49120fb 100644
+--- a/quotemate-automation/lib/sms/quote-readiness.ts
++++ b/quotemate-automation/lib/sms/quote-readiness.ts
+@@ -396,8 +396,15 @@ function missingServiceQuestion(
+ ): MissingQuoteFact | null {
+   const questions = (service?.clarifying_questions ?? []).filter((q): q is string => hasValue(q))
+   if (!service || questions.length === 0) return null
++  // EV questions all repeat the generic word "charger". Counting a single
++  // topic word lets the opening "install an EV charger" falsely answer
++  // "is it on-site, and which model?" before we have asked it. Require a
++  // meaningful share of the question's topic words for proactive EV answers;
++  // the normal outbound-question → substantive inbound path remains exact.
++  const proactiveTopicCoverage =
++    String(service.category ?? '').trim().toLowerCase() === 'ev_charger' ? 0.4 : 0
+   for (const question of questions) {
+-    if (!questionWasAnswered(input.history ?? [], question)) {
++    if (!questionWasAnswered(input.history ?? [], question, proactiveTopicCoverage)) {
+       return fact('service_question', question, `required service question for ${service.name}`)
+     }
+   }
+@@ -463,7 +470,11 @@ function serviceKeywords(name: string): string[] {
+ // topic the customer NEVER addressed (no echo path, no inbound topic word)
+ // still reports missing, so finish stays blocked on a genuinely unanswered
+ // mandatory field.
+-function questionWasAnswered(history: ConversationTurn[], question: string): boolean {
++function questionWasAnswered(
++  history: ConversationTurn[],
++  question: string,
++  proactiveTopicCoverage = 0,
++): boolean {
+   const qWords = serviceKeywords(question)
+   if (qWords.length === 0) return false
+ 
+@@ -483,7 +494,11 @@ function questionWasAnswered(history: ConversationTurn[], question: string): boo
+     if (turn.direction !== 'inbound') continue
+     if (isBareAffirmation(turn.body)) continue
+     const lower = turn.body.toLowerCase()
+-    if (qWords.some((w) => lower.includes(w))) return true
++    const hits = qWords.filter((w) => lower.includes(w)).length
++    const requiredHits = proactiveTopicCoverage > 0
++      ? Math.max(1, Math.ceil(qWords.length * proactiveTopicCoverage))
++      : 1
++    if (hits >= requiredHits) return true
+   }
+ 
+   return false

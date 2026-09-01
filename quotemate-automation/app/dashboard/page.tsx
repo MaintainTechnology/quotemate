@@ -8334,7 +8334,6 @@ function FormField({
 const ELECTRICAL_INSPECTION_ONLY = [
   'Switchboard upgrade or repair',
   'Fault finding',
-  'EV charger install',
   'Underground cabling',
   'Whole-house renovation rewires',
 ]

@@ -29,7 +29,6 @@ import {
   sanitizeIndices,
   structureCount,
 } from '@/lib/roofing/selection'
-import { buildSaveAsQuoteRequest } from '@/lib/roofing/save-as-quote-helpers'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
 import { BrandMark } from '@/app/_components/BrandMark'
@@ -267,15 +266,17 @@ export default async function MeasurementResultsPage({
   // Null when the row can't produce a valid request (no usable address), and
   // skipped entirely once promoted (the review UI links straight to the
   // dashboard editor — no point shipping an unused body in the RSC payload).
-  const saveAsQuoteBody = quoteShareToken
-    ? null
-    : buildSaveAsQuoteRequest({
-        address: row.address,
-        postcode: row.postcode,
-        state: row.state,
-        quote,
-        included_indices: row.included_indices,
-      })
+  const pricingRevision = (
+    quote as MultiRoofQuote & {
+      pricing_authority?: { revision?: unknown }
+    }
+  ).pricing_authority?.revision
+  const saveAsQuoteBody =
+    !quoteShareToken &&
+    typeof pricingRevision === 'string' &&
+    /^[a-f0-9]{64}$/.test(pricingRevision)
+      ? { expected_pricing_revision: pricingRevision }
+      : null
 
   // A persisted selection wins; an untouched (NULL/empty) record falls back to
   // the roof-only default (main dwelling) — never "all structures". We pass the

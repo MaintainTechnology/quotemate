@@ -143,9 +143,9 @@ Originally planned as five phases to a paid pilot launch. Where the build actual
 | **4 — Conversion engine** | Availability nudge, follow-up sequence, calendar, CRM | Partial (tradie notify + booking live; follow-up sequence not yet) |
 | Hardening | Stripe Connect Express, eval framework, multi-tenant RLS | Not yet started |
 
-**Initial wedge:** **electrical (NSW, residential)** — joined by **plumbing (Brisbane, residential)** in v5 (2026-05-11). Two parallel single-trade pilots keep each pricing book + assembly library focused before going broad. v1 scope is the "easy 5" auto-quoteable job types per trade:
+**Initial wedge:** **electrical (NSW, residential)** — joined by **plumbing (Brisbane, residential)** in v5 (2026-05-11). Two parallel single-trade pilots keep each pricing book + assembly library focused before going broad. The original "easy 5" remain the base auto-quoteable jobs; v22 adds one deliberately gated EV-charger exception:
 
-- **Electrical:** downlights, GPOs, ceiling fans, smoke alarms, outdoor / deck lighting. Switchboards, fault finding, EV chargers, underground cabling, and complex renovations are inspection-route only.
+- **Electrical:** downlights, GPOs, ceiling fans, smoke alarms, outdoor / deck lighting, plus the v22 single-phase EV charger exception: dashboard drafts require tradie review, any tradie-supplied unit needs a grounded catalogue price, and SMS availability is tenant-enabled. Three-phase EV work, switchboards, fault finding, underground cabling, and complex renovations are inspection-route only.
 - **Plumbing:** blocked drain, hot water, tap repair, tap replace, toilet repair, toilet replace. Gas fitting, burst pipe, and bathroom renovation are inspection-route only.
 - **Roofing:** dashboard measurement and tradie-reviewed quotes only. Complex/topology-derived edge values remain indicative until an approved imagery/LiDAR source and roofer review gate are in place.
 
