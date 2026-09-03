@@ -9,9 +9,14 @@ const token = 'tok_demo_123456'
 const SLOTS_OPEN = 6
 
 describe('VALID_TIERS', () => {
-  it('accepts good/better/best/inspection only', () => {
+  it('accepts the three tiers, the $99 inspection, and the two child literals', () => {
+    // 'deposit' and 'balance' are the post-site-visit child charges (spec
+    // post-visit-money-sequence R7). They are deliberately NOT reused tier
+    // names: paid_tier, the Payouts label and the webhook metadata all read
+    // this value, so a child charge labelled 'good' would be
+    // indistinguishable from a real tier deposit everywhere downstream.
     expect([...VALID_TIERS].sort()).toEqual(
-      ['best', 'better', 'good', 'inspection'].sort(),
+      ['balance', 'best', 'better', 'deposit', 'good', 'inspection'].sort(),
     )
   })
 })

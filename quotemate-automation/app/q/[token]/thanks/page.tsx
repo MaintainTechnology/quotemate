@@ -104,7 +104,7 @@ export default async function ThanksPage(props: {
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, paid_at, paid_tier, paid_amount_cents, selected_tier, total_inc_gst, scheduled_at, scheduled_window, needs_inspection, intake_id, tenant_id, share_token',
+      'id, paid_at, paid_tier, paid_amount_cents, selected_tier, total_inc_gst, scheduled_at, scheduled_window, needs_inspection, intake_id, tenant_id, share_token, quote_kind',
     )
     .eq('share_token', token)
     .maybeSingle()
@@ -132,6 +132,7 @@ export default async function ThanksPage(props: {
           intake_id: (quote.intake_id as string | null) ?? null,
           tenant_id: (quote.tenant_id as string | null) ?? null,
           share_token: (quote.share_token as string | null) ?? null,
+          quote_kind: (quote.quote_kind as string | null) ?? null,
         },
         sessionId: sp.session_id,
       },
@@ -142,7 +143,14 @@ export default async function ThanksPage(props: {
     }
   }
 
-  const target = thanksPageTarget({ paid: !!paidAt, scheduledAt })
+  const quoteKind = (quote.quote_kind as string | null) ?? null
+  // A 'final'/'balance' child never has a slot, so the confirmed-booking
+  // surface below can't render for one and the 'book' branch would send it to
+  // a calendar for a visit that already happened. Its quote page owns the
+  // "Deposit received" / "Paid in full" state instead (spec R11).
+  if (quoteKind === 'final' || quoteKind === 'balance') redirect(`/q/${token}`)
+
+  const target = thanksPageTarget({ paid: !!paidAt, scheduledAt, quoteKind })
   if (target === 'pay') {
     const tier = resolveNextTier(sp.tier ?? null, quote.selected_tier as string | null)
     redirect(`/r/${token}/${tier}`)

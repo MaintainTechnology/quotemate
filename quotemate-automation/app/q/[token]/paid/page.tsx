@@ -46,7 +46,9 @@ export default async function PaidPage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, intake_id, tenant_id, share_token')
+    .select(
+      'id, paid_at, paid_tier, selected_tier, scheduled_at, intake_id, tenant_id, share_token, quote_kind',
+    )
     .eq('share_token', token)
     .maybeSingle()
 
@@ -96,6 +98,7 @@ export default async function PaidPage(props: {
           intake_id: (quote.intake_id as string | null) ?? null,
           tenant_id: (quote.tenant_id as string | null) ?? null,
           share_token: (quote.share_token as string | null) ?? null,
+          quote_kind: (quote.quote_kind as string | null) ?? null,
         },
         sessionId: sp.session_id,
       },
@@ -106,18 +109,27 @@ export default async function PaidPage(props: {
     }
   }
 
+  const quoteKind = (quote.quote_kind as string | null) ?? null
   const tier = resolveNextTier(
     paidTier ?? sp.tier ?? null,
     quote.selected_tier as string | null,
   )
   const q = `?tier=${encodeURIComponent(tier)}`
 
-  switch (paidPageTarget({ paid: !!paidAt, scheduledAt })) {
+  switch (paidPageTarget({ paid: !!paidAt, scheduledAt, quoteKind })) {
     case 'thanks':
       redirect(`/q/${token}/thanks${q}`)
     case 'book':
       redirect(`/q/${token}/book${q}`)
     default:
-      redirect(`/q/${token}`)
+      // A 'final'/'balance' child always lands here: its quote page is the
+      // job's customer surface after the site visit, and ?paid= lets it
+      // render the "Deposit received" / "Paid in full" state (spec R5/R11).
+      // A balance token then 302s on to the final row's page.
+      redirect(
+        quoteKind === 'final' || quoteKind === 'balance'
+          ? `/q/${token}?paid=${quoteKind === 'final' ? 'deposit' : 'balance'}`
+          : `/q/${token}`,
+      )
   }
 }

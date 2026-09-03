@@ -10,7 +10,7 @@
 import { after } from 'next/server'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { bookingStateOnPaid, shouldFinaliseBookingOnPaid } from '@/lib/quote/booking'
-import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
+import { notifyBookingConfirmed, notifyChildPaymentReceived } from '@/lib/quote/booking-notify'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import { sendPushToTenant } from '@/lib/push/send'
 
@@ -21,6 +21,9 @@ export type PaidQuoteRow = {
   intake_id: string | null
   tenant_id: string | null
   share_token: string | null
+  /** quotes.quote_kind (spec post-visit-money-sequence R11). Absent/null on
+   *  every pre-chain caller → 'initial' → today's booking behaviour. */
+  quote_kind?: string | null
 }
 
 // Deliberately loose client type: the webhook and the /paid page both hold a
@@ -111,6 +114,51 @@ export async function finalisePaidQuote(
         quote_id: quoteId,
       })
     }
+  }
+
+  // ── Post-site-visit child rows (spec post-visit-money-sequence R11) ──
+  //
+  // A 'final' (deposit) or 'balance' payment is money on a job whose site
+  // visit already happened. It takes the payment stamps above and the
+  // lifecycle advance below, but NONE of the booking machinery: writing
+  // booking_state would drop the row into the dashboard calendar's "to
+  // schedule" bucket, and notifyBookingConfirmed would text the customer
+  // "pick a time" with a /book link for a visit that is behind them.
+  const childKind =
+    quote.quote_kind === 'final' || quote.quote_kind === 'balance' ? quote.quote_kind : null
+
+  if (childKind) {
+    // 'final' = the customer accepted the quote by paying the deposit;
+    // 'balance' = the job is settled. Both are monotonic ladder moves.
+    await advanceQuoteStatus(supabase, quoteId, childKind === 'final' ? 'accepted' : 'paid')
+
+    after(async () => {
+      const work: Promise<unknown>[] = [
+        notifyChildPaymentReceived(supabase, {
+          quoteId,
+          intakeId: quote.intake_id,
+          tenantId: quote.tenant_id,
+          shareToken: quote.share_token as string,
+          kind: childKind,
+          chargedCents: args.amountTotalCents ?? null,
+        }),
+      ]
+      if (quote.tenant_id) {
+        work.push(
+          sendPushToTenant(supabase, quote.tenant_id, {
+            title: childKind === 'final' ? 'Deposit paid' : 'Final payment received',
+            body:
+              childKind === 'final'
+                ? 'The customer has paid the deposit. The job is confirmed.'
+                : 'The customer has paid the balance. This job is paid in full.',
+            url: `/quotes?quoteId=${quoteId}`,
+          }),
+        )
+      }
+      await Promise.allSettled(work)
+    })
+
+    return { claimed: true }
   }
 
   // Paying CONFIRMS the booking (book-first / pay-last). Slot held →

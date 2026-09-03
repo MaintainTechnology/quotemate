@@ -37,7 +37,8 @@ import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { buildQuoteUpdatedSms } from '@/lib/sms/templates'
-import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
+import { asQuoteKind, isSiteVisitFirstRow } from '@/lib/quote/mint-tier'
+import { clampDepositPct } from '@/lib/quote/money'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { resolveQuoteDisplayMode } from '@/lib/quote/display'
 import { loadCandidatePrices } from '@/lib/estimate/run'
@@ -167,7 +168,7 @@ export async function POST(
       // deliberately NOT selected here: this route neither reads nor writes
       // it (Section 2 is generated, not tradie-edited in v1), and leaving it
       // unselected keeps this edit path working on a pre-175 database.
-      'id, tenant_id, intake_id, share_token, status, paid_at, selected_tier, good, better, best, stripe_links, total_inc_gst, needs_inspection, inspection_reason, estimated_timeframe, risk_flags, applied_discount_pct, scope_of_works, assumptions',
+      'id, tenant_id, intake_id, share_token, status, paid_at, selected_tier, good, better, best, stripe_links, total_inc_gst, needs_inspection, inspection_reason, estimated_timeframe, risk_flags, applied_discount_pct, scope_of_works, assumptions, quote_kind, deposit_pct',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -198,6 +199,11 @@ export async function POST(
   if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
+
+  // quotes.quote_kind — 'final'/'balance' rows are post-site-visit children
+  // (spec post-visit-money-sequence R4). They carry a tradie-confirmed price,
+  // are sent only by the explicit Send button, and never mint tier Sessions.
+  const quoteKind = asQuoteKind(quote.quote_kind as string | null)
 
   // ─── Intake context FIRST — its trade scopes the pricing read below ─
   // H-2 — pull intake.trade so candidates can be trade-scoped exactly
@@ -235,11 +241,21 @@ export async function POST(
   // Per-trade grounding posture: catalogue trades (electrical/plumbing) are
   // gated by the grounding validator; tradie-authored trades (solar/roof/paint)
   // have no catalogue, so the tradie owns the prices and the gate is skipped.
-  const groundingMode = tradeGroundingMode(
-    (intake?.trade as string | null | undefined) ??
-      (pricingBook?.trade as string | null | undefined) ??
-      null,
-  )
+  //
+  // A post-site-visit FINAL quote is exempt (spec post-visit-money-sequence
+  // R4): the tradie has BEEN to the property and is typing the price they
+  // confirmed there. That lump sum has no catalogue line to ground against,
+  // so the gate would 422 the one edit the whole chain exists to enable and
+  // force `force:true` — which stamps a `tradie_edit_ungrounded` risk flag on
+  // a price that is in fact the most reliable number in the system.
+  const groundingMode =
+    quoteKind !== 'initial'
+      ? 'tradie'
+      : tradeGroundingMode(
+          (intake?.trade as string | null | undefined) ??
+            (pricingBook?.trade as string | null | undefined) ??
+            null,
+        )
 
   // ─── Apply per-tier edits ──────────────────────────────────
   type TierJson = {
@@ -499,7 +515,12 @@ export async function POST(
   // for any quote that wasn't booked yet).
   const appliedDiscountPct = ((quote.applied_discount_pct as number | null | undefined) ?? 0)
 
-  if (isSiteVisitFirstTrade(intakeTrade)) {
+  // A post-site-visit child takes this branch for the SAME reason as
+  // electrical/plumbing: its charge is not a G/B/B tier Session. /r mints the
+  // deposit per click from the row's stored total, so a tier Session minted
+  // here would be unreachable — and a stale one left behind could be paid at
+  // a price the tradie has just changed.
+  if (quoteKind !== 'initial' || isSiteVisitFirstRow({ trade: intakeTrade, quoteKind })) {
     // Electrical/plumbing sell ONE thing: the flat $99 site visit (spec
     // elec-plumb-site-visit-first). A G/B/B Session minted here would be
     // permanently unreachable — /r/<token>/<tier> 302s those tiers onto the
@@ -594,8 +615,12 @@ export async function POST(
     // downstream — e.g. follow-up automation treats 'sent' as formally
     // quoted, vs 'draft' as still-being-fixed). Tradies routinely use
     // the editor for typo fixes; those should stay 'draft'.
+    // A FINAL quote is sent ONLY by the explicit Send button (spec R4): the
+    // tradie prices it on site over several saves, and auto-flipping it to
+    // 'sent' would both mislabel the pipeline and let the follow-up queues
+    // start chasing a quote the customer has never seen.
     status:
-      quote.status === 'draft' && changedTiers.length > 0
+      quoteKind === 'initial' && quote.status === 'draft' && changedTiers.length > 0
         ? 'sent'
         : quote.status,
     // 2026-07-02 — restart the 7-day price hold whenever a price actually
@@ -669,11 +694,17 @@ export async function POST(
   // an edit must not be their first contact (only Approve releases it).
   // shouldNotifyOnEdit suppresses the SMS while held, otherwise applies the
   // explicit-opt-in / legacy-price-change rule.
-  const shouldNotify = shouldNotifyOnEdit({
-    status: quote.status as string | null | undefined,
-    notifyCustomer: edits.notify_customer,
-    changedTiersCount: changedTiers.length,
-  })
+  // A FINAL quote never auto-texts on edit (spec R4). The updated-quote SMS
+  // is built for the initial tier shape — it would carry the $99 site-visit
+  // line and no deposit maths — and the tradie is mid-pricing on site. The
+  // explicit Send is the only thing that reaches the customer.
+  const shouldNotify =
+    quoteKind === 'initial' &&
+    shouldNotifyOnEdit({
+      status: quote.status as string | null | undefined,
+      notifyCustomer: edits.notify_customer,
+      changedTiersCount: changedTiers.length,
+    })
 
   if (shouldNotify) {
     after(async () => {
@@ -817,11 +848,15 @@ export async function POST(
               // only the $99 site visit, so the revised-quote message needs that
               // link even when stripe_links still holds G/B/B only.
               // /r/<token>/inspection mints a fresh Session per click.
-              ...(isSiteVisitFirstTrade(intakeTrade)
+              ...(isSiteVisitFirstRow({ trade: intakeTrade, quoteKind })
                 ? { inspection: `${appUrl}/r/${quote.share_token as string}/inspection` }
                 : null),
             },
-            deposit_pct: 30,
+            // The row's OWN deposit %, not a hardcoded 30: a job type with a
+            // configured rate (EV chargers at 50%) would otherwise be
+            // advertised at 30% in the revised-quote SMS and then charged at
+            // 50% by the mint, which reads quotes.deposit_pct.
+            deposit_pct: clampDepositPct(quote.deposit_pct as number | null),
             quote_view_url: `${appUrl}/q/${quote.share_token as string}`,
             pdf_url: quotePdfPath ? quotePdfUrl(quote.share_token as string) : null,
             scope_of_works: null,
@@ -851,6 +886,11 @@ export async function POST(
             // Spec elec-plumb-site-visit-first R5 — the trade decides whether
             // the message sells per-tier deposits or the one $99 site visit.
             trade: intakeTrade,
+            // …and post-visit-money-sequence R6 — the KIND decides whether the
+            // trade gate applies at all. Threaded even though the notify gate
+            // above already excludes children, so the builder is correct on
+            // its own inputs rather than relying on a caller-side guard.
+            quoteKind,
           },
         )
         // Best-effort MMS attach of the refreshed PDF (shared helper signs

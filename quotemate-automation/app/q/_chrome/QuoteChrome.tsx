@@ -22,7 +22,11 @@ import { SunIcon, MoonIcon, DownloadIcon, ArrowRightIcon } from './icons'
 import { BrandMark } from '@/app/_components/BrandMark'
 
 export type StickyBar =
-  | { paid: true; paidSub?: ReactNode }
+  /** `paidLabel` overrides the default "Deposit paid" headline. A post-visit
+   *  balance row is paid in full, not "deposit paid" (spec
+   *  post-visit-money-sequence R5); omitted, every existing caller reads
+   *  exactly as before. */
+  | { paid: true; paidLabel?: string; paidSub?: ReactNode }
   | { paid?: false; tierLabel: string; priceText: string; ctaLabel: string; ctaHref?: string | null }
 
 export function QuoteChrome({
@@ -160,7 +164,7 @@ export function QuoteChrome({
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span aria-hidden="true" style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, background: 'color-mix(in srgb, var(--success-bright) 18%, transparent)', color: 'var(--success-bright)', flexShrink: 0, borderRadius: 'var(--qm-r-sm)' }}>✓</span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--success-bright)' }}>Deposit paid</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--success-bright)' }}>{sticky.paidLabel ?? 'Deposit paid'}</div>
                   {sticky.paidSub ? <div style={{ fontSize: 12.5, color: 'var(--text-sec)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sticky.paidSub}</div> : null}
                 </div>
               </div>

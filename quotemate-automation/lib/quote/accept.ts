@@ -69,6 +69,14 @@ export type ResolveAcceptInput = {
   /** Whether a booking/site-visit time is part of this acceptance. Adds the
    *  "confirm the site visit" bullet Jon asked for. Defaults true. */
   confirmsSiteVisit?: boolean
+  /** The site visit has ALREADY happened — a post-site-visit 'final' row
+   *  (spec post-visit-money-sequence R5). The deposit-mode strings otherwise
+   *  promise "you confirm the site visit / start time on the next step" and
+   *  "secure your booking", both untrue once the tradie has been on site and
+   *  priced the job: what this deposit buys is the job itself, with the
+   *  balance requested on completion. Drops that bullet and re-labels the CTA.
+   *  Defaults false, so every existing caller is byte-identical. */
+  visitDone?: boolean
   /** Site-visit fee copy. Defaults "$99". */
   siteVisitFee?: string
   /** Override the deposit short-link. Surfaces NOT backed by public.quotes
@@ -102,6 +110,7 @@ export function resolveAcceptView(input: ResolveAcceptInput): AcceptView {
     priceLabel,
     depositLabel,
     confirmsSiteVisit = true,
+    visitDone = false,
     siteVisitFee = '$99',
     depositHref,
     inspectionHref,
@@ -122,18 +131,28 @@ export function resolveAcceptView(input: ResolveAcceptInput): AcceptView {
   if (pricesVisible && !priceExpired) {
     const confirmations: string[] = []
     if (priceLabel) confirmations.push(`You accept the quoted price of ${priceLabel}.`)
-    if (confirmsSiteVisit) confirmations.push('You confirm the site visit / start time on the next step.')
-    confirmations.push(
-      depositLabel
-        ? `Next: secure your booking with the ${depositLabel}, credited to the final invoice.`
-        : 'Next: secure your booking with the deposit, credited to the final invoice.',
-    )
+    if (confirmsSiteVisit && !visitDone) {
+      confirmations.push('You confirm the site visit / start time on the next step.')
+    }
+    if (visitDone) {
+      confirmations.push(
+        depositLabel
+          ? `Next: pay the ${depositLabel} to confirm the job; the balance is requested by your tradie on completion.`
+          : 'Next: pay the deposit to confirm the job; the balance is requested by your tradie on completion.',
+      )
+    } else {
+      confirmations.push(
+        depositLabel
+          ? `Next: secure your booking with the ${depositLabel}, credited to the final invoice.`
+          : 'Next: secure your booking with the deposit, credited to the final invoice.',
+      )
+    }
     return {
       mode: 'deposit',
       payHref: depositHref ?? `/r/${token}/${tier}`,
       acceptTier: tier,
-      ctaLabel: 'Accept & confirm booking',
-      heading: 'Accept your quote',
+      ctaLabel: visitDone ? 'Accept & pay deposit' : 'Accept & confirm booking',
+      heading: visitDone ? 'Accept your final quote' : 'Accept your quote',
       confirmations,
       actionable: true,
     }

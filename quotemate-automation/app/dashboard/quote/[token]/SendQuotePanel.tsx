@@ -24,6 +24,11 @@ export default function SendQuotePanel(props: {
   /** Open the dropdown above the button — needed inside the Quotes-tab
    *  sticky bottom action bar, where downward would clip off-viewport. */
   dropUp?: boolean
+  /** Post-site-visit child rows are SMS-only (spec R9): buildQuoteEmail's copy
+   *  is generic and carries no deposit link, no $99 credit and no fee line, so
+   *  an emailed final quote tells the customer nothing about what they owe.
+   *  The send route refuses the channel too — this just stops offering it. */
+  smsOnly?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [phone, setPhone] = useState('')
@@ -136,8 +141,8 @@ export default function SendQuotePanel(props: {
             {sms.err && <p className="mt-1 text-xs text-accent">{sms.err}</p>}
           </div>
 
-          {/* ─── Email row ─── */}
-          <div>
+          {/* ─── Email row — hidden on post-site-visit children (R9) ─── */}
+          <div hidden={props.smsOnly}>
             <div className="mb-1 text-[0.6rem] uppercase tracking-[0.08em] text-text-dim">
               Email (PDF attached)
             </div>

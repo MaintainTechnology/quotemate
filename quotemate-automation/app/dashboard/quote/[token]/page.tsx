@@ -16,6 +16,7 @@ import { buildDefaultReportDoc } from '@/lib/quote/report-doc/seed'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
 import type { ReportStyle } from '@/lib/quote/report-doc/style'
 import QuoteReportViewerClient from './QuoteReportViewerClient'
+import { asQuoteKind, isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,11 @@ export default async function DashboardQuoteViewerPage({
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at, deposit_paid, status, selected_tier, scope_of_works, assumptions, risk_flags, report_doc, report_style',
+      // paid_tier + the mig-194 chain columns (spec post-visit-money-sequence
+      // R12): the toolbar's "Issue final quote" is shown only on a row whose
+      // payment was the $99 site visit (paid_tier='inspection') and which is
+      // itself the chain root (quote_kind='initial').
+      'id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at, paid_tier, quote_kind, parent_quote_id, deposit_paid, status, selected_tier, scope_of_works, assumptions, risk_flags, report_doc, report_style',
     )
     .eq('share_token', token)
     .maybeSingle()
@@ -45,7 +50,7 @@ export default async function DashboardQuoteViewerPage({
   const { data: intake } = quote.intake_id
     ? await supabase
         .from('intakes')
-        .select('trade, job_type, caller, call_id, customer_id')
+        .select('trade, job_type, caller, call_id, customer_id, scope')
         .eq('id', quote.intake_id)
         .maybeSingle()
     : { data: null }
@@ -75,6 +80,29 @@ export default async function DashboardQuoteViewerPage({
       .maybeSingle()
     gstRegistered = !!(pb?.gst_registered ?? true)
   }
+
+  // ─── The post-site-visit chain (spec R3/R10) ─────────────────────
+  // Which forward action this row offers, decided here so the client
+  // component stays presentational:
+  //   • the paid $99 site-visit row on a site-visit-first trade → issue the
+  //     final quote (the step that unblocks a job stuck at "site visit paid");
+  //   • the final row, once its deposit has landed (or the $99 covered it,
+  //     paid_tier='credit') → request the balance.
+  // Everything else — an unpaid quote, a solar/roofing deposit, a balance row
+  // — offers neither.
+  const quoteKind = asQuoteKind(quote.quote_kind as string | null)
+  const paidTier = (quote.paid_tier as string | null) ?? null
+  const chainAction: 'issue-final' | 'request-balance' | null =
+    quoteKind === 'initial' &&
+    !!quote.paid_at &&
+    paidTier === 'inspection' &&
+    isSiteVisitFirstTrade(intake?.trade as string | null | undefined)
+      ? 'issue-final'
+      : quoteKind === 'final' &&
+          !!quote.paid_at &&
+          (paidTier === 'deposit' || paidTier === 'credit')
+        ? 'request-balance'
+        : null
 
   const adapter = getReportAdapter(trade)
   type ViewerTier = Parameters<typeof QuoteReportViewerClient>[0]['tiers']['good']
@@ -116,6 +144,8 @@ export default async function DashboardQuoteViewerPage({
       reportDoc={reportDoc}
       reportStyle={(quote.report_style as ReportStyle | null) ?? {}}
       selectedTier={(quote.selected_tier as 'good' | 'better' | 'best' | null) ?? null}
+      chainAction={chainAction}
+      quoteKind={quoteKind}
       bodyMode={adapter.bodyMode}
       editorKind={adapter.editorKind}
       pdfUrl={adapter.pdfPath(token)}

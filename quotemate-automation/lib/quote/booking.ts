@@ -81,8 +81,12 @@ export function bookingStateOnPaid(
 }
 
 /** Deposit tiers a booking may charge. 'inspection' is valid too but is
- *  passed through explicitly (it is a flat $99 fee, not a deposit). */
-const NEXT_PAY_TIERS = new Set(['good', 'better', 'best'])
+ *  passed through explicitly (it is a flat $99 fee, not a deposit).
+ *  'deposit'/'balance' are the post-site-visit child literals: a child never
+ *  reaches the booking pages, but resolveNextTier is also what /paid uses to
+ *  echo the tier back, and mapping them to 'better' there would mislabel the
+ *  charge (spec post-visit-money-sequence R7). */
+const NEXT_PAY_TIERS = new Set(['good', 'better', 'best', 'deposit', 'balance'])
 
 /**
  * Which tier the pay step charges. Shared by the /book page and POST
@@ -125,9 +129,24 @@ export function shouldFinaliseBookingOnPaid(
 export function paidPageTarget(input: {
   paid: boolean
   scheduledAt: string | null | undefined
+  /** quotes.quote_kind (spec post-visit-money-sequence R11). A 'final' or
+   *  'balance' child has no visit to schedule — the site visit already
+   *  happened — so it goes to the quote page, whose paid state reads
+   *  "Deposit received" / "Paid in full". Sending it to 'book' would hand the
+   *  customer a calendar for a visit that is behind them, let them prune a
+   *  real slot out of the tenant's availability, and fire the tradie's
+   *  "booked and paid the deposit" SMS for a job with no appointment. */
+  quoteKind?: string | null | undefined
 }): 'book' | 'thanks' | 'quote' {
+  if (isChildKind(input.quoteKind)) return 'quote'
   if (!input.paid) return 'quote'
   return input.scheduledAt ? 'thanks' : 'book'
+}
+
+/** True for the post-site-visit child rows ('final' | 'balance'). Local to
+ *  this module so the pure booking helpers stay dependency-free. */
+function isChildKind(v: string | null | undefined): boolean {
+  return v === 'final' || v === 'balance'
 }
 
 // ── Off-platform "book directly on the tradie's calendar" option ────

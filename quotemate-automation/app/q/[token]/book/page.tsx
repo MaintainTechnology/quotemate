@@ -68,12 +68,20 @@ export default async function BookingPage(props: {
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, tenant_id, intake_id, created_at, price_hold_until, needs_inspection',
+      'id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, tenant_id, intake_id, created_at, price_hold_until, needs_inspection, quote_kind',
     )
     .eq('share_token', token)
     .maybeSingle()
 
   if (!quote) notFound()
+
+  // A post-site-visit child ('final'/'balance') has no visit to book — the
+  // site visit is what created it (spec post-visit-money-sequence R11).
+  // Letting one through would sell a calendar for an appointment that already
+  // happened AND let the customer prune a real slot out of the tenant's
+  // availability. Its quote page is the surface that belongs to it.
+  const quoteKind = (quote.quote_kind as string | null) ?? null
+  if (quoteKind === 'final' || quoteKind === 'balance') redirect(`/q/${token}`)
 
   const isPaid = !!quote.paid_at
   const isScheduled = !!quote.scheduled_at
@@ -111,6 +119,7 @@ export default async function BookingPage(props: {
         ),
         needsInspection: !!(quote as { needs_inspection?: boolean | null }).needs_inspection,
         nextTier: tier,
+        quoteKind,
       })
 
   if (unpaidAction?.kind === 'expired') {
@@ -137,8 +146,11 @@ export default async function BookingPage(props: {
     )
   }
 
-  // Pay-first: booking follows the order the customer placed.
-  if (unpaidAction) redirect(`/r/${token}/${unpaidAction.tier}`)
+  // Pay-first: booking follows the order the customer placed. ('not_bookable'
+  // is unreachable here — children were redirected above — but the narrowing
+  // keeps the two guards from drifting apart.)
+  if (unpaidAction?.kind === 'pay') redirect(`/r/${token}/${unpaidAction.tier}`)
+  if (unpaidAction) redirect(`/q/${token}`)
 
   // Already booked → the thank-you page owns the confirmation.
   if (isScheduled) redirect(`/q/${token}/thanks`)

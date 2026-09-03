@@ -16,6 +16,7 @@ const h = vi.hoisted(() => {
   const queries: { table: string; ops: Op[] }[] = []
   const deferred: Array<() => unknown> = []
   const notify = vi.fn()
+  const notifyChild = vi.fn()
   const advance = vi.fn()
   const push = vi.fn()
 
@@ -39,7 +40,7 @@ const h = vi.hoisted(() => {
     return builder
   }
 
-  return { results, queries, deferred, notify, advance, push, client: { from } }
+  return { results, queries, deferred, notify, notifyChild, advance, push, client: { from } }
 })
 
 vi.mock('next/server', () => ({
@@ -47,7 +48,10 @@ vi.mock('next/server', () => ({
     h.deferred.push(fn)
   },
 }))
-vi.mock('@/lib/quote/booking-notify', () => ({ notifyBookingConfirmed: h.notify }))
+vi.mock('@/lib/quote/booking-notify', () => ({
+  notifyBookingConfirmed: h.notify,
+  notifyChildPaymentReceived: h.notifyChild,
+}))
 vi.mock('@/lib/quote/lifecycle', () => ({ advanceQuoteStatus: h.advance }))
 vi.mock('@/lib/push/send', () => ({ sendPushToTenant: h.push }))
 
@@ -69,8 +73,105 @@ beforeEach(() => {
   h.queries.length = 0
   h.deferred.length = 0
   h.notify.mockReset()
+  h.notifyChild.mockReset()
   h.advance.mockReset()
   h.push.mockReset()
+})
+
+// ── Post-site-visit child rows (spec post-visit-money-sequence R11) ──
+//
+// A 'final' (deposit) or 'balance' payment is money on a job whose site visit
+// already happened. It must take the payment stamps and the lifecycle move,
+// but NONE of the booking machinery: writing booking_state drops the row into
+// the dashboard calendar's "to schedule" bucket, and notifyBookingConfirmed
+// texts the customer "pick a time" with a /book link for a visit behind them.
+describe('finalisePaidQuote — child rows skip the booking machinery', () => {
+  it('deposit on a final row: no booking_state, no slot prune, no "pick a time" SMS', async () => {
+    h.results.push(
+      { data: [{ id: 'q-1' }], error: null }, // claim matched
+      { data: null, error: null }, // fund-flow stamp
+    )
+    const out = await finalisePaidQuote(sb, {
+      quote: { ...quote, quote_kind: 'final' },
+      tier: 'deposit',
+      sessionId: 'cs_dep',
+      amountTotalCents: 270400,
+      applicationFeeCents: 5302,
+    })
+    expect(out).toEqual({ claimed: true })
+
+    // The claim and the fund-flow stamp still run — this IS a payment.
+    expect(h.queries[0].ops).toContainEqual({ op: 'is', args: ['paid_at', null] })
+    const claimUpdate = h.queries[0].ops.find((o) => o.op === 'update')!
+    expect(claimUpdate.args[0]).toMatchObject({ paid_tier: 'deposit' })
+
+    // …but nothing after the stamp: no booking patch, no tenant slot read.
+    expect(h.queries).toHaveLength(2)
+    expect(h.queries.some((q) => q.table === 'tenants')).toBe(false)
+
+    // Accepting the quote is what paying the deposit MEANS.
+    expect(h.advance).toHaveBeenCalledWith(sb, 'q-1', 'accepted')
+
+    await h.deferred[0]()
+    expect(h.notify).not.toHaveBeenCalled()
+    expect(h.notifyChild).toHaveBeenCalledWith(
+      sb,
+      expect.objectContaining({ quoteId: 'q-1', kind: 'final', chargedCents: 270400 }),
+    )
+    expect(h.push).toHaveBeenCalledWith(sb, 't-1', expect.objectContaining({ title: 'Deposit paid' }))
+  })
+
+  it('balance payment advances to paid and reports paid-in-full', async () => {
+    h.results.push(
+      { data: [{ id: 'q-1' }], error: null },
+      { data: null, error: null },
+    )
+    const out = await finalisePaidQuote(sb, {
+      quote: { ...quote, quote_kind: 'balance' },
+      tier: 'balance',
+      sessionId: 'cs_bal',
+      amountTotalCents: 255000,
+    })
+    expect(out).toEqual({ claimed: true })
+    expect(h.queries).toHaveLength(2)
+    expect(h.advance).toHaveBeenCalledWith(sb, 'q-1', 'paid')
+
+    await h.deferred[0]()
+    expect(h.notify).not.toHaveBeenCalled()
+    expect(h.notifyChild).toHaveBeenCalledWith(
+      sb,
+      expect.objectContaining({ kind: 'balance' }),
+    )
+  })
+
+  it('a losing claim on a child performs no side effects at all', async () => {
+    h.results.push({ data: [], error: null }) // someone else claimed it
+    const out = await finalisePaidQuote(sb, {
+      quote: { ...quote, quote_kind: 'final' },
+      tier: 'deposit',
+      sessionId: 'cs_dup',
+    })
+    expect(out).toEqual({ claimed: false })
+    expect(h.deferred).toHaveLength(0)
+    expect(h.notifyChild).not.toHaveBeenCalled()
+    expect(h.advance).not.toHaveBeenCalled()
+  })
+
+  it('an unknown quote_kind is treated as initial — legacy rows are untouched', async () => {
+    h.results.push(
+      { data: [{ id: 'q-1' }], error: null },
+      { data: null, error: null },
+      { data: null, error: null }, // booking finalise patch DOES run
+    )
+    await finalisePaidQuote(sb, {
+      quote: { ...quote, quote_kind: null },
+      tier: 'inspection',
+      sessionId: 'cs_legacy',
+    })
+    const patch = h.queries[2].ops.find((o) => o.op === 'update')!.args[0] as Record<string, unknown>
+    expect(patch.booking_state).toBe('reserved')
+    expect(h.advance).toHaveBeenCalledWith(sb, 'q-1', 'paid')
+  })
 })
 
 describe('finalisePaidQuote', () => {

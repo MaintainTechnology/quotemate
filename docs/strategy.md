@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v22 (2026-09-01).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 added **commercial painting**; v12 extended **solar** to Path B auto-send; v13–v15 refined roofing structure/source gates; v16–v20 converged residential trades on a pay-first flat **$99 refundable site visit**; v17–v18 recorded the LLM receptionist and its route-level trade boundaries; v21 moved residential painting to auto-release; **v22 replaces v3's blanket EV-charger inspection rule with a narrow, tenant-enabled, tradie-reviewed single-phase pricing path while keeping explicit three-phase work inspection-only and forbidding guessed charger-unit prices.** The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v22 rationale.
+> **Current iteration: v23 (2026-09-03).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 added **commercial painting**; v12 extended **solar** to Path B auto-send; v13–v15 refined roofing structure/source gates; v16–v20 converged residential trades on a pay-first flat **$99 refundable site visit**; v17–v18 recorded the LLM receptionist and its route-level trade boundaries; v21 moved residential painting to auto-release; v22 replaced v3's blanket EV-charger inspection rule with a narrow, tenant-enabled, tradie-reviewed single-phase pricing path; **v23 carries the job past the paid $99 site visit — final quote, deposit (less the $99 credit) and balance each on their own linked `quotes` row, with the 2% platform fee charged on top so the tradie nets the quoted price.** The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v23 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -1586,5 +1586,137 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   - Review edits or site visits show the bounded single-phase path is poorly
     calibrated → return the affected configuration to inspection routing rather
     than widening model discretion.
+
+- **v23** (2026-09-03): **the job no longer ends at "site visit paid" — the tradie can issue a final quote, take a job-type deposit less the $99 already paid, and request the balance on completion, each charge on its own linked `quotes` row, with the 2% platform fee charged on top instead of deducted.** Owner decision, onboarding week. Extends **v20**; spec `quotemate-automation/specs/post-visit-money-sequence.md`.
+
+  **What was blocking it:**
+
+  v20 made the flat $99 site visit the only thing electrical and plumbing
+  sell, and the product stopped dead there. The stop was structural, not
+  cosmetic: a `quotes` row takes exactly one payment. `finalisePaidQuote`
+  claims with `WHERE paid_at IS NULL`, the Stripe webhook skips any session
+  for a row that already carries `paid_at`, and every tradie mutation — edit,
+  chat-edit, document, tier PATCH, DELETE — 409s once it is set. The only
+  post-payment action in the app *released* funds; nothing charged again. So
+  "the price is confirmed on site, now what" had no answer in code. The pilot
+  electrician put it plainly in onboarding week: stuck at the site visit, no
+  way forward to a full quote and deposit acceptance.
+
+  **The decision: chain rows, don't build a ledger.**
+
+  Each customer charge is its own `quotes` row — `quote_kind` one of
+  `initial | final | balance`, linked by `parent_quote_id` (mig 194, with a
+  partial unique index making "at most one open child of each kind" a database
+  guarantee rather than app code). The $99 initial row is untouched; the final
+  row carries the price confirmed on site and takes the deposit; the balance
+  row takes the rest. One-payment-per-row therefore stays literally true, and
+  the webhook claim, the paid-redirect and the Connect payout release all keep
+  working with no new branches.
+
+  The alternative was weighed on touch-points, not taste: record the balance as
+  a **second payment on the final row** — `balance_paid_at`,
+  `balance_amount_cents`, `balance_fee_cents`, `balance_payout_id`, a webhook
+  branch on `metadata.purpose` with its own claim, and a second release path.
+  That duplicates the entire payment column set *and* the release path, which
+  is precisely the money code where this repo has already grown silent-failure
+  bugs (v21's three-of-eight releases that texted nobody). The third row costs
+  one tier literal and a label. A proper `quote_payments` ledger stays the
+  named later upgrade — it is not this build.
+
+  **The 2% changes incidence, not size.**
+
+  The platform fee has always been *deducted*: `application_fee_amount` comes
+  off a destination charge, so a tradie quoting $10,000 settled $9,800. On the
+  deposit and the balance it is now charged **on top** — `surcharge =
+  platformFeeCents(base)`, `charged = base + surcharge`, and
+  `application_fee_amount` is that **same variable** — so the tradie nets
+  exactly the base they quoted and the customer sees a labelled "QuoteMax
+  platform fee (2%)" line. The $99 site visit is unchanged: flat, fee deducted.
+
+  The trap worth naming, because it looks equivalent and is not: charging
+  `round(base × 1.02)` and then taking the fee as `platformFeeCents(charged)`
+  is two roundings of two different bases, and it leaves the tradie about
+  0.04% short on every job. One base, one rounding, one variable.
+
+  **"Credited toward your final quote" becomes arithmetic.**
+
+  Since the $99 shipped, that credit has been a Stripe product-description
+  string and nothing more — no code subtracted it from anything, because there
+  was nothing later to subtract it from. Now `deposit = max(0, round(T × pct /
+  100) − 9900)` and `balance = T − 9900 − deposit`, with `9900 + deposit +
+  balance === T` as a tested identity in every case including the edges. A job
+  whose deposit would fall below the $99 already paid skips the deposit step
+  entirely rather than charging a token amount.
+
+  **Deposit % is per job type, and it is config, not code.**
+
+  The ask that suits a $600 switchboard repair does not suit a $12,000 EV
+  charger install; the pilot electrician wants 50% on EV work (v22's trade).
+  So `pricing_book.overlays.deposit_pct_by_job_type`, keyed verbatim by
+  `intakes.job_type` (`{"ev_charger": 50, "default": 30}`), resolved once and
+  stamped onto the child row when the final quote is issued. Overlays because
+  that is where per-tenant configuration already lives (mig 044) and it needs
+  no schema change; out-of-range values fall back to 30 with the documented
+  `clampDepositPct` semantics. No editor UI this iteration — Jon's map is
+  seeded by SQL.
+
+  **Two invariants stated unconditionally in CLAUDE.md are now scoped to
+  `quote_kind='initial'`** — the drift note future engineers need:
+
+  CLAUDE.md says `canTakePayment()` must gate **every** mint, and that the
+  early-booking discount must be realised at the generic mint. Both are now
+  true of initial rows only, and the narrowing is deliberate in each case. A
+  child row has no site visit to book, so the bookable-slots guard would refuse
+  a legitimate deposit on a tenant whose calendar happens to be full. And a
+  child must never inherit an early-bird offer: the `early_bird_*` columns are
+  deliberately not copied and `resolveMintDiscount` is skipped, because a stale
+  parent offer would otherwise silently discount a price the tradie had just
+  confirmed on site. The 7-day price hold is skipped on children for the same
+  reason — they have no hold, and one derived from `created_at` would expire a
+  link that should still be payable. And `/r/<child>/inspection` is refused
+  outright: it would mint a second $99 that claims the child's only `paid_at`
+  slot and permanently blocks the deposit. Anyone restoring the unconditional
+  reading of either invariant breaks the sequence.
+
+  **Entry point: SMS, and GHL stays deferred.**
+
+  Leads arrive from a Meta ad that tells the consumer to text the tradie's
+  QuoteMax number — the channel that already exists, handled by the out-of-repo
+  Front Desk and per-trade receptionist services on Railway. No GHL webhook or
+  status writeback: it is a second integration to keep alive before a single
+  job has been through the sequence end to end, and Meta→SMS needs no code in
+  this repo. ⚠ The dependency it creates is that the external receptionist must
+  mint the initial `quotes` row through this app, or the chain has no root.
+
+  **Two economics inputs v20 parked now move again**, recorded rather than
+  quietly corrected: §4's "platform fee on deposits" ARPU line and §11's
+  "≥1 deposit collected" pilot-exit criterion have rested on solar and
+  commercial painting alone since v19/v20. Electrical and plumbing can take a
+  deposit again — after the visit, against a price confirmed on site, with the
+  fee on top rather than inside it — so both need a fresh pass, not a
+  find-and-replace.
+
+  **What was deliberately NOT touched:** solar, roofing, painting and
+  commercial-painting money paths; the $99 initial flow for every existing
+  tenant; the fee percentage (2% remains a platform constant — only its
+  incidence moved). Roofing rows on `quotes` keep `quote_kind='initial'` and
+  pass through `/r` exactly as before, which is why every new gate is a *kind*
+  check layered on v20's trade allowlist rather than a blocklist. Refunds are
+  still absent: the $99 is advertised as refundable on every surface and no
+  refund path exists in code, so a declined final quote is handled by hand in
+  the Stripe dashboard. Recorded, not fixed.
+
+  **Trigger for the next iteration:**
+
+  - A third charge appears on a job (variations, staged payments), or per-row
+    payouts start confusing tradies → that is the signal to build
+    `quote_payments` properly, not to lengthen the chain.
+  - Deposits go routinely uncollected while the work proceeds anyway → the
+    deposit is theatre for this trade; drop it and charge the balance only,
+    exactly as v20 dropped the deposit that never converted.
+  - The 2% surcharge draws customer complaints, or its GST treatment gets an
+    accounting ruling → revisit the incidence before revisiting the number.
+    Stripe's processing fees are platform-borne, so 2% charged on top nets
+    QuoteMax roughly 0.3% — the fee is close to cost recovery, not margin.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

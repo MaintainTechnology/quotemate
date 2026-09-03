@@ -35,16 +35,36 @@ import { resolveRoofRenderSelection } from '@/lib/roofing/selection'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import {
   INSPECTION_FEE_AUD,
+  MIN_STRIPE_CHARGE_CENTS,
+  PLATFORM_FEE_PCT,
+  asMoneyNumber,
+  chargedCents,
   clampDepositPct,
+  depositCents,
   displayDeposit,
   displayIncGst,
+  dollars,
+  finalBalanceBaseCents,
+  finalDepositBaseCents,
   fmtAud,
+  surchargeCents,
+  totalIncGstCents,
 } from '@/lib/quote/money'
 import { safeWebsiteUrl, trustVideoTrack } from '@/lib/quote/tenant-identity'
 import type { TrustVideoState } from '@/lib/videos/trust-video'
 import type { TradeVideoMap } from '@/lib/videos/trade-videos'
 import { allocateIncGst, priceStack } from '@/lib/quote/line-allocation'
 import { jobMethod, METHOD_DISCLAIMER } from '@/lib/quote/job-method'
+import {
+  isEvChargerJob,
+  deriveEvInclusions,
+  deriveEvExclusions,
+  evEstimateTerms,
+  formatEstimateNumber,
+  EV_ESTIMATE_VALID_DAYS,
+  EV_SURGE_PROTECTION_NOTE,
+  EV_SWITCHBOARD_CAPACITY_NOTE,
+} from '@/lib/quote/report-html-ev-charger'
 import { loadQuoteMaterials, labourHours, type QuoteMaterial } from '@/lib/quote/quote-materials'
 import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { buildCalendarLinks } from '@/lib/quote/calendar-links'
@@ -66,7 +86,7 @@ import { PreviewSection } from './PreviewSection'
 import TradieEditor from './TradieEditor'
 import { AcceptBlock } from '../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
-import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
+import { asQuoteKind, isSiteVisitFirstRow } from '@/lib/quote/mint-tier'
 import { computePriceHoldUntil, priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import {
@@ -178,16 +198,86 @@ const fmt = fmtAud
 
 export default async function PublicQuotePage(props: {
   params: Promise<{ token: string }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { token } = await props.params
+  const searchParams = (await props.searchParams) ?? {}
+  // The child mint bounces here rather than 404ing when it cannot open a
+  // Session (spec R7: tenant not Connect-ready, or a charge under Stripe's
+  // minimum). Both land as a short reassurance, never a broken state.
+  const payBlocked =
+    searchParams.connect === '0' || searchParams.pay === 'unavailable'
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, intake_id, tenant_id, status, scope_of_works, assumptions, risk_flags, good, better, best, optional_upsells, estimated_timeframe, needs_inspection, inspection_reason, gst_note, selected_tier, share_token, stripe_links, paid_at, paid_tier, created_at, price_hold_until, booking_state, preview_status, preview_image_path, preview_image_paths, samples_status, sample_image_paths, display_mode, deposit_pct')
+    .select('id, intake_id, tenant_id, status, scope_of_works, assumptions, risk_flags, good, better, best, optional_upsells, estimated_timeframe, needs_inspection, inspection_reason, inspection_cause, gst_note, selected_tier, share_token, stripe_links, paid_at, paid_tier, created_at, price_hold_until, booking_state, preview_status, preview_image_path, preview_image_paths, samples_status, sample_image_paths, display_mode, deposit_pct, total_inc_gst, quote_kind, parent_quote_id')
     .eq('share_token', token)
     .maybeSingle()
 
   if (!quote) notFound()
+
+  // ═══ Post-site-visit chain (spec post-visit-money-sequence R5) ═══════
+  //
+  // A job is a chain of `quotes` rows: initial ($99 site visit) → final
+  // (the confirmed price, charged as a deposit less the $99) → balance.
+  // `quote_kind` defaults to 'initial', so every row that predates the chain
+  // — and every roofing/solar/commercial row on this shared page — takes the
+  // exact path it takes today; everything below is inert for them.
+  const quoteKind = asQuoteKind((quote as { quote_kind?: string | null }).quote_kind)
+  const isFinalRow = quoteKind === 'final'
+  const isChildRow = quoteKind !== 'initial'
+  const parentQuoteId = (quote as { parent_quote_id?: string | null }).parent_quote_id ?? null
+
+  // The FINAL row's page is the job's single customer surface after the visit,
+  // so the other two tokens hand over to it: a balance token has nothing of its
+  // own to render (tiers null), and the initial token is still sitting in the
+  // customer's SMS thread long after the final quote was issued.
+  if (quoteKind === 'balance' && parentQuoteId) {
+    const { data: finalRow } = await supabase
+      .from('quotes')
+      .select('share_token')
+      .eq('id', parentQuoteId)
+      .maybeSingle()
+    const finalToken = (finalRow?.share_token as string | null) ?? null
+    if (finalToken && finalToken !== token) redirect(`/q/${finalToken}`)
+  }
+  if (quoteKind === 'initial' && quote.paid_at) {
+    // Only hand over to a child the customer has actually been SENT. A final
+    // quote starts life as a $0 draft the tradie prices on site, so
+    // redirecting on existence alone would replace the quote they paid $99
+    // against with an unpriced draft the moment the tradie pressed "Issue
+    // final quote" — mid-visit, from their phone.
+    const { data: child } = await supabase
+      .from('quotes')
+      .select('share_token')
+      .eq('parent_quote_id', quote.id)
+      .eq('quote_kind', 'final')
+      .not('sent_at', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const childToken = (child?.share_token as string | null) ?? null
+    if (childToken) redirect(`/q/${childToken}`)
+  }
+
+  // This final row's balance child, when the tradie has requested the final
+  // payment. Drives the "Balance due" state and its pay link below.
+  let balanceChild: { token: string; paid: boolean } | null = null
+  if (isFinalRow) {
+    const { data: bal } = await supabase
+      .from('quotes')
+      .select('share_token, paid_at')
+      .eq('parent_quote_id', quote.id)
+      .eq('quote_kind', 'balance')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (bal?.share_token) {
+      balanceChild = { token: bal.share_token as string, paid: !!bal.paid_at }
+    }
+  }
+  const balancePaid = !!balanceChild?.paid
+  const balanceRequested = !!balanceChild && !balanceChild.paid
 
   // v8 Phase A — early-booking discount. SEPARATE best-effort select so
   // a pre-migration-044 deploy (columns absent) returns an error row
@@ -264,9 +354,16 @@ export default async function PublicQuotePage(props: {
   // shared with solar, commercial painting and the roofing rows on `quotes`,
   // all of which still sell deposits — so the gate is an allowlist that fails
   // open, matching /r/[token]/[tier] exactly.
-  const siteVisitFirst = isSiteVisitFirstTrade(
-    (intake as { trade?: string | null } | null)?.trade ?? null,
-  )
+  //
+  // ⚠ ROW, not trade (spec post-visit-money-sequence R5/R6). A 'final' child
+  // shares its parent's electrical/plumbing intake, so the trade-only gate
+  // answered "yes" and this page rendered a $99 site-visit CTA on a job that
+  // has ALREADY been visited — selling the customer a second site visit
+  // instead of the deposit the row exists to collect.
+  const siteVisitFirst = isSiteVisitFirstRow({
+    trade: (intake as { trade?: string | null } | null)?.trade ?? null,
+    quoteKind,
+  })
 
   // ── Solar → dedicated page redirect ──────────────────────────────
   // The solar pipeline token-twins its rows (quotes.share_token ==
@@ -617,6 +714,40 @@ export default async function PublicQuotePage(props: {
   // stored total_inc_gst (a legacy tenant-less quote defaults to registered).
   const gstRegistered = pricingBook ? !!pricingBook.gst_registered : true
 
+  // ── The post-visit deposit maths (spec "Money" — one source of truth) ──
+  //
+  //   deposit_base = max(0, pct% of T − $99)   balance_base = T − $99 − deposit
+  //   charged(x)   = x + surcharge(x)          surcharge = the 2% platform fee
+  //
+  // Every figure comes from lib/quote/money — never re-derived here — and T is
+  // read off the SAME good.subtotal_ex_gst the tier card above prints, so the
+  // stack always reconciles to the headline the customer is looking at. A
+  // child carries no early-bird columns, so there is no discount to thread in.
+  const finalPct = depositPct ?? 30
+  // T comes from the STORED total_inc_gst, which is what the mint charges from
+  // (app/r/[token]/[tier]/route.ts). Re-deriving it here from
+  // good.subtotal_ex_gst plus a LIVE pricing_book.gst_registered read would
+  // agree only until that flag is toggled after the quote was issued — and
+  // then this page would advertise a deposit 10% away from what Stripe
+  // actually charges, on the very screen whose button says "Accept & pay $X".
+  // One number, one source.
+  const finalTotalCents = isFinalRow
+    ? Math.round(asMoneyNumber(quote.total_inc_gst as number | string | null) * 100)
+    : 0
+  const finalGrossDepositCents = depositCents(finalTotalCents, finalPct)
+  const finalDepositBase = finalDepositBaseCents(finalTotalCents, finalPct)
+  const finalDepositFeeCents = surchargeCents(finalDepositBase)
+  const finalDepositChargedCents = chargedCents(finalDepositBase)
+  const finalBalanceBase = finalBalanceBaseCents(finalTotalCents, finalPct)
+  const finalBalanceChargedCents = chargedCents(finalBalanceBase)
+  // R8 — a deposit under Stripe's minimum is NO charge, not a small one: the
+  // $99 already covers it and the send route stamps the row paid_tier='credit'.
+  const finalZeroDeposit = isFinalRow && finalDepositBase < MIN_STRIPE_CHARGE_CENTS
+  // The one place the deposit CTA is offered. Suppressed once anything is paid,
+  // when the credit covers it, and when the mint has already told us it cannot
+  // open a Session — repeating the link would just bounce them back here.
+  const finalDepositPayable = isFinalRow && !isPaid && !finalZeroDeposit && !payBlocked
+
   // WP6 — price-hold / urgency. Use the persisted price_hold_until when
   // present (migration 026); otherwise derive it from created_at so the
   // countdown works on every quote even before the column is populated.
@@ -629,11 +760,17 @@ export default async function PublicQuotePage(props: {
   // Suppressed for site-visit-first trades: the banner's "lock it in with your
   // N% deposit" promises a payment they no longer take, and the $99 they DO
   // take has no price hold to advertise (spec elec-plumb-site-visit-first R5).
-  const showHoldBanner = !isPaid && !isInspection && !siteVisitFirst && hold.state !== 'none'
+  // Also suppressed on children: they carry no hold at all (price_hold_until
+  // is NULL by construction), so the derived-from-created_at fallback above
+  // would invent one and count a final quote down to an expiry nobody set.
+  const showHoldBanner =
+    !isPaid && !isInspection && !siteVisitFirst && !isChildRow && hold.state !== 'none'
   // Price hold lapsed → suppress the "Lock in" CTA so a customer can't book /
   // pay against a stale price. The banner above already tells them to reply
-  // for a refreshed quote. N/A to inspection ($99 fee, no hold) or once paid.
-  const priceExpired = !isPaid && !isInspection && hold.state === 'expired'
+  // for a refreshed quote. N/A to inspection ($99 fee, no hold), to a child
+  // (no hold either — a week-old final quote must still be payable), or once
+  // paid.
+  const priceExpired = !isPaid && !isInspection && !isChildRow && hold.state === 'expired'
 
   // v8 — early-booking discount. `ebApplied` once the customer booked
   // in time → tier prices render discounted. Otherwise, while the offer
@@ -644,8 +781,12 @@ export default async function PublicQuotePage(props: {
   // excludes 'inspection'), and site-visit-first trades no longer reach that
   // mint — so advertising the countdown to them would be a discount they can
   // never earn. An ALREADY-applied discount still renders below, unchanged.
+  // Children are excluded for the same reason: the early-bird columns are
+  // deliberately never copied onto them and the child mint never calls
+  // resolveMintDiscount (spec R3/R7).
   const showEarlyBirdOffer =
-    !isPaid && !isInspection && !siteVisitFirst && !ebApplied && ebStatus.state === 'live'
+    !isPaid && !isInspection && !siteVisitFirst && !isChildRow && !ebApplied &&
+    ebStatus.state === 'live'
 
   // Mig 142 — resolve which tier(s) the customer sees for THIS feature's mode.
   // Presentation-only: the full good/better/best stays persisted for the tradie
@@ -705,7 +846,42 @@ export default async function PublicQuotePage(props: {
   //                     (href suppressed when the price hold has lapsed or no
   //                     Stripe link exists).
   let stickyBar: StickyBar | null = null
-  if (isPaid) {
+  if (isFinalRow) {
+    // The post-visit chain owns its own bar end to end (spec R5). It never
+    // reads "Deposit paid" once the balance has settled, and it never offers
+    // a booking — the visit already happened.
+    if (balancePaid) {
+      stickyBar = {
+        paid: true,
+        paidLabel: 'Paid in full',
+        paidSub: 'Thanks — nothing further to pay',
+      }
+    } else if (balanceRequested && balanceChild) {
+      stickyBar = {
+        tierLabel: 'Balance on completion',
+        priceText: `$${fmt(dollars(finalBalanceChargedCents))}`,
+        ctaLabel: `Pay $${fmt(dollars(finalBalanceChargedCents))} balance`,
+        ctaHref: payBlocked ? null : `/r/${balanceChild.token}/balance`,
+      }
+    } else if (isPaid) {
+      stickyBar = {
+        paid: true,
+        paidLabel: 'Deposit received',
+        paidSub: 'Your tradie will confirm the job date',
+      }
+    } else if (finalZeroDeposit) {
+      // Nothing to charge now — a bar with a $0 CTA would be a button that
+      // does nothing. Section 05 carries the explanation instead.
+      stickyBar = null
+    } else {
+      stickyBar = {
+        tierLabel: `${finalPct}% deposit · less your $${INSPECTION_FEE_AUD} credit`,
+        priceText: `$${fmt(dollars(finalDepositChargedCents))}`,
+        ctaLabel: `Accept & pay $${fmt(dollars(finalDepositChargedCents))} deposit`,
+        ctaHref: finalDepositPayable ? `/r/${token}/deposit` : null,
+      }
+    }
+  } else if (isPaid) {
     stickyBar = {
       paid: true,
       paidSub: quote.paid_tier
@@ -766,7 +942,11 @@ export default async function PublicQuotePage(props: {
   const acceptDep = acceptFeaturedTier ? tierDeposit(acceptFeaturedTier) : null
   const acceptView = resolveAcceptView({
     token,
-    tier: (featuredKey ?? 'better') as 'good' | 'better' | 'best',
+    // A final row has ONE tier and it is always 'good' (the issue-final route
+    // seeds `good` and nulls better/best). Pin it rather than fall through to
+    // resolveAcceptView's 'better' default, which AcceptBlock would then POST
+    // to /accept and record as a tier this row does not have (spec R5).
+    tier: isFinalRow ? 'good' : ((featuredKey ?? 'better') as 'good' | 'better' | 'best'),
     isPaid,
     // pricesVisible false ⇒ resolveAcceptView's 4th branch: accept + pay the
     // $99. That is exactly what a site-visit-first trade sells, and it also
@@ -776,7 +956,18 @@ export default async function PublicQuotePage(props: {
     pricesVisible: !isInspection && !siteVisitFirst,
     priceExpired,
     priceLabel: acceptFeaturedTier ? `$${fmt(acceptInc)} inc GST` : null,
-    depositLabel: acceptDep ? `${depositPct ?? 30}% deposit ($${fmt(acceptDep)})` : null,
+    // A final row's deposit is NOT the raw tier deposit: it is that figure less
+    // the $99 already paid, plus the 2% platform fee — the number the mint
+    // actually charges (spec "Money").
+    depositLabel: isFinalRow
+      ? `${finalPct}% deposit, $${fmt(dollars(finalDepositChargedCents))} after your $${INSPECTION_FEE_AUD} credit and the ${PLATFORM_FEE_PCT}% platform fee`
+      : acceptDep
+        ? `${depositPct ?? 30}% deposit ($${fmt(acceptDep)})`
+        : null,
+    // The site visit has already happened on a final row, so the deposit-mode
+    // strings must not promise to confirm one on the next step (spec R5).
+    visitDone: isFinalRow,
+    depositHref: isFinalRow ? `/r/${token}/deposit` : undefined,
   })
 
   // NOTE: the electrical/plumbing tier cards used to be built here for the
@@ -865,7 +1056,20 @@ export default async function PublicQuotePage(props: {
   // is the refundable $99 visit — never a % deposit against a price nobody has
   // confirmed on site yet.
   const siteVisitGreeting = `The only payment now is a $${INSPECTION_FEE_AUD} site visit - refundable and credited toward your final quote. Your tradie confirms the final price on site.`
-  const heroGreeting = isInspection
+  // The final quote's own greeting (spec R5). The visit is done and the price
+  // is confirmed, so nothing here offers a site visit or a price hold.
+  const finalGreeting = balancePaid
+    ? 'Your final quote after the site visit. Paid in full - thanks.'
+    : balanceRequested
+      ? `Your final quote after the site visit. Deposit received. Balance due: $${fmt(dollars(finalBalanceChargedCents))}.`
+      : isPaid
+        ? 'Your final quote after the site visit. Deposit received - your tradie will confirm the job date.'
+        : finalZeroDeposit
+          ? `Your final quote after the site visit. Price includes GST. Your $${INSPECTION_FEE_AUD} site visit covers the deposit - nothing to pay now.`
+          : `Your final quote after the site visit. Price includes GST. Accept with a ${finalPct}% deposit - your $${INSPECTION_FEE_AUD} site visit is credited.`
+  const heroGreeting = isFinalRow
+    ? finalGreeting
+    : isInspection
     ? `This job needs a quick on-site visit before a real price can be locked in. The visit is $99, refundable and credited toward your final quote.`
     : tierCount === 1
       ? `One option below. Price includes 10% GST. ${
@@ -1143,6 +1347,100 @@ export default async function PublicQuotePage(props: {
       }
     }
 
+    // ── EV charger estimate parity (spec ev-charger-estimate-template R11) ──
+    //
+    // /q/[token] and /api/q/[token]/pdf are both linked in the same SMS, so the
+    // page must not contradict the document. These come from the SAME pure
+    // helpers the PDF builder uses, so the two surfaces cannot drift. This is an
+    // ADDITION to the existing five sections — no layout change, no change to
+    // the $99 CTA, the sticky bar or AcceptBlock.
+    const isEvEstimate = isEvChargerJob(intake?.job_type as string | null, intakeTrade)
+    const evSuppliedByRaw = (intake?.scope as { specs?: { supplied_by?: unknown } } | null)?.specs
+      ?.supplied_by
+    const evSuppliedBy =
+      evSuppliedByRaw === 'tradie' || evSuppliedByRaw === 'customer' ? evSuppliedByRaw : null
+    let evEstimateRef: string | null = null
+    let evExclusions: string[] = []
+    if (isEvEstimate) {
+      // Separate best-effort select, matching the booked-visit block above:
+      // ASSIGN, don't just read. Reading only would let this page show the
+      // 8-character quote ref while the PDF linked in the same SMS shows
+      // EST-0007, which is exactly the divergence R11 exists to prevent. The
+      // migration-195 function is idempotent — whichever surface renders first
+      // draws the number and every later caller gets the same one back — so
+      // both agree no matter which the customer opens first.
+      //
+      // Best-effort, like the booked-visit read above: estimate_number and its
+      // function arrive with migration 195, and a pre-migration deploy must
+      // degrade to the quote ref, never 404 a live public quote.
+      const { data: assigned, error: refErr } = await supabase.rpc(
+        'next_quote_estimate_number',
+        { p_quote_id: quote.id },
+      )
+      // supabase-js resolves {data, error}; it does not throw.
+      if (!refErr) {
+        const n = typeof assigned === 'number' ? assigned : Number(assigned)
+        if (Number.isFinite(n) && n > 0) evEstimateRef = formatEstimateNumber(n)
+      }
+
+      // The priced assemblies' own exclusions — the same derivation the document
+      // makes. A tradie edit that stripped the source uuid contributes nothing.
+      const assemblyIds = [
+        ...new Set(
+          visibleTierKeys
+            .flatMap((k) => {
+              const t = quote[k] as Tier
+              return Array.isArray(t?.line_items) ? t!.line_items! : []
+            })
+            .map((li) => /^assembly:(.+)$/i.exec(((li as { source?: string }).source ?? '').trim()))
+            .filter((m): m is RegExpExecArray => Boolean(m))
+            .map((m) => m[1].trim()),
+        ),
+      ]
+      if (assemblyIds.length > 0) {
+        const [shared, custom] = await Promise.all([
+          supabase.from('shared_assemblies').select('default_exclusions').in('id', assemblyIds),
+          supabase
+            .from('tenant_custom_assemblies')
+            .select('default_exclusions')
+            .in('id', assemblyIds),
+        ])
+        evExclusions = [...(shared.data ?? []), ...(custom.data ?? [])].flatMap((r) => {
+          const text = (r as { default_exclusions?: unknown }).default_exclusions
+          return typeof text === 'string'
+            ? text
+                .split(/(?<=[.!?])\s+|\r?\n|;/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : []
+        })
+      }
+
+      // The document's identity and terms, mirrored into the credential footer
+      // so the page and the PDF state the same thing (spec R7/R11/R13).
+      if (evEstimateRef) {
+        footerRows.unshift({ k: 'Estimate', v: evEstimateRef })
+      }
+      if (quote.created_at) {
+        const validUntil = new Date(quote.created_at as string)
+        validUntil.setDate(validUntil.getDate() + EV_ESTIMATE_VALID_DAYS)
+        footerRows.push({
+          k: 'Valid until',
+          v: validUntil.toLocaleDateString('en-AU', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          }),
+        })
+      }
+      // Replace the generic terms line with the estimate's own, so the page
+      // never promises a deposit the funnel refuses to take.
+      const termsAt = footerRows.findIndex((r) => r.k === 'Terms')
+      const evTerms = evEstimateTerms(gstRegistered).join(' ')
+      if (termsAt >= 0) footerRows[termsAt] = { k: 'Terms', v: evTerms }
+      else footerRows.push({ k: 'Terms', v: evTerms })
+    }
+
     const featuredTier = featuredKey ? (quote[featuredKey] as Tier) : null
     const featuredLines = Array.isArray(featuredTier?.line_items) ? featuredTier!.line_items! : []
 
@@ -1227,6 +1525,87 @@ export default async function PublicQuotePage(props: {
       maxWidth: 560,
       whiteSpace: 'normal',
     }
+
+    // ═══ Post-site-visit final quote (spec post-visit-money-sequence R5) ═══
+    //
+    // The deposit stack, the states after it is paid, and the one action band
+    // they share. Every dollar figure is a lib/quote/money helper applied to
+    // the cents computed once above — the fee and the GST are never re-derived
+    // here, which is exactly how the page, the SMS and the Stripe charge stay
+    // on the same number.
+    const successNote: React.CSSProperties = {
+      marginTop: 14,
+      border: '1px solid color-mix(in srgb, var(--success-bright) 40%, transparent)',
+      padding: '11px 14px',
+      textAlign: 'center',
+      ...microNote,
+      color: 'var(--success-bright)',
+    }
+    // The mint bounced with ?connect=0 / ?pay=unavailable. Nothing is broken
+    // from the customer's side and there is nothing for them to retry, so say
+    // so plainly and drop the CTA rather than loop them back through it.
+    const payBlockedNote = (
+      <div
+        style={{
+          marginTop: 14,
+          border: '1px solid var(--ink-line)',
+          background: 'var(--ink-deep)',
+          padding: '12px 14px',
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          color: 'var(--text-sec)',
+        }}
+      >
+        We can&apos;t take this payment just yet. Your tradie has been notified and will
+        sort it out — there&apos;s nothing more for you to do right now.
+      </div>
+    )
+    const finalDepositStack = (
+      <div style={{ marginTop: 14, display: 'grid', gap: 7 }}>
+        <StackRow label={`Deposit (${finalPct}%)`} value={`$${fmt(dollars(finalGrossDepositCents))}`} />
+        <StackRow
+          label={`Less $${INSPECTION_FEE_AUD} site-visit credit`}
+          value={`−$${fmt(INSPECTION_FEE_AUD)}`}
+          accent
+        />
+        <StackRow
+          label={`QuoteMax platform fee (${PLATFORM_FEE_PCT}%)`}
+          value={`$${fmt(dollars(finalDepositFeeCents))}`}
+        />
+        <StackRow label="Deposit due now" value={`$${fmt(dollars(finalDepositChargedCents))}`} strong />
+        <StackRow label="Balance on completion" value={`$${fmt(dollars(finalBalanceBase))}`} />
+      </div>
+    )
+    const finalCardAction = balancePaid ? (
+      <div style={successNote}>Paid in full — thanks</div>
+    ) : balanceRequested && balanceChild ? (
+      <>
+        <div style={successNote}>Deposit received</div>
+        {payBlocked ? (
+          payBlockedNote
+        ) : (
+          <a
+            href={`/r/${balanceChild.token}/balance`}
+            className="qm-cta"
+            style={{ ...ctaStyle, marginTop: 14 }}
+          >
+            Pay ${fmt(dollars(finalBalanceChargedCents))} balance
+          </a>
+        )}
+      </>
+    ) : isPaid ? (
+      <div style={successNote}>Deposit received — your tradie will confirm the job date</div>
+    ) : finalZeroDeposit ? (
+      <div style={{ marginTop: 14, ...microNote, textAlign: 'center' }}>
+        Your ${INSPECTION_FEE_AUD} site visit covers the deposit — nothing to pay now
+      </div>
+    ) : payBlocked ? (
+      payBlockedNote
+    ) : (
+      <a href={`/r/${token}/deposit`} className="qm-cta" style={{ ...ctaStyle, marginTop: 14 }}>
+        Accept &amp; pay ${fmt(dollars(finalDepositChargedCents))} deposit
+      </a>
+    )
 
     const sections: ScopeItem[] = [
       {
@@ -1493,6 +1872,89 @@ export default async function PublicQuotePage(props: {
               </div>
             ) : null}
 
+            {/* EV charger estimate parity (spec R11) — the same Inclusions,
+                Exclusions and Optional Upgrades the PDF prints, from the same
+                pure helpers, so the two surfaces cannot disagree. */}
+            {isEvEstimate ? (
+              <>
+                {(() => {
+                  const inclusions = deriveEvInclusions({
+                    businessName: '',
+                    estimateRef: evEstimateRef ?? quoteRef,
+                    good: visibleTierSet.has('good') ? (quote.good as Tier) : null,
+                    better: visibleTierSet.has('better') ? (quote.better as Tier) : null,
+                    best: visibleTierSet.has('best') ? (quote.best as Tier) : null,
+                  })
+                  return inclusions.length > 0 ? (
+                    <div>
+                      <h4 style={subHeading}>Inclusions</h4>
+                      <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
+                        {inclusions.map((s, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                            <span aria-hidden="true" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>○</span>
+                            <span>{s}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+                {(() => {
+                  const exclusions = deriveEvExclusions({
+                    businessName: '',
+                    estimateRef: evEstimateRef ?? quoteRef,
+                    good: null,
+                    better: null,
+                    best: null,
+                    exclusions: evExclusions,
+                    suppliedBy: evSuppliedBy,
+                  })
+                  return exclusions.length > 0 ? (
+                    <div>
+                      <h4 style={subHeading}>Exclusions</h4>
+                      <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
+                        {exclusions.map((s, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                            <span aria-hidden="true" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>○</span>
+                            <span>{s}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+                <div>
+                  <h4 style={subHeading}>Optional upgrades &amp; recommendations</h4>
+                  <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
+                    {[EV_SURGE_PROTECTION_NOTE, EV_SWITCHBOARD_CAPACITY_NOTE].map((n) => (
+                      <div key={n.title} style={{ fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-pri)' }}>
+                          {n.title}
+                        </span>
+                        <p style={{ margin: '4px 0 0' }}>{n.body}</p>
+                      </div>
+                    ))}
+                    {/* A price shows ONLY when a catalogue row produced one —
+                        never a figure this page invented. */}
+                    {(Array.isArray(quote.optional_upsells) ? (quote.optional_upsells as Array<{ name?: string; price_ex_gst?: number | null }>) : [])
+                      .filter((u) => (u?.name ?? '').trim())
+                      .map((u, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                          <span aria-hidden="true" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>○</span>
+                          <span>
+                            {u.name}
+                            {' — '}
+                            {typeof u.price_ex_gst === 'number' && Number.isFinite(u.price_ex_gst)
+                              ? `$${displayIncGst(u.price_ex_gst, { gstRegistered }).toLocaleString('en-AU')} inc GST`
+                              : 'quoted on site'}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </>
+            ) : null}
+
             {(Array.isArray(quote.assumptions) && quote.assumptions.length > 0) || quote.gst_note ? (
               <div>
                 <h4 style={subHeading}>Good to know</h4>
@@ -1608,8 +2070,12 @@ export default async function PublicQuotePage(props: {
                     // tier is "the paid one" — without this, EVERY card would
                     // read "Another option confirmed" and dim itself once the
                     // $99 landed. The cards stay display-only and undimmed.
-                    const paidThis = !siteVisitFirst && isPaid && quote.paid_tier === k
-                    const otherPaid = !siteVisitFirst && isPaid && quote.paid_tier !== k
+                    // A child's paid_tier is 'deposit'/'credit'/'balance', so
+                    // without !isChildRow every card on a paid final row would
+                    // dim itself and read "Another option confirmed" — on the
+                    // one option the customer just paid a deposit against.
+                    const paidThis = !siteVisitFirst && !isChildRow && isPaid && quote.paid_tier === k
+                    const otherPaid = !siteVisitFirst && !isChildRow && isPaid && quote.paid_tier !== k
                     return (
                       <div
                         key={k}
@@ -1643,7 +2109,7 @@ export default async function PublicQuotePage(props: {
                               color: 'var(--accent)',
                             }}
                           >
-                            {tierCount === 1 ? 'Your quote' : k}
+                            {isFinalRow ? 'Final quote' : tierCount === 1 ? 'Your quote' : k}
                             {recommended ? ' · most popular' : ''}
                           </span>
                           <span
@@ -1752,8 +2218,11 @@ export default async function PublicQuotePage(props: {
                               )}
                               <StackRow label="Total (inc GST)" value={`$${fmt(stack.totalDollars)}`} strong />
                               {/* No deposit row for a site-visit-first trade —
-                                  the $99 visit is the only thing to pay. */}
-                              {dep && !siteVisitFirst ? (
+                                  the $99 visit is the only thing to pay. A
+                                  final row has its own stack below (credit +
+                                  platform fee); the raw % here would read as a
+                                  second, larger deposit. */}
+                              {dep && !siteVisitFirst && !isChildRow ? (
                                 <StackRow
                                   label={`Deposit to book (${depositPct}%)`}
                                   value={`$${fmt(dep)}`}
@@ -1769,7 +2238,19 @@ export default async function PublicQuotePage(props: {
                           </details>
                         ) : null}
 
-                        {paidThis ? (
+                        {isFinalRow ? (
+                          <>
+                            {/* The stack is a bill for what is owed NOW, so it
+                                only belongs on a row with something left to
+                                pay. Rendering it once the deposit has landed
+                                put a live "Deposit due now $2,704" directly
+                                above "Paid in full — thanks". */}
+                            {!isPaid && !balanceRequested && !balancePaid
+                              ? finalDepositStack
+                              : null}
+                            {finalCardAction}
+                          </>
+                        ) : paidThis ? (
                           <div
                             style={{
                               marginTop: 14,
@@ -1814,10 +2295,31 @@ export default async function PublicQuotePage(props: {
         ),
       },
       {
-        title: 'Your site visit',
+        // The visit is behind a final row, so the section is about what
+        // happens next on the job — never about booking another one.
+        title: isFinalRow ? 'Next steps' : 'Your site visit',
         body: (
           <div style={{ ...blockBody, gap: 14, maxWidth: 460 }}>
-            {isPaid && scheduledAt ? (
+            {isFinalRow ? (
+              // Ordered FIRST so a paid final row can never fall into the
+              // "Pick your visit time" / /book branches below: the customer
+              // has had their visit, and a child row must never reach the
+              // booking calendar (spec R5/R11).
+              <>
+                {payBlocked ? payBlockedNote : null}
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  {balancePaid
+                    ? 'Paid in full — thanks. Nothing further to pay.'
+                    : balanceRequested
+                      ? `Your job is complete. Balance due: $${fmt(dollars(finalBalanceChargedCents))} — tap the balance button above to pay.`
+                      : isPaid
+                        ? 'Deposit received — your tradie will confirm the job date.'
+                        : finalZeroDeposit
+                          ? `Your $${INSPECTION_FEE_AUD} site visit covers the deposit — nothing to pay now; balance $${fmt(dollars(finalBalanceBase))} on completion.`
+                          : 'Next steps: pay the deposit to confirm the job; the balance is requested by your tradie on completion.'}
+                </p>
+              </>
+            ) : isPaid && scheduledAt ? (
               <>
                 <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                   Your visit is booked for{' '}
@@ -1922,7 +2424,9 @@ export default async function PublicQuotePage(props: {
             best: (quote.best as Parameters<typeof TradieEditor>[0]['initialTiers']['best']) ?? null,
           }}
         />
-        <QuoteSheet label={`Quote ${quoteRef}`}>
+        {/* Spec R11 — an EV quote is an ESTIMATE and carries the estimate
+            number the PDF prints. Every other quote keeps "Quote <ref>". */}
+        <QuoteSheet label={evEstimateRef ? `Estimate ${evEstimateRef}` : `Quote ${quoteRef}`}>
           {tenantIdentity?.business_name ? (
             <Letterhead
               name={tenantIdentity.business_name}
@@ -1934,7 +2438,10 @@ export default async function PublicQuotePage(props: {
               email={letterheadEmail}
             />
           ) : null}
-          <Scope eyebrow={`Quote ${quoteRef}`} items={sections} />
+          <Scope
+            eyebrow={evEstimateRef ? `Estimate ${evEstimateRef}` : `Quote ${quoteRef}`}
+            items={sections}
+          />
           {/* Acceptance record (customer_accepted_at) — the legal record that
               this exact price and scope was accepted. Kept OUT of section 05 on
               purpose: it renders its own full-bleed action band with the
@@ -1943,7 +2450,8 @@ export default async function PublicQuotePage(props: {
               05 already confirms the booking and in 'expired' mode both section
               04's banner and section 05 already say so — rendering it anyway
               put the same message on the page three times. */}
-          {acceptView.mode === 'deposit' || acceptView.mode === 'inspection' ? (
+          {(acceptView.mode === 'deposit' || acceptView.mode === 'inspection') &&
+          (!isFinalRow || finalDepositPayable) ? (
             <AcceptBlock token={token} view={acceptView} alreadyAccepted={!!customerAcceptedAt} />
           ) : null}
           <CredentialFooter rows={footerRows} />

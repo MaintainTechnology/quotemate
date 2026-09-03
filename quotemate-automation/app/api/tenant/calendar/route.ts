@@ -198,6 +198,11 @@ export async function GET(req: Request) {
     .eq('tenant_id', auth.tenant.id)
     .is('scheduled_at', null)
     .not('paid_at', 'is', null)
+    // Root rows only (spec post-visit-money-sequence R12). A post-site-visit
+    // deposit or balance is paid-and-unscheduled by definition — the visit
+    // already happened — so without this every child payment would nag the
+    // tradie to schedule a visit that is behind them.
+    .eq('quote_kind', 'initial')
     .gte('paid_at', paidSince)
     .order('paid_at', { ascending: false })
     .limit(MAX_EVENTS)

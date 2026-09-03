@@ -58,3 +58,55 @@ describe('renderReportDocument — tenant logo (shared chrome)', () => {
     expect(html).not.toContain('<span class="monogram">')
   })
 })
+
+// Spec ev-charger-estimate-template R2 — two optional slots, each defaulting to
+// today's output so every existing caller renders byte-identically.
+describe('renderReportDocument — titleText and introMetaHtml', () => {
+  const evDoc = {
+    docTitle: 'Quote',
+    dateLabel: '13 Aug 2026',
+    customerName: 'Jane',
+    bodyHtml: '<p>body</p>',
+  }
+
+  it('prints "Quotation" and the flat sub-line when neither slot is used', () => {
+    const html = renderReportDocument({ businessName: 'Atomic Electrical' }, evDoc)
+    expect(html).toContain('<div class="quote-title">Quotation</div>')
+    expect(html).toContain('<div class="quote-sub">')
+    expect(html).toContain('13 Aug 2026')
+  })
+
+  it('is byte-identical whether the slots are omitted or explicitly null', () => {
+    const branding = { businessName: 'Atomic Electrical' }
+    expect(
+      renderReportDocument(branding, { ...evDoc, titleText: null, introMetaHtml: null }),
+    ).toBe(renderReportDocument(branding, evDoc))
+  })
+
+  it('uses titleText for the visible title', () => {
+    const html = renderReportDocument(
+      { businessName: 'Electrical3' },
+      { ...evDoc, titleText: 'ESTIMATE' },
+    )
+    expect(html).toContain('<div class="quote-title">ESTIMATE</div>')
+    expect(html).not.toContain('>Quotation<')
+  })
+
+  it('escapes titleText', () => {
+    const html = renderReportDocument(
+      { businessName: 'E3' },
+      { ...evDoc, titleText: '<b>x</b>' },
+    )
+    expect(html).not.toContain('<div class="quote-title"><b>x</b></div>')
+    expect(html).toContain('&lt;b&gt;')
+  })
+
+  it('replaces the sub-line with introMetaHtml when supplied', () => {
+    const html = renderReportDocument(
+      { businessName: 'Electrical3' },
+      { ...evDoc, introMetaHtml: '<div class="ev-meta">Prepared For:</div>' },
+    )
+    expect(html).toContain('<div class="ev-meta">Prepared For:</div>')
+    expect(html).not.toContain('<div class="quote-sub">')
+  })
+})

@@ -17,7 +17,14 @@
 export function thanksPageTarget(input: {
   paid: boolean
   scheduledAt: string | null | undefined
+  /** quotes.quote_kind (spec post-visit-money-sequence R11). A 'final' or
+   *  'balance' child never has a slot, so the 'book' branch below would send
+   *  it to a calendar for a visit that already happened. Children are sent to
+   *  'pay' — the quote page — whose kind-aware paid state is their real
+   *  thank-you surface. */
+  quoteKind?: string | null | undefined
 }): 'pay' | 'book' | 'render' {
+  if (input.quoteKind === 'final' || input.quoteKind === 'balance') return 'pay'
   if (!input.paid) return 'pay'
   return input.scheduledAt ? 'render' : 'book'
 }

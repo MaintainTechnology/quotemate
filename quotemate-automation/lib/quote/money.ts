@@ -31,6 +31,18 @@ import { clampDiscountPct } from './early-bird'
 export const INSPECTION_FEE_AUD = 99
 export const INSPECTION_FEE_AUD_CENTS = INSPECTION_FEE_AUD * 100
 
+/** Stripe refuses AUD charges under $0.50. A deposit or balance that lands
+ *  below this is not "a small charge" — it is NO charge, and the caller must
+ *  take the skip branch (spec post-visit-money-sequence R8) rather than mint a
+ *  Session that throws at Stripe and dead-ends the customer on a 404. */
+export const MIN_STRIPE_CHARGE_CENTS = 50
+
+/** QuoteMax's platform fee, as a percentage of the base amount.
+ *  Defined HERE (the pure money module) rather than in lib/stripe/connect.ts
+ *  so the page, the SMS, the PDF and the Stripe mint all read ONE number —
+ *  connect.ts's platformFeeCents delegates to surchargeCents below. */
+export const PLATFORM_FEE_PCT = 2
+
 export type MoneyOpts = {
   /** Realised early-booking discount % (quotes.applied_discount_pct).
    *  Clamped to the platform cap; 0/null/undefined → no discount. */
@@ -101,4 +113,98 @@ export function fmtAud(n: number): string {
 export function clampDepositPct(v: number | string | null | undefined): number {
   const n = asMoneyNumber(v)
   return Number.isFinite(n) && n >= 1 && n <= 90 ? Math.round(n) : 30
+}
+
+// ── Post-site-visit money chain (spec post-visit-money-sequence) ─────
+//
+// After the $99 site visit is paid, the job splits into two further charges
+// carried by their own `quotes` rows: the DEPOSIT (a % of the confirmed
+// total, less the $99 already paid) and the BALANCE (everything left).
+//
+// The reconciliation identity, which holds for EVERY input including the
+// zero-deposit edge, is the whole point of computing all three here:
+//
+//     CREDIT + depositBase + balanceBase === T
+//
+// so the customer is never charged more or less than the quoted total, and
+// the two child charges plus the site visit always add back up to it.
+//
+// The platform fee is charged ON TOP (Jon's model): the customer pays
+// base + surcharge, `application_fee_amount` IS that same surcharge, and the
+// tradie therefore nets EXACTLY the base. Writing `round(base × 1.02)` for
+// the charge and `platformFeeCents(charged)` for the fee would be two
+// roundings of two different bases and would leave the tradie 0.04% short on
+// every job — hence one function per quantity, all derived from `base`.
+
+/** QuoteMax's fee for a base amount, in cents — the amount ADDED to what the
+ *  customer pays and taken as `application_fee_amount`. One rounding. */
+export function surchargeCents(baseCents: number): number {
+  if (!Number.isFinite(baseCents) || baseCents <= 0) return 0
+  return Math.round(baseCents * (PLATFORM_FEE_PCT / 100))
+}
+
+/** What the customer is actually charged for a base amount: base + fee.
+ *  `chargedCents(b) - surchargeCents(b) === b` exactly, by construction. */
+export function chargedCents(baseCents: number): number {
+  if (!Number.isFinite(baseCents) || baseCents <= 0) return 0
+  return baseCents + surchargeCents(baseCents)
+}
+
+/**
+ * The deposit the customer owes now, in cents, BEFORE the platform fee:
+ * `pct`% of the confirmed inc-GST total, less the $99 site visit they have
+ * already paid. Floored at 0 — a job whose deposit is smaller than the
+ * credit is fully covered by the site visit (R8), never a negative charge.
+ */
+export function finalDepositBaseCents(
+  totalIncCents: number,
+  depositPct: number | null | undefined,
+): number {
+  const total = asMoneyNumber(totalIncCents)
+  const gross = depositCents(total, clampDepositPct(depositPct))
+  return Math.max(0, gross - INSPECTION_FEE_AUD_CENTS)
+}
+
+/**
+ * The balance owed on completion, in cents, before the platform fee:
+ * whatever the total is not already covered by the $99 credit and the
+ * deposit. Deliberately NOT floored — the identity above must hold exactly,
+ * and a negative result (a total at or under $99) is a real signal that the
+ * site visit covered the job. Callers gate the charge on
+ * MIN_STRIPE_CHARGE_CENTS instead of clamping here.
+ */
+export function finalBalanceBaseCents(
+  totalIncCents: number,
+  depositPct: number | null | undefined,
+): number {
+  const total = asMoneyNumber(totalIncCents)
+  return total - INSPECTION_FEE_AUD_CENTS - finalDepositBaseCents(total, depositPct)
+}
+
+/**
+ * PURE — the deposit % for a job type, from the tenant's
+ * `pricing_book.overlays.deposit_pct_by_job_type` map (spec R2).
+ *
+ * Exact `intakes.job_type` key first, then the `"default"` key, then the
+ * platform default of 30. Every value goes through clampDepositPct, whose
+ * documented semantics are FALLBACK not clamp: anything outside 1..90 (a
+ * typo'd 100, a 0, a string) becomes 30 rather than being silently squashed
+ * to the nearest bound. The seed script rejects out-of-range entries so a
+ * misconfiguration is caught at write time, not at charge time.
+ */
+export function resolveDepositPct(
+  map: unknown,
+  jobType: string | null | undefined,
+): number {
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return 30
+  const table = map as Record<string, unknown>
+  const key = (jobType ?? '').trim()
+  // An exact key present with a null/undefined VALUE is not a configured
+  // override — it falls through to "default", the same as an absent key.
+  // Otherwise {"ev_charger": null, "default": 60} would charge 30, silently
+  // ignoring the default the tenant actually set.
+  const exact = key && key in table ? table[key] : undefined
+  const raw = exact ?? table.default
+  if (raw === undefined || raw === null) return 30
+  return clampDepositPct(raw as number | string)
 }

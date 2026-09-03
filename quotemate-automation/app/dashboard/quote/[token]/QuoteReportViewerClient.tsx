@@ -18,6 +18,7 @@ import TradieEditor, { type EditorApi } from '@/app/q/[token]/TradieEditor'
 import { getAuthToken } from '@/lib/auth/client-token'
 import SendQuotePanel from './SendQuotePanel'
 import TierSelect from './TierSelect'
+import ChainActions from './ChainActions'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
 import type { ReportStyle } from '@/lib/quote/report-doc/style'
 import type { EditorKind } from '@/lib/quote/report-adapters/types'
@@ -53,6 +54,15 @@ export default function QuoteReportViewerClient(props: {
   reportDoc?: ReportDoc
   reportStyle?: ReportStyle
   selectedTier?: 'good' | 'better' | 'best' | null
+  /** Which post-site-visit action this row offers, resolved server-side from
+   *  quote_kind + paid_tier + trade (spec post-visit-money-sequence R3/R10).
+   *  Null on every ordinary quote. */
+  chainAction?: 'issue-final' | 'request-balance' | null
+  /** quotes.quote_kind. A post-site-visit child hides the AI editor (chat-edit
+   *  can propose better/best on a single-slot row, which then 400s on save)
+   *  and the email channel (buildQuoteEmail's copy carries no deposit link,
+   *  no $99 credit and no fee line). Spec R4/R9. */
+  quoteKind?: 'initial' | 'final' | 'balance' | null
   bodyMode: 'pdf-inline' | 'download-only'
   /** Which in-shell editor this trade's adapter mounts. Only 'block-doc' trades
    *  get the TipTap living-document workspace; everything else stays on the
@@ -98,6 +108,8 @@ export default function QuoteReportViewerClient(props: {
     reportDoc,
     reportStyle,
     selectedTier,
+    chainAction,
+    quoteKind,
     bodyMode,
     editorKind,
     pdfUrl,
@@ -127,7 +139,10 @@ export default function QuoteReportViewerClient(props: {
 
   const owner = !!api?.canEdit // owner of an unpaid quote (resolved by TradieEditor)
   const canEdit = capabilities.manualEdit && owner && !needsInspection && !paid
-  const canAi = capabilities.aiEdit && owner && !needsInspection && !paid
+  const isChildRow = quoteKind === 'final' || quoteKind === 'balance'
+  // R4 — the AI editor is hidden on a child: chat-edit can propose better/best
+  // on a single-slot final quote and the save then 400s cannot_edit_missing_tier.
+  const canAi = capabilities.aiEdit && owner && !needsInspection && !paid && !isChildRow
 
   const toDocTier = (t: Tier): DocEditorTiers['good'] =>
     t ? { label: t.label ?? '', subtotal_ex_gst: t.subtotal_ex_gst ?? 0 } : null
@@ -225,7 +240,12 @@ export default function QuoteReportViewerClient(props: {
               customerEmail={customerEmail ?? null}
               paid={paid}
               label={sendLabel}
+              smsOnly={isChildRow}
             />
+            {/* The post-site-visit chain (spec post-visit-money-sequence
+                R3/R10). The server decides which — if either — of these is
+                available; the client just renders it. */}
+            {chainAction && <ChainActions quoteId={quoteId} action={chainAction} />}
           </div>
         </div>
         {disabledReason && (

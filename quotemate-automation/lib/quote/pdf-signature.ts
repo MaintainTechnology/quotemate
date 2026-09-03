@@ -47,6 +47,14 @@ export function quotePdfSignature(args: {
    *  (or the old headshot). Unset keeps the signature byte-identical to pre-v8,
    *  so photo-less tenants' cached PDFs aren't force-regenerated. */
   tradiePhotoUrl?: string | null
+  /** Body-template key for job_type-specific documents (spec
+   *  ev-charger-estimate-template R15). The EV charger estimate passes 'ev1'.
+   *  Unset appends nothing, so every quote rendered by the generic template
+   *  keeps a byte-identical signature and is NOT force-regenerated — the same
+   *  back-compat trick disc/g/p use. Bump the key (ev2, …) on any later change
+   *  to that template instead of bumping REPORT_TEMPLATE_VERSION, which would
+   *  regenerate every cached electrical + plumbing PDF. */
+  templateKey?: string | null
 }): string {
   let base = `v${args.templateVersion}|${args.tierMode}|t=${args.visibleTierKeys.join('+')}|r=${
     args.recommendedTier ?? ''
@@ -58,6 +66,8 @@ export function quotePdfSignature(args: {
   // Hash, not the raw URL: storage URLs are long and the signature is a stored
   // column — the hash still changes on every re-upload (path carries a nonce).
   if (photo) base = `${base}|p=${hashReportContent(photo, null)}`
+  const tpl = (args.templateKey ?? '').trim()
+  if (tpl) base = `${base}|tpl=${tpl}`
   return args.docHash ? `${base}|d=${args.docHash}` : base
 }
 

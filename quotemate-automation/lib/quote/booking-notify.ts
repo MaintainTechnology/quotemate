@@ -14,9 +14,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import {
+  buildBalanceReceivedSms,
   buildBookingConfirmationSms,
   buildDepositAwaitingSlotSms,
+  buildDepositReceivedSms,
   buildTradieBookingNotification,
+  buildTradieChildPaymentSms,
 } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { tzForState } from '@/lib/quote/availability'
@@ -184,5 +187,127 @@ export async function notifyBookingConfirmed(
       'booking confirmation SMS threw — booking + payment ARE committed, only SMS failed',
       e,
     )
+  }
+}
+
+/**
+ * Payment notifications for a post-site-visit CHILD row — the deposit on a
+ * 'final' row or the balance on a 'balance' row (spec
+ * post-visit-money-sequence R11).
+ *
+ * Deliberately NOT notifyBookingConfirmed: that function's whole shape is
+ * booking-centric. It would text the customer "pick a time" with a /book link
+ * for a visit that already happened, and it texts the tradie only when a slot
+ * exists — so on a child (which never has one) the tradie would learn about a
+ * multi-thousand-dollar deposit from a push notification alone.
+ *
+ * Same defensive contract as its sibling: never throws. The payment is
+ * committed before this runs.
+ */
+export async function notifyChildPaymentReceived(
+  supabase: SupabaseClient,
+  args: {
+    quoteId: string
+    intakeId: string | null
+    tenantId: string | null
+    shareToken: string
+    kind: 'final' | 'balance'
+    /** What the customer was charged, in cents (base + platform fee). */
+    chargedCents: number | null
+  },
+): Promise<void> {
+  const sms = pipelineLog('dispatch', args.quoteId)
+  try {
+    const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
+    const purpose = args.kind === 'final' ? 'deposit' : 'balance'
+
+    type IntakeRow = {
+      call_id?: string | null
+      job_type?: string | null
+      caller?: { name?: string; phone?: string } | null
+    }
+    let intake: IntakeRow | null = null
+    if (args.intakeId) {
+      const { data } = await supabase
+        .from('intakes')
+        .select('id, call_id, job_type, caller')
+        .eq('id', args.intakeId)
+        .maybeSingle()
+      intake = (data as unknown as IntakeRow | null) ?? null
+    }
+
+    let callerNumber: string | null = intake?.caller?.phone ?? null
+    if (!callerNumber && intake?.call_id) {
+      const { data: callRow } = await supabase
+        .from('calls')
+        .select('caller_number')
+        .eq('id', intake.call_id)
+        .maybeSingle()
+      callerNumber = (callRow?.caller_number as string | null) ?? null
+    }
+
+    let tenantSmsNumber: string | null = null
+    let tenantOwnerMobile: string | null = null
+    let tenantOwnerFirstName: string | null = null
+    let businessName: string | null = null
+    if (args.tenantId) {
+      const { data: tenantRow } = await supabase
+        .from('tenants')
+        .select('twilio_sms_number, owner_mobile, owner_first_name, business_name')
+        .eq('id', args.tenantId)
+        .maybeSingle()
+      tenantSmsNumber = (tenantRow?.twilio_sms_number as string | null) ?? null
+      tenantOwnerMobile = (tenantRow?.owner_mobile as string | null) ?? null
+      tenantOwnerFirstName = (tenantRow?.owner_first_name as string | null) ?? null
+      businessName = (tenantRow?.business_name as string | null) ?? null
+    }
+
+    const firstName = intake?.caller?.name
+    // The FINAL row's page is the job's customer surface. A balance row 302s
+    // to it, so linking the child's own token is correct for both kinds.
+    const quoteUrl = `${appUrl}/q/${args.shareToken}`
+
+    if (callerNumber) {
+      const body =
+        args.kind === 'final'
+          ? buildDepositReceivedSms({ firstName, businessName })
+          : buildBalanceReceivedSms({ firstName, businessName })
+      const customerFrom = tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER
+      const r = await dispatchQuoteMessage({
+        to: callerNumber,
+        text: body,
+        from: customerFrom ?? undefined,
+      })
+      if (r.ok) sms.ok(`customer ${purpose} receipt sent`, { channel: r.channel, sid: r.sid })
+      else sms.err(`customer ${purpose} receipt failed`, null, { sms_code: r.smsAttempt.code })
+    } else {
+      sms.ok(`customer ${purpose} receipt skipped — no callerNumber resolvable`)
+    }
+
+    // Unlike the booking path, the tradie is ALWAYS texted here: this is money
+    // landing on a live job, and there is no slot to gate it on.
+    const notifyMobile = tenantOwnerMobile ?? process.env.TRADIE_NOTIFY_NUMBER
+    if (notifyMobile) {
+      const tradieBody = buildTradieChildPaymentSms({
+        tradieFirstName: tenantOwnerFirstName,
+        customerName: firstName,
+        jobType: intake?.job_type ?? 'job',
+        amountAud: Math.round((args.chargedCents ?? 0) / 100),
+        kind: purpose,
+        quoteUrl,
+      })
+      const r = await dispatchQuoteMessage({
+        to: notifyMobile,
+        text: tradieBody,
+        from: tenantSmsNumber ?? undefined,
+        audience: 'tradie',
+      })
+      if (r.ok) sms.ok(`tradie ${purpose} notification sent`, { channel: r.channel, sid: r.sid })
+      else sms.err(`tradie ${purpose} notification failed`, null, { sms_code: r.smsAttempt.code })
+    } else {
+      sms.ok('tradie notify skipped — no tenant.owner_mobile and no env fallback')
+    }
+  } catch (e) {
+    sms.err('child payment SMS threw — the payment IS committed, only SMS failed', e)
   }
 }

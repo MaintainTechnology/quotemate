@@ -39,7 +39,7 @@ import {
 } from '@/lib/quote/display'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
-import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
+import { asQuoteKind, isSiteVisitFirstRow } from '@/lib/quote/mint-tier'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { resolveCustomerContact } from '@/lib/quote/send-customer'
 
@@ -78,7 +78,7 @@ export async function POST(
   const { data: quote, error: qErr } = await supabase
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct',
+      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct, quote_kind',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -174,7 +174,8 @@ export async function POST(
   // $99 site visit, so the approved-send message needs that link even on a
   // quote drafted before the model changed (stripe_links hold G/B/B only).
   // /r/<token>/inspection mints a fresh Session per click, so it is always live.
-  if (isSiteVisitFirstTrade(approveIntakeTrade)) {
+  const approveQuoteKind = asQuoteKind(quote.quote_kind as string | null)
+  if (isSiteVisitFirstRow({ trade: approveIntakeTrade, quoteKind: approveQuoteKind })) {
     payLinks.inspection = `${appUrl}/r/${quote.share_token as string}/inspection`
   }
   const depositPct =
@@ -237,6 +238,8 @@ export async function POST(
     displayMode: asQuoteDisplayMode(displayMode),
     tierMode,
     trade: approveIntakeTrade,
+    quoteKind: approveQuoteKind,
+    businessName: (tenant as { business_name?: string | null }).business_name ?? null,
   })
   const fromNumber = tenant.twilio_sms_number ?? process.env.TWILIO_SMS_NUMBER ?? undefined
   // Best-effort MMS attach of the PDF — the shared helper signs the media

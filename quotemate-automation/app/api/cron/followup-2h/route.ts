@@ -175,6 +175,11 @@ async function sweepQuotes(
     .is('paid_at', null)
     .is('accepted_at', null)
     .is('needs_inspection', false)
+    // Never chase a BALANCE row (spec post-visit-money-sequence R12): it is an
+    // invoice for finished work, and "just checking in on the quote we sent"
+    // reads as nonsense against it. Unpaid FINAL quotes are still chased —
+    // that is a real quote awaiting a decision.
+    .neq('quote_kind', 'balance')
     .gte('sent_at', floorIso)
     .lte('sent_at', ceilingIso)
     .order('sent_at', { ascending: true })

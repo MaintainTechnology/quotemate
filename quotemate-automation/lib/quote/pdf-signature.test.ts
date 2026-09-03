@@ -188,3 +188,37 @@ describe('quotePdfSignature with docHash', () => {
     )
   })
 })
+
+// Spec ev-charger-estimate-template R15 — a job_type-specific document keys the
+// cache here rather than bumping REPORT_TEMPLATE_VERSION, which would lazily
+// regenerate EVERY cached electrical and plumbing PDF.
+describe('quotePdfSignature — templateKey', () => {
+  const base = {
+    templateVersion: 8,
+    tierMode: 'single' as const,
+    visibleTierKeys: ['good'] as const,
+    recommendedTier: null,
+  }
+
+  it('is byte-identical to today when no templateKey is passed', () => {
+    expect(quotePdfSignature(base)).toBe('v8|single|t=good|r=')
+    expect(quotePdfSignature({ ...base, templateKey: null })).toBe('v8|single|t=good|r=')
+    expect(quotePdfSignature({ ...base, templateKey: '' })).toBe('v8|single|t=good|r=')
+  })
+
+  it('appends a tpl segment for the EV estimate', () => {
+    expect(quotePdfSignature({ ...base, templateKey: 'ev1' })).toBe('v8|single|t=good|r=|tpl=ev1')
+  })
+
+  it('changes when the key is bumped, so only EV PDFs regenerate', () => {
+    expect(quotePdfSignature({ ...base, templateKey: 'ev1' })).not.toBe(
+      quotePdfSignature({ ...base, templateKey: 'ev2' }),
+    )
+  })
+
+  it('keeps the doc segment last so an existing docHash signature is unchanged', () => {
+    expect(quotePdfSignature({ ...base, templateKey: 'ev1', docHash: 'abc' })).toBe(
+      'v8|single|t=good|r=|tpl=ev1|d=abc',
+    )
+  })
+})

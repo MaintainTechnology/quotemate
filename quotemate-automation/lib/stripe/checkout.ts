@@ -44,6 +44,8 @@ import { randomBytes } from 'node:crypto'
 import { clampDiscountPct } from '@/lib/quote/early-bird'
 import {
   INSPECTION_FEE_AUD_CENTS,
+  MIN_STRIPE_CHARGE_CENTS,
+  PLATFORM_FEE_PCT,
   depositCents,
   totalIncGstCents,
 } from '@/lib/quote/money'
@@ -78,6 +80,11 @@ export type StripeLinks = {
   best?: string
   /** Set on inspection-required quotes — single $99 site-visit deposit Session URL. */
   inspection?: string
+  /** Post-site-visit child charges, keyed by their own tier literal so a
+   *  balance mint never expires the deposit's Session (the /r mint expires
+   *  whatever it replaces under the same key). */
+  deposit?: string
+  balance?: string
 }
 
 /**
@@ -294,6 +301,166 @@ export async function createCheckoutSessionForTier(opts: {
     },
   })
   return session.url ?? null
+}
+
+// ── Post-site-visit child charges (spec post-visit-money-sequence R7) ──
+//
+// The deposit and the balance are charged on their OWN `quotes` rows, and
+// neither can be expressed by createCheckoutSessionForTier: that builder
+// computes `deposit = pct% of the tier total` with no $99 credit, no fee on
+// top, and a hardcoded "balance due on completion" description.
+//
+// THE FEE IS CHARGED ON TOP HERE (Jon's model), unlike the $99 site visit
+// where QuoteMax's 2% is deducted from the tradie's settlement. That makes
+// the arithmetic load-bearing, so it is done ONCE by the caller and passed
+// in as two explicit numbers:
+//
+//     charged = baseCents + surchargeCents        (what the customer pays)
+//     application_fee_amount = surchargeCents     (what QuoteMax takes)
+//     ⇒ the tradie's balance receives exactly baseCents.
+//
+// This is why `connectPaymentIntentExtras`/`connectSessionMetadata` are NOT
+// used below: both recompute the fee as 2% of whatever amount they are
+// handed, so passing them the charged total would take 2% of 1.02×base —
+// 2.04% of base — and leave the tradie 0.04% short on every single job,
+// with the Payouts "yours" figure quietly disagreeing with the quote. The
+// fee is instead written from the SAME variable into the PaymentIntent and
+// into `metadata.application_fee_cents`, which is what the webhook stamps
+// into `platform_fee_cents` and what the payout release subtracts.
+
+type ChildChargeOpts = {
+  quoteId: string
+  /** The CHILD row's share_token — it owns the success/cancel URLs. */
+  shareToken: string
+  /** Amount the tradie is owed for this step, before the platform fee. */
+  baseCents: number
+  /** The platform fee, added on top. MUST be surchargeCents(baseCents). */
+  surchargeCents: number
+  /** $99 already paid at the site visit — description + audit only (Stripe
+   *  has no negative line item, so the credit is applied by the caller when
+   *  it computes baseCents). */
+  creditCents?: number
+  /** Job description for the line item, e.g. "ev charger". */
+  jobLabel: string
+  customerEmail?: string | null
+  appUrl: string
+  connect?: ConnectDestination | null
+  /** Audit trail so the whole split is reconstructible from Stripe alone. */
+  audit: {
+    quoteKind: 'final' | 'balance'
+    parentQuoteId: string | null
+    totalIncGstCents: number
+    depositPct: number
+  }
+}
+
+/** Shared Session shape for both child charges. `tier`/`purpose` differ. */
+async function createChildChargeSession(
+  opts: ChildChargeOpts & { tier: 'deposit' | 'balance'; productName: string; description: string },
+): Promise<string | null> {
+  const stripe = getStripe()
+  const { baseCents, surchargeCents: fee } = opts
+  if (!Number.isFinite(baseCents) || baseCents < MIN_STRIPE_CHARGE_CENTS) return null
+
+  const metadata: Record<string, string> = {
+    quote_id: opts.quoteId,
+    tier: opts.tier,
+    purpose: opts.tier,
+    quote_kind: opts.audit.quoteKind,
+    parent_quote_id: opts.audit.parentQuoteId ?? '',
+    base_cents: String(baseCents),
+    credit_cents: String(opts.creditCents ?? 0),
+    surcharge_cents: String(fee),
+    total_inc_gst_cents: String(opts.audit.totalIncGstCents),
+    deposit_pct: String(opts.audit.depositPct),
+    ...(opts.connect
+      ? { connect_destination: opts.connect.accountId, application_fee_cents: String(fee) }
+      : {}),
+  }
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    // AU-only business: force AUD, never localise the price to another currency
+    // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+    adaptive_pricing: { enabled: false },
+    // Link renders the 'Save my information for faster checkout' row and a
+    // US-format phone field. Hidden per-session (not via the Dashboard) so it
+    // stays hidden when the charge rides on a tradie's connected account.
+    wallet_options: { link: { display: 'never' } },
+    line_items: [
+      {
+        price_data: {
+          currency: 'aud',
+          product_data: { name: opts.productName, description: opts.description },
+          unit_amount: baseCents,
+        },
+        quantity: 1,
+      },
+      // The fee is its own line so the customer sees exactly what the 2% is
+      // and what it is for — never folded into the job price.
+      ...(fee > 0
+        ? [
+            {
+              price_data: {
+                currency: 'aud' as const,
+                product_data: { name: `QuoteMax platform fee (${PLATFORM_FEE_PCT}%)` },
+                unit_amount: fee,
+              },
+              quantity: 1,
+            },
+          ]
+        : []),
+    ],
+    customer_email: opts.customerEmail || undefined,
+    // Through /paid, not straight to /q: that page runs confirmPaidFromSession,
+    // the webhook-race guard every other funnel relies on. It is kind-aware and
+    // forwards a child to the final row's quote page (R11).
+    success_url: `${opts.appUrl}/q/${opts.shareToken}/paid?tier=${opts.tier}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${opts.appUrl}/q/${opts.shareToken}`,
+    metadata,
+    payment_intent_data: {
+      metadata: { quote_id: opts.quoteId, tier: opts.tier },
+      ...(opts.connect
+        ? {
+            on_behalf_of: opts.connect.accountId,
+            transfer_data: { destination: opts.connect.accountId },
+            // The fee ON TOP — the same `fee` variable as the line item and
+            // the metadata, so the tradie nets exactly baseCents.
+            application_fee_amount: fee,
+          }
+        : {}),
+    },
+  })
+  return session.url ?? null
+}
+
+/**
+ * The deposit on a 'final' row: `pct`% of the confirmed total, LESS the $99
+ * site visit already paid, plus the 2% platform fee.
+ */
+export async function createFinalDepositCheckoutSession(
+  opts: ChildChargeOpts,
+): Promise<string | null> {
+  const credit = opts.creditCents ?? 0
+  const creditLine = credit > 0 ? ` (less $${Math.round(credit / 100)} site-visit credit)` : ''
+  return createChildChargeSession({
+    ...opts,
+    tier: 'deposit',
+    productName: `QuoteMax — ${opts.jobLabel} · deposit`,
+    description: `${opts.audit.depositPct}% deposit${creditLine} · balance requested on completion`,
+  })
+}
+
+/** The balance on a 'balance' row: the rest of the job, plus the 2% fee. */
+export async function createBalanceCheckoutSession(
+  opts: ChildChargeOpts,
+): Promise<string | null> {
+  return createChildChargeSession({
+    ...opts,
+    tier: 'balance',
+    productName: `QuoteMax — ${opts.jobLabel} · final payment`,
+    description: 'Balance due on completion of the job',
+  })
 }
 
 /**

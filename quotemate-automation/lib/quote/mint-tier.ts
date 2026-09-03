@@ -39,6 +39,56 @@ export const SITE_VISIT_FIRST_TRADES: ReadonlySet<string> = new Set(['electrical
 /** The priced tiers a generic pay short-link can name. */
 const DEPOSIT_TIERS: ReadonlySet<string> = new Set(['good', 'better', 'best'])
 
+// ── The post-site-visit chain (spec post-visit-money-sequence) ───────
+//
+// After the $99 is paid, a job grows two more `quotes` rows: a 'final' row
+// carrying the confirmed price (charged as a deposit, less the $99 credit)
+// and a 'balance' row for the remainder. They share the parent's intake —
+// and therefore its electrical/plumbing trade — so EVERY gate below that
+// asks "is this site-visit-first?" would otherwise answer yes and try to
+// sell the customer a SECOND $99 site visit on a job already visited.
+//
+// The trade alone can no longer answer the question. `quote_kind` must be
+// part of it, which is why isSiteVisitFirstRow (not isSiteVisitFirstTrade)
+// is what the page, the SMS builders, the send/edit routes and the mint all
+// call now.
+
+/** quotes.quote_kind — 'initial' is every row that existed before the chain. */
+export type QuoteKind = 'initial' | 'final' | 'balance'
+
+/** The tier literal each child kind is allowed to charge. Children never use
+ *  good/better/best/inspection: a distinct literal keeps paid_tier, the
+ *  Payouts label and the webhook's tier metadata unambiguous. */
+export const CHILD_TIER_FOR_KIND: Readonly<Record<'final' | 'balance', string>> = {
+  final: 'deposit',
+  balance: 'balance',
+}
+
+/** Normalise an unknown/legacy quote_kind. NULL columns on pre-migration
+ *  rows, and anything unrecognised, mean 'initial' — the behaviour every
+ *  existing row already has. */
+export function asQuoteKind(v: string | null | undefined): QuoteKind {
+  return v === 'final' || v === 'balance' ? v : 'initial'
+}
+
+/**
+ * PURE — does this ROW sell the $99 site visit?
+ *
+ * True only for an initial row on an allowlisted trade. A 'final' or
+ * 'balance' child is past the site visit by definition, so it sells its own
+ * deposit/balance instead. Replaces isSiteVisitFirstTrade at every call site
+ * that can be reached by a child row.
+ */
+export function isSiteVisitFirstRow(input: {
+  /** RAW intakes.trade — never the `?? 'electrical'` display fallback. */
+  trade: string | null | undefined
+  /** quotes.quote_kind. Omitted → 'initial' (every legacy caller). */
+  quoteKind?: string | null | undefined
+}): boolean {
+  if (asQuoteKind(input.quoteKind) !== 'initial') return false
+  return isSiteVisitFirstTrade(input.trade)
+}
+
 /**
  * PURE — is this trade on the $99-only allowlist?
  *
@@ -54,6 +104,13 @@ export function isSiteVisitFirstTrade(trade: string | null | undefined): boolean
 export type GenericMintTier =
   /** Electrical/plumbing G/B/B link → 302 onto /r/<token>/inspection. */
   | { kind: 'redirect_to_inspection' }
+  /** A child row asked for a tier it cannot charge — mint NOTHING and bounce
+   *  to the quote page. Critically this covers 'inspection' on a child: that
+   *  tier is passthrough for every row today, so without this a click on
+   *  /r/<child>/inspection would mint a live second $99, claim the child's
+   *  single paid_at slot with paid_tier='inspection', and permanently block
+   *  the deposit the row exists to collect. */
+  | { kind: 'refuse' }
   /** Every other trade/tier combination → today's behaviour, untouched. */
   | { kind: 'passthrough' }
 
@@ -70,7 +127,19 @@ export type GenericMintTier =
 export function resolveGenericMintTier(
   tier: string,
   trade: string | null | undefined,
+  /** quotes.quote_kind. Defaults to 'initial' so every existing two-argument
+   *  caller — and the 17 cases in mint-tier.test.ts — behave exactly as before. */
+  quoteKind?: string | null | undefined,
 ): GenericMintTier {
+  const kind = asQuoteKind(quoteKind)
+
+  // A child row is trade-blind: it charges its own literal and nothing else.
+  // Anything else (a stale G/B/B link, the deposit tier on a balance row,
+  // and above all 'inspection') mints nothing.
+  if (kind !== 'initial') {
+    return tier === CHILD_TIER_FOR_KIND[kind] ? { kind: 'passthrough' } : { kind: 'refuse' }
+  }
+
   if (!isSiteVisitFirstTrade(trade)) return { kind: 'passthrough' }
   if (DEPOSIT_TIERS.has(tier)) return { kind: 'redirect_to_inspection' }
   // The 'inspection' literal (and anything else the route already rejects)
@@ -83,6 +152,9 @@ export type BookUnpaidAction =
   | { kind: 'expired' }
   /** Send them to the mint for this tier. */
   | { kind: 'pay'; tier: string }
+  /** A 'final'/'balance' child row: there is no visit left to book, so this
+   *  page has nothing to offer. The caller sends them to the quote instead. */
+  | { kind: 'not_bookable' }
 
 /**
  * PURE — what an UNPAID visitor to the shared `/q/[token]/book` page gets
@@ -107,8 +179,13 @@ export function resolveBookUnpaidAction(input: {
   needsInspection: boolean
   /** resolveNextTier(?tier, selected_tier) — the tier the pay step would charge. */
   nextTier: string
+  /** quotes.quote_kind. Omitted → 'initial' (every legacy caller). */
+  quoteKind?: string | null | undefined
 }): BookUnpaidAction {
-  if (isSiteVisitFirstTrade(input.trade)) return { kind: 'pay', tier: 'inspection' }
+  if (asQuoteKind(input.quoteKind) !== 'initial') return { kind: 'not_bookable' }
+  if (isSiteVisitFirstRow({ trade: input.trade, quoteKind: input.quoteKind })) {
+    return { kind: 'pay', tier: 'inspection' }
+  }
   if (!input.needsInspection && input.holdExpired) return { kind: 'expired' }
   return { kind: 'pay', tier: input.nextTier }
 }

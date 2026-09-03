@@ -169,7 +169,12 @@ export async function GET(req: Request) {
       supabase
         .from('quotes')
         .select(
-          'id, created_at, status, selected_tier, total_inc_gst, scope_of_works, share_token, intake_id, needs_inspection, routing_decision, good, better, best, estimated_timeframe, display_mode, paid_at',
+          // paid_tier + the mig-194 chain columns (spec post-visit-money-sequence
+          // R12): without paid_tier the dashboard cannot tell a $99 site-visit
+          // payment from a deposit, which is what gates "Issue final quote";
+          // quote_kind/parent_quote_id keep a chained job (initial → final →
+          // balance) counting as ONE job in the pipeline KPIs.
+          'id, created_at, status, selected_tier, total_inc_gst, scope_of_works, share_token, intake_id, needs_inspection, routing_decision, good, better, best, estimated_timeframe, display_mode, paid_at, paid_tier, quote_kind, parent_quote_id',
         )
         .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false })

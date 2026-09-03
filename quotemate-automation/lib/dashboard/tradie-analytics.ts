@@ -14,6 +14,7 @@ import {
   type SplitSlice,
   type WeeklyPoint,
 } from '@/lib/admin/metrics'
+import { asQuoteKind } from '@/lib/quote/mint-tier'
 
 // ─── Input row shapes (single tenant; only the columns we need) ────────
 
@@ -28,6 +29,9 @@ export type TradieQuoteRow = {
   status: string | null
   total_inc_gst: number | string | null
   needs_inspection: boolean | null
+  /** Mig 194 — 'final'/'balance' rows are further payments on a job this list
+   *  already counts once. Absent on every pre-194 row ⇒ 'initial'. */
+  quote_kind?: string | null
 }
 
 export type TradieIntakeRow = {
@@ -188,7 +192,12 @@ export function buildTradieAnalytics(
   const toMs =
     to != null && !Number.isNaN(Date.parse(to)) ? Date.parse(to) : null
   const inWin = (c: string | null) => inInstantWindow(c, fromMs, toMs)
-  const quotes = input.quotes.filter((q) => inWin(q.created_at))
+  // Root-only (spec post-visit-money-sequence R12). A chained job is three
+  // rows — initial $99 → 'final' deposit → 'balance' — and one job. Counting
+  // the children would treble Quotes, and their paid_at would treble the
+  // funnel's Accepted stage off a single conversion.
+  const rootQuotes = input.quotes.filter((q) => asQuoteKind(q.quote_kind) === 'initial')
+  const quotes = rootQuotes.filter((q) => inWin(q.created_at))
   const intakes = input.intakes.filter((i) => inWin(i.created_at))
   const calls = input.calls.filter((c) => inWin(c.created_at))
   const customers = input.customers.filter((c) => inWin(c.created_at))
@@ -290,7 +299,7 @@ export function buildTradieAnalytics(
     // Always the full rolling `weeks` window — a period filter scopes the
     // headline numbers, not this trend line's context.
     weeklyTrend: computeWeeklyTrends(
-      { quotes: input.quotes, intakes: input.intakes, tenants: [] },
+      { quotes: rootQuotes, intakes: input.intakes, tenants: [] },
       weeks,
       now,
     ),

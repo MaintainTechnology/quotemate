@@ -151,14 +151,79 @@ create table if not exists quotes (
   price_hold_until timestamptz,
   booking_state text,
 
+  -- Migration 194: the post-visit money chain. One customer charge per row is
+  -- structural, so a job is a chain of rows — initial ($99 site visit) ->
+  -- 'final' (deposit less the $99 credit) -> 'balance' — linked by
+  -- parent_quote_id. quote_kind defaults to 'initial' so every legacy row
+  -- keeps today's behaviour. The partial unique index quotes_open_child_uniq
+  -- (at most one UNPAID child per parent+kind — the idempotency guarantee for
+  -- the tradie's Issue-final-quote / Request-final-payment buttons) lives in
+  -- the migration only: it is partial on paid_at, a column this DDL lacks.
+  -- ⚠ This CREATE TABLE is not prod schema — share_token, paid_at, paid_tier,
+  -- deposit_pct and tenant_id are all added by sql/02_stages_06_10_partial.sql,
+  -- sql/04_f3_finish.sql and later migrations.
+  parent_quote_id uuid references quotes(id) on delete set null,
+  quote_kind text not null default 'initial'
+    check (quote_kind in ('initial', 'final', 'balance')),
+
   -- Gotenberg customer quote PDF cache (migrations 105 + 146). pdf_path is the
   -- stored object in the private quote-pdfs bucket; pdf_signature fingerprints
   -- the report template version + resolved tier mode the PDF was rendered from,
   -- so a tradie's Pricing-settings tier-mode change self-heals the cache
   -- (lib/quote/pdf.ts).
   pdf_path text,
-  pdf_signature text
+  pdf_signature text,
+
+  -- Human-readable estimate number (migration 194), rendered EST-%04d on the EV
+  -- charger estimate document. Drawn lazily from quote_estimate_number_seq the
+  -- first time that document renders, so quotes that never produce one never
+  -- consume a number. Null everywhere else; the renderer falls back to the
+  -- 8-character quote reference.
+  estimate_number bigint
 );
+
+create sequence if not exists quote_estimate_number_seq as bigint start with 1 increment by 1;
+
+-- Draws the next estimate number for a quote, once. The guarded UPDATE plus the
+-- read-back must be ONE statement: PostgREST cannot put nextval() in an update
+-- payload, and read-then-write from the app would race two concurrent renders
+-- of the same quote into two numbers. Idempotent — the first caller assigns and
+-- every later one gets the same number back (migration 195).
+create or replace function next_quote_estimate_number(p_quote_id uuid)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_number bigint;
+begin
+  update public.quotes
+     set estimate_number = nextval('public.quote_estimate_number_seq')
+   where id = p_quote_id
+     and estimate_number is null
+  returning estimate_number into v_number;
+
+  if v_number is null then
+    select estimate_number into v_number from public.quotes where id = p_quote_id;
+  end if;
+
+  return v_number;
+end;
+$$;
+
+-- SECURITY DEFINER: PostgreSQL's default PUBLIC EXECUTE grant would make this an
+-- unauthenticated write against quotes that bypasses RLS. Server-only. The
+-- service_role grant is guarded because a bare Postgres has no such role.
+revoke execute on function next_quote_estimate_number(uuid) from public;
+
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant execute on function next_quote_estimate_number(uuid) to service_role';
+  end if;
+end
+$$;
 
 create table if not exists quote_line_items (
   id uuid primary key default gen_random_uuid(),

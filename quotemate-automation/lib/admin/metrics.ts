@@ -35,6 +35,8 @@ export type QuoteRow = {
   accepted_at: string | null
   paid_at: string | null
   status: string | null
+  /** quotes.quote_kind (mig 194). Absent on pre-chain callers → 'initial'. */
+  quote_kind?: string | null
 }
 
 export type IntakeRow = {
@@ -251,7 +253,17 @@ export function buildMetrics(
   const tenantById = new Map(input.tenants.map((t) => [t.id, t]))
 
   // Rows scoped to the tenants we are showing.
-  const quotes = input.quotes.filter((q) => q.tenant_id != null && allowed.has(q.tenant_id))
+  // Root rows only (spec post-visit-money-sequence R12). A chained job is
+  // three quotes rows — initial $99 → 'final' deposit → 'balance' — but ONE
+  // job: counting the children would treble the quote volume and, because
+  // each child carries its own accepted_at/paid_at, inflate the acceptance
+  // rate off a single real conversion.
+  const quotes = input.quotes.filter(
+    (q) =>
+      q.tenant_id != null &&
+      allowed.has(q.tenant_id) &&
+      (q.quote_kind ?? 'initial') === 'initial',
+  )
   const intakes = input.intakes.filter((i) => i.tenant_id != null && allowed.has(i.tenant_id))
   const calls = input.calls.filter((c) => c.tenant_id != null && allowed.has(c.tenant_id))
   const customers = input.customers.filter((c) => c.tenant_id != null && allowed.has(c.tenant_id))

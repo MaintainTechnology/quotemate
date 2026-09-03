@@ -45,6 +45,7 @@ import {
   followupCategoryOptions,
 } from '@/lib/quote/followup-filter'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
+import { asQuoteKind } from '@/lib/quote/mint-tier'
 import { resolveCatalogueBadge, badgeLabel } from '@/lib/dashboard/badge-state'
 import {
   buildServiceTogglePayload,
@@ -317,6 +318,15 @@ type Quote = {
   needs_inspection: boolean | null
   routing_decision: string | null
   estimated_timeframe: string | null
+  /** quotes.paid_tier — WHAT was paid, not just that something was:
+   *  'inspection' = the $99 site visit, 'deposit'/'credit' = the final
+   *  quote's deposit, 'balance' = the completion payment. */
+  paid_tier: string | null
+  /** Mig 194 — the post-visit chain. A job is initial ($99) → final (deposit)
+   *  → balance; children carry the kind and point at their parent. NULL/absent
+   *  on every pre-194 row, which is 'initial' by definition. */
+  quote_kind: 'initial' | 'final' | 'balance' | null
+  parent_quote_id: string | null
   good: TierJson
   better: TierJson
   best: TierJson
@@ -344,6 +354,14 @@ type Quote = {
   channel: 'sms' | 'voice' | null
   conversation_id: string | null
   messages: ConvoMessage[]
+}
+
+/** A chained job (spec post-visit-money-sequence) is ONE job spread over three
+ *  rows: the initial $99 site visit, the 'final' deposit and the 'balance'.
+ *  Every count-of-jobs figure reads the ROOT only — counting the children would
+ *  treble the pipeline volume and the conversion rate off one real job. */
+function isChainRoot(q: Quote): boolean {
+  return asQuoteKind(q.quote_kind) === 'initial'
 }
 
 type PricingBook = NonNullable<Pricing> & { trade: 'electrical' | 'plumbing' }
@@ -2780,9 +2798,14 @@ function OverviewTab({
   // local calendar (OverviewAnalytics sends the same bounds to the server).
   const [period, setPeriod] = useState<Period>('all')
   const periodWindow = periodRange(period, new Date())
-  const scopedQuotes = periodWindow
-    ? data.quotes.filter((q) => inPeriod(q.created_at, periodWindow))
-    : data.quotes
+  // Root-only (R12): a chained job's 'final' and 'balance' rows are further
+  // payments on a job already counted here, not new jobs. Leaving them in
+  // would treble scopedCount, quotedValue and the conversion denominator.
+  const scopedQuotes = (
+    periodWindow
+      ? data.quotes.filter((q) => inPeriod(q.created_at, periodWindow))
+      : data.quotes
+  ).filter(isChainRoot)
   const scopedCount = scopedQuotes.length
 
   const enabledServices = data.services.filter((s) => s.enabled).length
@@ -2799,8 +2822,26 @@ function OverviewTab({
   // about, scoped to the selected period. A quote counts as "accepted" if its
   // status is 'accepted' OR a deposit has landed (deposit_paid overrides status
   // in the QuoteCard badge ordering, same logic applied here).
+  // R12 attribution — the acceptance a chained job earns belongs to its ROOT,
+  // which is the row the pipeline counts. A paid 'final' child (paid_tier
+  // 'deposit', or 'credit' when the $99 covered it) accepts the parent.
+  // Scanned over ALL quotes, not the period-scoped roots: the child is created
+  // after the parent and can easily fall outside the parent's window.
+  const depositPaidRootIds = new Set(
+    data.quotes
+      .filter(
+        (q) =>
+          q.quote_kind === 'final' &&
+          (q.paid_tier === 'deposit' || q.paid_tier === 'credit'),
+      )
+      .map((q) => q.parent_quote_id)
+      .filter((id): id is string => !!id),
+  )
   const acceptedQuotes = scopedQuotes.filter(
-    (q) => q.deposit_paid || (q.status ?? '').toLowerCase() === 'accepted',
+    (q) =>
+      q.deposit_paid ||
+      (q.status ?? '').toLowerCase() === 'accepted' ||
+      depositPaidRootIds.has(q.id),
   )
   const quotedValue = scopedQuotes.reduce(
     (sum, q) => sum + (toNum(q.total_inc_gst) ?? 0),
@@ -4802,13 +4843,22 @@ function fmtAudCents(cents: number | null | undefined): string {
   })
 }
 
+// One chained job now produces up to three payout rows — the $99 site visit,
+// the deposit and the balance — so the tier suffix is what tells them apart
+// (spec post-visit-money-sequence R12). Without an explicit map the two child
+// charges would read as the bare literals 'deposit' / 'balance', which is
+// nearly right but inconsistent with "site visit"; spelling all three out
+// keeps the list scannable.
+const PAYOUT_TIER_LABEL: Record<string, string> = {
+  inspection: 'site visit',
+  deposit: 'deposit',
+  balance: 'final payment',
+}
+
 function payoutJobLabel(j: PayoutJob): string {
   const job = (j.job_type ?? 'job').replace(/_/g, ' ')
-  return j.paid_tier && j.paid_tier !== 'inspection'
-    ? `${job} · ${j.paid_tier}`
-    : j.paid_tier === 'inspection'
-      ? `${job} · site visit`
-      : job
+  if (!j.paid_tier) return job
+  return `${job} · ${PAYOUT_TIER_LABEL[j.paid_tier] ?? j.paid_tier}`
 }
 
 function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
@@ -8845,6 +8895,7 @@ function QuotesTab({
                   isMultiTrade={isMultiTrade}
                   accessToken={accessToken}
                   onDeleted={onQuoteDeleted}
+                  allQuotes={data.quotes}
                 />
               ) : (
                 <JobQueueDetail
@@ -8987,7 +9038,20 @@ function DeleteQuoteButton({
 function quoteBadges(q: Quote): { label: string; tone: QuoteBadgeTone }[] {
   const isInspection = !!(q.needs_inspection || q.inspection_required)
   const out: { label: string; tone: QuoteBadgeTone }[] = []
-  if (q.deposit_paid) out.push({ label: 'Deposit paid', tone: 'paid' })
+  // R12 — say which link of the chain this row is. Without it a job's three
+  // rows are indistinguishable in the list.
+  const kind = asQuoteKind(q.quote_kind)
+  if (kind === 'final') out.push({ label: 'Final quote', tone: 'sent' })
+  if (kind === 'balance') out.push({ label: 'Balance', tone: 'sent' })
+  if (q.deposit_paid) {
+    // "Deposit paid" is wrong on a paid BALANCE row — that money is the final
+    // payment, and the job is settled, not just secured.
+    out.push(
+      kind === 'balance'
+        ? { label: 'Paid in full', tone: 'paid' }
+        : { label: 'Deposit paid', tone: 'paid' },
+    )
+  }
   if (isInspection) out.push({ label: 'Inspection required', tone: 'inspect' })
   if (!q.deposit_paid) {
     const raw = (q.status ?? 'draft').toLowerCase()
@@ -9385,13 +9449,34 @@ function QuoteDetail({
   isMultiTrade,
   accessToken,
   onDeleted,
+  allQuotes,
 }: {
   q: Quote
   isMultiTrade: boolean
   accessToken: string | null
   onDeleted: (id: string) => void
+  /** Every quote already loaded for this tenant — used to resolve the
+   *  post-site-visit chain (spec R12). No extra fetch: the rows are in memory. */
+  allQuotes?: Quote[]
 }) {
   const url = q.share_token ? `/q/${q.share_token}` : null
+
+  // ── The post-site-visit chain (spec R12) ─────────────────────────
+  // A job can now span three rows — the $99 site visit, the final quote, and
+  // the balance — and until this they were three unrelated cards with no way
+  // to tell they were one job, or to get from one to the next.
+  const chain = useMemo(() => {
+    const rows = allQuotes ?? []
+    const kind = asQuoteKind(q.quote_kind)
+    if (kind !== 'initial') {
+      const parent = rows.find((r) => r.id === q.parent_quote_id) ?? null
+      return { parent, child: null as Quote | null, kind }
+    }
+    // On the root, point forward to the final quote issued against it.
+    const child =
+      rows.find((r) => r.parent_quote_id === q.id && asQuoteKind(r.quote_kind) === 'final') ?? null
+    return { parent: null as Quote | null, child, kind }
+  }, [allQuotes, q.id, q.parent_quote_id, q.quote_kind])
 
   // Tier prices. Each tier JSONB stores `subtotal_ex_gst` but NOT
   // total_inc_gst (the estimator applies GST at the quote level on
@@ -9481,6 +9566,27 @@ function QuoteDetail({
               {q.suburb ? ` · ${q.suburb}` : ''}
               {isMultiTrade && trade ? ` · ${tradeLabel(trade)}` : ''}
             </p>
+            {/* R12 — one job, up to three rows. Say which link this is and
+                give the tradie a way to walk the chain. */}
+            {chain.parent?.share_token && (
+              <a
+                href={`/dashboard/quote/${chain.parent.share_token}`}
+                className="mt-2 flex text-[0.62rem] font-bold uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-accent"
+              >
+                ←{' '}
+                {chain.kind === 'balance'
+                  ? 'Balance for this final quote'
+                  : 'Follow-up to the $99 site visit'}
+              </a>
+            )}
+            {chain.child?.share_token && (
+              <a
+                href={`/dashboard/quote/${chain.child.share_token}`}
+                className="mt-2 flex text-[0.62rem] font-bold uppercase tracking-[0.08em] text-text-dim transition-colors hover:text-accent"
+              >
+                Final quote issued →
+              </a>
+            )}
             {url && (
               <a
                 href={url}

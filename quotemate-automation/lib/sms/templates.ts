@@ -7,8 +7,19 @@
 import { priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { asQuoteDisplayMode, type QuoteDisplayMode } from '@/lib/quote/display'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
-import { depositCents, totalIncGstCents, dollars } from '@/lib/quote/money'
-import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
+import {
+  INSPECTION_FEE_AUD,
+  MIN_STRIPE_CHARGE_CENTS,
+  PLATFORM_FEE_PCT,
+  chargedCents,
+  clampDepositPct,
+  depositCents,
+  dollars,
+  finalBalanceBaseCents,
+  finalDepositBaseCents,
+  totalIncGstCents,
+} from '@/lib/quote/money'
+import { isSiteVisitFirstRow } from '@/lib/quote/mint-tier'
 
 /** Phase A — caller-supplied display mode flag. 'summary' suppresses the
  *  per-tier "X items + Yhr labour" component line so the SMS reads as a
@@ -30,6 +41,15 @@ export interface QuoteSmsOptions {
    *  trade — and an unthreaded/unresolvable trade — keeps today's per-tier
    *  deposit shape: the allowlist fails open exactly like the mint route. */
   trade?: string | null
+  /** quotes.quote_kind (spec post-visit-money-sequence R6/R9). A 'final' row
+   *  shares its parent's electrical/plumbing intake, so the `trade` gate above
+   *  would otherwise fire on it and text the customer a SECOND $99 site-visit
+   *  link for a job already visited. 'final' takes a dedicated message shape:
+   *  one confirmed price, the deposit less the $99 credit, the platform fee,
+   *  and the balance to come. Omitted → 'initial' → today's behaviour. */
+  quoteKind?: string | null
+  /** Tenant business name — signs off the final-quote message. */
+  businessName?: string | null
 }
 
 function pickVariant<T>(variants: readonly T[]): T {
@@ -104,7 +124,10 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
   }
   const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
   // Electrical/plumbing: prices stay, the deposit ask goes (see the option docs).
-  const siteVisitFirst = isSiteVisitFirstTrade(options?.trade)
+  const siteVisitFirst = isSiteVisitFirstRow({
+    trade: options?.trade,
+    quoteKind: options?.quoteKind,
+  })
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
   const timeframe = (quote.estimated_timeframe ?? '').toLowerCase().trim()
@@ -717,6 +740,105 @@ export function buildDepositAwaitingSlotSms(opts: {
   return scrubForGsm7(body)
 }
 
+// ── Post-site-visit child payments (spec post-visit-money-sequence R11) ──
+//
+// The site visit has already happened by the time either of these fires, so
+// neither may carry the "pick a time" nudge or a /book link the way
+// buildDepositAwaitingSlotSms does — there is no visit left to schedule, and
+// the booking page would let the customer prune a real slot out of the
+// tenant's calendar for a job that has no appointment.
+
+/** Customer SMS when the deposit on a 'final' row is paid. */
+export function buildDepositReceivedSms(opts: {
+  firstName?: string | null
+  businessName?: string | null
+}): string {
+  const first = (opts.firstName ?? '').trim().split(' ')[0] || 'there'
+  const business = (opts.businessName ?? '').trim() || 'your tradie'
+  return scrubForGsm7(
+    `Hi ${first}, deposit received - thanks! ${business} will be in touch to confirm the job date.\n\n- QuoteMax`,
+  )
+}
+
+/** Customer SMS when the balance on a 'balance' row is paid. */
+export function buildBalanceReceivedSms(opts: {
+  firstName?: string | null
+  businessName?: string | null
+}): string {
+  const first = (opts.firstName ?? '').trim().split(' ')[0] || 'there'
+  const business = (opts.businessName ?? '').trim() || 'your tradie'
+  return scrubForGsm7(
+    `Hi ${first}, payment received - you're all paid up. Thanks for your business.\n\n- ${business}`,
+  )
+}
+
+/**
+ * Tradie SMS when a child payment lands. Today a deposit landing without a
+ * slot notifies the tradie by PUSH only (booking-notify only texts when a
+ * slot exists), which is not good enough for money on a job in progress:
+ * the tradie is standing on site asking whether the payment came through.
+ */
+export function buildTradieChildPaymentSms(opts: {
+  tradieFirstName?: string | null
+  customerName?: string | null
+  jobType: string
+  /** Whole dollars the customer was charged, fee included. */
+  amountAud: number
+  kind: 'deposit' | 'balance'
+  quoteUrl: string
+}): string {
+  const who = (opts.tradieFirstName ?? '').trim().split(' ')[0]
+  const hi = who ? `Hi ${who}, ` : ''
+  const customer = (opts.customerName ?? '').trim().split(' ')[0] || 'The customer'
+  const job = (opts.jobType ?? 'job').replace(/_/g, ' ')
+  const label = opts.kind === 'deposit' ? 'the deposit' : 'the balance'
+  const tail =
+    opts.kind === 'deposit'
+      ? 'The job is confirmed - book it in with them.'
+      : 'That job is paid in full.'
+  return scrubForGsm7(
+    `${hi}${customer} just paid ${label} of $${fmtAudWhole(opts.amountAud)} for the ${job}. ${tail}\n\n${opts.quoteUrl}`,
+  )
+}
+
+/**
+ * Customer SMS asking for the final payment, sent when the tradie taps
+ * "Request final payment" on the job (spec post-visit-money-sequence R10).
+ *
+ * Links the /r short-link, never the raw Stripe URL: a Checkout Session dies
+ * after 24h, and the tradie sends this standing on site — the customer may
+ * well pay it the next day. /r mints a fresh Session per click.
+ *
+ * Says "tap to pay", never "reply YES": replies to this thread land at the
+ * out-of-repo receptionist, which would read them as a brand-new enquiry.
+ */
+export function buildBalanceRequestSms(opts: {
+  firstName?: string | null
+  businessName?: string | null
+  jobType: string
+  /** Balance owed, whole dollars, before the platform fee. */
+  balanceAud: number
+  /** Total charged, whole dollars, fee included. */
+  chargedAud: number
+  payUrl: string
+}): string {
+  const first = (opts.firstName ?? '').trim().split(' ')[0] || 'there'
+  const business = (opts.businessName ?? '').trim() || 'your tradie'
+  const job = (opts.jobType ?? 'job').replace(/_/g, ' ')
+  return scrubForGsm7(
+    `Hi ${first}, your ${job} is complete. Balance due: $${fmtAudWhole(opts.balanceAud)} + 2% platform fee = $${fmtAudWhole(opts.chargedAud)}.\n\nTap to pay: ${opts.payUrl}\n\nThanks - ${business}`,
+  )
+}
+
+/** Whole-dollar en-AU amount for SMS bodies ("1,250"). Local to keep the
+ *  templates ASCII-safe and independent of the money module's formatter. */
+function fmtAudWhole(n: number): string {
+  return Math.round(n).toLocaleString('en-AU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+}
+
 // Tradie-side booking notification — fires alongside the customer
 // confirmation. Sent to the tenant's owner_mobile (and WhatsApp where
 // configured) when a customer accepts a tier and pays the deposit.
@@ -942,7 +1064,9 @@ type Quote = {
   /** optional per-tier short redirect URLs. May include 'inspection' for
    *  inspection-required quotes — when present, template renders the
    *  inspection-only layout (single $99 link, indicative ranges as context). */
-  pay_links?: Partial<Record<'good' | 'better' | 'best' | 'inspection', string>>
+  pay_links?: Partial<
+    Record<'good' | 'better' | 'best' | 'inspection' | 'deposit' | 'balance', string>
+  >
   /** % deposit used in the SMS line (e.g. 30 → "(deposit $209)") */
   deposit_pct?: number | string | null
   /** True when intake/estimation flagged this quote as needing an on-site visit
@@ -1095,6 +1219,12 @@ function pickScopeForSms(quote: Quote): string | null {
  * dedicated layout below and are untouched by the trade gate.
  */
 export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOptions): string {
+  // A post-site-visit FINAL quote is a different message entirely: one
+  // confirmed price, a deposit that credits the $99 already paid, and a
+  // balance to come. It must never reach the site-visit branch below.
+  if (options?.quoteKind === 'final') {
+    return buildFinalQuoteSms(intake, quote, options)
+  }
   // Inspection-required quotes get a distinct SMS layout — indicative ranges
   // for context, ONE prominent $99 site-visit link, no per-tier pay buttons.
   if (quote.needs_inspection) {
@@ -1102,7 +1232,10 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   }
   const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
   // Electrical/plumbing: prices stay, the deposit ask goes (see the option docs).
-  const siteVisitFirst = isSiteVisitFirstTrade(options?.trade)
+  const siteVisitFirst = isSiteVisitFirstRow({
+    trade: options?.trade,
+    quoteKind: options?.quoteKind,
+  })
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
   const job = jobSummary(intake)
@@ -1204,6 +1337,84 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   )
   lines.push('')
   lines.push('- QuoteMax')
+
+  return gsm7Safe(lines.join('\n'))
+}
+
+/**
+ * The FINAL-quote SMS — the message that unblocks a job stuck at "site visit
+ * paid" (spec post-visit-money-sequence R9).
+ *
+ * Deliberately its own shape rather than a variant of the tier message:
+ *   • there is exactly ONE price (the tradie confirmed it on site), so the
+ *     Good/Better/Best scaffolding and the "recommended" badge are noise;
+ *   • the deposit is not `pct% of total` — it is that LESS the $99 already
+ *     paid, plus the platform fee on top — and every one of those three
+ *     numbers has to be visible or the customer can't reconcile what they
+ *     are about to be charged;
+ *   • the only link is /r/<token>/deposit. An `/inspection` link here would
+ *     sell a second site visit for a job already visited, and paying it would
+ *     claim the row's single paid_at slot and block the deposit for good.
+ *
+ * Says "tap to pay", never "reply YES": replies land at the out-of-repo
+ * receptionist, which would read them as a fresh enquiry.
+ */
+function buildFinalQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOptions): string {
+  const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
+  const job = jobSummary(intake)
+  const business = (options?.businessName ?? '').trim() || 'QuoteMax'
+
+  const tier = quote.good ?? quote.better ?? quote.best ?? null
+  const totalCents = tier
+    ? totalIncGstCents(tier.subtotal_ex_gst, { gstRegistered: quote.gst_registered })
+    : 0
+  const pct = clampDepositPct(quote.deposit_pct)
+  const depositBase = finalDepositBaseCents(totalCents, pct)
+  const balanceBase = finalBalanceBaseCents(totalCents, pct)
+  const charged = chargedCents(depositBase)
+  const payUrl = quote.pay_links?.deposit ?? null
+
+  const lines: string[] = []
+  lines.push(`Hi ${firstName},`)
+  lines.push('')
+  lines.push(`Your final quote for ${job} from ${business}: $${dollars(totalCents)} inc GST.`)
+  lines.push('')
+  if (quote.quote_view_url) lines.push(`View quote: ${quote.quote_view_url}`)
+  if (quote.pdf_url) lines.push(`PDF copy: ${quote.pdf_url}`)
+  if (quote.quote_view_url || quote.pdf_url) lines.push('')
+
+  if (depositBase >= MIN_STRIPE_CHARGE_CENTS) {
+    lines.push(
+      `Accept with a ${pct}% deposit: $${dollars(
+        depositCents(totalCents, pct),
+      )} less your $${INSPECTION_FEE_AUD} site-visit credit + ${PLATFORM_FEE_PCT}% platform fee = $${dollars(
+        charged,
+      )}.`,
+    )
+    if (payUrl) {
+      lines.push('Tap to pay:')
+      lines.push(payUrl)
+    }
+    lines.push('')
+    if (balanceBase >= MIN_STRIPE_CHARGE_CENTS) {
+      lines.push(`Balance $${dollars(balanceBase)} is requested on completion.`)
+      lines.push('')
+    }
+  } else {
+    // R8 — the $99 already covers the deposit, so there is nothing to pay now.
+    // Saying "deposit $0" would read as a mistake; say what actually happened.
+    lines.push(
+      `Your $${INSPECTION_FEE_AUD} site visit covers the deposit - nothing to pay now.`,
+    )
+    if (balanceBase >= MIN_STRIPE_CHARGE_CENTS) {
+      lines.push(`Balance $${dollars(balanceBase)} on completion.`)
+    }
+    lines.push('')
+  }
+
+  lines.push('Questions? Call us back.')
+  lines.push('')
+  lines.push(`- ${business}`)
 
   return gsm7Safe(lines.join('\n'))
 }

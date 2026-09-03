@@ -49,10 +49,24 @@ import { isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
 import { resolveMintDiscount } from '@/lib/quote/early-bird'
-import { resolveGenericMintTier } from '@/lib/quote/mint-tier'
+import {
+  CHILD_TIER_FOR_KIND,
+  asQuoteKind,
+  resolveGenericMintTier,
+} from '@/lib/quote/mint-tier'
+import {
+  INSPECTION_FEE_AUD_CENTS,
+  MIN_STRIPE_CHARGE_CENTS,
+  asMoneyNumber,
+  clampDepositPct,
+  finalDepositBaseCents,
+  surchargeCents,
+} from '@/lib/quote/money'
 import { pipelineLog } from '@/lib/log/pipeline'
 import {
+  createBalanceCheckoutSession,
   createCheckoutSessionForTier,
+  createFinalDepositCheckoutSession,
   createInspectionCheckoutSession,
   expireCheckoutSession,
 } from '@/lib/stripe/checkout'
@@ -79,7 +93,12 @@ function db() {
   return _supabase
 }
 
-export const VALID_TIERS = new Set(['good', 'better', 'best', 'inspection'])
+// 'deposit'/'balance' are the post-site-visit child literals (spec
+// post-visit-money-sequence R7). They are deliberately NOT reused tier names:
+// paid_tier, the Payouts label and the webhook's metadata all read this value,
+// so a child charge that said 'good' would be indistinguishable from a real
+// tier deposit everywhere downstream.
+export const VALID_TIERS = new Set(['good', 'better', 'best', 'inspection', 'deposit', 'balance'])
 
 export type PayRedirectDecision =
   /** Price hold lapsed — bounce to the quote page (shows the expired state). */
@@ -109,12 +128,27 @@ export function resolvePayRedirect(input: {
    *  caller with resolveBookingOptions — the SAME resolver the booking page
    *  renders from, so this answer and the calendar can never disagree. */
   bookableCount: number
+  /** quotes.quote_kind (spec post-visit-money-sequence R7). A 'final' or
+   *  'balance' child skips BOTH of the gates below, and for opposite reasons
+   *  to each other:
+   *    • the PRICE HOLD is an initial-quote concept (a 7-day freshness window
+   *      on an unaccepted estimate). A child carries no hold, but
+   *      isPriceHoldExpired derives one from created_at when the column is
+   *      null, so leaving the gate on would silently kill a deposit link 7
+   *      days after the final quote went out;
+   *    • the NO-SLOTS guard exists because pay-first means committing before
+   *      seeing any times. The site visit already happened — there is nothing
+   *      left to book — so refusing a deposit because the tenant's calendar is
+   *      empty would block money for a job already underway.
+   *  The 'paid' check is NOT skipped: never re-charge, on any row. */
+  quoteKind?: string | null | undefined
 }): PayRedirectDecision {
   const { tier, paid, scheduledAt, expired, token, appUrl, bookableCount } = input
+  const isChild = input.quoteKind === 'final' || input.quoteKind === 'balance'
 
   // Expiry gate — priced tiers only. Inspection has no price hold, and an
   // already-paid quote has transacted, so neither is blocked.
-  if (tier !== 'inspection' && !paid && expired) {
+  if (!isChild && tier !== 'inspection' && !paid && expired) {
     return { kind: 'expired', url: `${appUrl}/q/${token}` }
   }
 
@@ -126,7 +160,7 @@ export function resolvePayRedirect(input: {
   // About to charge — refuse if there is nothing to book afterwards. Checked
   // AFTER 'paid' so an already-paid customer is never bounced: they are not
   // being charged again, and their booking page handles the empty case itself.
-  if (!canTakePayment({ bookableCount })) {
+  if (!isChild && !canTakePayment({ bookableCount })) {
     return { kind: 'no-slots', url: `${appUrl}/q/${token}?slots=0` }
   }
 
@@ -292,6 +326,117 @@ async function mintFreshDepositUrl(
   }
 }
 
+/**
+ * Mint the Checkout Session for a post-site-visit child row (spec
+ * post-visit-money-sequence R7) and persist it under its own tier key.
+ *
+ * Everything the charge needs is read from the row's STORED
+ * `total_inc_gst` + `deposit_pct` rather than recomputed from the tier
+ * subtotal and a live `gst_registered` lookup the way the initial mint does.
+ * That matters because the deposit and the balance are minted at different
+ * times: recomputing would let `T` shift between the two clicks (a
+ * gst_registered flip, an edited subtotal) and the three charges would stop
+ * adding up to the total the customer accepted.
+ */
+async function mintChildChargeUrl(
+  quote: {
+    id: string
+    intake_id: string | null
+    tenant_id: string | null
+    parent_quote_id: string | null
+    total_inc_gst: number | string | null
+    deposit_pct: number | null
+    stripe_links: Record<string, string> | null
+  },
+  kind: 'final' | 'balance',
+  token: string,
+): Promise<{ url: string | null; reason?: 'no_connect' | 'below_minimum' | 'error' }> {
+  const appUrl = process.env.APP_URL!
+  try {
+    // A child charge MUST route through Connect. Unlike the $99 — which falls
+    // back to a platform-direct charge — a platform-direct deposit can never
+    // be released to the tradie (payoutReleaseDecision → 'not_connect_routed'),
+    // so the money would strand in QuoteMax's account. Refuse instead.
+    const connect = await connectDestinationForTenantId(db(), quote.tenant_id)
+    if (!connect) return { url: null, reason: 'no_connect' }
+
+    const { data: intakeRow } = await db()
+      .from('intakes')
+      .select('job_type, caller')
+      .eq('id', quote.intake_id)
+      .maybeSingle()
+    const jobLabel = ((intakeRow?.job_type as string) ?? 'job').replace(/_/g, ' ')
+    const email = (intakeRow?.caller as { email?: string } | null)?.email ?? null
+
+    const totalCents = Math.round(asMoneyNumber(quote.total_inc_gst) * 100)
+    const depositPct = clampDepositPct(quote.deposit_pct)
+    // The two child kinds store DIFFERENT things in total_inc_gst, and
+    // conflating them undercharges the tradie by half the job:
+    //   • a FINAL row holds the whole job total, so the deposit is derived
+    //     from it — pct% less the $99 already paid;
+    //   • a BALANCE row holds the balance ITSELF (request-final-payment
+    //     computed it once, from the final row, and stamped it). Running the
+    //     balance formula over it again would deduct the $99 credit and a
+    //     second deposit from an amount that already has both taken out.
+    const base =
+      kind === 'final' ? finalDepositBaseCents(totalCents, depositPct) : totalCents
+    if (base < MIN_STRIPE_CHARGE_CENTS) return { url: null, reason: 'below_minimum' }
+
+    const fee = surchargeCents(base)
+    const shared = {
+      quoteId: quote.id,
+      shareToken: token,
+      baseCents: base,
+      surchargeCents: fee,
+      jobLabel,
+      customerEmail: email,
+      appUrl,
+      connect,
+      audit: {
+        quoteKind: kind,
+        parentQuoteId: quote.parent_quote_id,
+        totalIncGstCents: totalCents,
+        depositPct,
+      },
+    }
+    const url =
+      kind === 'final'
+        ? await createFinalDepositCheckoutSession({
+            ...shared,
+            creditCents: INSPECTION_FEE_AUD_CENTS,
+          })
+        : await createBalanceCheckoutSession(shared)
+
+    if (url) {
+      const links = { ...(quote.stripe_links ?? {}) }
+      const tierKey = CHILD_TIER_FOR_KIND[kind]
+      const replaced = links[tierKey]
+      links[tierKey] = url
+      const { error: linkErr } = await db()
+        .from('quotes')
+        .update({ stripe_links: links })
+        .eq('id', quote.id)
+      if (linkErr) {
+        pipelineLog('dispatch').err('child stripe_links persist failed', linkErr.message, {
+          quote_id: quote.id,
+          tier: tierKey,
+        })
+      }
+      // Keyed by the CHILD literal, so a balance mint can never expire the
+      // deposit's Session (and vice versa).
+      if (replaced && replaced !== url) await expireCheckoutSession(replaced)
+    }
+    return { url }
+  } catch (e: unknown) {
+    pipelineLog('dispatch').err(
+      'child charge Session mint failed',
+      e instanceof Error ? e.message : String(e),
+      { quote_id: quote.id, kind },
+    )
+    return { url: null, reason: 'error' }
+  }
+}
+
 export async function GET(req: NextRequest, ctx: { params: Promise<{ token: string; tier: string }> }) {
   const { token, tier } = await ctx.params
   if (!VALID_TIERS.has(tier)) {
@@ -301,12 +446,64 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   const { data: quote } = await db()
     .from('quotes')
     .select(
-      'id, stripe_links, paid_at, scheduled_at, created_at, price_hold_until, needs_inspection, intake_id, tenant_id, good, better, best, deposit_pct',
+      'id, stripe_links, paid_at, scheduled_at, created_at, price_hold_until, needs_inspection, intake_id, tenant_id, good, better, best, deposit_pct, quote_kind, parent_quote_id, total_inc_gst',
     )
     .eq('share_token', token)
     .single()
 
   if (!quote) return new Response('Not found', { status: 404 })
+
+  const quoteKind = asQuoteKind(quote.quote_kind as string | null)
+
+  // ── Post-site-visit child rows (spec post-visit-money-sequence R7) ──
+  // A child charges exactly one literal ('deposit' on a final row, 'balance'
+  // on a balance row). Every other tier — a stale G/B/B link from the parent's
+  // SMS thread, and above all 'inspection' — mints NOTHING and bounces to the
+  // quote page. That last case is the load-bearing one: 'inspection' is
+  // passthrough for every row today, so without this refusal a click would
+  // mint a live second $99, claim the child's single paid_at slot with
+  // paid_tier='inspection', and permanently block the deposit.
+  if (quoteKind !== 'initial') {
+    const childGate = resolveGenericMintTier(tier, null, quoteKind)
+    if (childGate.kind !== 'passthrough') {
+      return Response.redirect(new URL(`/q/${token}`, req.url), 302)
+    }
+
+    // Never re-charge a paid child — the same rule every other row follows.
+    const childDecision = resolvePayRedirect({
+      tier,
+      paid: !!quote.paid_at,
+      scheduledAt: null,
+      expired: false,
+      token,
+      appUrl: process.env.APP_URL!,
+      bookableCount: 1,
+      quoteKind,
+    })
+    if (childDecision.kind !== 'stripe') {
+      return Response.redirect(childDecision.url, 302)
+    }
+
+    const minted = await mintChildChargeUrl(
+      {
+        id: quote.id as string,
+        intake_id: (quote.intake_id as string | null) ?? null,
+        tenant_id: (quote.tenant_id as string | null) ?? null,
+        parent_quote_id: (quote.parent_quote_id as string | null) ?? null,
+        total_inc_gst: (quote.total_inc_gst as number | string | null) ?? null,
+        deposit_pct: (quote.deposit_pct as number | null) ?? null,
+        stripe_links: (quote.stripe_links as Record<string, string> | null) ?? null,
+      },
+      quoteKind,
+      token,
+    )
+    if (minted.url) return Response.redirect(minted.url, 302)
+    // No silent fallback to a stored link here: a child's amounts are
+    // computed per click, so a stale Session could charge the wrong money.
+    // Bounce to the quote page with a reason the page can render.
+    const q = minted.reason === 'no_connect' ? '?connect=0' : '?pay=unavailable'
+    return Response.redirect(new URL(`/q/${token}${q}`, req.url), 302)
+  }
 
   // ── $99-site-visit gate (spec elec-plumb-site-visit-first R1, 2026-08-06) ──
   // Electrical and plumbing sell ONE customer payment: the flat $99 refundable
@@ -327,7 +524,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
       .select('trade')
       .eq('id', quote.intake_id)
       .maybeSingle()
-    const gate = resolveGenericMintTier(tier, (tradeRow?.trade as string | null) ?? null)
+    const gate = resolveGenericMintTier(tier, (tradeRow?.trade as string | null) ?? null, quoteKind)
     if (gate.kind === 'redirect_to_inspection') {
       // Same-app hop, so base it on the REQUEST rather than APP_URL: the two
       // provisioned Twilio webhook hosts both serve this app, and an unset
@@ -394,6 +591,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     token,
     appUrl: process.env.APP_URL!,
     bookableCount,
+    quoteKind,
   })
 
   if (decision.kind !== 'stripe') {

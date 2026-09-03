@@ -20,12 +20,18 @@
 //      account for the job's net (paid − fee) → their bank.
 
 import { getStripe } from './client'
+import { PLATFORM_FEE_PCT, surchargeCents } from '@/lib/quote/money'
 
-export const PLATFORM_FEE_PCT = 2
+export { PLATFORM_FEE_PCT }
 
-/** QuoteMax's cut of a charge, in cents: 2% of the amount, rounded. */
+/** QuoteMax's cut of a charge, in cents: 2% of the amount, rounded.
+ *
+ *  Delegates to lib/quote/money.ts so the fee the customer is SHOWN (quote
+ *  page, SMS) and the fee Stripe is TOLD are literally the same function —
+ *  the post-visit deposit/balance charge the fee on top and must not derive
+ *  it from a second implementation that could round differently. */
 export function platformFeeCents(amountCents: number): number {
-  return Math.round(amountCents * (PLATFORM_FEE_PCT / 100))
+  return surchargeCents(amountCents)
 }
 
 export type ConnectDestination = { accountId: string }

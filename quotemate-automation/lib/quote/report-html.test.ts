@@ -322,8 +322,11 @@ describe('buildQuoteReportHtml — propertyVisuals (spec quote-visual-parity R1)
     expect(omitted).not.toContain('Your roof, from above')
   })
 
-  it('REPORT_TEMPLATE_VERSION is bumped to 8 so cached PDFs regenerate (job details + your tradie)', () => {
-    expect(REPORT_TEMPLATE_VERSION).toBe(8)
+  it('REPORT_TEMPLATE_VERSION is bumped to 9 so cached PDFs regenerate (final-quote marker + disclaimer)', () => {
+    // v9: post-site-visit final quotes print "FINAL QUOTE" instead of "GOOD"
+    // and drop the "final pricing is confirmed on site" line, which is false
+    // once the visit has happened (spec post-visit-money-sequence R5).
+    expect(REPORT_TEMPLATE_VERSION).toBe(9)
   })
 
   it('v7 — tier prices honour the realised early-booking discount (P7)', () => {

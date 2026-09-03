@@ -67,7 +67,7 @@ export async function POST(
 
   const { data: quote, error: quoteErr } = await supabase
     .from('quotes')
-    .select('id, paid_at, scheduled_at, selected_tier, share_token, intake_id, tenant_id, good, better, best, stripe_links, created_at, price_hold_until, needs_inspection')
+    .select('id, paid_at, scheduled_at, selected_tier, share_token, intake_id, tenant_id, good, better, best, stripe_links, created_at, price_hold_until, needs_inspection, quote_kind')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -78,6 +78,22 @@ export async function POST(
   if (!quote) {
     return Response.json({ ok: false, error: 'Quote not found' }, { status: 404 })
   }
+  // A post-site-visit child ('final'/'balance') has no visit to book — the
+  // site visit is what created it (spec post-visit-money-sequence R11).
+  // Booking one would stamp a phantom appointment, prune a real slot out of
+  // the tenant's availability, and fire the tradie's "booked and paid the
+  // deposit" SMS for a job with no time attached. The /book PAGE redirects
+  // children; this is the API-level guard behind it.
+  {
+    const kind = (quote as { quote_kind?: string | null }).quote_kind ?? null
+    if (kind === 'final' || kind === 'balance') {
+      return Response.json(
+        { ok: false, error: 'This payment has no visit to book.' },
+        { status: 409 },
+      )
+    }
+  }
+
   // Already booked + paid → terminal, don't let them re-pick.
   if (quote.paid_at && quote.scheduled_at) {
     return Response.json(

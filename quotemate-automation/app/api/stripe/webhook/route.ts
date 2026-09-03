@@ -194,7 +194,9 @@ export async function POST(req: Request) {
 
   const { data: existing } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_stripe_session_id, scheduled_at, intake_id, tenant_id, share_token')
+    .select(
+      'id, paid_at, paid_stripe_session_id, scheduled_at, intake_id, tenant_id, share_token, quote_kind',
+    )
     .eq('id', quoteId)
     .single()
 
@@ -227,6 +229,9 @@ export async function POST(req: Request) {
       intake_id: (existing.intake_id as string | null) ?? null,
       tenant_id: (existing.tenant_id as string | null) ?? null,
       share_token: (existing.share_token as string | null) ?? null,
+      // Drives the child branch: a 'final'/'balance' row takes the payment
+      // stamps but none of the booking machinery (spec R11).
+      quote_kind: (existing.quote_kind as string | null) ?? null,
     },
     tier,
     sessionId: session.id,

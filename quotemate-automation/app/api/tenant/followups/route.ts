@@ -81,6 +81,11 @@ export async function GET(req: Request) {
     .or('status.in.(sent,viewed),sent_at.not.is.null')
     .is('paid_at', null)
     .is('accepted_at', null)
+    // Balance rows are invoices for completed work, not quotes awaiting a
+    // decision — chasing one as a "follow-up" would confuse the VA and the
+    // customer (spec post-visit-money-sequence R12). Unpaid final quotes DO
+    // belong in the queue.
+    .neq('quote_kind', 'balance')
     .order('last_status_at', { ascending: true, nullsFirst: false })
     .limit(500)
 

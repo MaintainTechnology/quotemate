@@ -19,7 +19,7 @@ import {
 } from '../pdf/report-chrome'
 import { renderRoofLayoutSectionHtml, type RoofLayoutOverlay } from '@/lib/roofing/report-html'
 import { clampDiscountPct } from './early-bird'
-import { displayIncGst } from './money'
+import { INSPECTION_FEE_AUD, clampDepositPct, displayIncGst } from './money'
 
 /**
  * Bump whenever buildQuoteReportHtml's output changes in a way that should
@@ -48,8 +48,14 @@ import { displayIncGst } from './money'
  *   v8 (2026-07-21): customer-view parity — the PDF now carries the page's
  *   "Job details" sentence (quotes.scope_short) and a "Your tradie" block with
  *   the tradie's photo (tenants.photo_url, else the placeholder avatar).
+ *   v9 (2026-09-03): post-site-visit FINAL quotes (spec
+ *   post-visit-money-sequence R5) — the single tier prints as "FINAL QUOTE"
+ *   rather than "GOOD", and the "final pricing is confirmed on site"
+ *   disclaimer is replaced: on a document produced AFTER the visit that
+ *   sentence told the customer the price they are paying a deposit against
+ *   might still move.
  */
-export const REPORT_TEMPLATE_VERSION = 8
+export const REPORT_TEMPLATE_VERSION = 9
 
 export type QuoteReportLineItem = {
   description: string
@@ -109,6 +115,12 @@ export type QuoteReportInput = {
   better: QuoteReportTier
   best: QuoteReportTier
   selectedTier?: 'good' | 'better' | 'best' | null
+  /** v9 — quotes.quote_kind (mig 194). 'final' switches the tier marker to
+   *  "FINAL QUOTE" and swaps the "confirmed on site" disclaimer, which is
+   *  false on a document produced after the visit. Absent → 'initial'. */
+  quoteKind?: string | null
+  /** v9 — quotes.deposit_pct, printed in the final-quote disclaimer. */
+  depositPct?: number | null
   /** v7 — realised early-booking discount % (quotes.applied_discount_pct).
    *  When > 0 headline tier prices render DISCOUNTED, matching the page,
    *  the SMS and the Stripe charge (P7). Absent/0 → full price. */
@@ -135,8 +147,14 @@ function tierSection(
   tier: QuoteReportTier,
   selected: boolean,
   money?: { discountPct?: number | null; gstRegistered?: boolean | null },
+  /** v9 — a post-site-visit FINAL quote has one confirmed price, so the
+   *  marker prints "FINAL QUOTE" rather than the raw slot name. Printing
+   *  "GOOD" on a price the tradie confirmed on site reads as one option of
+   *  three that were never offered. */
+  quoteKind?: string | null,
 ): string {
   if (!tier) return ''
+  const isFinal = quoteKind === 'final'
   const discountPct = clampDiscountPct(money?.discountPct)
   const price = displayIncGst(tier.subtotal_ex_gst, {
     discountPct,
@@ -157,9 +175,9 @@ function tierSection(
   return `
   <section class="part">
     <div class="tier-head" style="display:flex;justify-content:space-between;align-items:baseline;">
-      <span class="marker" style="padding:4px 10px;font-size:11px;letter-spacing:0.12em;">${key.toUpperCase()}${
-        selected ? ' · RECOMMENDED' : ''
-      }</span>
+      <span class="marker" style="padding:4px 10px;font-size:11px;letter-spacing:0.12em;">${
+        isFinal ? 'FINAL QUOTE' : key.toUpperCase()
+      }${selected && !isFinal ? ' · RECOMMENDED' : ''}</span>
       <span class="tier-price" style="font-size:20px;font-weight:800;">$${price.toLocaleString(
         'en-AU',
       )} <small style="font-size:10px;font-weight:400;color:var(--dim);">${esc(priceNote)}</small></span>
@@ -184,7 +202,13 @@ function tierSection(
 export function renderQuoteTiersHtml(
   input: Pick<
     QuoteReportInput,
-    'good' | 'better' | 'best' | 'selectedTier' | 'appliedDiscountPct' | 'gstRegistered'
+    | 'good'
+    | 'better'
+    | 'best'
+    | 'selectedTier'
+    | 'appliedDiscountPct'
+    | 'gstRegistered'
+    | 'quoteKind'
   >,
 ): string {
   const money = {
@@ -192,7 +216,9 @@ export function renderQuoteTiersHtml(
     gstRegistered: input.gstRegistered,
   }
   return (['good', 'better', 'best'] as const)
-    .map((key) => tierSection(key, input[key], input.selectedTier === key, money))
+    .map((key) =>
+      tierSection(key, input[key], input.selectedTier === key, money, input.quoteKind),
+    )
     .join('')
 }
 
@@ -202,6 +228,23 @@ const QUOTE_PLEASE_NOTE = [
   'Final pricing is confirmed on site; variations to the scope above are quoted separately.',
   'Materials are supplied to equivalent specification where a named brand is unavailable.',
 ]
+
+/**
+ * v9 — the disclaimers for a post-site-visit FINAL quote.
+ *
+ * Line 2 of the default set promises that "final pricing is confirmed on
+ * site", which is exactly backwards on a document produced AFTER the site
+ * visit: this price IS the confirmed one. Leaving it would tell the customer
+ * the number they are about to pay a deposit against might still move.
+ */
+function pleaseNoteFor(quoteKind: string | null | undefined, depositPct: number): string[] {
+  if (quoteKind !== 'final') return QUOTE_PLEASE_NOTE
+  return [
+    QUOTE_PLEASE_NOTE[0],
+    `Price confirmed at your site visit. Deposit ${depositPct}% less $${INSPECTION_FEE_AUD} credit; balance on completion.`,
+    QUOTE_PLEASE_NOTE[2],
+  ]
+}
 
 export function buildQuoteReportHtml(input: QuoteReportInput): string {
   return buildQuoteReportHtmlFromBody(input, buildDefaultQuoteBody(input))
@@ -314,7 +357,7 @@ export function buildQuoteReportHtmlFromBody(input: QuoteReportInput, bodyHtml: 
       multiTier ? 'Your Good / Better / Best options are' : 'Your quote is'
     } set out below.`,
     bodyHtml,
-    pleaseNote: QUOTE_PLEASE_NOTE,
+    pleaseNote: pleaseNoteFor(input.quoteKind, clampDepositPct(input.depositPct)),
     closingLine,
   })
 }

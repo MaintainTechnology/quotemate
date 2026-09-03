@@ -37,7 +37,14 @@ import {
 } from '@/lib/quote/display'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
-import { isSiteVisitFirstTrade } from '@/lib/quote/mint-tier'
+import { asQuoteKind, isSiteVisitFirstRow } from '@/lib/quote/mint-tier'
+import {
+  MIN_STRIPE_CHARGE_CENTS,
+  asMoneyNumber,
+  clampDepositPct,
+  finalDepositBaseCents,
+} from '@/lib/quote/money'
+import { pipelineLog } from '@/lib/log/pipeline'
 import { normaliseAuMobile } from '@/lib/phone/au'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { sendEmail } from '@/lib/email/resend'
@@ -122,7 +129,7 @@ export async function POST(
   const { data: quote, error: qErr } = await supabase
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct',
+      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct, quote_kind, paid_at',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -208,7 +215,60 @@ export async function POST(
   // act). Computed here because the SMS body embeds it, but only WRITTEN
   // after a successful dispatch: a failed send must not silently re-arm an
   // expired hold for a quote the customer never received.
-  const refreshedHoldUntil = computePriceHoldUntil(new Date().toISOString())
+  const quoteKind = asQuoteKind(quote.quote_kind as string | null)
+
+  if (quoteKind !== 'initial') {
+    // R9 — the email channel is for initial quotes only. buildQuoteEmail's
+    // copy is generic: it carries no deposit link, no $99 credit and no fee
+    // line, so an emailed final quote tells the customer nothing about what
+    // they owe or how to pay it. This is the server-side half of hiding the
+    // email row in the dashboard — the API must not be the weaker gate.
+    if (channel === 'email') {
+      return Response.json(
+        {
+          error: 'email_not_supported_for_child',
+          message: 'Final quotes and balance requests are sent by SMS.',
+        },
+        { status: 409 },
+      )
+    }
+    // A balance row is an invoice minted by "Request final payment", which
+    // texts its own link. Pushing it through the quote sender would compose a
+    // degenerate tier message ("YOUR OPTION (inc 10% GST)") for a row that
+    // has no tiers at all.
+    if (quoteKind === 'balance') {
+      return Response.json(
+        {
+          error: 'balance_not_sendable',
+          message: 'Use Request final payment to re-send the balance link.',
+        },
+        { status: 409 },
+      )
+    }
+    // Never text a customer an unpriced quote. The child is seeded with a $0
+    // whole-of-job line for the tradie to fill in on site; sending before
+    // that is always a mis-tap, and it used to stamp the row paid-by-credit
+    // and freeze it permanently.
+    const totalCents = Math.round(
+      asMoneyNumber(quote.total_inc_gst as number | string | null) * 100,
+    )
+    if (totalCents < MIN_STRIPE_CHARGE_CENTS) {
+      return Response.json(
+        {
+          error: 'not_priced',
+          message: 'Add the confirmed price before sending this final quote.',
+        },
+        { status: 409 },
+      )
+    }
+  }
+
+  // A final/balance row carries no price hold (spec R9): the hold is a
+  // freshness window on an unaccepted estimate, and the mint skips its gate
+  // for children. Re-arming it here would write a `price_hold_until` that
+  // makes the quote page render a countdown the customer can't act on.
+  const refreshedHoldUntil =
+    quoteKind === 'initial' ? computePriceHoldUntil(new Date().toISOString()) : null
 
   if (channel === 'sms') {
     const displayMode = resolveQuoteDisplayMode({
@@ -231,8 +291,18 @@ export async function POST(
     // $99 site visit, so the message needs that link even on a quote drafted
     // before the model changed (whose stripe_links hold G/B/B only).
     // /r/<token>/inspection mints a fresh Session per click, so it is always live.
-    if (isSiteVisitFirstTrade(rawTrade)) {
+    if (isSiteVisitFirstRow({ trade: rawTrade, quoteKind })) {
       payLinks.inspection = `${appUrl}/r/${shareToken}/inspection`
+    }
+    // A FINAL quote sells its deposit and nothing else (spec R9). The link is
+    // set unconditionally because the loop above only mirrors keys already in
+    // stripe_links, and a freshly-issued child has none — /r mints per click,
+    // so the short-link is live regardless. Any `inspection` key inherited
+    // from the parent is dropped: offering it here would sell a second site
+    // visit and, once paid, claim the row's only paid_at slot.
+    if (quoteKind === 'final') {
+      delete payLinks.inspection
+      payLinks.deposit = `${appUrl}/r/${shareToken}/deposit`
     }
     const depositPct =
       typeof quote.deposit_pct === 'number'
@@ -268,6 +338,8 @@ export async function POST(
       displayMode: asQuoteDisplayMode(displayMode),
       tierMode,
       trade: rawTrade,
+      quoteKind,
+      businessName: (tenant as { business_name?: string | null }).business_name ?? null,
     })
     const fromNumber = tenant.twilio_sms_number ?? process.env.TWILIO_SMS_NUMBER ?? undefined
 
@@ -296,12 +368,26 @@ export async function POST(
 
     await markSent(quote.id as string, quote.tenant_id as string, refreshedHoldUntil, 'sms')
 
+    // ── R8: the $99 already covers the deposit ──────────────────────
+    // A job small enough that pct% of it is under the site-visit fee has
+    // nothing left to charge as a deposit. Stamping the row paid with a
+    // 'credit' tier is what lets the chain continue: "Request final payment"
+    // accepts it, the row leaves the follow-up queues, and it freezes like
+    // any other paid row. paid_amount_cents 0 with a NULL Connect destination
+    // keeps it out of Payouts — there is no money to release.
+    //
+    // Stamped HERE, after a delivered dispatch, and never before: the house
+    // rule is that nothing may report a state the customer was not actually
+    // told about.
+    const creditStamped = await stampDepositCoveredByCredit(quote, quoteKind)
+
     return Response.json({
       ok: true,
       quote_id: quote.id,
       channel: dispatch.channel,
       sid: dispatch.sid,
       status: 'sent',
+      ...(creditStamped ? { deposit_covered_by_credit: true } : {}),
     })
   }
 
@@ -358,6 +444,55 @@ export async function POST(
     messageId: result.messageId,
     status: 'sent',
   })
+}
+
+/**
+ * R8 — mark a FINAL row's deposit as already covered by the $99 site visit.
+ *
+ * Returns true when the stamp was applied. No-op for anything that is not an
+ * unpaid final row whose deposit lands under Stripe's minimum charge, so a
+ * normal final quote is untouched. The `.is('paid_at', null)` guard makes it
+ * a conditional claim, matching the payment path: a re-send can never
+ * overwrite a real deposit payment that landed in between.
+ */
+async function stampDepositCoveredByCredit(
+  quote: { id: unknown; total_inc_gst: unknown; deposit_pct: unknown; paid_at: unknown },
+  quoteKind: string,
+): Promise<boolean> {
+  if (quoteKind !== 'final' || quote.paid_at) return false
+  const totalCents = Math.round(asMoneyNumber(quote.total_inc_gst as number | string | null) * 100)
+  // An UNPRICED row is not a small job — it is a draft. R3 seeds every final
+  // quote off an inspection-routed parent with a $0 whole-of-job line, so
+  // without this guard the very first Send (before the tradie types the price
+  // they confirmed on site) computes max(0, 0 − $99) = 0, stamps the row paid
+  // by "credit", and freezes it forever: edit 409s on paid_at, and Request
+  // final payment 409s nothing_to_charge because the balance is −$99.
+  if (totalCents < MIN_STRIPE_CHARGE_CENTS) return false
+  const depositBase = finalDepositBaseCents(
+    totalCents,
+    clampDepositPct(quote.deposit_pct as number | null),
+  )
+  if (depositBase >= MIN_STRIPE_CHARGE_CENTS) return false
+
+  const { data, error } = await supabase
+    .from('quotes')
+    .update({
+      paid_at: new Date().toISOString(),
+      paid_tier: 'credit',
+      paid_amount_cents: 0,
+      paid_stripe_session_id: null,
+      stripe_connect_destination: null,
+    })
+    .eq('id', quote.id as string)
+    .is('paid_at', null)
+    .select('id')
+  if (error) {
+    pipelineLog('dispatch').err('deposit-credit stamp failed', error.message, {
+      quote_id: String(quote.id),
+    })
+    return false
+  }
+  return !!data && data.length > 0
 }
 
 /** Post-success bookkeeping: restart the price hold, advance the lifecycle,

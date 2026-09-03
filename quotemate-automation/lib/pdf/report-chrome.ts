@@ -68,6 +68,16 @@ export type ReportDocument = {
   docTitle: string
   /** Mono eyebrow above the heading, e.g. "Roofing quote · Good / Better / Best". */
   eyebrow?: string | null
+  /** The big visible title above the intro meta. Defaults to "Quotation" — the
+   *  string every trade printed before this slot existed, so an omitting caller
+   *  renders byte-identically. The EV charger estimate passes "ESTIMATE"
+   *  (spec ev-charger-estimate-template R2). */
+  titleText?: string | null
+  /** Replaces the flat "Name · Date · Contact" sub-line with caller-supplied
+   *  HTML (already escaped by the caller). Absent ⇒ the default sub-line, so
+   *  existing callers are unchanged. The EV estimate passes a two-column
+   *  Prepared For / Proposal Details block (spec R2/R3). */
+  introMetaHtml?: string | null
   /** Pre-formatted date string (caller controls locale/format). */
   dateLabel: string
   customerName?: string | null
@@ -376,10 +386,13 @@ export function renderReportDocument(branding: TenantBranding, doc: ReportDocume
 
   <div class="intro-block">
     ${doc.eyebrow ? `<div class="eyebrow">${esc(doc.eyebrow)}</div>` : ''}
-    <div class="quote-title">Quotation</div>
-    <div class="quote-sub">${
-      introCustomer ? `<strong>${introCustomer}</strong> · ` : ''
-    }${esc(doc.dateLabel)}${doc.customerContact ? ` · ${esc(doc.customerContact)}` : ''}</div>
+    <div class="quote-title">${esc(doc.titleText ?? 'Quotation')}</div>
+    ${
+      doc.introMetaHtml ??
+      `<div class="quote-sub">${
+        introCustomer ? `<strong>${introCustomer}</strong> · ` : ''
+      }${esc(doc.dateLabel)}${doc.customerContact ? ` · ${esc(doc.customerContact)}` : ''}</div>`
+    }
     ${doc.introHtml ? `<p class="intro">${doc.introHtml}</p>` : ''}
   </div>
 
