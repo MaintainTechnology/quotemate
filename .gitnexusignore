@@ -1,0 +1,78 @@
+# GitNexus index scope for the QuoteMax repo.
+#
+# The product is quotemate-automation/ (Next.js app) plus redesign/, scripts/,
+# docs/ and specs/. The repo root also carries ~4,400 files of *vendored agent
+# tooling* (one config dir per AI coding agent) which is not QuoteMax code and
+# only adds noise to the knowledge graph. Excluded below.
+#
+# .gitignore is honoured automatically — node_modules/, .next/, .env* etc. do
+# not need repeating here.
+
+# --- Vendored AI-agent config/skill trees (not product code) ---
+.adal/
+.agents/
+.aider-desk/
+.augment/
+.autohand/
+.bob/
+.claire/
+.claude/
+.claude-flow/
+.clone/
+.codeartsdoer/
+.codebuddy/
+.codemaker/
+.codestudio/
+.codex/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.devin/
+.factory/
+.forge/
+.goose/
+.hermes/
+.iflow/
+.impeccable/
+.inferencesh/
+.jazz/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.lingma/
+.mcpjam/
+.moxby/
+.mux/
+.neovate/
+.ona/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.ralph/
+.reasonix/
+.roo/
+.rovodev/
+.superpowers/
+.tabnine/
+.terramind/
+.tinycloud/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
+skills/
+
+# --- Generated / binary / capture artefacts ---
+screenshots/
+marketing-screenshots/
+.design-captures/
+mockups/
+graphify-out/
+tmp/
+data/
+*.bak-*
+ruvector.db
