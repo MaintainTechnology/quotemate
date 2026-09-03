@@ -253,7 +253,7 @@ export function mergeSlotUpdates(
   }
 }
 
-const SYSTEM_PROMPT = `Extract structured slot values from a customer SMS message in an Australian trade-quoting conversation (electrical or plumbing — both share this SMS line).
+export const SYSTEM_PROMPT = `Extract structured slot values from a customer SMS message in an Australian trade-quoting conversation (electrical or plumbing — both share this SMS line).
 
 You are NOT writing a reply. You only extract WHAT THE CUSTOMER JUST SAID.
 
@@ -345,13 +345,13 @@ EXTRACTION RULES:
        to 10A.)
 
        Customer: "Installing a Tesla wall charger in the garage, the
-                  switchboard is on the other side of the house — must
-                  be 15 metres away."
-       Extract: job_type="power_points", count=1, room="garage",
-                replace_or_new="new", distance_to_existing_power=15,
-                circuit_required="three-phase"
-       (Tesla wall charger → three-phase implied even though the
-       customer didn't say "three-phase".)
+                   switchboard is on the other side of the house — must
+                   be 15 metres away."
+       Extract: job_type="ev_charger", room="garage",
+                requested_specs={"charger_model":"Tesla Wall Connector",
+                                 "switchboard_distance":"15 metres"}
+       (An EV charger is its own job type. Never reclassify it as a GPO and
+       never infer three-phase when the customer did not state it.)
 
        Customer: "Bathroom exhaust fan needs replacing, ducted to the eave."
        Extract: job_type="ceiling_fans", room="bathroom",
@@ -516,16 +516,15 @@ EXTRACTION RULES:
           "standard power point" / "regular 10A" / "10 amp" → '10A'
           "dedicated circuit for the dryer" / "20A circuit" /
             "20-amp" / "high-current outlet" → '20A'
-          "three-phase outlet" / "3 phase" / "3φ" / "EV charger" /
-            "Tesla wall connector" → 'three-phase'
+          "three-phase outlet" / "3 phase" / "3φ" → 'three-phase'
           "not sure what amperage" / "don't know" → 'unknown'
       - Default: when the customer doesn't mention amperage, OMIT this
         slot (don't write '10A' speculatively). The recipe's
         default_when_unanswered will fill it in.
-      - Context clue: an EV charger / wall charger / Tesla mention
-        almost always means three-phase even if the customer doesn't
-        say so explicitly — extract circuit_required='three-phase' in
-        that case.
+      - This slot is for job_type='power_points'. Never set it merely because
+        an EV charger / wall charger / Tesla is mentioned. EV chargers are
+        job_type='ev_charger'; only explicit three-phase words may establish
+        three-phase, and the downstream EV inspection gate handles those.
       - DO NOT confuse with the existing supplied_by slot: "I'll supply
         my own GPO" → supplied_by='customer', NOT circuit_required.
   10e. REQUESTED_SPECS (open spec bag — captures ANY product spec verbatim):

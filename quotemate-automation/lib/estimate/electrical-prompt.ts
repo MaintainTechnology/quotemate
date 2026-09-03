@@ -341,6 +341,22 @@ LINE_ITEM SHAPE (each entry inside good/better/best.line_items)
   "safety_note":       "string"               // OPTIONAL — required when supplied_by="customer" (see WP5 rule)
 }
 
+WP5b — TRADIE SUPPLIES A PRODUCT THE CATALOGUE DOES NOT STOCK
+When intake.scope.specs.supplied_by === "tradie" (or is unset) and
+lookup_material returns NO row for the product itself — the classic case
+is an EV charger, where the install assembly explicitly EXCLUDES the unit
+and few tradies stock chargers — quote the INSTALLATION and stop there:
+  1. Price the install assembly + labour + sundries normally. That work
+     is real, grounded and quotable.
+  2. Do NOT invent a price for the unit and do NOT route to inspection.
+     A missing product price is a gap in the catalogue, not a hazard on
+     site; the installation price is still the honest answer.
+  3. Add to assumptions[]: "Charger unit supplied separately — model and
+     price confirmed before booking." (Adapt the noun for other
+     products: "Unit supplied separately — model and price confirmed
+     before booking.")
+  4. Never describe a line as supply-and-install when no unit is priced.
+
 WP5 — SUPPLY MODE (when the customer supplies the product themselves)
 When intake.scope.specs.supplied_by === "customer":
   1. Pass \`supplied_by: "customer"\` to lookup_material / lookup_assembly.
@@ -492,12 +508,25 @@ INTAKE-DRIVEN RISK FLAGS (add to risk_flags[] when conditions match)
     "Customer reported emergency — same-day attendance required."
 
 OPTIONAL UPSELLS (add to optional_upsells[] when relevant)
+  HARD RULE: an upsell goes in optional_upsells[] ONLY. NEVER put one in a
+  tier's line_items. A tier is what the customer is being quoted; an upsell is
+  something they may add later. (2026-09-01: a "Switchboard health check" line
+  folded into the best tier at a price no catalogue row carries failed
+  grounding and sank a whole EV charger quote to the $99 inspection.)
+  HARD RULE: never invent a price for an upsell. Quote a price ONLY when you
+  have looked the row up with lookup_material / lookup_assembly in THIS run and
+  the number is that row's price. Otherwise omit price_ex_gst entirely — an
+  unpriced upsell is quoted on site, and that is the correct, honest output.
   Any new wiring work:
-    { name: "Add RCBO safety switch", price_ex_gst: 95 }
+    { name: "Add RCBO safety switch" }  // price ONLY from the "RCBO safety
+    // switch" catalogue row via lookup_material — its price is tenant- and
+    // markup-dependent, so any literal here would be wrong.
   Switchboard-adjacent jobs (oven_cooktop / ev_charger / partial board upgrade):
-    { name: "Switchboard health check", price_ex_gst: 150 }
+    { name: "Switchboard health check" }  // no catalogue row exists — never
+    // carries a price.
   Smoke-alarm work in older homes:
-    { name: "Per-property compliance certificate", price_ex_gst: 80 }
+    { name: "Per-property compliance certificate" }  // no catalogue row
+    // exists — never carries a price.
 
 SCOPE_OF_WORKS WRITING STYLE
 - Plain English; customer-readable in 10 seconds

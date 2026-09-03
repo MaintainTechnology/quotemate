@@ -79,6 +79,10 @@ export default function QuoteReportViewerClient(props: {
    *  deliberately not merged into quotes.assumptions, which is customer-facing
    *  (lib/quote/report-html.ts). */
   riskFlags?: string[] | null
+  /** R5(c) — an address we know only from an EARLIER job with this customer,
+   *  when the current conversation never produced one. Shown labelled and
+   *  tradie-only: it is a lead to confirm, never this job's site. */
+  rememberedAddress?: string | null
 }) {
   const {
     quoteId,
@@ -101,6 +105,7 @@ export default function QuoteReportViewerClient(props: {
     capabilities,
     tiers,
     riskFlags,
+    rememberedAddress,
   } = props
 
   const [api, setApi] = useState<EditorApi | null>(null)
@@ -231,6 +236,30 @@ export default function QuoteReportViewerClient(props: {
           </div>
         )}
       </div>
+
+      {/* ─── Address on file, unconfirmed for THIS job (tradie-only) ─── */}
+      {rememberedAddress?.trim() ? (
+        <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+          <section
+            aria-labelledby="remembered-address-heading"
+            className="border border-ink-line bg-ink-card px-5 py-4"
+          >
+            <h2
+              id="remembered-address-heading"
+              className=" text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-dim"
+            >
+              Address from customer records &middot; confirm on site
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-text-sec">
+              {rememberedAddress.trim()}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-text-dim">
+              This customer did not give an address in this conversation. The
+              address above is from an earlier job and may be the wrong site.
+            </p>
+          </section>
+        </div>
+      ) : null}
 
       {/* ─── What the engine assumed (tradie-only) ─── */}
       {(riskFlags?.length ?? 0) > 0 && (

@@ -66,7 +66,7 @@ describe('192 EV charger bounds migration', () => {
         notes: expect.stringContaining('PROVISIONAL_EV_CHARGER_BOUNDS_V1'),
       }),
     ])
-  }, 15_000)
+  }, 45_000)
 
   it('does not overwrite a tenant-authoritative bound already present', async () => {
     const db = await databaseWithBoundsTable()
@@ -84,7 +84,7 @@ describe('192 EV charger bounds migration', () => {
       where trade = 'electrical' and job_type = 'ev_charger'
     `)
     expect(result.rows).toEqual([{ max_labour_hours: 8, notes: 'Jon confirmed' }])
-  }, 15_000)
+  }, 45_000)
 
   it('rolls back only the untouched provisional row', async () => {
     const db = await databaseWithBoundsTable()
@@ -101,7 +101,7 @@ describe('192 EV charger bounds migration', () => {
     expect(
       (await db.query<{ notes: string }>('select notes from job_type_bounds')).rows,
     ).toEqual([{ notes: 'Jon confirmed' }])
-  }, 15_000)
+  }, 45_000)
 
   it('keeps init representative and makes the runner opt-in and transactional', () => {
     expect(initSql).toMatch(

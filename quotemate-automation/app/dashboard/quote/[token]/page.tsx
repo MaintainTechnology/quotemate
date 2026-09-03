@@ -104,6 +104,9 @@ export default async function DashboardQuoteViewerPage({
       sendLabel={sendCta.label || undefined}
       // Tradie-only. Strings only — legacy rows stored objects here before the
       // shape settled, and rendering one would print "[object Object]".
+      rememberedAddress={
+        ((intake?.scope as { remembered_address?: string } | null)?.remembered_address ?? null)
+      }
       riskFlags={
         Array.isArray(quote.risk_flags)
           ? (quote.risk_flags as unknown[]).filter((f): f is string => typeof f === 'string' && f.trim() !== '')

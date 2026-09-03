@@ -141,6 +141,7 @@ import {
   buildProductOptionsSms,
   buildChoiceHoldSms,
   categoryForJobType,
+  productChoiceAllowedForSupply,
   weatherproofAdvisory,
   type ProductChoiceState,
 } from '@/lib/sms/product-options'
@@ -2700,41 +2701,56 @@ export async function POST(req: Request) {
             .maybeSingle()
           const pending = (pcRow?.product_choice ?? null) as ProductChoiceState | null
           if (pending && pending.status === 'pending') {
-            const lastInbound = [...turns].reverse().find((t) => t.direction === 'inbound')
-            const reply = lastInbound?.body ?? ''
-            const next = applyChoiceSelection(pending, { reply })
-            if (next && next.status === 'chosen' && next.chosen_catalogue_id) {
-              await supabase
+            const choiceAllowed = productChoiceAllowedForSupply(
+              pending.category,
+              initialConversationState.slots.supplied_by as string | undefined,
+            )
+            if (!choiceAllowed) {
+              const { error: clearChoiceError } = await supabase
                 .from('sms_conversations')
-                .update({ product_choice: next, updated_at: new Date().toISOString() })
+                .update({ product_choice: null, updated_at: new Date().toISOString() })
                 .eq('id', conversationId)
-              // Make the dialog acknowledge the pick naturally instead
-              // of being confused by a bare "1".
-              if (lastInbound) {
-                lastInbound.body = `I'd like the ${next.chosen_name}, thanks.`
-              }
-              console.log('[sms/inbound:after] WP9 CAPTURE — product choice recorded', {
-                conversationId,
-                chosen: next.chosen_name,
-                catalogueId: next.chosen_catalogue_id,
-              })
-            } else if (next && next.status === 'declined') {
-              // Customer opted OUT of catalogue options. Resolve the
-              // choice with no chosen product and rewrite the turn so
-              // the dialog reads a clear "standard quote" intent and
-              // proceeds to finish — the estimator then does a
-              // conventional Good/Better/Best from the base assemblies.
-              await supabase
-                .from('sms_conversations')
-                .update({ product_choice: next, updated_at: new Date().toISOString() })
-                .eq('id', conversationId)
-              if (lastInbound) {
-                lastInbound.body =
-                  'No catalogue options for me thanks — just do me a standard quote.'
-              }
-              console.log('[sms/inbound:after] WP9 CAPTURE — customer declined catalogue options (conventional GBB)', {
+              if (clearChoiceError) throw clearChoiceError
+              console.log('[sms/inbound:after] WP9 CAPTURE — cleared EV unit choice for customer-supplied charger', {
                 conversationId,
               })
+            } else {
+              const lastInbound = [...turns].reverse().find((t) => t.direction === 'inbound')
+              const reply = lastInbound?.body ?? ''
+              const next = applyChoiceSelection(pending, { reply })
+              if (next && next.status === 'chosen' && next.chosen_catalogue_id) {
+                await supabase
+                  .from('sms_conversations')
+                  .update({ product_choice: next, updated_at: new Date().toISOString() })
+                  .eq('id', conversationId)
+                // Make the dialog acknowledge the pick naturally instead
+                // of being confused by a bare "1".
+                if (lastInbound) {
+                  lastInbound.body = `I'd like the ${next.chosen_name}, thanks.`
+                }
+                console.log('[sms/inbound:after] WP9 CAPTURE — product choice recorded', {
+                  conversationId,
+                  chosen: next.chosen_name,
+                  catalogueId: next.chosen_catalogue_id,
+                })
+              } else if (next && next.status === 'declined') {
+                // Customer opted OUT of catalogue options. Resolve the
+                // choice with no chosen product and rewrite the turn so
+                // the dialog reads a clear "standard quote" intent and
+                // proceeds to finish — the estimator then does a
+                // conventional Good/Better/Best from the base assemblies.
+                await supabase
+                  .from('sms_conversations')
+                  .update({ product_choice: next, updated_at: new Date().toISOString() })
+                  .eq('id', conversationId)
+                if (lastInbound) {
+                  lastInbound.body =
+                    'No catalogue options for me thanks — just do me a standard quote.'
+                }
+                console.log('[sms/inbound:after] WP9 CAPTURE — customer declined catalogue options (conventional GBB)', {
+                  conversationId,
+                })
+              }
             }
           }
         } catch (e: any) {
@@ -2904,6 +2920,32 @@ export async function POST(req: Request) {
           error_name: e?.name,
           first_stack_frame: e?.stack?.split('\n')[1]?.trim(),
         })
+      }
+
+      // A correction such as "I already have the charger" can arrive after
+      // an EV product offer. Clear the persisted choice immediately so a
+      // stale pending/chosen unit cannot leak into this or the next quote.
+      if (
+        WP9_ENABLED &&
+        !productChoiceAllowedForSupply(
+          conversationState.slots.job_type as string | undefined,
+          conversationState.slots.supplied_by as string | undefined,
+        )
+      ) {
+        const { error: clearEvChoiceError } = await supabase
+          .from('sms_conversations')
+          .update({ product_choice: null, updated_at: new Date().toISOString() })
+          .eq('id', conversationId)
+        if (clearEvChoiceError) {
+          console.warn('[sms/inbound:after] failed to clear EV unit choice after customer-supply correction', {
+            conversationId,
+            error: clearEvChoiceError.message,
+          })
+        } else {
+          console.log('[sms/inbound:after] cleared EV unit choice after customer-supply correction', {
+            conversationId,
+          })
+        }
       }
 
       console.log('[sms/inbound:after] step 6 — calling Sonnet dialog agent', {
@@ -3839,8 +3881,25 @@ export async function POST(req: Request) {
             .eq('id', conversationId)
             .maybeSingle()
           const already = (existing?.product_choice ?? null) as ProductChoiceState | null
-          const category = categoryForJobType(decision.job_type_guess)
-          if (already) {
+          const productJobType =
+            (conversationState.slots.job_type as string | undefined) ?? decision.job_type_guess
+          const choiceAllowed = productChoiceAllowedForSupply(
+            productJobType,
+            conversationState.slots.supplied_by as string | undefined,
+          )
+          const category = categoryForJobType(productJobType)
+          if (!choiceAllowed) {
+            if (already) {
+              const { error: clearChoiceError } = await supabase
+                .from('sms_conversations')
+                .update({ product_choice: null, updated_at: new Date().toISOString() })
+                .eq('id', conversationId)
+              if (clearChoiceError) throw clearChoiceError
+            }
+            console.log('[sms/inbound:after] WP9 OFFER — skipped EV unit for customer-supplied charger', {
+              conversationId,
+            })
+          } else if (already) {
             // Pending = customer hasn't picked yet → keep holding the
             // quote. Chosen = let the normal finish flow proceed.
             if (already.status === 'pending') {
@@ -3853,7 +3912,7 @@ export async function POST(req: Request) {
             })
           } else if (!category) {
             console.log('[sms/inbound:after] WP9 OFFER — no catalogue category for job type, skipping', {
-              jobType: decision.job_type_guess,
+              jobType: productJobType,
             })
           } else {
             const { data: catRows } = await supabase

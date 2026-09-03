@@ -65,6 +65,64 @@ export function scheduleIntakeLeadPush(
   return true
 }
 
+/** Phase answers that mean THREE-PHASE in a customer's own words. Matched
+ *  exactly (after trim + lowercase) so a stray mention inside prose never
+ *  routes a job to inspection — only a real slot answer does. */
+const THREE_PHASE_SLOT_ANSWERS = new Set(['three-phase', 'three phase', '3 phase', '3-phase'])
+
+/**
+ * R6(c) (2026-09-02) — deterministic three-phase gate for the SMS path.
+ *
+ * The dashboard quoter has had one since the EV build (job-quote/route.ts
+ * enforceThreePhaseInspection); SMS had nothing, so three-phase routing
+ * depended entirely on Opus honouring a prompt rule. Genuine three-phase work
+ * IS a site-visit job (switchboard capacity, supply upgrade), and that call is
+ * too important to leave to model discretion.
+ *
+ * Only the customer's OWN explicit answer counts. The slot extractor used to
+ * infer 'three-phase' from any EV/Tesla mention — that inference is gone (SMS
+ * parity patch), and this helper deliberately does not resurrect it: a
+ * single-phase answer, or no answer, changes nothing.
+ *
+ * PURE: returns the input untouched unless it must set the flag, and it can
+ * only ever set inspection_required to true — never clear a decision the
+ * structurer or a safety rule already made.
+ */
+export function enforceSmsThreePhaseInspection<T extends { inspection_required: boolean }>(
+  intake: T,
+  phaseAnswer: string | null | undefined,
+): T {
+  const answer = String(phaseAnswer ?? '').trim().toLowerCase()
+  if (!THREE_PHASE_SLOT_ANSWERS.has(answer)) return intake
+  if (intake.inspection_required === true) return intake
+  return { ...intake, inspection_required: true }
+}
+
+/**
+ * R5(a) — where did THIS job's address come from?
+ *
+ * A suburb is a stable fact about a customer; a street address is a fact about
+ * one job. Backfilling the remembered one silently put an address the customer
+ * never typed into the quote, the SMS SCOPE line and the tradie's run sheet
+ * (live 2026-09-01: a roofing address from six weeks earlier printed as an EV
+ * charger site).
+ *
+ * So the job address comes from THIS thread or not at all. What memory knows
+ * still travels — labelled, tradie-only — as `remembered_address`.
+ *
+ * PURE.
+ */
+export function resolveAddressProvenance(
+  threadAddress: string | null | undefined,
+  customerAddress: string | null | undefined,
+): { address_source: 'thread' | 'none'; remembered_address?: string } {
+  if ((threadAddress ?? '').trim()) return { address_source: 'thread' }
+  const remembered = (customerAddress ?? '').trim()
+  return remembered
+    ? { address_source: 'none', remembered_address: remembered }
+    : { address_source: 'none' }
+}
+
 // Channel-agnostic intake handler.
 //   • Voice path: { callId } — loads transcript + photos from `calls` row.
 //   • SMS path:   { conversationId, sourceChannel: 'sms' } — stitches the
@@ -136,6 +194,9 @@ export async function POST(req: Request) {
   // R17 — the dialog/slot-extractor's job_type, captured at function scope so it
   // can be reconciled against the structurer's job_type after structuring.
   let dialogJobType: string | null = null
+  // R6(c) — the customer's own phase answer, read straight off the dialog
+  // slots so the three-phase gate below never depends on model discretion.
+  let dialogRequestedPhase: string | null = null
   let leadPushAlreadySent = false
 
   if (sourceChannel === 'sms') {
@@ -256,6 +317,10 @@ export async function POST(req: Request) {
       tradeHint = deriveTradeFromJobType(slotJobType)
     }
     dialogJobType = slotJobType ?? null
+    dialogRequestedPhase =
+      (convo.conversation_state as
+        { slots?: { requested_specs?: { phase?: string } } } | null)
+        ?.slots?.requested_specs?.phase ?? null
 
     // Photos arrive on the SMS path through TWO surfaces — both feed
     // structureIntake the same way:
@@ -356,6 +421,15 @@ export async function POST(req: Request) {
     risks: intake.risks?.length ?? 0,
   })
 
+  // R6(c) — three-phase is a site-visit call, not a prompt suggestion.
+  const phaseGated = enforceSmsThreePhaseInspection(intake, dialogRequestedPhase)
+  if (phaseGated.inspection_required !== intake.inspection_required) {
+    intake.inspection_required = true
+    log.ok('three-phase answered explicitly — inspection required (deterministic)', {
+      phase: dialogRequestedPhase,
+    })
+  }
+
   // R17 — reconcile the dialog's job_type against the structurer's. A genuine
   // conflict (both classified, and they disagree) means one mis-read the job;
   // rather than silently ground a quote against the WRONG assembly, downgrade
@@ -412,6 +486,10 @@ export async function POST(req: Request) {
   // is missing, backfill it. We only fill BLANKS — if Opus extracted a
   // value (e.g. customer corrected the suburb mid-conversation), we
   // never overwrite it with the stale customer-record value.
+  // Captured BEFORE any backfill so the stamp below reflects what this
+  // conversation actually produced, not what memory added.
+  const threadAddressAtStructure = (intake.address ?? '').trim()
+
   if (customer) {
     const backfilled: string[] = []
     const callerName = (intake.caller?.name ?? '').trim()
@@ -426,9 +504,19 @@ export async function POST(req: Request) {
       intake.suburb = customer.suburb
       backfilled.push(`suburb=${customer.suburb}`)
     }
-    if (!(intake.address ?? '').trim() && customer.address) {
-      intake.address = customer.address
-      backfilled.push(`address=${customer.address}`)
+    // R5 (2026-09-02) — the remembered STREET address is NOT this job's
+    // address. Suburb is a stable fact about a customer; a street address is a
+    // fact about one job, and backfilling it silently put an address the
+    // customer never typed into the quote, the SMS SCOPE line and the tradie's
+    // run sheet. Live 2026-09-01: "652 London Rd, Chandler" — captured six
+    // weeks earlier in a ROOFING thread — was printed as the site for an EV
+    // charger enquiry whose customer had only ever texted the suburb.
+    //
+    // The address now comes from THIS thread or not at all. What memory knows
+    // still travels, but labelled and tradie-only (scope.remembered_address),
+    // so the tradie can confirm it on the phone instead of driving to it.
+    if (!threadAddressAtStructure && customer.address) {
+      backfilled.push(`remembered_address=${customer.address} (NOT used as the job address)`)
     }
     if (!(intake.caller?.email ?? '').trim() && customer.email) {
       intake.caller = { ...(intake.caller ?? {}), email: customer.email }
@@ -447,6 +535,17 @@ export async function POST(req: Request) {
           : 'customer record empty for stable fields',
       })
     }
+  }
+
+  // R5(a) — record where this job's address came from, ALWAYS. Stamped
+  // server-side after structuring, so these stay OUT of IntakeSchema (its
+  // optional-parameter budget is capped for Anthropic generateObject,
+  // schema.ts:51-54) and the model never supplies either field.
+  // Runs unconditionally: an intake with no customers row still deserves an
+  // explicit 'none' rather than an undefined nobody can reason about.
+  ;(intake as { scope: Record<string, unknown> }).scope = {
+    ...(intake.scope ?? {}),
+    ...resolveAddressProvenance(threadAddressAtStructure, customer?.address),
   }
 
   // ─── Optional legacy gas-HWS inspection override ────────────────────

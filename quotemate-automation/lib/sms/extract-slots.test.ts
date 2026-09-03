@@ -18,8 +18,32 @@ import {
   mergeSlotUpdates,
   normaliseState,
   extractJsonObject,
+  SYSTEM_PROMPT,
   type ConversationState,
 } from './extract-slots'
+
+describe('EV charger classification contract', () => {
+  it('accepts EV charger as its own job type with grounded product specs', () => {
+    const r = SlotsSchema.safeParse({
+      job_type: 'ev_charger',
+      room: 'garage',
+      requested_specs: {
+        charger_model: 'Tesla Wall Connector',
+        switchboard_distance: '15 metres',
+      },
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('never tells the extractor to turn a Tesla charger into a GPO or invent three-phase', () => {
+    expect(SYSTEM_PROMPT).toContain('Extract: job_type="ev_charger"')
+    expect(SYSTEM_PROMPT).toContain('never infer three-phase')
+    expect(SYSTEM_PROMPT).not.toMatch(
+      /Tesla wall charger[\s\S]{0,350}Extract: job_type="power_points"/,
+    )
+    expect(SYSTEM_PROMPT).not.toContain('"Tesla wall connector" → \'three-phase\'')
+  })
+})
 
 describe('Phase 4: SlotsSchema accepts the new recipe slots', () => {
   it('accepts a numeric distance_to_existing_power', () => {

@@ -368,11 +368,15 @@ export async function POST(req: Request) {
     // failure makes diagnosis pointlessly slow. Each line gets its own
     // structured entry tagged with the same intake_id so a single
     // Vercel log filter ("grounding check failed") returns the full set.
-    if (estimation.downgradedToInspection) {
+    if (estimation.downgradedToInspection || estimation.groundingHold) {
       const failures = estimation.groundingFailures ?? []
-      log.err('grounding check failed — downgrading quote to inspection-required', null, {
-        total_failures: failures.length,
-      })
+      log.err(
+        estimation.groundingHold
+          ? 'grounding check failed — holding priced quote for tradie review'
+          : 'grounding check failed — downgrading quote to inspection-required',
+        null,
+        { total_failures: failures.length },
+      )
       failures.forEach((f, i) => {
         log.err(`grounding check failed — line ${i + 1}/${failures.length}`, null, {
           tier: f.tier,
@@ -406,6 +410,26 @@ export async function POST(req: Request) {
     const INSPECTION_SUBTOTAL_EX_GST = +(INSPECTION_TOTAL_INC_GST - INSPECTION_GST_AMOUNT).toFixed(2)
 
     const isInspection = draft.needs_inspection === true
+
+    // R4 (2026-09-02, mig 193) — classify WHY, not just THAT. The customer
+    // copy "Every site is different — we can't price this safely without
+    // seeing the work in person" is only honest for a real site/model
+    // decision. `grounding_failed` means OUR validator rejected a price; since
+    // R3.2 those drafts are held for tradie review rather than downgraded, so
+    // this branch should be unreachable — it stays as the belt that keeps the
+    // wrong story off a customer's phone if some other path ever downgrades.
+    // The estimator classifies the causes it creates (it is the only code that
+    // knows WHICH of its five downgrade paths fired). Everything else is a
+    // model/intake decision: the structurer flagging the job is a real site
+    // fact, otherwise the estimator model asked for the visit itself.
+    // NEVER infer 'grounding_failed' from `downgradedToInspection` — that flag
+    // is set by paths that have nothing to do with grounding, and mislabelling
+    // a genuine three-phase job would strip the one sentence that IS true of it.
+    const inspectionCause: 'site_conditions' | 'model_declared' | 'grounding_failed' =
+      estimation.inspectionCause
+        ?? ((intake as { inspection_required?: boolean } | null)?.inspection_required === true
+          ? 'site_conditions'
+          : 'model_declared')
 
     // R13 — constrain the customer-facing inspection reason before it is
     // persisted and sent. Strips invented price claims (an inspection quote
@@ -495,7 +519,12 @@ export async function POST(req: Request) {
         '[billing] over fair-use quote allowance for this plan this month — usage is high; consider upgrading',
       )
     }
-    if (estimation.downgradedToInspection) {
+    // R3.2 — the same per-line detail is written for BOTH grounding outcomes:
+    // the legacy inspection downgrade AND the new priced-but-held draft. On the
+    // held path these `[grounding]` strings are also what makes
+    // shouldHoldForReview() hold, so the customer never gets an unverified
+    // number and the tradie sees exactly which lines to fix.
+    if (estimation.downgradedToInspection || estimation.groundingHold) {
       for (const f of estimation.groundingFailures ?? []) {
         riskFlags.push(
           `[grounding] tier=${f.tier} line#${f.lineIndex} ${f.description} — unit=${f.unit} × $${f.unit_price_ex_gst} — expected: ${f.expected}`,
@@ -525,6 +554,12 @@ export async function POST(req: Request) {
       optional_upsells:    draft.optional_upsells ?? [],
       estimated_timeframe: draft.estimated_timeframe,
       needs_inspection:    isInspection,
+      // R4 (mig 193) — WHY this quote is inspection-routed. Gates the
+      // customer-facing "Every site is different" copy: only a genuine
+      // site/model decision may use it. A grounding failure is our own
+      // validation problem and must never be dressed up as site complexity.
+      // Null on non-inspection quotes so the column stays meaningful.
+      inspection_cause:    isInspection ? inspectionCause : null,
       inspection_reason:   draft.inspection_reason,
       gst_note:            draft.gst_note,
       selected_tier:       selectedTier,
@@ -547,9 +582,16 @@ export async function POST(req: Request) {
       // Conditionally spread so a clean quote's column keeps its exact
       // current two-key shape — nothing reading `.ok` sees a new field, and
       // there is no empty array on the 99% path.
+      // R3.2 — `ok` means "every line grounded", NOT "this quote is priced".
+      // A held draft (groundingHold) is priced AND ungrounded, so keying off
+      // isInspection alone would record ok:true on exactly the rows an audit
+      // needs to find. `held_for_review` distinguishes it from the legacy
+      // inspection downgrade. Keep this literal compact — the wiring test in
+      // tests/grounding-result-failures.test.ts reads a fixed slice of it.
       grounding_result:    {
-        ok: !isInspection,
+        ok: !isInspection && !estimation.groundingHold,
         downgraded: !!estimation.downgradedToInspection,
+        ...(estimation.groundingHold ? { held_for_review: true } : {}),
         ...(estimation.groundingFailures?.length
           ? { failures: estimation.groundingFailures }
           : {}),
@@ -1109,7 +1151,18 @@ export async function POST(req: Request) {
         //   2. held by review policy → buildTradieReviewNotification
         //      (approve + edit links, customer SMS not yet sent)
         //   3. auto-sent → buildTradieDraftNotification (today's path)
-        const tradieBody = isInspection
+        // R5(c) — an address we only know from an EARLIER job with this
+      // customer. Labelled on every tradie surface, never presented as this
+      // job's site, and never shown to the customer.
+      const rememberedAddressForTradie =
+        ((intake.scope as { remembered_address?: string } | null)
+          ?.remembered_address ?? null)
+      // Nothing from the thread AND nothing on file — the tradie is being sent
+      // to a suburb. Say so rather than leaving a silent gap.
+      const noAddressOnFileForTradie =
+        !((intake.address as string | null | undefined) ?? '').trim() &&
+        !rememberedAddressForTradie
+      const tradieBody = isInspection
           ? buildTradieInspectionNotification({
               tradieFirstName: tenantOwnerFirstName,
               customerName,
@@ -1118,6 +1171,10 @@ export async function POST(req: Request) {
               inspectionReason: draft.inspection_reason ?? null,
               quoteUrl,
               dashboardUrl,
+              // R5(c) — an inspection-routed job is the one MOST likely to have
+              // no address in-thread, and a tradie cannot attend a suburb.
+              rememberedAddress: rememberedAddressForTradie,
+                noAddressOnFile: noAddressOnFileForTradie,
             })
           : reviewDecision.hold
             ? buildTradieReviewNotification({
@@ -1135,6 +1192,15 @@ export async function POST(req: Request) {
                 // modal opens immediately on arrival.
                 editUrl: `${quoteUrl}?edit=1`,
                 policyReason: reviewDecision.reason,
+                // R3.2 — when grounding is what held the quote, name the
+                // lines. The tradie's first question is always "which bit?".
+                groundingFailureDescriptions: estimation.groundingHold
+                  ? (estimation.groundingFailures ?? []).map((f) => f.description)
+                  : undefined,
+                // R5(c) — an address we only know from an older job is
+                // labelled, never presented as this job's site.
+                rememberedAddress: rememberedAddressForTradie,
+                noAddressOnFile: noAddressOnFileForTradie,
               })
             : buildTradieDraftNotification({
                 tradieFirstName: tenantOwnerFirstName,
@@ -1145,6 +1211,10 @@ export async function POST(req: Request) {
                 totalIncGst: total,
                 quoteUrl,
                 dashboardUrl,
+                // R5(c) — the customer declined (or never gave) an address, so
+                // this is the tradie's only surface for the one on file.
+                rememberedAddress: rememberedAddressForTradie,
+                noAddressOnFile: noAddressOnFileForTradie,
               })
 
         if (notifyMobile && !tradieNotifiedUndelivered) {

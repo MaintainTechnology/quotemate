@@ -470,6 +470,7 @@ const JOB_TYPE_CATEGORY: Record<string, string> = {
   ceiling_fans: 'fan',
   smoke_alarms: 'smoke_alarm',
   outdoor_lighting: 'outdoor_light',
+  ev_charger: 'ev_charger',
   // plumbing
   blocked_drain: 'drain',
   hot_water: 'hot_water',
@@ -481,6 +482,20 @@ const JOB_TYPE_CATEGORY: Record<string, string> = {
 export function categoryForJobType(jobType: string | null | undefined): string | null {
   const k = (jobType ?? '').trim().toLowerCase()
   return JOB_TYPE_CATEGORY[k] ?? null
+}
+
+/**
+ * EV charger units are an optional, tradie-supplied catalogue item. When the
+ * customer already owns the charger, WP9 must neither offer nor retain a unit
+ * choice. Other jobs keep their existing product-option behaviour.
+ */
+export function productChoiceAllowedForSupply(
+  jobType: string | null | undefined,
+  suppliedBy: string | null | undefined,
+): boolean {
+  const job = (jobType ?? '').trim().toLowerCase()
+  const supply = (suppliedBy ?? '').trim().toLowerCase()
+  return job !== 'ev_charger' || supply !== 'customer'
 }
 
 /**

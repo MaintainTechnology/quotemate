@@ -139,6 +139,54 @@ describe('evaluateQuoteReadiness', () => {
     })
     expect(r.ready).toBe(true)
   })
+
+  it('keeps an enabled EV charger service in its MUST-ASK flow until every answer is gathered', () => {
+    const service = {
+      name: 'Install EV charger',
+      description: 'Single-phase 7kW home charger install',
+      always_inspection: false,
+      category: 'ev_charger',
+      clarifying_questions: [
+        'Is the charger on-site, and which model is it?',
+        'Roughly how far is the parking spot from the switchboard?',
+        'Single or three-phase supply, and any idea of spare switchboard capacity?',
+      ],
+    }
+    const conversationState = state({
+      first_name: 'Jon',
+      suburb: 'Chandler',
+      job_type: 'ev_charger',
+      room: 'garage',
+    })
+
+    const blocked = evaluateQuoteReadiness({
+      action: 'finish',
+      jobTypeGuess: 'ev_charger',
+      conversationState,
+      services: [service],
+      history: [{ direction: 'inbound', body: 'Install an EV charger in my garage' }],
+    })
+    expect(blocked.ready).toBe(false)
+    expect(blocked.reply).toMatch(/charger on-site/i)
+
+    const complete = evaluateQuoteReadiness({
+      action: 'finish',
+      jobTypeGuess: 'ev_charger',
+      conversationState,
+      services: [service],
+      history: [
+        { direction: 'inbound', body: 'Install an EV charger in my garage' },
+        { direction: 'outbound', body: 'Is the charger on-site, and which model is it?' },
+        { direction: 'inbound', body: 'Yes, a Tesla Wall Connector is here' },
+        { direction: 'outbound', body: 'Roughly how far is the parking spot from the switchboard?' },
+        { direction: 'inbound', body: 'Under 5 metres' },
+        { direction: 'outbound', body: 'Single or three-phase supply, and any idea of spare switchboard capacity?' },
+        { direction: 'inbound', body: 'Single phase and there is spare capacity' },
+      ],
+    })
+    expect(complete.ready).toBe(true)
+    expect(complete.missing).toEqual([])
+  })
 })
 
 // ════════════════════════════════════════════════════════════════════

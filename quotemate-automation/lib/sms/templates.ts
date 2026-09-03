@@ -301,7 +301,27 @@ function scrubForGsm7(text: string): string {
     .replace(/[^\x20-\x7E\n]/g, '')
 }
 
+/** R5(c) — one wording for the "we only know this from an older job" address,
+ *  used by every tradie notification. Labelled on purpose: presenting it as
+ *  the job site is what sent a tradie toward the wrong house on 2026-09-01. */
+function rememberedAddressLine(
+  rememberedAddress?: string | null,
+  noAddressOnFile?: boolean,
+): string {
+  const a = (rememberedAddress ?? '').trim()
+  if (a) return `\nAddress from customer records (confirm on site): ${a}`
+  // Silence reads as "nothing to worry about". A job with NO address anywhere
+  // is exactly the one a tradie must chase before they set off.
+  return noAddressOnFile ? '\nNo address provided - confirm with the customer.' : ''
+}
+
 export function buildTradieDraftNotification(opts: {
+  /** R5(c) — address on the customer record when THIS conversation produced
+   *  none. Always labelled: it may belong to an older, unrelated job. */
+  rememberedAddress?: string | null
+  /** True when NO address is known from anywhere — the customer declined and
+   *  the record is empty. Said out loud so the tradie chases it. */
+  noAddressOnFile?: boolean
   tradieFirstName?: string | null
   customerName?: string
   customerPhone?: string
@@ -319,7 +339,8 @@ export function buildTradieDraftNotification(opts: {
   const dashLine = opts.dashboardUrl ? `\nDashboard: ${opts.dashboardUrl}` : ''
   const body =
     `${greet}, ${who} has requested a quote - ${qty}, $${total} inc GST drafted and ready to review.\n` +
-    `Quote: ${opts.quoteUrl}${dashLine}`
+    `Quote: ${opts.quoteUrl}${dashLine}` +
+    rememberedAddressLine(opts.rememberedAddress, opts.noAddressOnFile)
   return scrubForGsm7(body)
 }
 
@@ -368,26 +389,60 @@ export function buildTradieReviewNotification(opts: {
   approveUrl: string
   editUrl: string
   policyReason?: string | null
+  /** R3.2 — descriptions of the line items that failed grounding. Named in
+   *  the text so the tradie knows what to look at before approving, instead
+   *  of opening the quote to find out why it was held. */
+  groundingFailureDescriptions?: string[]
+  /** R5(c) — the address on the customer record when THIS conversation never
+   *  produced one. Always labelled: it may be from an older, unrelated job. */
+  rememberedAddress?: string | null
+  /** See buildTradieDraftNotification. */
+  noAddressOnFile?: boolean
 }): string {
   const greet = opts.tradieFirstName ? `Hi ${opts.tradieFirstName}` : 'Hi'
   const who = opts.customerName?.split(' ')[0] || opts.customerPhone || 'a customer'
   const job = JOB_TYPE_LABEL[opts.jobType] ?? opts.jobType.replace(/_/g, ' ')
   const qty = opts.itemCount ? `${opts.itemCount} ${job}` : job
   const total = opts.totalIncGst.toFixed(0)
+  const groundingHeld = (opts.groundingFailureDescriptions ?? []).length > 0
   // Short reason chip — "over $500" reads cleaner than the policy slug
-  const reasonChip = opts.policyReason?.startsWith('total_')
-    ? ' (over your threshold)'
-    : opts.policyReason === 'tenant_policy_always_review'
-      ? ' (review-all is on)'
-      : ''
-  const body =
-    `${greet}, quote ready for your review${reasonChip} - ${qty}, $${total} inc GST.\n` +
-    `Tap to send: ${opts.approveUrl}\n` +
-    `Edit first: ${opts.editUrl}`
-  return scrubForGsm7(body)
+  const reasonChip = groundingHeld
+    ? ' (price needs a check)'
+    : opts.policyReason?.startsWith('total_')
+      ? ' (over your threshold)'
+      : opts.policyReason === 'tenant_policy_always_review'
+        ? ' (review-all is on)'
+        : ''
+  const lines: string[] = [
+    `${greet}, quote ready for your review${reasonChip} - ${qty}, $${total} inc GST.`,
+  ]
+  if (groundingHeld) {
+    // Two names is enough to orient the tradie; the full list is on the quote.
+    // Count from the ARRAY, never by re-splitting the joined string: a line
+    // description containing ", " would otherwise be counted as two names and
+    // the remainder under-reported (or hidden entirely).
+    const all = (opts.groundingFailureDescriptions ?? [])
+      .map((d) => String(d ?? '').trim())
+      .filter(Boolean)
+    const shown = all.slice(0, 2)
+    const more = all.length - shown.length
+    lines.push(
+      `Check these line(s) before sending: ${shown.join(', ')}${more > 0 ? ` +${more} more` : ''}.`,
+    )
+  }
+  const addressLine = rememberedAddressLine(opts.rememberedAddress, opts.noAddressOnFile)
+  if (addressLine) lines.push(addressLine.replace(/^\n/, ''))
+  lines.push(`Tap to send: ${opts.approveUrl}`)
+  lines.push(`Edit first: ${opts.editUrl}`)
+  return scrubForGsm7(lines.join('\n'))
 }
 
 export function buildTradieInspectionNotification(opts: {
+  /** R5(c) — see buildTradieDraftNotification. An inspection-routed job is the
+   *  case MOST likely to lack an address, and a tradie cannot attend a suburb. */
+  rememberedAddress?: string | null
+  /** See buildTradieDraftNotification. */
+  noAddressOnFile?: boolean
   tradieFirstName?: string | null
   customerName?: string
   customerPhone?: string
@@ -403,7 +458,8 @@ export function buildTradieInspectionNotification(opts: {
   const dashLine = opts.dashboardUrl ? `\nDashboard: ${opts.dashboardUrl}` : ''
   const body =
     `${greet}, ${who} has requested work that needs a site visit - ${job}${reason}. $99 inspection.\n` +
-    `Details: ${opts.quoteUrl}${dashLine}`
+    `Details: ${opts.quoteUrl}${dashLine}` +
+    rememberedAddressLine(opts.rememberedAddress, opts.noAddressOnFile)
   return scrubForGsm7(body)
 }
 
@@ -894,6 +950,11 @@ type Quote = {
   needs_inspection?: boolean | null
   /** Required when needs_inspection is true. Customer-facing reason. */
   inspection_reason?: string | null
+  /** Migration 193 — WHY the quote is inspection-routed. Only
+   *  'site_conditions' / 'model_declared' / null (legacy) may show the
+   *  "Every site is different" line; 'grounding_failed' is an internal
+   *  validation problem and gets neutral copy instead. */
+  inspection_cause?: 'site_conditions' | 'model_declared' | 'grounding_failed' | null
   /** Public quote-view URL — `${APP_URL}/q/${share_token}`. When set, both
    *  templates render a "View full quote" line near the top so the customer
    *  can see scope, line items, risks, and CTAs in one place. */
@@ -1171,7 +1232,18 @@ function buildInspectionQuoteSms(intake: Intake, quote: Quote): string {
     lines.push(`View full quote: ${quote.quote_view_url}`)
     lines.push('')
   }
-  lines.push(`Every site is different — we can't price this safely without seeing the work in person.`)
+  // R4 (2026-09-02) — this sentence is a claim about the SITE. It is only
+  // honest when a site or model decision actually routed the job here. When
+  // the cause was our own grounding validator rejecting a price
+  // (inspection_cause 'grounding_failed'), saying it blames the customer's
+  // property for our validation problem — which is exactly what happened on
+  // 2026-09-01 to a fully priced EV charger quote. Legacy rows (null cause)
+  // keep today's copy: every one of them predates the classification.
+  lines.push(
+    quote.inspection_cause === 'grounding_failed'
+      ? `We've got your details and we're confirming the price on this one.`
+      : `Every site is different — we can't price this safely without seeing the work in person.`,
+  )
   lines.push('')
   if (inspectionUrl) {
     lines.push('Tap to lock in your site visit ($99 refundable, credited toward your final quote):')

@@ -11,6 +11,7 @@ import {
   recommendedOption,
   applyChoiceSelection,
   categoryForJobType,
+  productChoiceAllowedForSupply,
   describeChosenProductDirective,
   chosenProductFromChoice,
   isDeclineReply,
@@ -273,12 +274,26 @@ describe('categoryForJobType', () => {
     expect(categoryForJobType('toilet_repair')).toBe('toilet')
     expect(categoryForJobType('downlights')).toBe('downlight')
     expect(categoryForJobType('power_points')).toBe('gpo')
+    expect(categoryForJobType('ev_charger')).toBe('ev_charger')
     expect(categoryForJobType('hot_water')).toBe('hot_water')
   })
   it('returns null for unknown / empty (→ no offer, safe default)', () => {
     expect(categoryForJobType('unknown')).toBeNull()
     expect(categoryForJobType('')).toBeNull()
     expect(categoryForJobType(null)).toBeNull()
+  })
+})
+
+describe('productChoiceAllowedForSupply', () => {
+  it('suppresses EV charger unit choices when the customer already owns the unit', () => {
+    expect(productChoiceAllowedForSupply('ev_charger', 'customer')).toBe(false)
+    expect(productChoiceAllowedForSupply(' EV_CHARGER ', ' CUSTOMER ')).toBe(false)
+  })
+
+  it('allows a tradie-supplied EV unit and preserves all non-EV product flows', () => {
+    expect(productChoiceAllowedForSupply('ev_charger', 'tradie')).toBe(true)
+    expect(productChoiceAllowedForSupply('ev_charger', undefined)).toBe(true)
+    expect(productChoiceAllowedForSupply('ceiling_fans', 'customer')).toBe(true)
   })
 })
 

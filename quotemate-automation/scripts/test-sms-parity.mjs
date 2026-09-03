@@ -368,11 +368,28 @@ describe("UNIVERSAL_MUST_ASK — captures name + suburb (voice parity)", () => {
 });
 
 describe("UNIVERSAL_INSPECTION_TRIGGERS — covers all dangerous scenarios", () => {
-  const required = ["burning smell", "sparks", "electric shock", "switchboard", "ev charger", "three-phase", "asbestos"];
+  const required = ["burning smell", "sparks", "electric shock", "switchboard", "three-phase", "asbestos"];
   for (const trigger of required) {
     it(`includes "${trigger}"`, () => {
       const found = assumptions.UNIVERSAL_INSPECTION_TRIGGERS.some(t => t.toLowerCase().includes(trigger));
       assert.ok(found, `missing universal trigger: ${trigger}`);
+    });
+  }
+
+  // EV charger is a PRICED service wherever the tenant enables it (strategy
+  // v22). Leaving it in this list told the dialog to escalate the very job the
+  // enabled-service HARD RULE tells it to quote — a prompt-level coin flip that
+  // sent live EV enquiries to the $99 inspection (incident 2026-09-01, quote
+  // 7zNJCjsaxBOL_N3cATDNvQ). The physical hazards above stay, and "three-phase"
+  // stays: that is a genuine supply/switchboard risk, not a job type.
+  const evPhrasesMustBeAbsent = [
+    "ev charger", "ev charging", "electric vehicle charger",
+    "tesla charger", "wallbox", "wall charger",
+  ];
+  for (const phrase of evPhrasesMustBeAbsent) {
+    it(`does NOT include "${phrase}"`, () => {
+      const found = assumptions.UNIVERSAL_INSPECTION_TRIGGERS.some(t => t.toLowerCase().includes(phrase));
+      assert.ok(!found, `EV phrase must not be a universal inspection trigger: ${phrase}`);
     });
   }
 });

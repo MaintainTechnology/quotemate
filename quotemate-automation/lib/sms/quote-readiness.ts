@@ -396,8 +396,15 @@ function missingServiceQuestion(
 ): MissingQuoteFact | null {
   const questions = (service?.clarifying_questions ?? []).filter((q): q is string => hasValue(q))
   if (!service || questions.length === 0) return null
+  // EV questions all repeat the generic word "charger". Counting a single
+  // topic word lets the opening "install an EV charger" falsely answer
+  // "is it on-site, and which model?" before we have asked it. Require a
+  // meaningful share of the question's topic words for proactive EV answers;
+  // the normal outbound-question → substantive inbound path remains exact.
+  const proactiveTopicCoverage =
+    String(service.category ?? '').trim().toLowerCase() === 'ev_charger' ? 0.4 : 0
   for (const question of questions) {
-    if (!questionWasAnswered(input.history ?? [], question)) {
+    if (!questionWasAnswered(input.history ?? [], question, proactiveTopicCoverage)) {
       return fact('service_question', question, `required service question for ${service.name}`)
     }
   }
@@ -463,7 +470,11 @@ function serviceKeywords(name: string): string[] {
 // topic the customer NEVER addressed (no echo path, no inbound topic word)
 // still reports missing, so finish stays blocked on a genuinely unanswered
 // mandatory field.
-function questionWasAnswered(history: ConversationTurn[], question: string): boolean {
+function questionWasAnswered(
+  history: ConversationTurn[],
+  question: string,
+  proactiveTopicCoverage = 0,
+): boolean {
   const qWords = serviceKeywords(question)
   if (qWords.length === 0) return false
 
@@ -483,7 +494,11 @@ function questionWasAnswered(history: ConversationTurn[], question: string): boo
     if (turn.direction !== 'inbound') continue
     if (isBareAffirmation(turn.body)) continue
     const lower = turn.body.toLowerCase()
-    if (qWords.some((w) => lower.includes(w))) return true
+    const hits = qWords.filter((w) => lower.includes(w)).length
+    const requiredHits = proactiveTopicCoverage > 0
+      ? Math.max(1, Math.ceil(qWords.length * proactiveTopicCoverage))
+      : 1
+    if (hits >= requiredHits) return true
   }
 
   return false

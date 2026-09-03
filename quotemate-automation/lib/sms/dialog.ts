@@ -607,6 +607,25 @@ the state block lists is a hard error.
      ASK the next question. If everything is captured, run the
      verification handshake.
 
+10b. STREET ADDRESS — ask for it once, before you finish a PRICED
+    electrical or plumbing job (not needed for an inspection referral).
+    Suburb alone books nobody: the tradie needs a street address to
+    attend. Ask it as its own action='ask' turn, phrased plainly:
+
+      "What's the street address for the job?"
+
+    Rules:
+      - Ask ONCE. If the customer gives it, carry on to the handshake.
+      - If they decline, deflect, or say they'll confirm later ("I'll
+        send it", "not sure yet", "can you call me"), that is a complete
+        answer — do NOT ask again, and do NOT block the quote. Continue
+        to the verification handshake.
+      - NEVER state an address back to the customer that they did not
+        type in THIS conversation. You may know one from an earlier job;
+        it may be a different property, and putting it in the quote sends
+        the tradie to the wrong house (live 2026-09-01: a roofing address
+        from six weeks earlier was printed as an EV charger site).
+
 11. VERIFICATION HANDSHAKE — required before action='finish'.
     Once you have ALL universal MUST-ASK fields (name, suburb, job_type)
     AND ALL per-job MUST-ASK fields, do NOT immediately set
@@ -922,10 +941,23 @@ function formatHistory(history: ConversationTurn[]): string {
  *  prompt, so its wording is customer-facing in effect and needs pinning. */
 export function formatStateBlock(state: ConversationState | undefined): string | null {
   if (!state) return null
-  const slotEntries = Object.entries(state.slots).filter(
+  const allEntries = Object.entries(state.slots).filter(
     ([, v]) => v !== null && v !== undefined,
   )
-  if (slotEntries.length === 0) return null
+  // R5(a)/(d) — a STREET ADDRESS we only know from an earlier job must not be
+  // listed as a known value. This block says "do NOT re-ask any of these" and
+  // "use these values verbatim", which is precisely how a six-week-old roofing
+  // address came back out of the bot's mouth, re-entered the transcript and
+  // was stamped as this job's site (2026-09-01). Suburb is fine — it is stable
+  // and never routes a van. Withholding it here is also what lets rule 10b
+  // ("ask for the street address once") actually fire for a returning
+  // customer, instead of being silently satisfied by memory.
+  const rememberedAddressWithheld =
+    state.sources?.address === 'from_memory' && state.slots?.address != null
+  const slotEntries = rememberedAddressWithheld
+    ? allEntries.filter(([k]) => k !== 'address')
+    : allEntries
+  if (slotEntries.length === 0 && !rememberedAddressWithheld) return null
 
   const lines: string[] = [
     'CURRENT JOB STATE — single source of truth for what we know.',
@@ -937,6 +969,17 @@ export function formatStateBlock(state: ConversationState | undefined): string |
   for (const [key, value] of slotEntries) {
     const src = state.sources[key as SlotKey]
     lines.push(`  ${key}: ${JSON.stringify(value)}${src ? `  [source: ${src}]` : ''}`)
+  }
+
+  if (rememberedAddressWithheld) {
+    lines.push('')
+    lines.push(
+      'NOTE: we have a street address on file for this phone from an EARLIER job.',
+    )
+    lines.push(
+      'It may be a different property. Do NOT state it back, and still ask for',
+    )
+    lines.push('this job\'s street address as per rule 10b.')
   }
 
   const corrections = slotEntries.filter(

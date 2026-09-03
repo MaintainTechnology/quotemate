@@ -3,7 +3,8 @@ import { generateText, stepCountIs } from 'ai'
 import { createClient } from '@supabase/supabase-js'
 import { systemPrompt } from './prompt'
 import { makeTools } from './tools'
-import { buildCandidatePrices, validateQuoteGrounding, type GroundingFailure, type PricingBookForValidation } from './validate'
+import { applyTypedRefRetags, buildCandidatePrices, validateQuoteGrounding, type GroundingFailure, type PricingBookForValidation } from './validate'
+import { stripUngroundedUpsellLines, type StrippedUpsell } from './upsell-guard'
 import {
   catalogueCandidateRows,
   formatCatalogueHint,
@@ -35,6 +36,7 @@ import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize
 import {
   CUSTOMER_SUPPLIES_EV_CHARGER,
   enforceEvChargerCustomerSupplyFence,
+  ensureChargerSuppliedSeparatelyAssumption,
 } from './ev-charger-supply'
 import {
   checkSanityBounds,
@@ -98,6 +100,18 @@ export type EstimationResult = {
    *  validation failed. The route handler should NOT create three-tier
    *  Stripe sessions in this case. */
   downgradedToInspection?: boolean
+  /** R4 (2026-09-02) — WHY this result is inspection-routed, decided where
+   *  the decision is actually made. `downgradedToInspection` is far too coarse
+   *  to classify from: five different paths set it and only some are our own
+   *  validation failing. Absent → the route falls back to the intake's own
+   *  inspection_required flag. */
+  inspectionCause?: 'site_conditions' | 'model_declared' | 'grounding_failed'
+  /** R3.2 (2026-09-02) — grounding failed but the draft is still PRICED and
+   *  is NOT an inspection quote. The route must persist the tiers, write the
+   *  `[grounding]` risk flags (which make shouldHoldForReview hold) and let
+   *  the tradie approve or edit. A grounding failure is our validation
+   *  problem, never a "the site is too complex" message to the customer. */
+  groundingHold?: boolean
   /** R15b — set when a HARD spec mismatch blocked SOME (not all) priced
    *  tiers in enforce mode. The quote still ships with its spec-correct
    *  tier(s) (so it is NOT an inspection downgrade), but the route handler
@@ -186,13 +200,17 @@ export async function runEstimation(
     cacheLog.ok('structured intake requires inspection — estimator paths skipped', {
       job_type: intake?.job_type ?? null,
     })
+    // The INTAKE asked for the visit (three-phase, switchboard risk, a safety
+    // rule). That is a real fact about the site, so the customer gets the
+    // site-conditions copy — this is the one case "Every site is different" is
+    // the honest sentence.
     trace('estimate', 'warn', {
       substep: 'route_to_inspection',
       message: 'structured intake requires inspection; recipe, retrieval and model paths skipped',
       decisions: { route: 'inspection', cause: 'intake_inspection_required' },
       duration_ms: totalSw.elapsed(),
     })
-    return { draft, downgradedToInspection: true }
+    return { draft, downgradedToInspection: true, inspectionCause: 'site_conditions' }
   }
 
   // Price-authority preflight. A PRESENT recipe is a commitment to use the
@@ -231,7 +249,9 @@ export async function runEstimation(
           },
           duration_ms: totalSw.elapsed(),
         })
-        return { draft, downgradedToInspection: true }
+        // Our own price authority is missing — an internal gap, not a fact
+        // about the customer's site. Never dress it up as site complexity.
+        return { draft, downgradedToInspection: true, inspectionCause: 'grounding_failed' }
       }
     }
   } catch (error) {
@@ -254,7 +274,8 @@ export async function runEstimation(
       decisions: { route: 'inspection', cause: 'recipe_authority_check_failed' },
       duration_ms: totalSw.elapsed(),
     })
-    return { draft, downgradedToInspection: true }
+    // Same class as above: an internal authority check we could not complete.
+    return { draft, downgradedToInspection: true, inspectionCause: 'grounding_failed' }
   }
 
   // RAG: anchor Opus to similar past quotes. Returns null on cold-start
@@ -351,7 +372,7 @@ export async function runEstimation(
     (bomBlock ? `${bomBlock}\n` : '') +
     (priceHistoryBlock ? `${priceHistoryBlock}\n` : '') +
     (tenantGroundingBlock ? `${tenantGroundingBlock}\n` : '') +
-    `Draft a quote for this NEW intake:\n\n${JSON.stringify(intake, null, 2)}`
+    `Draft a quote for this NEW intake:\n\n${JSON.stringify(intakeForModel(intake), null, 2)}`
 
   // Tenant-scoped tool factory. lookupAssembly now reads BOTH
   // shared_assemblies AND this tenant's tenant_custom_assemblies
@@ -842,9 +863,66 @@ export async function runEstimation(
   // `candidates` was loaded above (before the recipe merge) so the R9
   // appended-extra micro-validation and this pass share one candidate set.
   const validateSw = stopwatch()
-  const check = validateQuoteGrounding(draft, pricingBook as PricingBookForValidation, candidates)
+  let check = validateQuoteGrounding(draft, pricingBook as PricingBookForValidation, candidates)
+
+  // R1 (2026-09-02) — a typed ref Opus tagged with the wrong table prefix but
+  // whose row and price are legitimate is grounded against the row it really
+  // is; rewrite `source` so every downstream reader agrees with the validator.
+  if (check.retags?.length) {
+    draft = applyTypedRefRetags(draft, check.retags)
+    cacheLog.ok('typed_ref_retagged — grounded against the other candidate table', {
+      count: check.retags.length,
+      retags: check.retags.map((r) => `${r.from}:${r.id}→${r.to} ("${r.sourceName}")`),
+    })
+    trace('estimate', 'ok', {
+      substep: 'typed_ref_retagged',
+      message: `${check.retags.length} typed ref(s) resolved against the other candidate table`,
+      outputs: { retags: check.retags },
+    })
+  }
+
+  if (check.ambiguousTypedRefs?.length) {
+    cacheLog.err(
+      'typed_ref_ambiguous — row id exists in BOTH candidate tables; declared type used',
+      null,
+      { refs: check.ambiguousTypedRefs },
+    )
+  }
+
+  // R2 / R3.1 — an OPTIONAL UPSELL the prompt offered ("Switchboard health
+  // check", "Add RCBO safety switch") that Opus folded into a tier at a price
+  // no catalogue row carries must not sink the whole quote. Move the offending
+  // line into optional_upsells[] unpriced and re-validate; the customer keeps
+  // their real, fully grounded quote and still sees the extra offered.
+  let strippedUpsells: StrippedUpsell[] = []
+  if (!check.valid) {
+    const guard = stripUngroundedUpsellLines(draft, check.failures)
+    if (guard.changed) {
+      draft = guard.draft
+      strippedUpsells = guard.removed
+      check = validateQuoteGrounding(draft, pricingBook as PricingBookForValidation, candidates)
+      cacheLog.ok('ungrounded optional-upsell line(s) moved to optional_upsells', {
+        removed: guard.removed.map((r) => `${r.tier} #${r.lineIndex} ${r.description}`),
+        still_failing: check.valid ? 0 : check.failures.length,
+      })
+      trace('estimate', 'warn', {
+        substep: 'upsell_guard',
+        message: `${guard.removed.length} ungrounded upsell line(s) stripped from tiers`,
+        outputs: { removed: guard.removed },
+        decisions: { revalidated: check.valid ? 'grounded' : 'still_ungrounded' },
+      })
+    }
+  }
 
   if (check.valid) {
+    if (strippedUpsells.length > 0) {
+      draft.risk_flags = [
+        ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+        `[upsell-guard] ungrounded_lines_stripped: ${strippedUpsells
+          .map((r) => `${r.description} (${r.tier})`)
+          .join('; ')} — offered as optional extras, quoted on site`,
+      ]
+    }
     trace('estimate', 'ok', {
       substep: 'validate_grounding',
       message: 'all line items grounded',
@@ -1307,6 +1385,18 @@ export async function runEstimation(
       )
     }
 
+    // R7 — the tradie supplies the charger but stocks none: the install is
+    // still real work at a real price, so quote it and say plainly that the
+    // unit is separate. Runs BEFORE the customer-supply fence so the two
+    // branches never both touch the same draft.
+    draft = ensureChargerSuppliedSeparatelyAssumption(draft, {
+      jobType: intake?.job_type as string | null | undefined,
+      chargerSupply:
+        (intake?.scope?.specs?.supplied_by as string | undefined) === 'customer'
+          ? CUSTOMER_SUPPLIES_EV_CHARGER
+          : null,
+    })
+
     // EV customer-supply fence — the install assembly explicitly excludes the
     // charger unit. Grounding proves a material price exists, but cannot prove
     // the customer did not already buy that material, so remove only
@@ -1393,6 +1483,12 @@ export async function runEstimation(
           ? { groundingFailures: forcedInspection.groundingFailures }
           : {}),
         downgradedToInspection: true,
+        // Post-grounding integrity gate. When it carries grounding failures
+        // the cause is OURS; otherwise a real safety/verification rule fired
+        // (e.g. the EV customer-supply fence) and the site copy is correct.
+        inspectionCause: forcedInspection.groundingFailures?.length
+          ? ('grounding_failed' as const)
+          : ('site_conditions' as const),
       }
     }
 
@@ -1473,32 +1569,45 @@ export async function runEstimation(
     duration_ms: validateSw.elapsed(),
   })
 
-  const reason = `Pricing not yet available — ${check.failures.length} line item(s) failed grounding check against the database. A site visit is needed before we can quote accurately.`
-
-  const downgraded = {
+  // R3.2 (2026-09-02) — HOLD FOR TRADIE REVIEW, do not tell the customer the
+  // site is the problem.
+  //
+  // A grounding failure is an INTERNAL fact: the model quoted a number this
+  // tenant's price rows cannot justify. Nulling the tiers and sending the $99
+  // inspection SMS put a site-conditions story in front of the customer for
+  // what was our own validation error — and threw away a draft the tradie
+  // could have corrected in seconds (live 2026-09-01, quote
+  // 7zNJCjsaxBOL_N3cATDNvQ: three optional lines sank a good EV quote).
+  //
+  // So: keep the priced tiers, mark the quote for review, and hand the tradie
+  // the exact failing lines. The `[grounding]` risk flags the route writes make
+  // shouldHoldForReview() hold (review-policy.ts safetyReviewReasons), so the
+  // customer is never auto-sent this draft — the tradie approves or edits it.
+  // needs_inspection stays FALSE: this quote is priced, just unverified.
+  const held = {
     ...draft,
-    good: null,
-    better: null,
-    best: null,
-    needs_inspection: true,
-    inspection_reason: resolveInspectionReason(reason),
-    pricing_path: 'inspection',
-    estimated_timeframe: 'After site visit (within 5 business days)',
-    // Preserve scope_short for the SMS, but null the assumptions if they
-    // referenced fabricated prices/inclusions.
+    // NOTE: pricing_path is deliberately left as the estimator set it.
+    // It is CHECK-constrained to deterministic|opus_fallback|inspection
+    // (mig 127) and it answers "how was this priced" — a held draft was
+    // genuinely priced by the Opus path. That it is being held is carried by
+    // `groundingHold`, the [grounding] risk flags and grounding_result.
+    risk_flags: [
+      ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+      `[grounding] ${check.failures.length} line(s) could not be grounded against this tenant's price rows — quote held for your review before it goes to the customer`,
+    ],
   }
 
   trace('estimate', 'warn', {
     substep: 'done',
-    message: 'returned inspection-downgrade (grounding failed)',
-    decisions: { route: 'inspection', cause: 'grounding_failed' },
+    message: 'grounding failed — holding priced draft for tradie review (not customer inspection)',
+    decisions: { route: 'tradie_review', cause: 'grounding_failed' },
     duration_ms: totalSw.elapsed(),
   })
 
   return {
-    draft: downgraded,
+    draft: held,
     groundingFailures: check.failures,
-    downgradedToInspection: true,
+    groundingHold: true,
   }
 }
 
@@ -3069,4 +3178,21 @@ function parseJsonFromText(text: string): any {
   }
 
   throw new Error(`Unbalanced braces in Opus output. First 300 chars: ${text.slice(0, 300)}`)
+}
+
+/**
+ * R5(b) — the estimator writes the customer-facing scope_of_works, so it must
+ * never see an address this conversation did not produce.
+ *
+ * `scope.remembered_address` exists for the TRADIE (labelled "confirm on
+ * site"). Passing the whole intake to the model handed that stale string
+ * straight to the thing that authors the SCOPE line — which is how a roofing
+ * address from six weeks earlier was printed as an EV charger site on
+ * 2026-09-01. Strip it from the model payload only; the DB row keeps it.
+ */
+export function intakeForModel(intake: any): any {
+  const scope = intake?.scope
+  if (!scope || typeof scope !== 'object' || !('remembered_address' in scope)) return intake
+  const { remembered_address: _dropped, ...scopeForModel } = scope as Record<string, unknown>
+  return { ...intake, scope: scopeForModel }
 }

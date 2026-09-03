@@ -371,11 +371,11 @@ export const UNIVERSAL_INSPECTION_TRIGGERS = [
   'no spare ways on switchboard',
   'fuse box', 'ceramic fuse', 'old fuses',
   'rewire', 'three-phase', 'three phase',
-  // EV chargers are explicit inspection-only per strategy.md v3 (mains
-  // current, load calcs, switchboard interaction, dedicated circuit
-  // required). The parity harness asserts this trigger set covers them.
-  'ev charger', 'ev charging', 'electric vehicle charger', 'tesla charger',
-  'wallbox', 'wall charger',
+  // EV charger enquiries are a priced, review-required service when the
+  // tenant has enabled "Install EV charger". Do not make the job name itself
+  // an inspection trigger: the enabled service's MUST-ASK answers decide the
+  // route. Genuine three-phase/switchboard/danger language above still forces
+  // an inspection.
   // ── Plumbing (v5) ───────────────────────────────────────
   'smell gas', 'gas leak', 'gas smell', 'leaking gas',
   'burst pipe', 'pipe burst', 'water everywhere',

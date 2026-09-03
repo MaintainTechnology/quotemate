@@ -127,6 +127,13 @@ create table if not exists quotes (
   estimated_timeframe text,
   needs_inspection boolean default false,
   inspection_reason text,
+  -- Migration 193 — WHY the quote is inspection-routed. Gates the customer
+  -- copy: only site_conditions / model_declared / NULL may claim the site is
+  -- the reason; grounding_failed is an internal validation problem.
+  inspection_cause text check (
+    inspection_cause is null
+    or inspection_cause in ('site_conditions', 'model_declared', 'grounding_failed')
+  ),
   gst_note text,
 
   selected_tier text default 'better',

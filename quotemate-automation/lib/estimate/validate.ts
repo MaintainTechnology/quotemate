@@ -59,9 +59,37 @@ export type GroundingFailure = {
   expected: string
 }
 
+/** R1 (2026-09-02) — a typed `source` ref whose UUID turned out to live in
+ *  the OTHER candidate table. The row and its price are legitimate; only the
+ *  `material:`/`assembly:` prefix Opus stamped was wrong. The caller applies
+ *  these to the draft so downstream consumers (catalogue enrichment, dedup,
+ *  the tradie edit UI) read the same ref the validator grounded against. */
+export type TypedRefRetag = {
+  tier: 'good' | 'better' | 'best'
+  lineIndex: number
+  id: string
+  from: 'material' | 'assembly'
+  to: 'material' | 'assembly'
+  sourceName: string
+}
+/** R1 edge case — a typed ref whose UUID resolves in BOTH candidate tables.
+ *  The declared type wins (no retag), but the collision is worth knowing about:
+ *  it means two different rows share an id, which should not happen. Reported
+ *  rather than logged here because the validator is pure. */
+export type AmbiguousTypedRef = {
+  tier: 'good' | 'better' | 'best'
+  lineIndex: number
+  id: string
+  declaredType: 'material' | 'assembly'
+}
 export type GroundingResult =
-  | { valid: true }
-  | { valid: false; failures: GroundingFailure[] }
+  | { valid: true; retags?: TypedRefRetag[]; ambiguousTypedRefs?: AmbiguousTypedRef[] }
+  | {
+      valid: false
+      failures: GroundingFailure[]
+      retags?: TypedRefRetag[]
+      ambiguousTypedRefs?: AmbiguousTypedRef[]
+    }
 
 /** A categorised candidate price — one entry per DB row × markup variant. */
 export type CandidatePrice = {
@@ -826,6 +854,11 @@ export function validateQuoteGrounding(
   }
 
   const failures: GroundingFailure[] = []
+  /** R1 — typed refs grounded against the other candidate table (wrong
+   *  prefix, right row). Reported so the caller can correct the draft. */
+  const retags: TypedRefRetag[] = []
+  /** R1 edge case — ids that resolve in both tables (declared type still wins). */
+  const ambiguousTypedRefs: AmbiguousTypedRef[] = []
   const TIERS = ['good', 'better', 'best'] as const
 
   for (const tierKey of TIERS) {
@@ -950,9 +983,43 @@ export function validateQuoteGrounding(
         // suddenly breaks.
         const ref = extractRowRef(li?.source)
         if (ref) {
-          const candidateList = ref.type === 'material'
+          // R1 (2026-09-02) — CROSS-TYPE RESOLUTION.
+          // The declared type always wins when it resolves (an id present in
+          // both tables keeps the prefix Opus stamped). Only when the declared
+          // map has no such row do we look in the other one: a real, in-scope
+          // row that Opus tagged with the wrong prefix is a TYPING mistake,
+          // not an ungrounded price, and failing it threw away whole quotes.
+          // Live 2026-09-01: "Add RCBO safety switch" was tagged
+          // `material:5b48eed9-…e20`, which is the shared_ASSEMBLIES row
+          // "Install 20A dedicated GPO" (enabled for that tenant) — two tiers
+          // failed and a fully priced EV quote became a $99 inspection.
+          // The price rule is untouched: the row's own raw/markup variants
+          // still have to match within tolerance, so this never widens what
+          // counts as a grounded number.
+          const declaredList = ref.type === 'material'
             ? materialById.get(ref.id)
             : assemblyById.get(ref.id)
+          const otherType: 'material' | 'assembly' = ref.type === 'material' ? 'assembly' : 'material'
+          const otherList = declaredList && declaredList.length > 0
+            ? undefined
+            : (otherType === 'material' ? materialById.get(ref.id) : assemblyById.get(ref.id))
+          // Both tables hold this id — keep the declared type, but record it:
+          // a shared row id across tables is a data problem worth surfacing.
+          if (declaredList && declaredList.length > 0) {
+            const alsoOther = otherType === 'material'
+              ? materialById.get(ref.id)
+              : assemblyById.get(ref.id)
+            if (alsoOther && alsoOther.length > 0) {
+              ambiguousTypedRefs.push({
+                tier: tierKey,
+                lineIndex: i,
+                id: ref.id,
+                declaredType: ref.type,
+              })
+            }
+          }
+          const resolvedType = declaredList && declaredList.length > 0 ? ref.type : otherType
+          const candidateList = declaredList && declaredList.length > 0 ? declaredList : otherList
           if (!candidateList || candidateList.length === 0) {
             valid = false
             expected =
@@ -964,11 +1031,21 @@ export function validateQuoteGrounding(
             const match = candidateList.find((c) => within(c.price, price))
             if (match) {
               valid = true
+              if (resolvedType !== ref.type) {
+                retags.push({
+                  tier: tierKey,
+                  lineIndex: i,
+                  id: ref.id,
+                  from: ref.type,
+                  to: resolvedType,
+                  sourceName: match.sourceName,
+                })
+              }
             } else {
               valid = false
               const allowed = Array.from(new Set(candidateList.map((c) => `$${c.price.toFixed(2)}`))).join(', ')
               expected =
-                `${ref.type}:${ref.id} ("${candidateList[0].sourceName}") allows ` +
+                `${resolvedType}:${ref.id} ("${candidateList[0].sourceName}") allows ` +
                 `prices [${allowed}] (raw + markup variants); got $${price}. ` +
                 `Either Opus emitted a price that doesn't match the row it picked, ` +
                 `or it stamped the wrong row id.`
@@ -1098,7 +1175,35 @@ export function validateQuoteGrounding(
     })
   }
 
-  return failures.length === 0 ? { valid: true } : { valid: false, failures }
+  const extras = {
+    ...(retags.length ? { retags } : {}),
+    ...(ambiguousTypedRefs.length ? { ambiguousTypedRefs } : {}),
+  }
+  return failures.length === 0
+    ? { valid: true, ...extras }
+    : { valid: false, failures, ...extras }
+}
+
+/** R1 — rewrite each retagged line's `source` to the type the validator
+ *  actually grounded it against. PURE: returns a new draft, never mutates
+ *  the input. Applying this is bookkeeping only — validity was already
+ *  decided by {@link validateQuoteGrounding}. */
+export function applyTypedRefRetags<T>(draft: T, retags: readonly TypedRefRetag[] | undefined): T {
+  if (!retags || retags.length === 0) return draft
+  const next = { ...(draft as Record<string, unknown>) } as Record<string, unknown>
+  for (const r of retags) {
+    const tier = next[r.tier] as { line_items?: unknown[] } | null | undefined
+    if (!tier || !Array.isArray(tier.line_items)) continue
+    const line = tier.line_items[r.lineIndex] as Record<string, unknown> | undefined
+    if (!line) continue
+    // Only rewrite when the line still carries the exact ref we resolved —
+    // a reconcile step may have replaced the line since validation ran.
+    if (String(line.source ?? '') !== `${r.from}:${r.id}`) continue
+    const lines = tier.line_items.slice()
+    lines[r.lineIndex] = { ...line, source: `${r.to}:${r.id}` }
+    next[r.tier] = { ...tier, line_items: lines }
+  }
+  return next as T
 }
 
 /** Raw DB row fed into the candidate builder. `category`, when set, is an

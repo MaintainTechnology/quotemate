@@ -155,6 +155,11 @@ export function safetyReviewReasons(riskFlags: unknown): string[] {
     if (flag.includes('[reconcile]') && flag.includes('quantity')) {
       reasons.add('quantity_mismatch');
     }
+    // R3.2 (2026-09-02) — a priced draft whose lines failed grounding is held
+    // for the tradie instead of being nulled into a $99 inspection SMS. The
+    // hold is what makes that safe: the customer never sees an unverified
+    // number, and the tradie gets a draft to correct rather than a dead end.
+    if (flag.includes('[grounding]')) reasons.add('grounding_failed');
   }
   return Array.from(reasons);
 }

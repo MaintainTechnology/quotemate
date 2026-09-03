@@ -1579,7 +1579,9 @@ export default async function PublicQuotePage(props: {
                 <p style={{ margin: '10px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)', maxWidth: '52ch' }}>
                   {quote.inspection_reason
                     ? `Why a visit: ${quote.inspection_reason as string}`
-                    : 'Every site is different, so this job is priced in person rather than sight-unseen.'}{' '}
+                    : quote.inspection_cause === 'grounding_failed'
+                      ? 'Your tradie is confirming the price on this one.'
+                      : 'Every site is different, so this job is priced in person rather than sight-unseen.'}{' '}
                   The visit fee is credited toward your final quote.
                 </p>
               </div>
@@ -2120,6 +2122,7 @@ export default async function PublicQuotePage(props: {
               reason={quote.inspection_reason}
               shareToken={token}
               paid={isPaid}
+              cause={quote.inspection_cause as string | null}
             />
           </SheetSection>
         ) : !tradeFormat.usesGenericCard ? (
@@ -2467,10 +2470,14 @@ function InspectionBlock({
   reason,
   shareToken,
   paid,
+  cause,
 }: {
   reason: string | null
   shareToken: string
   paid: boolean
+  /** Migration 193 — why this quote is inspection-routed. Only a genuine
+   *  site/model decision may claim the site is the reason. */
+  cause?: string | null
 }) {
   return (
     <section className="bg-ink-card border-2 border-warning/50 p-6 sm:p-8 relative overflow-hidden">
@@ -2482,7 +2489,11 @@ function InspectionBlock({
           Site visit required
         </div>
         <p className="text-base leading-relaxed text-text-pri sm:text-lg">
-          Every site is different. We can&apos;t price this safely without seeing the work in person.
+          {cause === 'grounding_failed' ? (
+            <>We&apos;ve got your details and we&apos;re confirming the price on this one.</>
+          ) : (
+            <>Every site is different. We can&apos;t price this safely without seeing the work in person.</>
+          )}
         </p>
 
         {reason ? (

@@ -109,6 +109,23 @@ describe('Phase 5: universal layers untouched by power_points cleanup', () => {
     expect(UNIVERSAL_INSPECTION_TRIGGERS).toContain('rewire')
   })
 
+  it('does not treat an EV charger request itself as an inspection trigger', () => {
+    for (const phrase of [
+      'ev charger',
+      'ev charging',
+      'electric vehicle charger',
+      'tesla charger',
+      'wallbox',
+      'wall charger',
+    ]) {
+      expect(UNIVERSAL_INSPECTION_TRIGGERS).not.toContain(phrase)
+    }
+    // The safety boundary stays deterministic: an explicitly three-phase or
+    // switchboard-constrained EV job is still inspection-only.
+    expect(UNIVERSAL_INSPECTION_TRIGGERS).toContain('three-phase')
+    expect(UNIVERSAL_INSPECTION_TRIGGERS).toContain('switchboard at capacity')
+  })
+
   it('UNIVERSAL_MUST_ASK includes the conversation-wide questions', () => {
     // Sanity check — these have been stable for many migrations and
     // tests touching adjacent code shouldn't perturb them.

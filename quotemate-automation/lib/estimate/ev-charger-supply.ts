@@ -280,3 +280,53 @@ export function enforceEvChargerCustomerSupplyFence<T extends DraftWithTiers>(
     removed,
   }
 }
+
+/** The exact assumption a tradie-supplied EV quote carries when the charger
+ *  unit itself is not priced. Exported so the estimator and its test agree on
+ *  one string instead of two that drift apart. */
+export const CHARGER_SUPPLIED_SEPARATELY_ASSUMPTION =
+  'Charger unit supplied separately — model and price confirmed before booking.'
+
+/**
+ * R7 (2026-09-02) — TRADIE SUPPLIES, NOTHING STOCKED.
+ *
+ * The seeded "Install EV charger" assembly explicitly excludes the unit, and
+ * almost no tenant stocks chargers yet. That is a gap in the price book, not a
+ * hazard on site — the installation is still quotable, and the honest output
+ * is a priced install with the unit called out as separate.
+ *
+ * Stamped deterministically, because a customer reading "supply and install a
+ * 7kW EV charger" while no unit is priced is exactly the confusion the
+ * 2026-09-01 incident produced. PURE: returns a new draft, never mutates the
+ * input, and no-ops unless every condition holds:
+ *   - the job is ev_charger
+ *   - the customer is NOT supplying (that path has its own fence above)
+ *   - no priced tier already carries a charger-unit line
+ */
+export function ensureChargerSuppliedSeparatelyAssumption<T extends DraftWithTiers>(
+  draft: T,
+  opts: { jobType?: string | null; chargerSupply?: string | null },
+): T {
+  if (normalise(opts.jobType) !== 'ev_charger') return draft
+  if (normalise(opts.chargerSupply) === CUSTOMER_SUPPLIES_EV_CHARGER) return draft
+  if (inspectionDraft(draft)) return draft
+
+  const hasUnitLine = TIERS.some((tierName) => {
+    const tier = draft[tierName]
+    if (!tier || !Array.isArray(tier.line_items)) return false
+    return tier.line_items.some(
+      (line) => !isProtectedInstallationLine(line) && looksLikeEvChargerUnit(line),
+    )
+  })
+  if (hasUnitLine) return draft
+
+  const existing = Array.isArray((draft as Record<string, unknown>).assumptions)
+    ? ((draft as Record<string, unknown>).assumptions as unknown[]).map((a) => String(a ?? ''))
+    : []
+  if (existing.some((a) => /charger unit supplied separately/i.test(a))) return draft
+
+  return {
+    ...draft,
+    assumptions: [...existing, CHARGER_SUPPLIED_SEPARATELY_ASSUMPTION],
+  } as T
+}
