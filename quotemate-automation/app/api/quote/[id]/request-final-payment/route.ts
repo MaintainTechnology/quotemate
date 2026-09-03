@@ -245,20 +245,34 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   // A double-tap on the job must not text the customer twice. The DB index
-  // already collapses the two inserts into one row; this collapses the two
-  // SENDS. A recovered row whose SMS went out moments ago is the second tap
-  // of one intent — report it truthfully as not-sent rather than firing a
-  // duplicate "Balance due" text. A deliberate re-send minutes later still
-  // goes through, which is how a tradie retries after a carrier failure.
+  // collapses the two INSERTS into one row; this collapses the two SENDS.
+  //
+  // A CONDITIONAL CLAIM on sent_at, not a timestamp comparison — the same
+  // pattern the payment path uses for paid_at, and for the same reason: a
+  // time-window check cannot see a first dispatch that is still IN FLIGHT
+  // (its sent_at is not written yet), so two near-simultaneous taps would
+  // both pass it and both text the customer. Whoever wins this UPDATE owns
+  // the send; the loser matches zero rows and reports sent:false.
+  //
+  // The window is still here, as the claim's WHERE: a row last sent longer
+  // ago than this is re-claimable, which is how a tradie deliberately
+  // re-sends. And because a failed dispatch REVERTS the claim below, a retry
+  // after a carrier failure is never blocked.
   const DOUBLE_TAP_WINDOW_MS = 2 * 60_000
-  if (
-    already &&
-    recoveredSentAt &&
-    Date.now() - Date.parse(recoveredSentAt) < DOUBLE_TAP_WINDOW_MS
-  ) {
-    log.ok('balance re-request suppressed as a double tap', {
+  const claimCutoff = new Date(Date.now() - DOUBLE_TAP_WINDOW_MS).toISOString()
+  const { data: claimed, error: claimErr } = await supabase
+    .from('quotes')
+    .update({ sent_at: nowIso })
+    .eq('id', balanceId as string)
+    .or(`sent_at.is.null,sent_at.lt.${claimCutoff}`)
+    .select('id')
+  if (claimErr) {
+    log.err('balance send claim failed', claimErr.message, { quote_id: balanceId })
+    return Response.json({ ok: false, error: 'claim_failed', sent: false }, { status: 500 })
+  }
+  if (!claimed || claimed.length === 0) {
+    log.ok('balance re-request suppressed — another send holds the claim', {
       quote_id: balanceId,
-      sent_at: recoveredSentAt,
     })
     return Response.json({
       ok: true,
@@ -293,6 +307,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       quote_id: balanceId,
       sms_code: dispatch.smsAttempt.code,
     })
+    // Hand the claim back. Without this the failed send would leave sent_at
+    // stamped, the row would look delivered, and the tradie's retry would be
+    // suppressed for two minutes — the exact window a retry happens in.
+    // (Same shape as painting's revertPaintingRelease.)
+    const { error: revertErr } = await supabase
+      .from('quotes')
+      .update({ sent_at: null })
+      .eq('id', balanceId as string)
+    if (revertErr) {
+      log.err('balance send-claim revert failed', revertErr.message, { quote_id: balanceId })
+    }
     return Response.json(
       {
         ok: false,
@@ -306,13 +331,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     )
   }
 
-  // A carrier accepted it — NOW the row is sent. This is the only writer of
-  // sent_at on a balance row, which is what makes the double-tap window above
-  // trustworthy: it can only ever mean "a text was delivered at this time".
+  // Delivered. sent_at is already held by the claim above; advance the
+  // lifecycle so the row stops reading as a draft awaiting the tradie.
   if (balanceId) {
     const { error: stampErr } = await supabase
       .from('quotes')
-      .update({ status: 'sent', sent_at: new Date().toISOString() })
+      .update({ status: 'sent' })
       .eq('id', balanceId)
     if (stampErr) {
       log.err('balance sent stamp failed', stampErr.message, { quote_id: balanceId })

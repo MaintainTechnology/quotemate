@@ -321,8 +321,15 @@ export function computeScorecard(
   const thisWeek = sydneyWeekStart(now)
   const lastWeek = shiftKey(thisWeek, -7)
 
-  const activeThis = activeTenantsInWeek(quotes, intakes, thisWeek)
-  const activeLast = activeTenantsInWeek(quotes, intakes, lastWeek)
+  // `quotes` arrives with ALL kinds because the acceptance attribution below
+  // needs the 'final' children. Everything else in this function counts JOBS,
+  // so it must use roots only — a child shares its parent's intake_id and is
+  // created days later, so letting one through skews avgTurnaroundHours by its
+  // whole age and can mark a tenant "active" on a follow-up charge alone.
+  const rootQuotes = quotes.filter((q) => (q.quote_kind ?? 'initial') === 'initial')
+
+  const activeThis = activeTenantsInWeek(rootQuotes, intakes, thisWeek)
+  const activeLast = activeTenantsInWeek(rootQuotes, intakes, lastWeek)
 
   const newSignups = tenants.filter((t) => weekStartOf(t.created_at) === thisWeek).length
 
@@ -333,7 +340,7 @@ export function computeScorecard(
   // this week. Drop negatives and absurd outliers (>30d) from stale test data.
   const intakeCreatedById = new Map(intakes.map((i) => [i.id, i.created_at]))
   const turnarounds: number[] = []
-  for (const q of quotes) {
+  for (const q of rootQuotes) {
     if (weekStartOf(q.created_at) !== thisWeek || !q.intake_id) continue
     const qt = parseDate(q.created_at)
     const it = parseDate(intakeCreatedById.get(q.intake_id) ?? null)
@@ -351,12 +358,10 @@ export function computeScorecard(
   // can stamp accepted_at without sent_at (a shared-link acceptance after the
   // auto-SMS failed, or a Stripe-paid quote whose sent_at was never written), and
   // counting those in the numerator but not the denominator would inflate it.
-  // R12 — a chained job is three rows but ONE job. Count roots only, or the
-  // acceptance rate inflates off a single conversion; and credit the root
-  // when its FINAL child's deposit lands ('credit' = the $99 covered it),
-  // or the whole electrical chain reads as never-accepted because the root
-  // only ever carries the $99 site visit.
-  const rootQuotes = quotes.filter((q) => (q.quote_kind ?? 'initial') === 'initial')
+  // R12 — credit the root when its FINAL child's deposit lands ('credit' =
+  // the $99 covered it), or a chained job reads as never-accepted because the
+  // root only ever carries the $99 site visit. Built from the full `quotes`
+  // array, which is why this function takes all kinds.
   const depositPaidRootIds = new Set(
     quotes
       .filter(

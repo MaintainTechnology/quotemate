@@ -8412,6 +8412,12 @@ function quoteMatchesFilter(q: Quote, f: QuoteFilter): boolean {
   if (f === 'inspect') return !!(q.needs_inspection || q.inspection_required)
   const s = (q.status ?? 'draft').toLowerCase()
   if (f === 'sent') return s === 'sent'
+  // A 'balance' row is an invoice minted by "Request final payment", not a
+  // quote awaiting the tradie's review. It sits at status 'draft' until its
+  // SMS is delivered, so without this a failed send would surface it in the
+  // review queue with a "Confirm & Send" CTA that the send route refuses
+  // (balance_not_sendable) — an actionable-looking dead end.
+  if (asQuoteKind(q.quote_kind) === 'balance') return false
   return ['drafted', 'awaiting_review', 'review', 'draft'].includes(s)
 }
 
