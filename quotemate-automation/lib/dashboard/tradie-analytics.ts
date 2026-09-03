@@ -32,6 +32,12 @@ export type TradieQuoteRow = {
   /** Mig 194 — 'final'/'balance' rows are further payments on a job this list
    *  already counts once. Absent on every pre-194 row ⇒ 'initial'. */
   quote_kind?: string | null
+  /** Mig 194 — which root a child belongs to, so the acceptance a chained job
+   *  earns can be attributed back to the row the funnel actually counts. */
+  parent_quote_id?: string | null
+  /** 'inspection' (the $99), 'deposit', 'credit' (the $99 covered it) or
+   *  'balance'. A 'deposit'/'credit' on a final child IS the job's acceptance. */
+  paid_tier?: string | null
 }
 
 export type TradieIntakeRow = {
@@ -222,8 +228,24 @@ export function buildTradieAnalytics(
   // any quote that reached the customer (sent_at) OR was accepted/paid — under
   // auto-send (Path B) accepted_at/paid_at get stamped without sent_at, so
   // folding them in keeps the funnel monotonic (Accepted can't exceed Sent).
+  // R12 attribution — a post-site-visit job converts when its FINAL child's
+  // deposit lands ('deposit', or 'credit' when the $99 covered it), but the
+  // funnel counts roots. Without this the electrical jobs that convert through
+  // the new chain read as never-accepted: the root only ever carries the $99.
+  // Scanned over the UNfiltered input, because the child is created after the
+  // parent and can easily fall outside the parent's reporting window.
+  const depositPaidRootIds = new Set(
+    input.quotes
+      .filter(
+        (q) =>
+          q.quote_kind === 'final' &&
+          (q.paid_tier === 'deposit' || q.paid_tier === 'credit'),
+      )
+      .map((q) => q.parent_quote_id)
+      .filter((id): id is string => !!id),
+  )
   const acceptedCount = quotes.filter(
-    (q) => q.accepted_at != null || q.paid_at != null,
+    (q) => q.accepted_at != null || q.paid_at != null || depositPaidRootIds.has(q.id),
   ).length
   const reachedCount = quotes.filter(
     (q) => q.sent_at != null || q.accepted_at != null || q.paid_at != null,

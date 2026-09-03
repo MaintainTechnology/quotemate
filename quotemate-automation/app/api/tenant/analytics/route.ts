@@ -58,7 +58,7 @@ export async function GET(req: Request) {
       supabase
         .from('quotes')
         .select(
-          'id, tenant_id, intake_id, created_at, sent_at, accepted_at, paid_at, status, total_inc_gst, needs_inspection, quote_kind',
+          'id, tenant_id, intake_id, created_at, sent_at, accepted_at, paid_at, status, total_inc_gst, needs_inspection, quote_kind, parent_quote_id, paid_tier',
         )
         .eq('tenant_id', tenantId),
       supabase

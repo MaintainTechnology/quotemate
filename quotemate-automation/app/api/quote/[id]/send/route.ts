@@ -202,13 +202,6 @@ export async function POST(
   const shareToken = quote.share_token as string
   const quoteViewUrl = `${appUrl}/q/${shareToken}`
 
-  // Mig 146 — fresh render on a human send so the PDF reflects the tenant's
-  // current tier mode / template at send time. Inspection-routed quotes carry
-  // no committable prices, so no PDF. Best-effort: null never blocks the send.
-  const quotePdfPath = quote.needs_inspection
-    ? null
-    : await ensureQuotePdf(quote.id as string, { regenerate: true })
-
   // Restart the 7-day price hold from the moment the customer actually
   // receives the quote (same rationale as /approve — a stale hold would let
   // the /r + booking gates block the customer before they had a window to
@@ -262,6 +255,17 @@ export async function POST(
       )
     }
   }
+
+  // Mig 146 — fresh render on a human send so the PDF reflects the tenant's
+  // current tier mode / template at send time. Inspection-routed quotes carry
+  // no committable prices, so no PDF. Best-effort: null never blocks the send.
+  //
+  // Deliberately AFTER the child guards above: rendering first meant a send
+  // refused as `not_priced` still cached a $0 PDF on the row, which the
+  // customer's /q page would then offer for download.
+  const quotePdfPath = quote.needs_inspection
+    ? null
+    : await ensureQuotePdf(quote.id as string, { regenerate: true })
 
   // A final/balance row carries no price hold (spec R9): the hold is a
   // freshness window on an unaccepted estimate, and the mint skips its gate

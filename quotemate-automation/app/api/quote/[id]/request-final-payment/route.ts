@@ -147,9 +147,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       quote_kind: 'balance',
       parent_quote_id: finalRow.id,
       share_token: shareToken,
-      // Sent the moment the SMS goes out — this row is never drafted or edited.
-      status: 'sent',
-      sent_at: nowIso,
+      // NOT stamped sent here. sent_at must mean "a carrier accepted a text at
+      // this time" and nothing else — it is what the double-tap window below
+      // reads. Stamping it at insert made a row created 30s ago whose SMS then
+      // 502'd indistinguishable from one delivered 30s ago, which suppressed
+      // the legitimate retry AND reported it to the tradie as a re-send. Same
+      // released_at / quote_sent_at split painting had to make. Stamped after
+      // a delivered dispatch below.
+      status: 'draft',
+      sent_at: null,
       // The balance IS the row's total: /r reads total_inc_gst and deposit_pct
       // and, for a balance row, charges the whole remaining amount.
       total_inc_gst: +(balanceBase / 100).toFixed(2),
@@ -300,16 +306,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     )
   }
 
-  // Re-stamp sent_at on a recovered row so the double-tap window above is
-  // measured from THIS send, not the original one. Best-effort: the customer
-  // has the link, which is what matters.
-  if (already && balanceId) {
+  // A carrier accepted it — NOW the row is sent. This is the only writer of
+  // sent_at on a balance row, which is what makes the double-tap window above
+  // trustworthy: it can only ever mean "a text was delivered at this time".
+  if (balanceId) {
     const { error: stampErr } = await supabase
       .from('quotes')
-      .update({ sent_at: new Date().toISOString() })
+      .update({ status: 'sent', sent_at: new Date().toISOString() })
       .eq('id', balanceId)
     if (stampErr) {
-      log.err('balance sent_at restamp failed', stampErr.message, { quote_id: balanceId })
+      log.err('balance sent stamp failed', stampErr.message, { quote_id: balanceId })
     }
   }
 

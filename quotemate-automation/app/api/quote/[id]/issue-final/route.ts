@@ -63,7 +63,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!resolved) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   const tenant = resolved.tenant as (TenantConnectState & { id: string }) | null
 
-  const { data: parent } = await supabase
+  const { data: parent, error: parentErr } = await supabase
     .from('quotes')
     .select(
       'id, tenant_id, intake_id, paid_at, paid_tier, quote_kind, good, better, best, selected_tier, scope_of_works, scope_short, assumptions, risk_flags, estimated_timeframe, gst_note, display_mode, optional_upsells',
@@ -71,6 +71,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     .eq('id', parentId)
     .maybeSingle()
 
+  // Distinguish "no such quote" from "the read failed" — same reason the
+  // pricing_book and intakes reads below check {error}: supabase-js resolves
+  // on failure, so a bare read makes an outage look like a 404.
+  if (parentErr) {
+    log.err('parent quote read failed', parentErr.message, { parent_id: parentId })
+    return Response.json({ ok: false, error: 'lookup_failed' }, { status: 500 })
+  }
   if (!parent) return Response.json({ ok: false, error: 'no_quote' }, { status: 404 })
 
   // Legacy tenant-less rows can't be owned, priced against a pricing book, or

@@ -9773,6 +9773,9 @@ function QuoteDetail({
               paid={false}
               label={sendCta.label}
               dropUp
+              // R9 — a child row is SMS-only. The send route 409s the email
+              // channel anyway; this stops offering a button that dead-ends.
+              smsOnly={asQuoteKind(q.quote_kind) !== 'initial'}
             />
           )}
           {url && (

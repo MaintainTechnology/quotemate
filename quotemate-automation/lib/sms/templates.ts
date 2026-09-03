@@ -10,6 +10,7 @@ import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/
 import {
   INSPECTION_FEE_AUD,
   MIN_STRIPE_CHARGE_CENTS,
+  asMoneyNumber,
   PLATFORM_FEE_PCT,
   chargedCents,
   clampDepositPct,
@@ -1064,6 +1065,9 @@ type Quote = {
   /** optional per-tier short redirect URLs. May include 'inspection' for
    *  inspection-required quotes — when present, template renders the
    *  inspection-only layout (single $99 link, indicative ranges as context). */
+  /** quotes.total_inc_gst — the stored figure the page shows and the mint
+   *  charges from. Used by the final-quote message so all three agree. */
+  total_inc_gst?: number | string | null
   pay_links?: Partial<
     Record<'good' | 'better' | 'best' | 'inspection' | 'deposit' | 'balance', string>
   >
@@ -1364,10 +1368,20 @@ function buildFinalQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOpti
   const job = jobSummary(intake)
   const business = (options?.businessName ?? '').trim() || 'QuoteMax'
 
+  // T is the STORED total_inc_gst — the same column the quote page displays
+  // from and the /r mint charges from. Re-deriving it here from the tier
+  // subtotal plus a live gst_registered read would agree only until that flag
+  // is toggled between the edit that stamped the total and this send, and
+  // then the customer would be texted a deposit 10% away from what Stripe
+  // takes. Falls back to the tier only for a row with no stored total.
   const tier = quote.good ?? quote.better ?? quote.best ?? null
-  const totalCents = tier
-    ? totalIncGstCents(tier.subtotal_ex_gst, { gstRegistered: quote.gst_registered })
-    : 0
+  const storedTotalCents = Math.round(asMoneyNumber(quote.total_inc_gst) * 100)
+  const totalCents =
+    storedTotalCents > 0
+      ? storedTotalCents
+      : tier
+        ? totalIncGstCents(tier.subtotal_ex_gst, { gstRegistered: quote.gst_registered })
+        : 0
   const pct = clampDepositPct(quote.deposit_pct)
   const depositBase = finalDepositBaseCents(totalCents, pct)
   const balanceBase = finalBalanceBaseCents(totalCents, pct)

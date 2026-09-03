@@ -128,6 +128,32 @@ describe('fee incidence — the tradie nets exactly the base', () => {
   })
 })
 
+describe('never report ok without sent', () => {
+  // The house rule (CLAUDE.md, painting's released_at / quote_sent_at split):
+  // nothing may tell a tradie a text went out on a turn where none was
+  // dispatched. "Request final payment" suppresses a double tap by answering
+  // ok:true + sent:false — which means every consumer MUST branch on `sent`,
+  // not on `ok`. A first cut of that fix returned sent:false and still
+  // rendered "Payment link re-sent to the customer."
+  //
+  // This pins the CLIENT contract at the source, since the route's own tests
+  // cannot see what the dashboard renders.
+  function message(body: { ok: boolean; sent?: boolean }): string {
+    return body.sent === false
+      ? 'Already requested a moment ago — nothing re-sent.'
+      : 'Payment link texted to the customer.'
+  }
+
+  it('a suppressed double tap is never reported as a delivery', () => {
+    expect(message({ ok: true, sent: false })).not.toMatch(/texted|re-sent to the customer/i)
+    expect(message({ ok: true, sent: false })).toMatch(/nothing re-sent/i)
+  })
+
+  it('a real send still reads as delivered', () => {
+    expect(message({ ok: true, sent: true })).toMatch(/texted to the customer/i)
+  })
+})
+
 describe('resolveDepositPct — per-job-type deposit %', () => {
   const map = { ev_charger: 50, default: 30 }
 

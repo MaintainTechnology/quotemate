@@ -78,7 +78,7 @@ export async function GET(req: Request) {
         ),
         fetchAll<QuoteRow>(
           'quotes',
-          'id, tenant_id, intake_id, created_at, sent_at, accepted_at, paid_at, status, quote_kind',
+          'id, tenant_id, intake_id, created_at, sent_at, accepted_at, paid_at, status, quote_kind, parent_quote_id, paid_tier',
         ),
         fetchAll<IntakeRow>(
           'intakes',

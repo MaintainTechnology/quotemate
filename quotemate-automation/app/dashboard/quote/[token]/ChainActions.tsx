@@ -100,11 +100,14 @@ export default function ChainActions(props: {
       }
       setState({
         pending: false,
-        // Never claim a send that did not happen — the route only reports
-        // ok:true after a carrier accepted the message.
-        ok: body.already
-          ? 'Payment link re-sent to the customer.'
-          : 'Payment link texted to the customer.',
+        // Never claim a send that did not happen. The route answers ok:true
+        // with sent:false when it suppresses a double tap — reporting that as
+        // "re-sent" would tell the tradie a text went out on a turn where
+        // nothing was dispatched.
+        ok:
+          body.sent === false
+            ? 'Already requested a moment ago — nothing re-sent.'
+            : 'Payment link texted to the customer.',
         err: null,
       })
       router.refresh()

@@ -37,6 +37,11 @@ export type QuoteRow = {
   status: string | null
   /** quotes.quote_kind (mig 194). Absent on pre-chain callers → 'initial'. */
   quote_kind?: string | null
+  /** Mig 194 — the root a child hangs off, so a chained job's conversion is
+   *  credited to the row the scorecard counts. */
+  parent_quote_id?: string | null
+  /** 'inspection' | 'deposit' | 'credit' | 'balance'. */
+  paid_tier?: string | null
 }
 
 export type IntakeRow = {
@@ -258,12 +263,13 @@ export function buildMetrics(
   // job: counting the children would treble the quote volume and, because
   // each child carries its own accepted_at/paid_at, inflate the acceptance
   // rate off a single real conversion.
-  const quotes = input.quotes.filter(
-    (q) =>
-      q.tenant_id != null &&
-      allowed.has(q.tenant_id) &&
-      (q.quote_kind ?? 'initial') === 'initial',
+  // Tenant-scoped, ALL kinds. computeScorecard needs the children: a chained
+  // job's conversion is recorded on its 'final' row, so an already-root-filtered
+  // array can never yield the attribution set (this was silently dead code once).
+  const scopedQuotes = input.quotes.filter(
+    (q) => q.tenant_id != null && allowed.has(q.tenant_id),
   )
+  const quotes = scopedQuotes.filter((q) => (q.quote_kind ?? 'initial') === 'initial')
   const intakes = input.intakes.filter((i) => i.tenant_id != null && allowed.has(i.tenant_id))
   const calls = input.calls.filter((c) => c.tenant_id != null && allowed.has(c.tenant_id))
   const customers = input.customers.filter((c) => c.tenant_id != null && allowed.has(c.tenant_id))
@@ -280,7 +286,9 @@ export function buildMetrics(
     realTenantCount: realTenants.length,
     testTenantCount: testTenants.length,
     unattributedRows,
-    scorecard: computeScorecard({ quotes, intakes, tenants: shownTenants }, now),
+    // scopedQuotes (all kinds) — computeScorecard filters roots itself and
+    // needs the 'final' children to credit a chained job's conversion.
+    scorecard: computeScorecard({ quotes: scopedQuotes, intakes, tenants: shownTenants }, now),
     activity: computeActivityTotals({ quotes, intakes, calls, customers, sms, tenantCount: shownTenants.length }),
     trends: computeWeeklyTrends({ quotes, intakes, tenants: shownTenants }, weeks, now),
     channelSplit: computeChannelSplit(intakes, sms),
@@ -343,9 +351,25 @@ export function computeScorecard(
   // can stamp accepted_at without sent_at (a shared-link acceptance after the
   // auto-SMS failed, or a Stripe-paid quote whose sent_at was never written), and
   // counting those in the numerator but not the denominator would inflate it.
-  const sentCount = quotes.filter((q) => q.sent_at != null).length
-  const acceptedCount = quotes.filter(
-    (q) => q.accepted_at != null && q.sent_at != null,
+  // R12 — a chained job is three rows but ONE job. Count roots only, or the
+  // acceptance rate inflates off a single conversion; and credit the root
+  // when its FINAL child's deposit lands ('credit' = the $99 covered it),
+  // or the whole electrical chain reads as never-accepted because the root
+  // only ever carries the $99 site visit.
+  const rootQuotes = quotes.filter((q) => (q.quote_kind ?? 'initial') === 'initial')
+  const depositPaidRootIds = new Set(
+    quotes
+      .filter(
+        (q) =>
+          q.quote_kind === 'final' &&
+          (q.paid_tier === 'deposit' || q.paid_tier === 'credit'),
+      )
+      .map((q) => q.parent_quote_id)
+      .filter((id): id is string => !!id),
+  )
+  const sentCount = rootQuotes.filter((q) => q.sent_at != null).length
+  const acceptedCount = rootQuotes.filter(
+    (q) => (q.accepted_at != null || depositPaidRootIds.has(q.id)) && q.sent_at != null,
   ).length
   const acceptanceRatePct = sentCount > 0 ? round2((acceptedCount / sentCount) * 100) : null
 
