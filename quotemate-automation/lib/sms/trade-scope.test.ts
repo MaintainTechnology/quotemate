@@ -26,6 +26,13 @@ describe('tradeScopeDirective — pilot trades unchanged (byte-identical pins)',
           - In the opener invite, mention BOTH trades:
               "We do electrical (downlights, GPOs, fans, smoke alarms, outdoor lights)
                AND plumbing (blocked drains, hot water, taps, toilets)."
+          - The easy-5 list above is the AUTO-QUOTE job_type VOCABULARY, not the full
+            list of what this tradie sells, and the opener list is EXAMPLES, not a limit.
+            Any service in the TENANT SERVICES block is EQUALLY in scope. Before telling
+            a customer we do not do something, CHECK that block: if it is listed there we
+            DO do it — ask its MUST-ASK questions instead of declining. Only decline when
+            the job is absent from that block AND from the easy-5 lists, or is named in
+            DECLINED SERVICES.
           - NOT OFFERED: roofing, painting, solar, aircon. If the customer asks for one of these,
             say we don't offer that service and suggest a specialist — do NOT quote
             it, do NOT gather job details for it, and do NOT offer the $99 inspection."
@@ -45,7 +52,15 @@ describe('tradeScopeDirective — pilot trades unchanged (byte-identical pins)',
             "Apologies <name>, we're sparkies - we don't do plumbing work.
              You'll need a plumber for that one. All the best!"
         - DO NOT escalate plumbing jobs to a $99 inspection. That's for out-of-scope ELECTRICAL
-          work (switchboards, EV chargers, etc.), not for the wrong trade entirely.
+          work (switchboards, rewires, three-phase, mains/underground cabling), not for the
+          wrong trade entirely.
+        - The easy-5 list above is the AUTO-QUOTE job_type VOCABULARY, not the full
+          list of what this tradie sells, and the opener list is EXAMPLES, not a limit.
+          Any service in the TENANT SERVICES block is EQUALLY in scope. Before telling
+          a customer we do not do something, CHECK that block: if it is listed there we
+          DO do it — ask its MUST-ASK questions instead of declining. Only decline when
+          the job is absent from that block AND from the easy-5 lists, or is named in
+          DECLINED SERVICES.
         - NOT OFFERED: roofing, painting, solar, aircon. If the customer asks for one of these,
           say we don't offer that service and suggest a specialist — do NOT quote
           it, do NOT gather job details for it, and do NOT offer the $99 inspection."
@@ -66,6 +81,13 @@ describe('tradeScopeDirective — pilot trades unchanged (byte-identical pins)',
              You'll need a sparky for that one. All the best!"
         - DO NOT escalate electrical jobs to a $99 inspection. That's for out-of-scope PLUMBING
           work (gas fitting, bathroom reno, etc.), not for the wrong trade entirely.
+        - The easy-5 list above is the AUTO-QUOTE job_type VOCABULARY, not the full
+          list of what this tradie sells, and the opener list is EXAMPLES, not a limit.
+          Any service in the TENANT SERVICES block is EQUALLY in scope. Before telling
+          a customer we do not do something, CHECK that block: if it is listed there we
+          DO do it — ask its MUST-ASK questions instead of declining. Only decline when
+          the job is absent from that block AND from the easy-5 lists, or is named in
+          DECLINED SERVICES.
         - NOT OFFERED: roofing, painting, solar, aircon. If the customer asks for one of these,
           say we don't offer that service and suggest a specialist — do NOT quote
           it, do NOT gather job details for it, and do NOT offer the $99 inspection."
@@ -216,5 +238,75 @@ describe('tradeScopeDirective — absent trades are explicitly declined', () => 
 
   it('empty trades[] stays the degenerate fallback, no declines', () => {
     expect(tradeScopeDirective([])).not.toContain('NOT OFFERED')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// Regression: an ENABLED catalogue service must never be contradicted by
+// the trade-scope block.
+//
+// Live 2026-09-04, tenants Sparky and Electrical3. Both hold "Install EV
+// charger" ENABLED (tenant_service_offerings.enabled = true, overriding the
+// shared_assemblies default_enabled = false), and it renders inside the
+// TENANT SERVICES block well within the 40-row cap. The receptionist still
+// answered turn 1 with "Sorry Jeff, EV charger installs aren't something we
+// take on. We do cover downlights, GPOs, ceiling fans, smoke alarms and
+// outdoor lights though" — reciting the easy-5 opener as if it were the
+// tenant's whole scope — and only self-corrected ("Actually Jeff, my
+// mistake - EV charger installs are something we do") once the customer
+// pushed back.
+//
+// Two causes, both here in tradeScopeDirective:
+//   1. the electrical branch named "EV chargers" as an example of
+//      out-of-scope ELECTRICAL work, contradicting Rule 6's conditional
+//      carve-out ("in scope when TENANT SERVICES lists it"); and
+//   2. nothing told the model the easy-5 list was a job_type vocabulary
+//      rather than the tradie's full service list.
+//
+// The Railway fleet hard-scopes every tenant to a single trade
+// (service-dialog.ts -> scopeTenantTrades), so multi-trade tenants like
+// Sparky render the ELECTRICAL-ONLY branch — which is why the electrical
+// branch specifically is the one that shipped the contradiction.
+describe('tradeScopeDirective — enabled services are not pre-declined', () => {
+  const EASY_5_BRANCHES: ReadonlyArray<readonly string[]> = [
+    ['electrical'],
+    ['plumbing'],
+    ['electrical', 'plumbing'],
+  ]
+
+  it('never names EV chargers as out-of-scope electrical work', () => {
+    for (const trades of EASY_5_BRANCHES) {
+      const d = tradeScopeDirective([...trades])
+      expect(d, `trades=${trades.join('+')}`).not.toMatch(
+        /out-of-scope ELECTRICAL[\s\S]*EV charger/i,
+      )
+    }
+  })
+
+  it('the $99 examples come from Rule 6 unconditional escalate list only', () => {
+    const d = tradeScopeDirective(['electrical'])
+    expect(d).toContain('switchboards, rewires, three-phase, mains/underground cabling')
+  })
+
+  it('tells the model the easy-5 list is a vocabulary, not the full scope', () => {
+    for (const trades of EASY_5_BRANCHES) {
+      const d = tradeScopeDirective([...trades])
+      expect(d, `trades=${trades.join('+')}`).toContain(
+        'not the full',
+      )
+      expect(d, `trades=${trades.join('+')}`).toContain('TENANT SERVICES')
+    }
+  })
+
+  it('a plumbing-only tenant still redirects electrical work by trade', () => {
+    // The wrong-TRADE redirect is correct and must survive: a plumber does
+    // not install EV chargers. Only the out-of-SCOPE framing was wrong.
+    const d = tradeScopeDirective(['plumbing'])
+    expect(d).toContain("we don't do electrical work")
+  })
+
+  it('branches with no easy-5 list do not carry the vocabulary note', () => {
+    expect(tradeScopeDirective(['roofing'])).not.toContain('AUTO-QUOTE job_type VOCABULARY')
+    expect(tradeScopeDirective(['carpentry'])).not.toContain('AUTO-QUOTE job_type VOCABULARY')
   })
 })

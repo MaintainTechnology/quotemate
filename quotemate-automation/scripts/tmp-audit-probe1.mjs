@@ -1,0 +1,15 @@
+import pg from 'pg'
+const c = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } })
+await c.connect()
+const L=(s='')=>console.log(s)
+L('=== tenants (sms/voice numbers, trades, billing) ===')
+const {rows:t} = await c.query(`select id, business_name, sms_number, status, billing_exempt, subscription_status, trades from tenants order by business_name`)
+for (const r of t) L(`  ${(r.business_name||'').padEnd(22)} sms=${String(r.sms_number).padEnd(14)} ${r.status} exempt=${r.billing_exempt} sub=${r.subscription_status} trades=${(r.trades||[]).join('/')}\n     id=${r.id}`)
+L('\n=== last 15 sms_conversations (any tenant) ===')
+const {rows:sc} = await c.query(`select sc.id, sc.created_at, sc.last_message_at, sc.from_number, sc.to_number, sc.status, sc.turn_count, sc.conversation_type, sc.intake_id, t.business_name
+  from sms_conversations sc left join tenants t on t.id=sc.tenant_id order by sc.last_message_at desc nulls last limit 15`)
+for (const r of sc) L(`  ${r.last_message_at?.toISOString().slice(0,16)} | ${(r.business_name||'?').padEnd(18)} | from=${r.from_number} to=${r.to_number} | ${r.status} turns=${r.turn_count} intake=${r.intake_id?'Y':'n'}`)
+L('\n=== sms_messages count by day, last 14d ===')
+const {rows:d} = await c.query(`select date_trunc('day', created_at) d, direction, count(*) n from sms_messages where created_at > now()-interval '14 days' group by 1,2 order by 1 desc`)
+for (const r of d) L(`  ${r.d.toISOString().slice(0,10)} ${r.direction} ${r.n}`)
+await c.end()

@@ -46,6 +46,7 @@ import {
   isEnforcementEnabled,
 } from '@/lib/billing/entitlements'
 import { getMonthlyUsage } from '@/lib/billing/usage'
+import { recordTrace } from '@/lib/log/trace'
 import { isCronAuthorised } from '@/lib/agents/cron'
 
 // R42-draft — the after() block does the heavy sends (PDF render, customer
@@ -116,6 +117,34 @@ export async function POST(req: Request) {
           .maybeSingle()
         if (billingRow) {
           const usage = await getMonthlyUsage(supabase, intakeTenantId)
+          // A blocked gate is a DROPPED LEAD, not a no-op: by the time the
+          // draft is requested the SMS receptionist has already told the
+          // customer "quote drafting now, you'll see it shortly". Returning
+          // skipped-and-silent leaves them waiting forever and leaves no
+          // trace anywhere a human looks — stdout only, no pipeline_traces
+          // row, no tradie notify. Live 2026-09-03/04: Electrical3 lost
+          // three intakes this way (two downlights, one EV charger) with
+          // ZERO estimate traces, and the cause was only findable by
+          // correlating billing_exempt against which tenants ever quoted.
+          // recordTrace is fire-and-forget and swallows its own errors, so
+          // this cannot break the gate it reports on.
+          const traceBlocked = (substep: string, reason: string) =>
+            recordTrace(supabase, {
+              step: 'estimate',
+              substep,
+              status: 'err',
+              message: `billing gate blocked the draft (${reason}) — customer was already promised a quote and will receive nothing`,
+              decisions: {
+                reason,
+                tenant_id: intakeTenantId,
+                subscription_status: billingRow.subscription_status,
+                subscription_plan: billingRow.subscription_plan,
+                billing_exempt: !!billingRow.billing_exempt,
+              },
+              tenant_id: intakeTenantId,
+              intake_id: intakeId,
+            })
+
           if (intake.call_id != null) {
             const v = checkVoiceEntitlement(billingRow, usage)
             if (!v.allowed) {
@@ -123,6 +152,7 @@ export async function POST(req: Request) {
                 tenant_id: intakeTenantId,
                 reason: v.reason,
               })
+              await traceBlocked('billing_gate_voice', v.reason)
               return Response.json({ ok: false, skipped: 'voice_not_entitled', reason: v.reason })
             }
           }
@@ -132,6 +162,7 @@ export async function POST(req: Request) {
               tenant_id: intakeTenantId,
               reason: q.reason,
             })
+            await traceBlocked('billing_gate_quote', q.reason)
             return Response.json({ ok: false, skipped: 'not_entitled', reason: q.reason })
           }
           quoteOverFairUse = !!q.overFairUse
