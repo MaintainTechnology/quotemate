@@ -31,6 +31,54 @@ export type QuoteReadinessInput = {
   knownSuburb?: string | null
   history?: ConversationTurn[]
   services?: ReadonlyArray<QuoteReadinessService>
+  /** True when this conversation already holds at least one customer photo —
+   *  an inbound MMS (sms_messages.photo_paths) or an upload through the link
+   *  (sms_conversations.photo_paths). Drives the EV photo gate (spec
+   *  ev-charger-location-photo R6); ignored for every other job type. */
+  hasPhoto?: boolean
+}
+
+// ─── EV charger: the five MUST-ASK questions, code side (spec R10) ─────────
+//
+// shared_assemblies.clarifying_questions is the source of truth AND the row is
+// default_enabled=false — verified in production, exactly ONE of eight tenants
+// has switched it on. On the other seven findMatchedService returns null and an
+// EV finish is gated by nothing at all, so "required" would be required for one
+// tenant and optional for the rest.
+//
+// This mirror is the floor, not the authority: when the tenant HAS enabled the
+// service, its DB questions win (they may have been tailored). Keep this list
+// in step with sql/migrations/196_ev_charger_clarifying_questions.sql.
+export const EV_CHARGER_FALLBACK_QUESTIONS: readonly string[] = [
+  'Which electric vehicle is the charger for - Tesla, BYD, or another make?',
+  'Do you already have the charger unit, or should we supply it?',
+  'Whereabouts is the charger going - garage, carport, or an external wall?',
+  'Roughly how far is the charger spot from the switchboard?',
+  'Is the property single phase or three phase, and any idea of spare switchboard capacity?',
+]
+
+/** The one EV question that is not text: send a photo of the spot (spec R6). */
+export const EV_PHOTO_QUESTION =
+  "Last thing - send us a photo of the spot where the charger will go and I'll get your quote across."
+
+/** Customer said they cannot send a photo (spec R9). Without this escape a
+ *  customer who is not at the property is re-asked to the cap and converted to
+ *  a $99 inspection — the opposite of what the photo is for. Deliberately
+ *  narrow: it must read as an inability or refusal, not as any negative. */
+const PHOTO_DECLINE_RE =
+  /\b(can'?t|cannot|can not|unable to|won'?t be able|no camera|not there|not at (?:the )?(?:property|house|home)|not home|later|skip|no photo|without (?:a )?photo|haven'?t got|don'?t have)\b/i
+
+/** True when an inbound turn declines the photo ask (spec R9). */
+export function photoDeclined(history: ConversationTurn[]): boolean {
+  for (let i = 0; i < history.length; i++) {
+    const turn = history[i]
+    if (turn.direction !== 'outbound') continue
+    if (!/photo|picture|pic\b|snap/i.test(turn.body)) continue
+    // Only an inbound AFTER the photo ask can decline it.
+    const laterInbound = history.slice(i + 1).find((t) => t.direction === 'inbound')
+    if (laterInbound && PHOTO_DECLINE_RE.test(laterInbound.body)) return true
+  }
+  return false
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -403,17 +451,46 @@ function missingServiceQuestion(
   // the normal outbound-question → substantive inbound path remains exact.
   const proactiveTopicCoverage =
     String(service.category ?? '').trim().toLowerCase() === 'ev_charger' ? 0.4 : 0
-  for (const question of questions) {
+  for (let i = 0; i < questions.length; i++) {
+    const question = questions[i]
     if (!questionWasAnswered(input.history ?? [], question, proactiveTopicCoverage)) {
-      return fact('service_question', question, `required service question for ${service.name}`)
+      // The code identifies WHICH question is outstanding (spec
+      // ev-charger-location-photo R4). It used to be the bare string
+      // 'service_question' for every question, and the route's progress check
+      // compares missing-code ARRAYS: on a flow whose only missing fact is a
+      // service question the array was ['service_question'] on every blocked
+      // turn, its length never shrank, madeProgress was always false, and the
+      // clarify cap fired on a customer who was answering each question in
+      // order — converting the job to a $99 inspection. Indexing makes the set
+      // change as the customer progresses.
+      return fact(
+        `service_question:${i}`,
+        question,
+        `required service question ${i + 1} of ${questions.length} for ${service.name}`,
+      )
     }
   }
   return null
 }
 
+/** The EV floor service, used when the tenant has not enabled the catalogue
+ *  row (spec R10). Not a real catalogue entry — it exists only to carry the
+ *  MUST-ASK questions through the same gate. */
+function evChargerFallbackService(): QuoteReadinessService {
+  return {
+    name: 'Install EV charger',
+    category: 'ev_charger',
+    always_inspection: false,
+    clarifying_questions: [...EV_CHARGER_FALLBACK_QUESTIONS],
+  }
+}
+
 function findMatchedService(input: QuoteReadinessInput): QuoteReadinessService | null {
   const services = (input.services ?? []).filter((s) => !s.always_inspection)
-  if (services.length === 0) return null
+  const isEv = jobType(input) === 'ev_charger'
+  // R10 — an EV job is gated on every tenant, not only the one that enabled the
+  // service. A real enabled row still wins below.
+  if (services.length === 0) return isEv ? evChargerFallbackService() : null
 
   const category = categoryForJobType(jobType(input))
   if (category) {
@@ -421,6 +498,7 @@ function findMatchedService(input: QuoteReadinessInput): QuoteReadinessService |
       (s) => String(s.category ?? '').trim().toLowerCase() === category,
     )
     if (byCategory) return byCategory
+    if (isEv) return evChargerFallbackService()
   }
 
   const text = transcript(input).toLowerCase()
@@ -478,13 +556,27 @@ function questionWasAnswered(
   const qWords = serviceKeywords(question)
   if (qWords.length === 0) return false
 
+  // How many of this question's topic words must appear before we believe it
+  // was the one asked/answered. 1 for a normal service (its questions are about
+  // different things), but a coverage FRACTION where the caller asked for one.
+  //
+  // This applies to BOTH paths. It used to gate Path B only, which left a hole
+  // the moment a service had several questions sharing a word: all five EV
+  // questions contain "charger", so asking question 1 put "charger" in an
+  // outbound, and the customer's reply then marked questions 2, 3 and 4 answered
+  // too — the receptionist would ask one thing and consider the set complete.
+  const requiredHits =
+    proactiveTopicCoverage > 0
+      ? Math.max(1, Math.ceil(qWords.length * proactiveTopicCoverage))
+      : 1
+
   // Path A — outbound echo of the stored question + substantive reply.
   for (let i = 0; i < history.length; i++) {
     const turn = history[i]
     if (turn.direction !== 'outbound') continue
     const lower = turn.body.toLowerCase()
     const overlap = qWords.filter((w) => lower.includes(w)).length
-    if (overlap === 0) continue
+    if (overlap < requiredHits) continue
     const laterInbound = history.slice(i + 1).find((t) => t.direction === 'inbound')
     if (laterInbound && !isBareAffirmation(laterInbound.body)) return true
   }
@@ -495,9 +587,6 @@ function questionWasAnswered(
     if (isBareAffirmation(turn.body)) continue
     const lower = turn.body.toLowerCase()
     const hits = qWords.filter((w) => lower.includes(w)).length
-    const requiredHits = proactiveTopicCoverage > 0
-      ? Math.max(1, Math.ceil(qWords.length * proactiveTopicCoverage))
-      : 1
     if (hits >= requiredHits) return true
   }
 
@@ -539,6 +628,26 @@ export function evaluateQuoteReadiness(input: QuoteReadinessInput): QuoteReadine
   ]
   const serviceMissing = missingServiceQuestion(input, matchedService)
   if (serviceMissing) missing.push(serviceMissing)
+
+  // R6 — the photo is the sixth required step for an EV charger job, and it is
+  // gated here rather than as a clarifying_question for two reasons: it is not
+  // answered by TEXT (questionWasAnswered could never mark it done), and a
+  // sixth question would exceed dialog.ts MAX_MUSTASK_PER_SERVICE, leaving the
+  // model blind to a question the gate still enforced.
+  //
+  // Asked LAST, and only once the five text questions are done, so the customer
+  // is never asked for a photo before the job is understood. A decline settles
+  // it permanently (R9).
+  if (
+    jobType(input) === 'ev_charger' &&
+    !serviceMissing &&
+    !input.hasPhoto &&
+    !photoDeclined(input.history ?? [])
+  ) {
+    missing.push(
+      fact('ev_photo', EV_PHOTO_QUESTION, 'a photo of the charger location is required for EV charger jobs'),
+    )
+  }
 
   if (missing.length === 0) return { ready: true, missing: [], reply: null }
   return {

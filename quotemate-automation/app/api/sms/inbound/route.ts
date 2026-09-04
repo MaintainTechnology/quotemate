@@ -260,6 +260,12 @@ const EASY_5_JOB_TYPES = new Set([
   'toilet_replace',
 ])
 
+// Job types allowed to be sent the photo-upload link. A SUPERSET of the easy-5
+// (spec ev-charger-location-photo R7): EV charger needs a photo of the spot the
+// charger is going, but it must NOT join EASY_5_JOB_TYPES itself — that set
+// also drives assumption rules and quoting behaviour, and EV has its own.
+const PHOTO_ELIGIBLE_JOB_TYPES = new Set([...EASY_5_JOB_TYPES, 'ev_charger'])
+
 // Best-effort first-name guess from a customer's SMS turn. Used only
 // for the photo-request SMS greeting — Opus does the authoritative
 // extraction in structureIntake later. We look for a turn that's 1-3
@@ -3526,6 +3532,14 @@ export async function POST(req: Request) {
             JSON.stringify(buildTenantFacts(tenant ?? null)),
             ...(slotJob ? [safeRulesAsText(slotJob)] : []),
             ...(customAssemblies ?? []).map((s) => s.name ?? ''),
+            // Spec ev-charger-location-photo R11 — the MUST-ASK question TEXT,
+            // not just the service name. These questions are tool-produced (a
+            // DB row, or the code-side EV floor), and one of them offers
+            // distances. Without them here, a model rephrasing "how far is the
+            // charger spot from the switchboard" with "5-10 m" trips
+            // assertGroundedReply's >=10 figure rule and the customer gets the
+            // snag fallback instead of a question.
+            ...(customAssemblies ?? []).flatMap((s) => s.clarifying_questions ?? []),
             // The follow-up block is tool-produced (formatActiveFollowupContext
             // reads quote_followup_events) and carries the REAL quote link the
             // prompt tells the model to resend. Without it, a correct
@@ -3642,6 +3656,39 @@ export async function POST(req: Request) {
       // the finish into one more SMS question before any photo, product-choice,
       // or intake/estimate side effect can fire.
       if (!hasExistingIntake && decision.action === 'finish') {
+        // Spec ev-charger-location-photo R6 — does this conversation already
+        // hold a customer photo? Either channel counts: an inbound MMS
+        // (sms_messages.photo_paths) or the upload link
+        // (sms_conversations.photo_paths). Only read for EV, which is the one
+        // job type that gates on it; best-effort, because losing this read must
+        // downgrade to "ask for a photo", never fail the turn.
+        let hasPhoto = false
+        if (decision.job_type_guess === 'ev_charger') {
+          try {
+            const [convo, msgs] = await Promise.all([
+              supabase
+                .from('sms_conversations')
+                .select('photo_paths')
+                .eq('id', conversationId)
+                .maybeSingle<{ photo_paths: string[] | null }>(),
+              supabase
+                .from('sms_messages')
+                .select('photo_paths')
+                .eq('conversation_id', conversationId)
+                .not('photo_paths', 'is', null),
+            ])
+            hasPhoto =
+              (convo.data?.photo_paths?.length ?? 0) > 0 ||
+              (msgs.data ?? []).some(
+                (m) => ((m as { photo_paths?: string[] | null }).photo_paths?.length ?? 0) > 0,
+              )
+          } catch (e) {
+            console.error('[sms/inbound:after] EV photo lookup failed (non-fatal)', {
+              conversationId,
+              error: e instanceof Error ? e.message : String(e),
+            })
+          }
+        }
         const readiness = evaluateQuoteReadiness({
           action: decision.action,
           jobTypeGuess: decision.job_type_guess,
@@ -3650,6 +3697,7 @@ export async function POST(req: Request) {
           knownSuburb: customer?.suburb ?? null,
           history: turns,
           services: customAssemblies,
+          hasPhoto,
         })
         const priorClarifyCount = Number(
           (conversationState as Record<string, unknown>).clarify_gate_count ?? 0,
@@ -3663,8 +3711,16 @@ export async function POST(req: Request) {
           ? ((conversationState as Record<string, unknown>).clarify_missing as string[])
           : []
         const currentMissing = readiness.missing.map((m) => m.code)
-        const madeProgress =
-          priorMissing.length > 0 && currentMissing.length < priorMissing.length
+        // Progress = the outstanding set CHANGED, not merely shrank (spec
+        // ev-charger-location-photo R4). Service questions are asked one at a
+        // time, so answering one swaps 'service_question:0' for
+        // 'service_question:1' — same length, real progress. Comparing lengths
+        // alone counted that as a stalled turn and marched a cooperative
+        // customer to the cap.
+        const sameSet =
+          currentMissing.length === priorMissing.length &&
+          currentMissing.every((c) => priorMissing.includes(c))
+        const madeProgress = priorMissing.length > 0 && !sameSet
         if (!readiness.ready) {
           // R24 safety valve — gate the deterministic override behind the
           // kill-switch flag and a clarifying-turn cap so it can be disabled
@@ -3754,7 +3810,8 @@ export async function POST(req: Request) {
         decisionAction: decision.action,
         sonnetRequestedPhoto: decision.request_photo_link === true,
         offerProductChoice: decision.offer_product_choice === true,
-        jobTypeIsEasy5: EASY_5_JOB_TYPES.has(decision.job_type_guess),
+        // "is this job type allowed a photo request" — the easy-5 plus EV (R7).
+        jobTypeIsEasy5: PHOTO_ELIGIBLE_JOB_TYPES.has(decision.job_type_guess),
       })
       const shouldSendPhotoRequest = photoTrigger.fire
       if (!shouldSendPhotoRequest) {

@@ -248,6 +248,12 @@ type QuotePdfRow = {
   /** Stored by the draft route, rendered on NO surface until the EV charger
    *  estimate's "Optional Upgrades & Recommendations" section (spec R10). */
   optional_upsells: Array<{ name?: string | null; price_ex_gst?: number | null }> | null
+  /** The Gemini render of the job in the customer's own photo, produced by
+   *  lib/ig-engine/generate.ts at draft/upload time. Read only here — a
+   *  document render must never make a billable AI call (spec
+   *  ev-charger-location-photo R12/R13). */
+  preview_status: string | null
+  preview_image_paths: string[] | null
 }
 
 type RoofPdfRow = {
@@ -344,7 +350,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
       // and a column missing from this select fails the whole read — which would
       // cost every electrical/plumbing quote its PDF on a pre-194 deploy. The EV
       // path reads it in its own best-effort select instead (spec R5/R6).
-      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, scope_short, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct, created_at, optional_upsells, quote_kind, deposit_pct',
+      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, scope_short, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct, created_at, optional_upsells, quote_kind, deposit_pct, preview_status, preview_image_paths',
     )
     .eq('id', quoteId)
     .maybeSingle<QuotePdfRow>()
@@ -809,6 +815,33 @@ async function loadEvEstimateExtras(ctx: QuoteReportContext): Promise<EvEstimate
 const EV_MAX_IMAGES = 3
 
 /**
+ * The EV document's cache key: the template version plus the AI render set
+ * (spec ev-charger-location-photo R14).
+ *
+ * The render is generated asynchronously by lib/ig-engine/generate.ts, so it
+ * usually arrives AFTER the send-time PDF was cached. Nothing else in
+ * quotePdfSignature changes when an image lands, so without the render state in
+ * the key the customer would download the image-less document forever. Hashing
+ * the paths (rather than listing them) keeps the stored signature short and
+ * still changes whenever the set does.
+ */
+export function evTemplateCacheKey(ctx: {
+  quote: { preview_status: string | null; preview_image_paths: string[] | null }
+}): string {
+  const status = (ctx.quote.preview_status ?? '').trim()
+  const paths = Array.isArray(ctx.quote.preview_image_paths)
+    ? ctx.quote.preview_image_paths.filter((p) => typeof p === 'string' && p.trim())
+    : []
+  // Only a set the document would actually RENDER counts — a 'generating' or
+  // 'failed' status contributes nothing to the document, so it must not
+  // invalidate the cache either.
+  if ((status !== 'ready' && status !== 'partial') || paths.length === 0) {
+    return EV_ESTIMATE_TEMPLATE_KEY
+  }
+  return `${EV_ESTIMATE_TEMPLATE_KEY}+img${hashReportContent(paths.join('|'), null)}`
+}
+
+/**
  * Images for the estimate (spec R14): the tenant's own charger product shot
  * first, then any photos the customer sent. `embed` produces data URIs for the
  * PDF (Gotenberg must not depend on a network fetch) and is skipped for the
@@ -824,13 +857,27 @@ async function resolveEvImages(
   opts: { embed: boolean },
 ): Promise<{ images: EvEstimateImage[]; expected: number; missing: boolean }> {
   const candidates: Array<{ src: string; caption: string | null; signed: boolean }> = []
-  if (extras.chosenProductImagePath) {
-    // catalogue-images is a public bucket — the stored path is already a URL.
-    candidates.push({
-      src: extras.chosenProductImagePath,
-      caption: extras.chosenProductName,
-      signed: false,
-    })
+  // Spec ev-charger-location-photo R12 — the AI render leads, because it is the
+  // one image that shows the customer the finished job in their own spot.
+  //
+  // READ ONLY (R13): generatePreviewImage is called at draft time and on upload,
+  // never from here. A document render must never make a billable AI call, so a
+  // status that is not ready/partial simply contributes nothing and the next
+  // download picks it up once the render lands.
+  if (ctx.quote.preview_status === 'ready' || ctx.quote.preview_status === 'partial') {
+    const renderPaths = Array.isArray(ctx.quote.preview_image_paths)
+      ? ctx.quote.preview_image_paths
+      : []
+    for (const p of renderPaths) {
+      if (candidates.length >= EV_MAX_IMAGES) break
+      if (typeof p === 'string' && p.trim()) {
+        candidates.push({
+          src: p.trim(),
+          caption: 'Indicative - how the charger could look in this spot',
+          signed: true,
+        })
+      }
+    }
   }
   if (ctx.quote.intake_id && candidates.length < EV_MAX_IMAGES) {
     const { data, error } = await supabase()
@@ -850,6 +897,17 @@ async function resolveEvImages(
         candidates.push({ src: p.trim(), caption: null, signed: true })
       }
     }
+  }
+  // The tenant's product shot comes LAST (R12): the render and the customer's
+  // own photo are about THIS job, a stock product photo is not. In production
+  // no tenant stocks a charger, so this is empty today either way.
+  if (extras.chosenProductImagePath && candidates.length < EV_MAX_IMAGES) {
+    // catalogue-images is a public bucket — the stored path is already a URL.
+    candidates.push({
+      src: extras.chosenProductImagePath,
+      caption: extras.chosenProductName,
+      signed: false,
+    })
   }
 
   const images: EvEstimateImage[] = []
@@ -1025,7 +1083,13 @@ export async function ensureQuotePdf(
       // Spec R15 — EV charger quotes render a different document. Keying it here
       // rather than bumping REPORT_TEMPLATE_VERSION regenerates ONLY those PDFs;
       // every other electrical/plumbing signature stays byte-identical.
-      templateKey: isEvChargerEstimate(ctx) ? EV_ESTIMATE_TEMPLATE_KEY : null,
+      //
+      // ev-charger-location-photo R14 folds the RENDER SET into that key. The
+      // Gemini image is produced asynchronously, so the first PDF is very often
+      // cached before it lands; without this the customer would keep downloading
+      // the render-less document forever, because nothing else in the signature
+      // changes when an image appears.
+      templateKey: isEvChargerEstimate(ctx) ? evTemplateCacheKey(ctx) : null,
     })
     if (
       !quotePdfIsStale({

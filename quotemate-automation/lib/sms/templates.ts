@@ -913,6 +913,18 @@ export function buildPhotoRequestSms(opts: {
   const named = first ? `${first}, ` : ''
   const tradie = tradieNoun(opts.jobType)
 
+  // EV charger is the one job type where the photo is REQUIRED, not optional
+  // (spec ev-charger-location-photo R8): the quote's AI render of the charger
+  // in position is built from it, and the electrician needs to see the spot.
+  // Every other variant below offers the photo as optional, which would tell
+  // the customer the opposite of what the readiness gate then enforces.
+  // Deliberately NOT randomised — one clear ask, no "optional" anywhere.
+  if (opts.jobType === 'ev_charger') {
+    return gsm7Safe(
+      `${first ? `${first}, ` : ''}last thing - send a photo of the spot where the charger will go and I'll get your quote across: ${opts.uploadUrl}`,
+    )
+  }
+
   if (opts.source === 'voice') {
     // Voice flows always lead with the call-context greeting so the
     // photo SMS doesn't feel like it came out of nowhere.

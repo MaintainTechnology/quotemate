@@ -1138,6 +1138,20 @@ export function buildPreviewPromptV2(ctx: PromptContext): SystemUserPrompt {
     ? [`This is a replacement job — remove the existing fitting shown in the photo; the output must look visibly different from the input at the fitting location.`]
     : []
 
+  // Spec ev-charger-location-photo R15 — the EV render is the one the customer
+  // reads as "this is what I'm buying", so it must not promise anything the
+  // tradie cannot deliver. No brand: an AI-drawn Tesla Wall Connector is a
+  // product commitment, and production stocks no charger to honour it. No
+  // vehicle or person invented: a car that was never in the photo reads as a
+  // mock-up, not a preview of their spot.
+  if (ctx.intake.job_type === 'ev_charger') {
+    extraMust.push(
+      'Show a compact, plain wall-mounted EV charger unit in the position described. Keep it generic: no brand name, logo, badge or model marking anywhere on the unit or in the image.',
+      'Do NOT add a vehicle, a charging cable in use, a person, a price, or any text overlay other than the AI PREVIEW watermark. If a vehicle is already in the attached photo, leave it exactly as it is.',
+      'Preserve the customer\'s wall, surface finish, lighting and surroundings exactly — only the charger is added.',
+    )
+  }
+
   const system = buildSystemInstructionV2(ctx, {
     task: 'Edit the attached customer photo to show the proposed install completed.',
     shot: { role: 'PREVIEW edit (in customer\'s own room)', mode: 'edit_customer_photo' },

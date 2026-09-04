@@ -8,7 +8,7 @@
 // tradieDrafted:true, which forces the review gate on. The customer only hears
 // from us when the tradie presses Send on the quote page.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getAuthToken } from '@/lib/auth/client-token'
@@ -25,6 +25,11 @@ const INPUT =
 const LABEL = 'block text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim'
 
 const JOB_TYPES = IntakeSchema.shape.job_type.options as readonly string[]
+
+/** Spec ev-charger-location-photo R1 — matches MAX_FILES on
+ *  /api/tenant/job-quote/photos and EV_MAX_IMAGES on the estimate document. */
+const EV_MAX_PHOTOS = 3
+const EV_PHOTO_MIME = 'image/jpeg,image/png,image/webp'
 
 /** "an electrical job" / "a plumbing job" — the trades are a closed set, so
  *  spell the article out rather than guessing from the first letter. */
@@ -173,6 +178,12 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   const [catalogue, setCatalogue] = useState<CatalogueRow[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Spec ev-charger-location-photo R1 — optional photos of the charger spot.
+  // Uploaded on pick (so the submit body stays small and validated) and carried
+  // into the submit as storage paths. EV charger only.
+  const [photoPaths, setPhotoPaths] = useState<string[]>([])
+  const [photoUrls, setPhotoUrls] = useState<string[]>([])
+  const [photoBusy, setPhotoBusy] = useState(false)
   // Held only for AddressAutocomplete, which takes a token as a prop. Every
   // actual submit still mints a fresh one — a captured token expires.
   const [token, setToken] = useState<string | null>(null)
@@ -186,7 +197,46 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
     setJobType(next)
     setAnswers({})
     setProductName('')
+    // The photo control is EV-only, so leaving paths behind would attach a
+    // charger-spot photo to whatever job the tradie switched to.
+    setPhotoPaths([])
+    setPhotoUrls([])
   }
+
+  /** R1/R2 — upload on pick. An upload failure NEVER blocks the submit: the
+   *  photo is optional on this surface, so the tradie still gets their quote. */
+  const uploadPhotos = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? [])
+    if (picked.length === 0) return
+    if (picked.length > EV_MAX_PHOTOS) {
+      setError(`Up to ${EV_MAX_PHOTOS} photos.`)
+      return
+    }
+    setPhotoBusy(true)
+    setError(null)
+    try {
+      const t = await getAuthToken()
+      if (!t) throw new Error('not signed in')
+      const fd = new FormData()
+      for (const f of picked) fd.append('photos', f, f.name)
+      // No Content-Type header — the browser must set the multipart boundary.
+      const res = await fetch('/api/tenant/job-quote/photos', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${t}` },
+        body: fd,
+      })
+      const j = await res.json()
+      if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`)
+      setPhotoPaths((prev) => [...prev, ...(j.paths as string[])].slice(0, EV_MAX_PHOTOS))
+      setPhotoUrls((prev) => [...prev, ...(j.urls as string[])].slice(0, EV_MAX_PHOTOS))
+    } catch (e2) {
+      setError(
+        `Photos did not upload (${e2 instanceof Error ? e2.message : String(e2)}). You can still send the form.`,
+      )
+    } finally {
+      setPhotoBusy(false)
+    }
+  }, [])
 
   function updateAnswer(fieldCode: string, nextValue: string) {
     setAnswers((current) => ({ ...current, [fieldCode]: nextValue }))
@@ -300,6 +350,11 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
           // The id is what makes the pin binding: the server re-reads the row
           // and forces its price. The name alone is only a prompt hint.
           ...(productSelectionAllowed && chosenProduct ? { product_id: chosenProduct.id } : {}),
+          // Spec ev-charger-location-photo R3 — already uploaded, so these are
+          // storage paths, not files. Sent only when some landed, so a failed
+          // or skipped upload leaves the body exactly as it was before.
+          ...(photoPaths.length ? { photo_paths: photoPaths } : {}),
+          ...(photoUrls.length ? { photo_urls: photoUrls } : {}),
         }),
       })
       // .catch(() => ({})) because a platform timeout or gateway error returns
@@ -516,6 +571,37 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                 />
               </div>
             </div>
+
+            {/* Spec ev-charger-location-photo R1 — EV charger only, and
+                optional here (it is REQUIRED over SMS, where the receptionist
+                cannot see the site any other way). */}
+            {jobType === 'ev_charger' ? (
+              <div>
+                <span className={LABEL}>Photo of the spot (optional)</span>
+                <label
+                  htmlFor="ev-photos"
+                  className="mt-2 flex cursor-pointer items-center justify-center border border-dashed border-ink-line bg-ink-deep px-4 py-6 text-center font-mono text-sm text-text-dim hover:border-accent hover:text-text-pri"
+                >
+                  {photoBusy
+                    ? 'Uploading...'
+                    : photoPaths.length > 0
+                      ? `${photoPaths.length} photo${photoPaths.length === 1 ? '' : 's'} added - tap to add more`
+                      : `Add up to ${EV_MAX_PHOTOS} photos of where the charger is going`}
+                  <input
+                    id="ev-photos"
+                    type="file"
+                    accept={EV_PHOTO_MIME}
+                    multiple
+                    disabled={photoBusy}
+                    onChange={uploadPhotos}
+                    className="sr-only"
+                  />
+                </label>
+                <p className="mt-2 font-mono text-xs text-text-dim">
+                  Helps the quote show the charger in position. JPEG, PNG or WebP.
+                </p>
+              </div>
+            ) : null}
 
             <div>
               <label htmlFor="notes" className={LABEL}>

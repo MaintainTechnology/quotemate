@@ -41,8 +41,11 @@ import { asMoneyNumber, totalIncGstCents, dollars } from './money'
 import { clampDiscountPct } from './early-bird'
 
 /** Body-template key folded into quotes.pdf_signature (R15). Bump on any change
- *  to this template's OUTPUT so cached EV PDFs — and only those — regenerate. */
-export const EV_ESTIMATE_TEMPLATE_KEY = 'ev1'
+ *  to this template's OUTPUT so cached EV PDFs — and only those — regenerate.
+ *
+ *  ev2 — the Images section now leads with the Gemini render of the charger in
+ *  the customer's own photo (spec ev-charger-location-photo R12/R14). */
+export const EV_ESTIMATE_TEMPLATE_KEY = 'ev2'
 
 /** How long the printed estimate says its prices stand (R7). Presentational:
  *  derived at render, never stored, and it gates nothing in the funnel. */

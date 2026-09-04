@@ -62,6 +62,13 @@ const BodySchema = z.object({
    *  estimator may ignore; the id lets the server re-read the row and force
    *  that exact price. Never trust a client-sent price. */
   product_id: z.string().uuid().optional(),
+  /** Optional photos of the job, already uploaded to the private intake-photos
+   *  bucket by /api/tenant/job-quote/photos (spec ev-charger-location-photo R3).
+   *  Storage PATHS are the durable reference stored on the intake; the signed
+   *  URLs are short-lived and used only to feed the structurer's vision pass.
+   *  Capped at 3 to match the upload route and the estimate document. */
+  photo_paths: z.array(z.string().trim().min(1)).max(3).optional(),
+  photo_urls: z.array(z.string().trim().min(1)).max(3).optional(),
 })
 
 const THREE_PHASE_INSPECTION_ANSWER = 'three phase (on-site inspection)'
@@ -141,7 +148,11 @@ export async function POST(req: Request) {
 
   try {
     const transcript = buildTranscript(body, trade)
-    const structuredIntake = await structureIntake(transcript, [], trade)
+    // Spec ev-charger-location-photo R3 — the second argument has always been
+    // `photoUrls: string[]` and has always been passed empty from here, so a
+    // dashboard job could never use vision. Feeding the freshly-signed URLs
+    // costs no signature change and lets the structurer see the spot.
+    const structuredIntake = await structureIntake(transcript, body.photo_urls ?? [], trade)
     const inspectionRoutedIntake = enforceThreePhaseInspection(structuredIntake, body.answers)
     const intake = canonicaliseEvChargerSupply(
       inspectionRoutedIntake,
@@ -277,6 +288,18 @@ export async function POST(req: Request) {
         timing: intake.timing,
         confidence: intake.confidence,
         confidence_reason: intake.confidence_reason,
+        // Spec ev-charger-location-photo R3. photo_paths is the durable
+        // reference every downstream reader uses — the EV estimate document's
+        // Images section, the customer quote page, and the Gemini render
+        // trigger, which does nothing when this array is empty.
+        //
+        // photo_urls is deliberately NOT written: that column does not exist on
+        // intakes (verified against production — only photo_paths does), so
+        // including it fails the whole INSERT and costs the tradie their quote.
+        // The signed URLs are short-lived anyway; they are used in-memory for
+        // the structurer's vision pass above and then discarded, and anything
+        // that needs a URL later re-signs the path.
+        ...(body.photo_paths?.length ? { photo_paths: body.photo_paths } : {}),
         embedding,
       })
       .select('id')

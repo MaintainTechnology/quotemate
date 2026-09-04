@@ -169,20 +169,37 @@ describe('evaluateQuoteReadiness', () => {
     expect(blocked.ready).toBe(false)
     expect(blocked.reply).toMatch(/charger on-site/i)
 
+    const answeredHistory = [
+      { direction: 'inbound' as const, body: 'Install an EV charger in my garage' },
+      { direction: 'outbound' as const, body: 'Is the charger on-site, and which model is it?' },
+      { direction: 'inbound' as const, body: 'Yes, a Tesla Wall Connector is here' },
+      { direction: 'outbound' as const, body: 'Roughly how far is the parking spot from the switchboard?' },
+      { direction: 'inbound' as const, body: 'Under 5 metres' },
+      { direction: 'outbound' as const, body: 'Single or three-phase supply, and any idea of spare switchboard capacity?' },
+      { direction: 'inbound' as const, body: 'Single phase and there is spare capacity' },
+    ]
+
+    // Every text question is answered, but an EV job now also needs a photo of
+    // the charger location before it can be quoted (spec
+    // ev-charger-location-photo R6) — so the gate holds one turn longer than it
+    // used to, asking for the photo rather than finishing.
+    const textAnswered = evaluateQuoteReadiness({
+      action: 'finish',
+      jobTypeGuess: 'ev_charger',
+      conversationState,
+      services: [service],
+      history: answeredHistory,
+    })
+    expect(textAnswered.ready).toBe(false)
+    expect(textAnswered.missing.map((m) => m.code)).toEqual(['ev_photo'])
+
     const complete = evaluateQuoteReadiness({
       action: 'finish',
       jobTypeGuess: 'ev_charger',
       conversationState,
       services: [service],
-      history: [
-        { direction: 'inbound', body: 'Install an EV charger in my garage' },
-        { direction: 'outbound', body: 'Is the charger on-site, and which model is it?' },
-        { direction: 'inbound', body: 'Yes, a Tesla Wall Connector is here' },
-        { direction: 'outbound', body: 'Roughly how far is the parking spot from the switchboard?' },
-        { direction: 'inbound', body: 'Under 5 metres' },
-        { direction: 'outbound', body: 'Single or three-phase supply, and any idea of spare switchboard capacity?' },
-        { direction: 'inbound', body: 'Single phase and there is spare capacity' },
-      ],
+      history: answeredHistory,
+      hasPhoto: true,
     })
     expect(complete.ready).toBe(true)
     expect(complete.missing).toEqual([])
