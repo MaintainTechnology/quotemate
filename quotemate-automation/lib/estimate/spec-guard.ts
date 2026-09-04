@@ -100,7 +100,17 @@ export function reconcileProductSpecs(args: {
     getSpecDefs(args.trade, args.category).map((d) => d.key.toLowerCase()),
   )
   const checkKeys =
-    defKeys.size > 0 ? reqKeys.filter((k) => defKeys.has(k.toLowerCase())) : reqKeys
+    // ponytail: no SpecDefs for this (trade, category) means there is no
+    // canonical grammar to compare with, so check NOTHING rather than
+    // everything. The old `: reqKeys` fallback compared free-text keys
+    // (charger_model, cable_run_metres) against the whole product
+    // DESCRIPTION by equality, which can never match — the same trap the
+    // `wattage` case in spec-registry documents. Live 2026-09-04: every
+    // EV charger quote was flagged [spec-guard] and held at
+    // awaiting_tradie_approval, so the customer was promised a quote and
+    // got silence. Categories WITH defs are unaffected; weatherproofConflict
+    // still runs. Add a SPEC_DEFS entry to opt a category back in.
+    defKeys.size > 0 ? reqKeys.filter((k) => defKeys.has(k.toLowerCase())) : []
   const effective = effectiveProductProps(args.properties, args.name, checkKeys)
   const base = reconcileSpecs(requested, effective, args.trade, args.category)
 
@@ -161,7 +171,17 @@ export function coverageGapConflicts(args: {
     getSpecDefs(args.trade, args.category).map((d) => d.key.toLowerCase()),
   )
   const checkKeys =
-    defKeys.size > 0 ? reqKeys.filter((k) => defKeys.has(k.toLowerCase())) : reqKeys
+    // ponytail: no SpecDefs for this (trade, category) means there is no
+    // canonical grammar to compare with, so check NOTHING rather than
+    // everything. The old `: reqKeys` fallback compared free-text keys
+    // (charger_model, cable_run_metres) against the whole product
+    // DESCRIPTION by equality, which can never match — the same trap the
+    // `wattage` case in spec-registry documents. Live 2026-09-04: every
+    // EV charger quote was flagged [spec-guard] and held at
+    // awaiting_tradie_approval, so the customer was promised a quote and
+    // got silence. Categories WITH defs are unaffected; weatherproofConflict
+    // still runs. Add a SPEC_DEFS entry to opt a category back in.
+    defKeys.size > 0 ? reqKeys.filter((k) => defKeys.has(k.toLowerCase())) : []
   if (checkKeys.length === 0) return []
 
   const chosenEff = effectiveProductProps(args.chosenProperties, args.chosenName, checkKeys)

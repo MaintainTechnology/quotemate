@@ -330,3 +330,75 @@ export function ensureChargerSuppliedSeparatelyAssumption<T extends DraftWithTie
     assumptions: [...existing, CHARGER_SUPPLIED_SEPARATELY_ASSUMPTION],
   } as T
 }
+
+/**
+ * Drop a HALLUCINATED, ZERO-PRICED EV charger unit line before the main
+ * grounding pass.
+ *
+ * ponytail: this exists because of an ordering bug, not a new policy. The
+ * real fence (enforceEvChargerCustomerSupplyFence) is wired at run.ts:1406,
+ * but the grounding pass runs at run.ts:866 and bails straight to the
+ * "hold priced draft for tradie review" branch — so on a customer-supplied
+ * charger the fence never got a turn.
+ *
+ * Live 2026-09-04 (Sparky, +61468048422, intake 31799f4f): Opus turned the
+ * WP5 description prefix "Customer to supply - ..." into the ref
+ * `material:customer` and emitted it as a $0 line in all three tiers. That
+ * ref matches no candidate row, so grounding failed 3/3, the quote was held
+ * at quote_integrity_grounding_failed, and the customer — already told
+ * "quote's on its way shortly" — received nothing at all.
+ *
+ * Deliberately narrow, so it can never move money:
+ *   - job_type must be ev_charger;
+ *   - the line must read as a charger UNIT (looksLikeEvChargerUnit);
+ *   - its unit price AND total must both be zero — a priced line is left for
+ *     the real fence and the grounding validator to judge;
+ *   - it must NOT be an installation/labour/assembly line;
+ *   - it must NOT be anchored to a real candidate row (an anchored unit is
+ *     the existing fence's job).
+ * A zero-priced line contributes nothing to any subtotal, so removing it
+ * cannot change a quoted figure — it only removes an ungrounded ref.
+ */
+export function dropUnpricedPhantomEvChargerLines<T extends DraftWithTiers>(
+  draft: T,
+  opts: { jobType?: string | null; candidates?: CandidatePrices | null },
+): { draft: T; dropped: RemovedEvChargerUnit[] } {
+  if (normalise(opts.jobType) !== 'ev_charger') return { draft, dropped: [] }
+
+  const knownIds = new Set<string>(evChargerCatalogueIds(opts.candidates, null))
+  for (const candidate of opts.candidates?.material ?? []) {
+    const id = normalise(candidate.sourceId)
+    if (id) knownIds.add(id)
+  }
+
+  const dropped: RemovedEvChargerUnit[] = []
+  let next: DraftWithTiers = draft
+
+  for (const tierName of TIERS) {
+    const tier = next[tierName] as DraftTier | undefined
+    if (!tier || !Array.isArray(tier.line_items)) continue
+
+    const keep = tier.line_items.filter((line, lineIndex) => {
+      if (isProtectedInstallationLine(line)) return true
+      if (!looksLikeEvChargerUnit(line)) return true
+      const price = Number(line.unit_price_ex_gst ?? 0)
+      const total = Number(line.total_ex_gst ?? 0)
+      if (!(price === 0 && total === 0)) return true
+      // Anchored to a real catalogue row → leave it to the existing fence.
+      if (lineAnchorIds(line).some((id) => knownIds.has(id))) return true
+      dropped.push({
+        tier: tierName,
+        lineIndex,
+        description: String(line.description ?? ''),
+        catalogueId: normalise(line.source) || 'unanchored',
+      })
+      return false
+    })
+
+    if (keep.length !== tier.line_items.length) {
+      next = { ...next, [tierName]: { ...tier, line_items: keep } }
+    }
+  }
+
+  return { draft: next as T, dropped }
+}

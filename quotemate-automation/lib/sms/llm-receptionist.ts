@@ -215,8 +215,16 @@ const SPELLED_NUMBER =
 // statement. A size threshold could not catch "callout is 99" or "gutters
 // run 45 per metre", and a cue-before-digit pattern could not catch
 // "that'll be 75 mate".
+// ponytail: the trailing `for NN` alternative catches an unsigned price
+// ("do it for 450") but must NOT catch a STREET NUMBER. Live 2026-09-04:
+// "that's all locked in for 14 Wilson St, Newtown" matched `for 14`, so
+// assertGroundedReply refused the turn — the customer got "hit a quick snag"
+// instead of the confirmation, AND the same refusal suppressed the EV photo
+// link (step 8b logged "the model wrote a price"). A capitalised word after
+// the digits means an address, not money; a price qualifier is lower-case
+// ("for 450 installed") and still matches.
 const MONEY_CONTEXT =
-  /\b(?:price[sd]?|pricing|cost[sd]?|deposit|fees?|charged?|charges|rates?|hourly|call-?out|bond|invoice|payment|pay|paid|upfront|up-front|gst|ballpark|estimated?|estimates|budget|discount|cheap\w*|each|all\s+up|works?\s+out|comes?\s+to|starting\s+(?:at|from)|as\s+(?:low|little)\s+as|per\s+(?:metre|meter|m2|sqm|square|hour|day|job|sheet|panel))\b|\bfor\s+\d{2,}\b/i
+  /\b(?:price[sd]?|pricing|cost[sd]?|deposit|fees?|charged?|charges|rates?|hourly|call-?out|bond|invoice|payment|pay|paid|upfront|up-front|gst|ballpark|estimated?|estimates|budget|discount|cheap\w*|each|all\s+up|works?\s+out|comes?\s+to|starting\s+(?:at|from)|as\s+(?:low|little)\s+as|per\s+(?:metre|meter|m2|sqm|square|hour|day|job|sheet|panel))\b|\bfor\s+\d{2,}\b(?!\s+[A-Z])/i
 
 // ── Everything else: allowed if it came from somewhere ───────────────
 const NUMBER = /\d[\d,]*(?:\.\d+)?/g

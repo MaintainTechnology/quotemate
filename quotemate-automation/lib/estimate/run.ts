@@ -35,6 +35,7 @@ import { resolveInspectionReason } from './inspection-reason'
 import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
 import {
   CUSTOMER_SUPPLIES_EV_CHARGER,
+  dropUnpricedPhantomEvChargerLines,
   enforceEvChargerCustomerSupplyFence,
   ensureChargerSuppliedSeparatelyAssumption,
 } from './ev-charger-supply'
@@ -862,6 +863,24 @@ export async function runEstimation(
   // line item fails grounding, downgrade the entire quote to inspection.
   // `candidates` was loaded above (before the recipe merge) so the R9
   // appended-extra micro-validation and this pass share one candidate set.
+  // A $0 phantom EV charger unit line (hallucinated ref) must go BEFORE the
+  // grounding pass below, otherwise grounding fails and we bail to the
+  // tradie-review hold at the bottom of this function — which means the real
+  // fence at the customer-supply branch further down never runs. See
+  // dropUnpricedPhantomEvChargerLines for the live case this closes.
+  {
+    const phantom = dropUnpricedPhantomEvChargerLines(draft, {
+      jobType: intake?.job_type as string | null | undefined,
+      candidates,
+    })
+    if (phantom.dropped.length) {
+      draft = phantom.draft
+      cacheLog.ok('dropped unpriced phantom EV charger unit line(s) before grounding', {
+        dropped: phantom.dropped.length,
+        descriptions: phantom.dropped.map((d) => d.description),
+      })
+    }
+  }
   const validateSw = stopwatch()
   let check = validateQuoteGrounding(draft, pricingBook as PricingBookForValidation, candidates)
 

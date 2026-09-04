@@ -105,6 +105,11 @@ const SPEC_DEFS: Record<string, Record<string, SpecDef[]>> = {
     gpo: [{ key: 'amperage' }],
     downlight: [{ key: 'wattage' }],
     outdoor_light: [{ key: 'ip_rating' }],
+    // ev_charger opts back in with the ONE spec that has a canonical
+    // grammar. charger_model / cable_run_metres deliberately stay out:
+    // they are free text and a job dimension, neither of which is a
+    // catalogue product property, so comparing them yields only noise.
+    ev_charger: [{ key: 'phase' }],
   },
   plumbing: {
     hot_water: [{ key: 'energy_source' }, { key: 'litres' }],
