@@ -1336,13 +1336,46 @@ function missingTradeLines(set: ReadonlySet<string>, explicit: boolean): string[
   ]
 }
 
+/** The easy-5 lists in the pilot branches below are the AUTO-QUOTE job_type
+ *  VOCABULARY, not the tenant's service list. Tradies switch extra catalogue
+ *  services on in their Services tab (EV charger, oven/cooktop, fault
+ *  finding, CCTV, PRV…) and those arrive separately, in TENANT SERVICES.
+ *
+ *  Without this line the model read the 5-item opener as an exhaustive scope
+ *  and declined services the tradie had actually ENABLED. Live 2026-09-04,
+ *  Sparky and Electrical3 (both hold "Install EV charger" enabled, and it
+ *  renders in TENANT SERVICES at index 6 and 8 — well inside the 40-row cap):
+ *  turn 1 was "EV charger installs aren't something we take on. We do cover
+ *  downlights, GPOs, ceiling fans, smoke alarms and outdoor lights though",
+ *  reciting the opener list verbatim as if it were the limit. Only when the
+ *  customer pushed back did it re-read the block and self-correct: "Actually
+ *  Jeff, my mistake - EV charger installs are something we do."
+ *
+ *  Applies to the three easy-5 branches only. The roofing and non-pilot
+ *  branches have no easy-5 list to qualify. */
+function easyListNotExhaustiveLines(): string[] {
+  return [
+    '  - The easy-5 list above is the AUTO-QUOTE job_type VOCABULARY, not the full',
+    '    list of what this tradie sells, and the opener list is EXAMPLES, not a limit.',
+    '    Any service in the TENANT SERVICES block is EQUALLY in scope. Before telling',
+    '    a customer we do not do something, CHECK that block: if it is listed there we',
+    '    DO do it — ask its MUST-ASK questions instead of declining. Only decline when',
+    '    the job is absent from that block AND from the easy-5 lists, or is named in',
+    '    DECLINED SERVICES.',
+  ]
+}
+
 export function tradeScopeDirective(trades: ReadonlyArray<string> | undefined): string {
   const set = new Set(trades ?? ['electrical', 'plumbing'])
   const both = set.has('electrical') && set.has('plumbing')
   // Appended to whichever pilot branch is chosen below. extra is empty for
   // a pilot-only tenant; missing is empty for legacy tenants (no explicit
   // trades[]), so those keep no invented declines.
-  const extra = [...extraTradeLines(set), ...missingTradeLines(set, Array.isArray(trades))]
+  const extra = [
+    ...easyListNotExhaustiveLines(),
+    ...extraTradeLines(set),
+    ...missingTradeLines(set, Array.isArray(trades)),
+  ]
   if (both) {
     return [
       'TENANT TRADE SCOPE: this tradie covers BOTH electrical AND plumbing jobs.',
@@ -1369,8 +1402,18 @@ export function tradeScopeDirective(trades: ReadonlyArray<string> | undefined): 
       '    that makes it clear we only do electrical. Example:',
       '      "Apologies <name>, we\'re sparkies - we don\'t do plumbing work.',
       '       You\'ll need a plumber for that one. All the best!"',
+      // "EV chargers" used to sit in this example list. It is NOT on Rule 6's
+      // escalate list (line ~333) — it is on the CONDITIONAL carve-out ("in
+      // scope when TENANT SERVICES lists it"), so naming it here as
+      // out-of-scope electrical work contradicted Rule 6, the TENANT SERVICES
+      // block and customServicesDirective all at once. Live 2026-09-04 the
+      // negative won turn 1 on both Sparky and Electrical3 ("EV charger
+      // installs aren't something we take on") and the model only self-
+      // corrected once the customer pushed back. Examples here must be drawn
+      // from Rule 6's UNCONDITIONAL escalate list, never from the carve-out.
       '  - DO NOT escalate plumbing jobs to a $99 inspection. That\'s for out-of-scope ELECTRICAL',
-      '    work (switchboards, EV chargers, etc.), not for the wrong trade entirely.',
+      '    work (switchboards, rewires, three-phase, mains/underground cabling), not for the',
+      '    wrong trade entirely.',
       ...extra,
     ].join('\n')
   }

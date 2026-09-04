@@ -252,8 +252,24 @@ is a representation the tradie may not be able to honour.
 **R16 — Prose identification only (D3).** If vision identifies the customer's
 existing charger, that may appear in `scope_of_works`, Description of Works or an
 assumption. It must never appear as a line item, carry a price, or reach
-`lookup_material`. A test must assert that no priced line in an EV draft matches
-`looksLikeEvChargerUnit` when the customer supplies the unit.
+`lookup_material`.
+
+> **Amended 2026-09-04 (build review).** This first demanded a test asserting
+> that *no priced line matches `looksLikeEvChargerUnit`*. That invariant is
+> false, and asserting it would fail against a legitimate draft:
+> `enforceEvChargerCustomerSupplyFence` skips protected lines
+> (`isProtectedInstallationLine` — labour, callout, sundry, `assembly:*`,
+> `tradie_manual`) **before** the detector runs, so a priced assembly line
+> reading "Install Tesla Wall Connector (customer supplied)" legitimately
+> survives at full price and matches the detector. The detector is an
+> ambiguity tripwire for *unanchored material* lines, not a naming ban.
+>
+> The testable invariant is the one that actually protects the money: **no
+> photo-derived text may reach a priced MATERIAL line.** Assert instead that a
+> customer-supplied EV draft carrying a charger name only in `scope_of_works` /
+> assumptions produces no `material:`-sourced line matching
+> `looksLikeEvChargerUnit`, and that an unanchored one still fails the whole
+> quote closed to inspection (the existing fence behaviour).
 
 ### D — Delivery
 

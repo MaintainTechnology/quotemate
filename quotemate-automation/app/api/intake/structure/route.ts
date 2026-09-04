@@ -19,6 +19,7 @@ import {
   type ProductChoiceState,
   type ChosenProduct,
 } from '@/lib/sms/product-options'
+import { photoDeclined } from '@/lib/sms/quote-readiness'
 
 // WP9 — feed a mid-chat product pick into the estimate. Flag-gated;
 // OFF (default) ⇒ this never runs and the transcript is unchanged.
@@ -197,6 +198,9 @@ export async function POST(req: Request) {
   // R6(c) — the customer's own phase answer, read straight off the dialog
   // slots so the three-phase gate below never depends on model discretion.
   let dialogRequestedPhase: string | null = null
+  /** Spec ev-charger-location-photo R9 — the customer answered the photo ask
+   *  with "I can't". Computed from the SMS transcript below. */
+  let dialogPhotoDeclined = false
   let leadPushAlreadySent = false
 
   if (sourceChannel === 'sms') {
@@ -353,6 +357,16 @@ export async function POST(req: Request) {
 
     photoPaths = Array.from(new Set([...mmsPhotoPaths, ...uploadedPhotoPaths]))
 
+    // R9 — did the customer decline the photo ask? Same predicate the SMS
+    // readiness gate uses, so the intake records exactly what let the quote
+    // through without a photo.
+    dialogPhotoDeclined = photoDeclined(
+      (messages ?? []).map((m) => ({
+        direction: (m.direction as 'inbound' | 'outbound') ?? 'inbound',
+        body: String(m.body ?? ''),
+      })) as Parameters<typeof photoDeclined>[0],
+    )
+
     log.ok('SMS conversation stitched', {
       messages: messages?.length ?? 0,
       assumptions: (convo.assumptions_made as string[] | null)?.length ?? 0,
@@ -420,6 +434,20 @@ export async function POST(req: Request) {
     inspection_required: intake.inspection_required,
     risks: intake.risks?.length ?? 0,
   })
+
+  // Spec ev-charger-location-photo R9 — record that the customer could not send
+  // a photo, so the tradie sees WHY the estimate has none rather than assuming
+  // the receptionist forgot to ask. Deterministic and SMS-only: the structurer
+  // is never asked to infer it, and it is never set for a job that has photos.
+  if (intake.job_type === 'ev_charger' && dialogPhotoDeclined && photoPaths.length === 0) {
+    const scope = intake.scope as unknown as Record<string, unknown>
+    const specs = (scope?.specs ?? {}) as Record<string, unknown>
+    intake.scope = {
+      ...(scope ?? {}),
+      specs: { ...specs, photo_declined: true },
+    } as unknown as typeof intake.scope
+    log.ok('EV photo declined by customer — recorded on scope.specs (R9)')
+  }
 
   // R6(c) — three-phase is a site-visit call, not a prompt suggestion.
   const phaseGated = enforceSmsThreePhaseInspection(intake, dialogRequestedPhase)

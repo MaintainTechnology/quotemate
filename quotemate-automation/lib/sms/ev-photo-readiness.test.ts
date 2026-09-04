@@ -11,6 +11,8 @@ import {
   type QuoteReadinessService,
 } from './quote-readiness'
 import type { ConversationTurn } from './dialog'
+import { normaliseState } from './extract-slots'
+import { shouldSendPhotoRequest } from './photo-request-trigger'
 
 const EV_SERVICE: QuoteReadinessService = {
   name: 'Install EV charger',
@@ -138,9 +140,147 @@ describe('R9 — a customer who cannot send a photo still gets a quote', () => {
     expect(photoDeclined(history)).toBe(false)
   })
 
+  it('does not read an answer to ANOTHER EV question as a photo decline', () => {
+    // The regression this guards: "don't have" and "can't" used to match free
+    // of any photo noun, and the scan anchored to ANY outbound containing the
+    // word "photo" — so these literal answers to questions 2 and 5 silently
+    // waived the required photo and returned EV to 5 intakes, 0 photos.
+    for (const reply of [
+      "I don't have the charger yet, can you supply one",
+      "we don't have three phase here",
+      "the switchboard is about 8 metres away but I can't be exact",
+    ]) {
+      const history = [
+        turn('outbound', 'Send us a photo of the spot where the charger will go'),
+        turn('inbound', reply),
+      ]
+      expect(photoDeclined(history), reply).toBe(false)
+    }
+  })
+
+  it('only counts a decline that follows the photo ASK, not any mention of photos', () => {
+    // Sonnet's Rule 10 heads-up puts "photo" in outbounds while other questions
+    // are still being asked.
+    const history = [
+      turn('outbound', 'I can send you a photo link once we are done - how far is the switchboard?'),
+      turn('inbound', "I can't be precise, maybe 8 metres"),
+    ]
+    expect(photoDeclined(history)).toBe(false)
+  })
+
   it('ignores a decline sent BEFORE the photo was ever asked for', () => {
     const history = [turn('inbound', "I can't do that"), turn('outbound', 'send us a photo')]
     expect(photoDeclined(history)).toBe(false)
+  })
+})
+
+describe('R4/M1 — asking one question must not answer its neighbours, and a rephrase must not deadlock', () => {
+  it('asking question 1 leaves questions 2-5 outstanding', () => {
+    // All five questions contain the word "charger". A single-shared-word rule
+    // marked 2, 3 and 4 answered the moment the customer replied to 1; a
+    // coverage THRESHOLD instead deadlocked on rephrased asks. Best-match
+    // attribution fixes both.
+    const history = [
+      turn('outbound', EV_CHARGER_FALLBACK_QUESTIONS[0]),
+      turn('inbound', 'l have a Tesla'),
+    ]
+    const r = evaluateQuoteReadiness(base({ history }))
+    expect(r.missing.map((m) => m.code)).toContain('service_question:1')
+  })
+
+  it('walks the five in order, one per turn', () => {
+    for (let n = 0; n < 5; n++) {
+      const r = evaluateQuoteReadiness(base({ history: answeredThrough(n) }))
+      const code = r.missing.find((m) => m.code.startsWith('service_question'))?.code
+      expect(code, `after ${n} answers`).toBe(`service_question:${n}`)
+    }
+  })
+
+  it('a rephrased ask still credits the question the customer answered', () => {
+    // The LLM receptionist writes asks in its own words. A threshold scored
+    // those at zero, so the question stayed missing forever and the clarify cap
+    // escalated a cooperative customer to a $99 inspection.
+    const history = [
+      turn('outbound', 'Whereabouts is it going, garage or carport?'),
+      turn('inbound', 'in the carport out the back'),
+    ]
+    const r = evaluateQuoteReadiness(base({ history }))
+    expect(r.missing.map((m) => m.code)).not.toContain('service_question:2')
+  })
+})
+
+describe('B2 — the clarify counter must survive a round trip through normaliseState', () => {
+  it('carries clarify_gate_count and clarify_missing through', () => {
+    // normaliseState returns a fresh literal, so any key it does not name is
+    // dropped. It was dropping BOTH of these, and every read of
+    // conversation_state goes through it — so the route persisted a counter and
+    // a missing set, then read back 0 and [] on the very next turn. The
+    // progress check could never see progress, and the R24 clarify cap could
+    // never reach its limit, so the safety valve had never once fired.
+    const round = normaliseState({
+      slots: { job_type: 'ev_charger' },
+      sources: {},
+      last_extracted_at: null,
+      clarify_gate_count: 3,
+      clarify_missing: ['service_question:2'],
+    })
+    expect(round.clarify_gate_count).toBe(3)
+    expect(round.clarify_missing).toEqual(['service_question:2'])
+  })
+
+  it('leaves a state that never had them untouched', () => {
+    const round = normaliseState({ slots: {}, sources: {}, last_extracted_at: null })
+    expect(round.clarify_gate_count).toBeUndefined()
+    expect(round.clarify_missing).toBeUndefined()
+  })
+
+  it('ignores junk rather than trusting it', () => {
+    const round = normaliseState({
+      slots: {},
+      sources: {},
+      last_extracted_at: null,
+      clarify_gate_count: 'many',
+      clarify_missing: 'nope',
+    })
+    expect(round.clarify_gate_count).toBeUndefined()
+    expect(round.clarify_missing).toBeUndefined()
+  })
+})
+
+describe('B4/R9 — the photo link is never sent once the requirement is met', () => {
+  const satisfied = (over: Record<string, unknown> = {}) =>
+    shouldSendPhotoRequest({
+      photoRequestToken: 'tok',
+      photoRequestAlreadySent: false,
+      freshIntakeId: null,
+      inflightContinuation: false,
+      decisionAction: 'finish',
+      sonnetRequestedPhoto: false,
+      offerProductChoice: false,
+      jobTypeIsEasy5: true,
+      ...over,
+    })
+
+  it('suppresses the finish-fallback when the photo is already in hand', () => {
+    // Without this the customer who has just SENT a photo, or just told us they
+    // cannot, is immediately texted an upload link.
+    const out = satisfied({ photoRequirementSatisfied: true })
+    expect(out.fire).toBe(false)
+    expect(out.reason).toBe('photo_requirement_satisfied')
+  })
+
+  it('beats every positive trigger, including an explicit Sonnet request', () => {
+    expect(satisfied({ photoRequirementSatisfied: true, sonnetRequestedPhoto: true }).fire).toBe(
+      false,
+    )
+    expect(satisfied({ photoRequirementSatisfied: true, offerProductChoice: true }).fire).toBe(false)
+  })
+
+  it('leaves every other job type exactly as it was', () => {
+    // The flag is optional and only EV sets it.
+    const out = satisfied()
+    expect(out.fire).toBe(true)
+    expect(out.reason).toBe('finish_fallback')
   })
 })
 

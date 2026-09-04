@@ -107,6 +107,7 @@ import {
   clarifyingEnforcementEnabled,
   clarifyingTurnCap,
   decideClarifyGate,
+  photoDeclined,
 } from '@/lib/sms/quote-readiness'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 import { buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
@@ -1723,8 +1724,21 @@ export async function POST(req: Request) {
 
   const fromNumber = params.From
   const toNumber = params.To
-  const inboundBody = (params.Body ?? '').trim()
   const messageSid = params.MessageSid ?? null
+
+  // A MEDIA-ONLY message is not an empty message. Twilio posts Body as an empty
+  // string when the customer attaches a photo and types nothing — which is the
+  // single most natural reply to "send us a photo of the spot". Treating that as
+  // a missing field 400'd the webhook here, ~480 lines before NumMedia is read
+  // and the media is fetched: no storage object, no sms_messages row, no reply,
+  // and Twilio retrying into the same 400. The EV photo gate then looked for a
+  // photo that had been thrown away at the door (spec
+  // ev-charger-location-photo R6). A synthetic body keeps the transcript, the
+  // dedupe key and the LLM turn all working on text.
+  const inboundNumMedia = Number.parseInt(params.NumMedia ?? '0', 10)
+  const inboundHasMedia = Number.isFinite(inboundNumMedia) && inboundNumMedia > 0
+  const inboundRawBody = (params.Body ?? '').trim()
+  const inboundBody = inboundRawBody || (inboundHasMedia ? '[photo]' : '')
 
   if (!fromNumber || !toNumber || !inboundBody) {
     return new Response('Missing required Twilio fields', { status: 400 })
@@ -3609,6 +3623,10 @@ export async function POST(req: Request) {
         .maybeSingle()
       const freshIntakeId = (convoState?.intake_id as string | null) ?? null
       const hasExistingIntake = !!freshIntakeId || quoteAlreadyDrafted
+      // Spec ev-charger-location-photo R9 — set by the readiness block below,
+      // read by the photo-request trigger in step 8b. Declared here so the two
+      // are in the same scope; false for every non-EV job.
+      let evPhotoRequirementSatisfied = false
       // Third duplicate/misroute signal: is this thread owned by another trade?
       // Read off the SAME fresh row rather than a second round trip.
       //
@@ -3659,24 +3677,48 @@ export async function POST(req: Request) {
         // Spec ev-charger-location-photo R6 — does this conversation already
         // hold a customer photo? Either channel counts: an inbound MMS
         // (sms_messages.photo_paths) or the upload link
-        // (sms_conversations.photo_paths). Only read for EV, which is the one
-        // job type that gates on it; best-effort, because losing this read must
+        // (sms_conversations.photo_paths). Best-effort: losing this read must
         // downgrade to "ask for a photo", never fail the turn.
+        //
+        // The job-type test MUST match the one evaluateQuoteReadiness uses
+        // (lib/sms/quote-readiness.ts jobType()): the persisted slot WINS over
+        // this turn's guess. Keying only on decision.job_type_guess meant any
+        // turn where the sticky slot said ev_charger but the model guessed
+        // something else evaluated the EV gate with hasPhoto=false, re-asking a
+        // customer who had already sent their photo.
+        const evJobType =
+          String(conversationState.slots?.job_type ?? decision.job_type_guess ?? '') ===
+          'ev_charger'
         let hasPhoto = false
-        if (decision.job_type_guess === 'ev_charger') {
+        if (evJobType) {
+          // Scoped to THIS job, not the whole thread. One sms_conversations row
+          // is reused across jobs, so an unscoped read let a photo sent for a
+          // previous downlights job silently satisfy the EV requirement for a
+          // returning customer — exactly what the photo reset at the top of this
+          // route exists to prevent. photo_request_sent_at is that reset's own
+          // boundary marker, so reuse it as the session floor.
+          const sessionFloor = (conversation.photo_request_sent_at as string | null) ?? null
           try {
-            const [convo, msgs] = await Promise.all([
-              supabase
-                .from('sms_conversations')
-                .select('photo_paths')
-                .eq('id', conversationId)
-                .maybeSingle<{ photo_paths: string[] | null }>(),
-              supabase
-                .from('sms_messages')
-                .select('photo_paths')
-                .eq('conversation_id', conversationId)
-                .not('photo_paths', 'is', null),
-            ])
+            const convoQ = supabase
+              .from('sms_conversations')
+              .select('photo_paths')
+              .eq('id', conversationId)
+              .maybeSingle<{ photo_paths: string[] | null }>()
+            let msgQ = supabase
+              .from('sms_messages')
+              .select('photo_paths')
+              .eq('conversation_id', conversationId)
+            if (sessionFloor) msgQ = msgQ.gte('created_at', sessionFloor)
+            const [convo, msgs] = await Promise.all([convoQ, msgQ])
+            // supabase-js RESOLVES {data,error}; it does not throw, so the
+            // try/catch alone would let a failed read look like "no photo".
+            if (convo.error || msgs.error) {
+              console.error('[sms/inbound:after] EV photo lookup errored (non-fatal)', {
+                conversationId,
+                convoError: convo.error?.message ?? null,
+                msgsError: msgs.error?.message ?? null,
+              })
+            }
             hasPhoto =
               (convo.data?.photo_paths?.length ?? 0) > 0 ||
               (msgs.data ?? []).some(
@@ -3689,6 +3731,10 @@ export async function POST(req: Request) {
             })
           }
         }
+        // Hoisted for step 8b: once the requirement is met (a photo, or a
+        // decline) the photo-request SMS must be suppressed, or the
+        // finish-fallback texts an upload link to someone who just satisfied it.
+        evPhotoRequirementSatisfied = evJobType && (hasPhoto || photoDeclined(turns))
         const readiness = evaluateQuoteReadiness({
           action: decision.action,
           jobTypeGuess: decision.job_type_guess,
@@ -3757,11 +3803,20 @@ export async function POST(req: Request) {
             }
           } else {
             // gate.mode === 'ask' — block finish, ask one more question.
+            //
+            // Spec ev-charger-location-photo R6/R7 — when the thing we are
+            // blocked on IS the photo, the upload link has to travel with the
+            // ask. Blanket-clearing request_photo_link here falsified all three
+            // photo triggers (photo-request-trigger.ts fires on
+            // sonnetRequestedPhoto / finish / offerProductChoice), so on the one
+            // turn the customer is told a photo is required they were given no
+            // way to send one, and MMS was the only channel left.
+            const blockedOnEvPhoto = readiness.missing.some((m) => m.code === 'ev_photo')
             decision = {
               ...decision,
               action: 'ask',
               ready_for_intake: false,
-              request_photo_link: false,
+              request_photo_link: blockedOnEvPhoto,
               offer_product_choice: false,
               reply_to_send: readiness.reply ?? 'Quick one before I quote it - can you confirm the missing detail?',
             }
@@ -3812,6 +3867,9 @@ export async function POST(req: Request) {
         offerProductChoice: decision.offer_product_choice === true,
         // "is this job type allowed a photo request" — the easy-5 plus EV (R7).
         jobTypeIsEasy5: PHOTO_ELIGIBLE_JOB_TYPES.has(decision.job_type_guess),
+        // R9 — never re-ask once the customer has sent one or told us they
+        // cannot. Only EV sets this; every other job keeps the old behaviour.
+        photoRequirementSatisfied: evPhotoRequirementSatisfied,
       })
       const shouldSendPhotoRequest = photoTrigger.fire
       if (!shouldSendPhotoRequest) {

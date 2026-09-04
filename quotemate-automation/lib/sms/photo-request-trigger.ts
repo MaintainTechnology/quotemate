@@ -49,6 +49,16 @@ export type PhotoRequestTriggerInput = {
   offerProductChoice: boolean
   /** Job is one of the easy-5 (auto-quoteable) types. */
   jobTypeIsEasy5: boolean
+  /** The job's photo requirement is ALREADY satisfied — the customer has sent
+   *  one, or has said they cannot (spec ev-charger-location-photo R9). Only EV
+   *  charger sets this today; every other job type leaves it false and keeps
+   *  the old behaviour exactly.
+   *
+   *  Without it the finish-fallback fires on the very turn the gate PASSES, so
+   *  the customer who just sent a photo — or just told us they could not — is
+   *  immediately asked for one again, contradicting R9's "never asked again in
+   *  that conversation". */
+  photoRequirementSatisfied?: boolean
 }
 
 export type PhotoRequestTriggerOutcome =
@@ -63,6 +73,7 @@ export type PhotoRequestTriggerOutcome =
         | 'escalate_inspection'
         | 'end_conversation'
         | 'job_type_not_easy5'
+        | 'photo_requirement_satisfied'
         | 'no_trigger'
     }
 
@@ -77,6 +88,12 @@ export function shouldSendPhotoRequest(
   if (input.decisionAction === 'escalate_inspection') return { fire: false, reason: 'escalate_inspection' }
   if (input.decisionAction === 'end_conversation') return { fire: false, reason: 'end_conversation' }
   if (!input.jobTypeIsEasy5) return { fire: false, reason: 'job_type_not_easy5' }
+  // Already have what we asked for (or a decline) — asking again is noise, and
+  // for EV it directly contradicts R9. Sits with the other absolute
+  // suppressions so it beats every trigger below, including finish_fallback.
+  if (input.photoRequirementSatisfied) {
+    return { fire: false, reason: 'photo_requirement_satisfied' }
+  }
 
   // Triggers — any one fires the photo, in priority order so audit
   // logs name the highest-signal trigger when multiple are true.

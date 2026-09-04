@@ -61,22 +61,69 @@ export const EV_CHARGER_FALLBACK_QUESTIONS: readonly string[] = [
 export const EV_PHOTO_QUESTION =
   "Last thing - send us a photo of the spot where the charger will go and I'll get your quote across."
 
-/** Customer said they cannot send a photo (spec R9). Without this escape a
- *  customer who is not at the property is re-asked to the cap and converted to
- *  a $99 inspection — the opposite of what the photo is for. Deliberately
- *  narrow: it must read as an inability or refusal, not as any negative. */
-const PHOTO_DECLINE_RE =
-  /\b(can'?t|cannot|can not|unable to|won'?t be able|no camera|not there|not at (?:the )?(?:property|house|home)|not home|later|skip|no photo|without (?:a )?photo|haven'?t got|don'?t have)\b/i
+/**
+ * Customer said they cannot send a photo (spec R9). Without this escape a
+ * customer who is not at the property is re-asked to the cap and converted to
+ * a $99 inspection — the opposite of what the photo is for.
+ *
+ * Deliberately narrow, in two halves:
+ *
+ *  SELF-CONTAINED — the phrase can only be about a photo ("no camera",
+ *  "not at the property"). Safe on its own.
+ *
+ *  NEEDS A PHOTO NOUN — bare inability words. An earlier version listed
+ *  can't / don't have / later / skip as free-floating alternates, which
+ *  matched ordinary answers to the OTHER EV questions and silently waived the
+ *  requirement: "I don't have the charger yet, can you supply one" is a literal
+ *  answer to question 2, and "we don't have three phase" answers question 5.
+ *  Both were being read as "no photo".
+ */
+const PHOTO_DECLINE_SELF_CONTAINED_RE =
+  /\b(no camera|not at (?:the )?(?:property|house|home)|not there right now|no photo|without (?:a )?photo)\b/i
+// "later" and "skip" are deliberately ABSENT: "I'll send it later" is an
+// intention to comply, not a refusal, and waiving the photo on it would lose the
+// render for a customer who was about to provide one. If they never do, the gate
+// simply asks again, which is the correct outcome.
+const PHOTO_DECLINE_INABILITY_RE =
+  /\b(can'?t|cannot|can not|unable to|won'?t be able|haven'?t got|don'?t have|no way to)\b/i
+const PHOTO_NOUN_RE = /\b(photo|photos|picture|pictures|pic|pics|snap|image|images|camera)\b/i
 
-/** True when an inbound turn declines the photo ask (spec R9). */
+/** Topic words belonging to the OTHER EV questions. Their presence means the
+ *  customer is answering something else, so a bare "don't have" in the same
+ *  message is about the charger or the phase, not about the photo:
+ *  "I don't have the charger yet" and "we don't have three phase" are literal
+ *  answers to questions 2 and 5. Pronouns are useless here — an earlier version
+ *  accepted "one", which matched "can you supply one". */
+const EV_TOPIC_NOUN_RE =
+  /\b(charger|chargers|switchboard|phase|garage|carport|tesla|byd|vehicle|metre|metres|meter|meters|board|capacity|wall)\b/i
+
+/** The outbound that actually ASKS for the photo — not merely any message that
+ *  happens to mention one. Sonnet's Rule 10 heads-up puts the word "photo" in
+ *  outbounds while other questions are still being asked, so matching on the
+ *  bare word let an ordinary answer to a different question count as a decline. */
+const PHOTO_ASK_RE = /\b(send|upload|snap|take|share|attach)\b[^.?!]{0,60}\b(photo|photos|picture|pictures|pic|pics|image)\b/i
+
+/** True when the customer declined the photo ASK (spec R9). */
 export function photoDeclined(history: ConversationTurn[]): boolean {
   for (let i = 0; i < history.length; i++) {
     const turn = history[i]
     if (turn.direction !== 'outbound') continue
-    if (!/photo|picture|pic\b|snap/i.test(turn.body)) continue
-    // Only an inbound AFTER the photo ask can decline it.
+    if (!PHOTO_ASK_RE.test(turn.body)) continue
+    // Only the FIRST inbound after the ask can answer it. Scanning further
+    // would let a much later, unrelated message retro-decline.
     const laterInbound = history.slice(i + 1).find((t) => t.direction === 'inbound')
-    if (laterInbound && PHOTO_DECLINE_RE.test(laterInbound.body)) return true
+    if (!laterInbound) continue
+    const body = laterInbound.body
+    if (PHOTO_DECLINE_SELF_CONTAINED_RE.test(body)) return true
+    // A bare inability counts when the message names a photo ("can't send a
+    // pic"), or when it names no other EV topic at all ("can't sorry") — a
+    // topicless refusal right after the photo ask is about the photo.
+    if (
+      PHOTO_DECLINE_INABILITY_RE.test(body) &&
+      (PHOTO_NOUN_RE.test(body) || !EV_TOPIC_NOUN_RE.test(body))
+    ) {
+      return true
+    }
   }
   return false
 }
@@ -453,7 +500,9 @@ function missingServiceQuestion(
     String(service.category ?? '').trim().toLowerCase() === 'ev_charger' ? 0.4 : 0
   for (let i = 0; i < questions.length; i++) {
     const question = questions[i]
-    if (!questionWasAnswered(input.history ?? [], question, proactiveTopicCoverage)) {
+    // Siblings let Path A attribute an ask to ONE question rather than to every
+    // question that shares a word with it.
+    if (!questionWasAnswered(input.history ?? [], question, proactiveTopicCoverage, questions)) {
       // The code identifies WHICH question is outstanding (spec
       // ev-charger-location-photo R4). It used to be the bare string
       // 'service_question' for every question, and the route's progress check
@@ -552,31 +601,47 @@ function questionWasAnswered(
   history: ConversationTurn[],
   question: string,
   proactiveTopicCoverage = 0,
+  siblings: readonly string[] = [],
 ): boolean {
   const qWords = serviceKeywords(question)
   if (qWords.length === 0) return false
 
-  // How many of this question's topic words must appear before we believe it
-  // was the one asked/answered. 1 for a normal service (its questions are about
-  // different things), but a coverage FRACTION where the caller asked for one.
-  //
-  // This applies to BOTH paths. It used to gate Path B only, which left a hole
-  // the moment a service had several questions sharing a word: all five EV
-  // questions contain "charger", so asking question 1 put "charger" in an
-  // outbound, and the customer's reply then marked questions 2, 3 and 4 answered
-  // too — the receptionist would ask one thing and consider the set complete.
+  // Path B's coverage threshold. A FRACTION of the question's topic words when
+  // the caller asked for one (EV: 0.4), else a single hit. This guards the
+  // customer's own opening message — "install an EV charger" shares one word
+  // with several EV questions and must not answer any of them.
   const requiredHits =
     proactiveTopicCoverage > 0
       ? Math.max(1, Math.ceil(qWords.length * proactiveTopicCoverage))
       : 1
 
-  // Path A — outbound echo of the stored question + substantive reply.
+  // Which OTHER questions this outbound could be, so an ask can be attributed
+  // to one question rather than to every question sharing a word with it.
+  const siblingWords = siblings
+    .filter((s) => s !== question)
+    .map((s) => serviceKeywords(s))
+
+  // Path A — an outbound ASKED this question, and a substantive reply followed.
+  //
+  // Attribution is BEST-MATCH, not a threshold. A threshold fails both ways
+  // when a service's questions are near-neighbours: too low and asking one
+  // marks its siblings answered (all five EV questions contain "charger"); too
+  // high and a rephrased ask from the LLM receptionist scores nothing, so the
+  // question sticks as missing forever and the clarify cap escalates a
+  // cooperative customer to a $99 inspection. Requiring this question to be the
+  // STRICTLY best match keeps a single shared word from bleeding across
+  // questions while still firing on one distinctive word.
   for (let i = 0; i < history.length; i++) {
     const turn = history[i]
     if (turn.direction !== 'outbound') continue
     const lower = turn.body.toLowerCase()
     const overlap = qWords.filter((w) => lower.includes(w)).length
-    if (overlap < requiredHits) continue
+    if (overlap === 0) continue
+    const bestSibling = siblingWords.reduce(
+      (best, words) => Math.max(best, words.filter((w) => lower.includes(w)).length),
+      0,
+    )
+    if (overlap <= bestSibling) continue
     const laterInbound = history.slice(i + 1).find((t) => t.direction === 'inbound')
     if (laterInbound && !isBareAffirmation(laterInbound.body)) return true
   }

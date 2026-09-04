@@ -133,6 +133,12 @@ export type ConversationState = {
   slots: Slots
   sources: SlotSources
   last_extracted_at: string | null
+  /** R24 clarify gate — how many CONSECUTIVE turns the readiness gate has
+   *  blocked a finish, and which facts were missing on the last blocked turn.
+   *  The route writes both (app/api/sms/inbound/route.ts) and reads them back
+   *  on the next turn to decide whether the customer made progress. */
+  clarify_gate_count?: number
+  clarify_missing?: string[]
 }
 
 export const EMPTY_STATE: ConversationState = {
@@ -147,10 +153,23 @@ export const EMPTY_STATE: ConversationState = {
 export function normaliseState(raw: unknown): ConversationState {
   if (!raw || typeof raw !== 'object') return { ...EMPTY_STATE }
   const r = raw as Partial<ConversationState>
+  // clarify_gate_count / clarify_missing MUST be carried through. This function
+  // returns a fresh literal, so any key not named here is silently dropped —
+  // and because every read of conversation_state goes through it, the route was
+  // reading back its own persisted counter as 0 and its own missing set as []
+  // on EVERY turn. Two consequences, both live: the "did the customer make
+  // progress" comparison always said no, and the R24 clarify cap could never
+  // reach its limit, so the safety valve that converts a stuck conversation to
+  // a $99 inspection had never once fired.
+  const count = Number(r.clarify_gate_count)
   return {
     slots: (r.slots && typeof r.slots === 'object') ? r.slots as Slots : {},
     sources: (r.sources && typeof r.sources === 'object') ? r.sources as SlotSources : {},
     last_extracted_at: r.last_extracted_at ?? null,
+    ...(Number.isFinite(count) && count > 0 ? { clarify_gate_count: count } : {}),
+    ...(Array.isArray(r.clarify_missing)
+      ? { clarify_missing: r.clarify_missing.filter((c): c is string => typeof c === 'string') }
+      : {}),
   }
 }
 
