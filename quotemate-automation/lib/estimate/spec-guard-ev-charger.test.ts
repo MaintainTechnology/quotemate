@@ -29,7 +29,7 @@ const REQUESTED = {
   phase: 'single-phase',
   charger_model: 'Tesla Wall Connector',
   spare_capacity: 'unknown',
-  cable_run_metres: 8,
+  cable_run_metres: '8',
 }
 
 /** Verbatim line-item description from the live quote. */

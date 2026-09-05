@@ -2,13 +2,19 @@
 // Reached via the SMS link "Tap here to add 1-2 photos: {APP_URL}/upload/{token}".
 // Same trust model as the quote page — token is unguessable.
 //
-// Design: Maintain Technology brand (dark navy canvas, orange accent,
-// numbered cards, JetBrains Mono labels). Matches the look of /q/[token]
-// so customers see one consistent visual identity across the journey.
+// Design: matches /q/[token] so the customer sees one identity across the
+// journey — and, like that page, it is WHITE-LABEL. The header wears the
+// TRADIE's logo, never ours. Live 2026-09-04: a customer opening an EV charger
+// photo link was shown the Maintain Technology wordmark, so the page appeared
+// to belong to a company they had never dealt with.
 
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
+import { businessInitials } from '@/lib/brand/monogram'
 import { UploadForm } from './UploadForm'
+
+/** The tradie whose token this is. Null only for a legacy tenant-less row. */
+type TenantBrand = { name: string; logoUrl: string | null } | null
 
 export const dynamic = 'force-dynamic'
 
@@ -25,28 +31,55 @@ export default async function UploadPage(props: { params: Promise<{ token: strin
   //   • sms_conversations.photo_request_token — SMS-agent flow
   const { data: call } = await supabase
     .from('calls')
-    .select('id, photo_request_token, photos_completed_at')
+    .select('id, photo_request_token, photos_completed_at, tenant_id')
     .eq('photo_request_token', token)
     .maybeSingle()
 
-  let resolved: { source: 'call' | 'sms'; completedAt: string | null } | null = null
+  let resolved: { source: 'call' | 'sms'; completedAt: string | null; tenantId: string | null } | null = null
   if (call) {
-    resolved = { source: 'call', completedAt: call.photos_completed_at as string | null }
+    resolved = {
+      source: 'call',
+      completedAt: call.photos_completed_at as string | null,
+      tenantId: (call.tenant_id as string | null) ?? null,
+    }
   } else {
     const { data: convo } = await supabase
       .from('sms_conversations')
-      .select('id, photo_request_token, photos_completed_at')
+      .select('id, photo_request_token, photos_completed_at, tenant_id')
       .eq('photo_request_token', token)
       .maybeSingle()
     if (convo) {
-      resolved = { source: 'sms', completedAt: convo.photos_completed_at as string | null }
+      resolved = {
+        source: 'sms',
+        completedAt: convo.photos_completed_at as string | null,
+        tenantId: (convo.tenant_id as string | null) ?? null,
+      }
+    }
+  }
+
+  // This page is WHITE-LABEL: the customer believes they are dealing with their
+  // tradie, not with us. Resolve the tradie who owns the token so the header can
+  // wear their mark. Best-effort — a lookup failure falls back to the initials
+  // monogram, and only a tenant-less legacy token reaches the wordmark.
+  let brand: TenantBrand = null
+  if (resolved?.tenantId) {
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('business_name, logo_url')
+      .eq('id', resolved.tenantId)
+      .maybeSingle()
+    if (tenant) {
+      brand = {
+        name: (tenant.business_name as string | null) ?? '',
+        logoUrl: (tenant.logo_url as string | null) ?? null,
+      }
     }
   }
 
   // ─── Invalid / expired link ───
   if (!resolved) {
     return (
-      <Shell>
+      <Shell brand={brand}>
         <StateCard
           eyebrow="Invalid link"
           title="LINK NOT FOUND"
@@ -60,7 +93,7 @@ export default async function UploadPage(props: { params: Promise<{ token: strin
   // ─── Already received ───
   if (resolved.completedAt) {
     return (
-      <Shell>
+      <Shell brand={brand}>
         <StateCard
           eyebrow="All done"
           title="PHOTOS RECEIVED"
@@ -73,7 +106,7 @@ export default async function UploadPage(props: { params: Promise<{ token: strin
 
   // ─── Live upload state ───
   return (
-    <Shell>
+    <Shell brand={brand}>
       <section>
         <span className="font-mono text-[0.7rem] uppercase tracking-[0.15em] text-text-dim">
           Photos · QuoteMax intake
@@ -150,16 +183,14 @@ export default async function UploadPage(props: { params: Promise<{ token: strin
    they should be extracted to a shared component then.
    ═══════════════════════════════════════════════════════════════ */
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, brand }: { children: React.ReactNode; brand?: TenantBrand }) {
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri relative">
       <TopographicBackground />
 
       <header className="relative z-10 border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="inline-flex items-center group" aria-label="Maintain Technology">
-            <MaintainLogo className="h-8 sm:h-9 w-auto transition-transform group-hover:-translate-y-0.5" />
-          </Link>
+          <BrandMark brand={brand} />
           <div className="text-right">
             <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">Photo upload</div>
           </div>
@@ -210,6 +241,52 @@ function StateCard({
         {body}
       </p>
     </section>
+  )
+}
+
+/**
+ * The mark in the header. Precedence mirrors app/q/_chrome/parts.tsx Letterhead:
+ *   1. the tradie's uploaded logo (tenants.logo_url)
+ *   2. their initials, derived from business_name at render time
+ *   3. our wordmark — ONLY for a legacy token with no tenant, where there is no
+ *      tradie to represent. A customer of "Bob's Plumbing" must never be shown
+ *      our brand as Bob's.
+ * Our wordmark also stops linking to the marketing site when a tradie owns the
+ * page — that journey belongs to them.
+ */
+function BrandMark({ brand }: { brand?: TenantBrand }) {
+  if (brand?.logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={brand.logoUrl}
+        alt={brand.name ? `${brand.name} logo` : 'Business logo'}
+        className="h-8 sm:h-9 w-auto max-w-[220px] object-contain block shrink-0"
+      />
+    )
+  }
+
+  const initials = brand ? businessInitials(brand.name) : ''
+  if (initials) {
+    return (
+      <span className="inline-flex items-center gap-3">
+        <span
+          aria-hidden
+          className="inline-grid place-items-center h-9 w-9 shrink-0 rounded-sm bg-accent text-ink-deep font-bold text-base tracking-tight"
+        >
+          {initials}
+        </span>
+        <span className="font-semibold uppercase tracking-tight text-sm sm:text-base text-text-pri">
+          {brand?.name}
+        </span>
+      </span>
+    )
+  }
+
+  return (
+    <Link href="/" className="inline-flex items-center group" aria-label="QuoteMax">
+      <MaintainLogo className="h-8 sm:h-9 w-auto transition-transform group-hover:-translate-y-0.5" />
+    </Link>
   )
 }
 
