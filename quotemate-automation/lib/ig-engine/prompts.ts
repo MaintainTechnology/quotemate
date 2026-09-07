@@ -356,11 +356,36 @@ export function pickAnchorLine(ctx: PromptContext): PromptLineItem | null {
     /\bterminal\b/i.test(desc) ||
     /^fittings,/i.test(desc)                 // generic "fittings, ..." line
 
-  const materials = ctx.lineItems.filter(li =>
-    li.tier === tier &&
-    (li.source === 'material' || !li.source) &&
-    !isSundries(li.description)
-  )
+  // A material line's `source` is a TYPED REF — "material:<uuid>" — not the
+  // bare string "material". The old equality check therefore matched almost
+  // nothing once typed refs landed, pickAnchorLine returned null on quote
+  // after quote, and validate-inputs rejected every render with
+  // [no_anchor_product] before a single model call. The evidence is in the
+  // data: 45 quotes reached preview_status='ready', the last of them
+  // 2026-06-24, and not one since. Untyped legacy lines (no source at all)
+  // still count, which is what kept the old check working before the change.
+  const isMaterialSource = (s: string | null | undefined): boolean => {
+    const v = String(s ?? '').trim().toLowerCase()
+    return v === '' || v === 'material' || v.startsWith('material:')
+  }
+
+  const onTier = ctx.lineItems.filter(li => li.tier === tier && !isSundries(li.description))
+  const materials = onTier.filter(li => isMaterialSource(li.source))
+
+  // EV charger is the one job where the SUBJECT of the render is never a
+  // material row: the customer supplies the charger, so the only line naming
+  // it is the install assembly ("Customer to supply — Tesla Wall Connector;
+  // install on a new dedicated circuit"). The material lines on that tier are
+  // incidental components — an RCBO, a length of cable — and anchoring on one
+  // tells Gemini the headline product is a safety switch, which is what it
+  // would then draw. Prefer the assembly for this job type only; every other
+  // trade keeps material-first ordering exactly as before.
+  if (String(ctx.intake?.job_type ?? '').trim().toLowerCase() === 'ev_charger') {
+    const assembly = onTier.find(li =>
+      String(li.source ?? '').trim().toLowerCase().startsWith('assembly:'))
+    if (assembly) return assembly
+  }
+
   if (materials.length === 0) return null
   const matchByCount = count !== null
     ? materials.find(m => m.quantity === count)
