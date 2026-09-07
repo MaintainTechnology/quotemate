@@ -338,6 +338,25 @@ function buildCountBlock(jobType: string, count: number | null, jobLabel: string
 //   4. Otherwise pick the first remaining material
 //   5. Return null if no anchor can be derived; the prompt then falls
 //      back to the generic job-type label.
+/**
+ * Is this line item a MATERIAL?
+ *
+ * A line's `source` is a TYPED REF — "material:<uuid>" — not the bare string
+ * "material". Both call sites used to compare with ===, so once typed refs
+ * landed they matched only legacy untyped lines: pickAnchorLine returned null
+ * and validate-inputs refused every render with [no_anchor_product] before a
+ * single model call, while the "specific products to render" block went out
+ * empty. The data dates it — 45 quotes reached preview_status='ready', the
+ * last on 2026-06-24, none since.
+ *
+ * Untyped legacy lines (no source at all) still count; that is what kept the
+ * old equality check working right up until typed refs arrived.
+ */
+export function isMaterialSource(source: string | null | undefined): boolean {
+  const v = String(source ?? '').trim().toLowerCase()
+  return v === '' || v === 'material' || v.startsWith('material:')
+}
+
 export function pickAnchorLine(ctx: PromptContext): PromptLineItem | null {
   if (!ctx.lineItems || ctx.lineItems.length === 0) return null
   const tier = ctx.quote?.selected_tier ?? 'better'
@@ -355,19 +374,6 @@ export function pickAnchorLine(ctx: PromptContext): PromptLineItem | null {
     /\bclip\b/i.test(desc) ||
     /\bterminal\b/i.test(desc) ||
     /^fittings,/i.test(desc)                 // generic "fittings, ..." line
-
-  // A material line's `source` is a TYPED REF — "material:<uuid>" — not the
-  // bare string "material". The old equality check therefore matched almost
-  // nothing once typed refs landed, pickAnchorLine returned null on quote
-  // after quote, and validate-inputs rejected every render with
-  // [no_anchor_product] before a single model call. The evidence is in the
-  // data: 45 quotes reached preview_status='ready', the last of them
-  // 2026-06-24, and not one since. Untyped legacy lines (no source at all)
-  // still count, which is what kept the old check working before the change.
-  const isMaterialSource = (s: string | null | undefined): boolean => {
-    const v = String(s ?? '').trim().toLowerCase()
-    return v === '' || v === 'material' || v.startsWith('material:')
-  }
 
   const onTier = ctx.lineItems.filter(li => li.tier === tier && !isSundries(li.description))
   const materials = onTier.filter(li => isMaterialSource(li.source))
@@ -681,7 +687,7 @@ function buildCustomerPrefsBlock(ctx: PromptContext): string {
     }
     const materialItems = (lineItems ?? []).filter(li =>
       li.tier === (quote.selected_tier ?? 'better') &&
-      (li.source === 'material' || !li.source)
+      isMaterialSource(li.source)
     )
     if (materialItems.length > 0) {
       lines.push(`Specific products to render (from the ${tierPlain} tier line items):`)
