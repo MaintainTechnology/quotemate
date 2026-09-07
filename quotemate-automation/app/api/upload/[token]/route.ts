@@ -204,11 +204,76 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     log.err('intakes.photo_paths mirror threw', e?.message ?? String(e))
   }
 
-  // We deliberately do NOT re-trigger /api/intake/structure here. The intake/estimate
-  // chain runs in parallel after the call ends, racing to produce a quote within
-  // ~70s. By the time photos arrive, the quote SMS may already have gone out.
-  // Photos are stored for AUDIT and future tradie review. v2: queue a re-quote if
-  // photos reveal risks the transcript missed.
+  // ─── Resume a conversation that was WAITING on this photo ───────────
+  // The note below is still true for VOICE, where the intake/estimate chain
+  // already raced to a quote while the call was ending, and for any SMS thread
+  // that has already produced an intake: there the photo is a late addition and
+  // re-triggering would duplicate work.
+  //
+  // It is NOT true for an SMS thread with no intake yet. There the photo is a
+  // PREREQUISITE — the receptionist said "need a quick photo of the install spot
+  // to lock it in" and stopped. Nothing else watches this table: no cron sweeps
+  // photos_completed_at, and the customer has no reason to text again because
+  // they did exactly what was asked. Live 2026-09-06, Electrical3 conversation
+  // 8db5259f: every slot collected, photo uploaded at 22:05:26, and then silence
+  // — intake_id NULL, no quote, thread still `open` a day later.
+  //
+  // /api/intake/structure is the same endpoint the SMS route calls on `finish`,
+  // with the same CRON_SECRET auth, and it is idempotent by conversation_id
+  // (it short-circuits when convo.intake_id is already set), so firing it here
+  // cannot double-quote a thread that raced us.
+  if (resolved.source === 'sms') {
+    after(async () => {
+      try {
+        const { data: convo } = await supabase
+          .from('sms_conversations')
+          .select('id, intake_id, status, conversation_state')
+          .eq('id', resolved.ownerId)
+          .maybeSingle()
+
+        if (!convo) return
+        if (convo.intake_id) {
+          log.ok('resume skipped — conversation already has an intake', { intake_id: convo.intake_id })
+          return
+        }
+        if (convo.status === 'closed') {
+          log.ok('resume skipped — conversation is closed')
+          return
+        }
+        // Readiness proxy: the dialog must have identified WHAT the job is.
+        // Without a job_type there is nothing to quote and structuring would
+        // mint a junk intake from a thread that never got started.
+        const jobType = (convo.conversation_state as { slots?: { job_type?: string } } | null)
+          ?.slots?.job_type
+        if (!jobType) {
+          log.ok('resume skipped — no job_type on the conversation yet')
+          return
+        }
+
+        log.step('photo was the last thing missing — resuming intake/structure', {
+          conversation_id: resolved.ownerId,
+          job_type: jobType,
+        })
+        const res = await fetch(`${process.env.APP_URL}/api/intake/structure`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.CRON_SECRET}`,
+          },
+          body: JSON.stringify({ conversationId: resolved.ownerId, sourceChannel: 'sms' }),
+        })
+        if (!res.ok) {
+          log.err('resume handoff rejected', `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+        } else {
+          log.ok('resume handoff accepted — quote pipeline running')
+        }
+      } catch (e: any) {
+        // Never fail the upload because the resume failed: the photos are
+        // already stored, and the tradie can still quote from the dashboard.
+        log.err('resume handoff threw', e?.message ?? String(e))
+      }
+    })
+  }
 
   // ─── AI preview trigger 1 (photo upload) ───
   // Customer just submitted photos. Find the linked quote (via the

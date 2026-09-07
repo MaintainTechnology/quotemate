@@ -357,6 +357,48 @@ export async function POST(req: Request) {
 
     photoPaths = Array.from(new Set([...mmsPhotoPaths, ...uploadedPhotoPaths]))
 
+    // RE-SIGN before vision. The URLs stored on sms_messages.photo_urls and
+    // sms_conversations.photo_urls were signed when the photo arrived and last
+    // 24 HOURS. structureIntake hands them to Anthropic, which fetches them
+    // server-side — so the moment a conversation is structured more than a day
+    // after its earliest photo, every model in the cascade fails identically
+    // with "Unable to download the file. Please verify the URL and try again."
+    // and the whole route 500s. No intake, no quote, no SMS: the customer just
+    // never hears back.
+    //
+    // Live 2026-09-06, Electrical3 conversation 4caf84f9: an MMS photo arrived
+    // 01:15, the EV charger thread resumed 21h later, and by the time the
+    // intake ran the MMS URL returned
+    // {"error":"InvalidJWT","message":"\"exp\" claim timestamp check failed"}.
+    // Opus 4.8 -> Opus 4.7 -> Sonnet 4.6 all failed on the same dead link.
+    //
+    // photo_paths is the permanent handle and is already aggregated above, so
+    // re-sign from it and only fall back to a stored URL for a legacy row that
+    // has no path. Anything that fails to sign is dropped rather than passed
+    // on: a missing photo costs detail, a dead URL costs the entire quote.
+    if (photoPaths.length > 0) {
+      const freshlySigned: string[] = []
+      for (const path of photoPaths) {
+        const { data, error } = await supabase
+          .storage
+          .from('intake-photos')
+          .createSignedUrl(path, 60 * 60) // one hour outlives any structuring run
+        if (error || !data?.signedUrl) {
+          log.err('could not re-sign intake photo — dropping it from vision', error?.message ?? 'no url', { path })
+          continue
+        }
+        freshlySigned.push(data.signedUrl)
+      }
+      // Legacy rows that predate photo_paths keep their stored URL.
+      const pathless = photoUrls.filter((u) => !u.includes('/intake-photos/'))
+      photoUrls = Array.from(new Set([...freshlySigned, ...pathless]))
+      log.ok('re-signed intake photos for vision', {
+        paths: photoPaths.length,
+        signed: freshlySigned.length,
+        legacy_kept: pathless.length,
+      })
+    }
+
     // R9 — did the customer decline the photo ask? Same predicate the SMS
     // readiness gate uses, so the intake records exactly what let the quote
     // through without a photo.
