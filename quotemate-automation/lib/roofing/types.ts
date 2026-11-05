@@ -490,3 +490,10 @@ export type MultiRoofQuote = {
    */
   property_context?: RoofPropertyContext | null
 }
+
+/** A measurement from a builder's plans, wholly (`plans`) or with existing
+ *  roofs measured from aerial data (`hybrid`, TKO-21): it has no customer
+ *  page, and keeps its plan geometry through an edit. */
+export function isPlanMeasurement(provider: unknown): boolean {
+  return provider === 'plans' || provider === 'hybrid'
+}

@@ -42,19 +42,25 @@ export type EdgeOverride = {
   storeys?: number | null
 }
 
+/** How the stored quote was measured. A measurement from a builder's plans
+ *  has an exact footprint, so a pitch edit recomputes its sloped area from
+ *  the pitch itself rather than from the pitch bucket's factor (TKO-20). */
+export type RepriceOptions = { planGeometry?: boolean }
+
 /** PURE — apply overrides (1-based index) to a stored quote's structures
- *  and re-price. Preserves the job-level solar addon + property context,
- *  which pricing doesn't reproduce. */
+ *  and re-price. Preserves each structure's label, and the job-level solar
+ *  addon + property context, which pricing doesn't reproduce. */
 export function repriceWithEdgeOverrides(
   quote: MultiRoofQuote,
   edges: EdgeOverride[],
   rateCard?: RoofingRateCard,
+  options: RepriceOptions = {},
 ): MultiRoofQuote {
   const byIndex = new Map(edges.map((e) => [e.index, e]))
   const structures = quote.structures.map((s, i) => {
     const o = byIndex.get(i + 1)
     if (!o) {
-      return { buildingId: s.buildingId, role: s.role, metrics: s.metrics, inputs: s.inputs }
+      return { buildingId: s.buildingId, role: s.role, label: s.label, metrics: s.metrics, inputs: s.inputs }
     }
     const m = { ...s.metrics }
     let inputs = s.inputs
@@ -89,8 +95,13 @@ export function repriceWithEdgeOverrides(
       if (typeof o.sloped_area_m2 !== 'number') {
         // Re-derive the pricing area from the new pitch (explicit area in
         // the same call wins below). very_steep/unknown buckets derive
-        // null, which correctly routes the structure to inspection.
-        m.sloped_area_m2 = slopedAreaFromFootprint(m.footprint_m2, bucket)
+        // null, which correctly routes the structure to inspection. A plan
+        // measurement's footprint is exact, so its area follows the pitch
+        // itself; a very steep pitch still routes to inspection by its bucket.
+        m.sloped_area_m2 =
+          options.planGeometry && bucket !== 'unknown'
+            ? Math.round((m.footprint_m2 / Math.cos((o.pitch_degrees * Math.PI) / 180)) * 100) / 100
+            : slopedAreaFromFootprint(m.footprint_m2, bucket)
         m.area_source = 'derived'
         m.field_sources = { ...m.field_sources, sloped_area: 'derived' }
       }
@@ -102,7 +113,7 @@ export function repriceWithEdgeOverrides(
       declare('sloped_area')
     }
 
-    return { buildingId: s.buildingId, role: s.role, metrics: m, inputs }
+    return { buildingId: s.buildingId, role: s.role, label: s.label, metrics: m, inputs }
   })
   const repriced = priceMultiRoof({ structures, rateCard })
   // priceMultiRoof rebuilds structures/combined/routing but not the job-level

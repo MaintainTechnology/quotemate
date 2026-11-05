@@ -22,7 +22,7 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { CSSProperties } from 'react'
-import type { MultiRoofQuote } from '@/lib/roofing/types'
+import { isPlanMeasurement, type MultiRoofQuote } from '@/lib/roofing/types'
 import {
   defaultStructureIndices,
   primaryStructureIndices,
@@ -272,8 +272,11 @@ export default async function MeasurementResultsPage({
       pricing_authority?: { revision?: unknown }
     }
   ).pricing_authority?.revision
+  // A measurement from a builder's plans isn't a homeowner's quote: it waits
+  // for P4's builder quote, which has no payment link (DEC-009, DEC-022).
   const saveAsQuoteBody =
     !quoteShareToken &&
+    !isPlanMeasurement(row.provider) &&
     typeof pricingRevision === 'string' &&
     /^[a-f0-9]{64}$/.test(pricingRevision)
       ? { expected_pricing_revision: pricingRevision }
@@ -373,7 +376,9 @@ export default async function MeasurementResultsPage({
         {row.address && <p className="mt-4 text-lg text-text-sec">{row.address}</p>}
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
           Every structure measured at this property
-          {row.provider ? ` (via ${row.provider})` : ''}. Untick any structure
+          {row.provider === 'hybrid'
+            ? ' (from the plans, with existing roofs from aerial data)'
+            : row.provider === 'plans' ? ' (from the plans)' : row.provider ? ` (via ${row.provider})` : ''}. Untick any structure
           you don&rsquo;t want in the job. Your selection is what the customer
           quote and the PDF are priced from.
         </p>

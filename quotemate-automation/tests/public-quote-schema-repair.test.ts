@@ -80,8 +80,8 @@ describe('public quote schema incident repair', () => {
   it('installs canonical pricing ownership, immutable snapshot and FK protections', async () => {
     const { pg, db, assets } = await fixture()
     await repairPublicQuoteSchema(db, { apply: true, assets })
-    const snapshot = (await pg.query('select to_jsonb(p) as snapshot from pricing_book p')).rows[0].snapshot
-    const saved = (await pg.query('select capture_quote_pricing_version($1,$2,$3,$4::jsonb) as version', [tenant, 'electrical', book, JSON.stringify(snapshot)])).rows[0].version as { id: string }
+    const snapshot = (await pg.query<{ snapshot: Record<string, unknown> }>('select to_jsonb(p) as snapshot from pricing_book p')).rows[0].snapshot
+    const saved = (await pg.query<{ version: { id: string } }>('select capture_quote_pricing_version($1,$2,$3,$4::jsonb) as version', [tenant, 'electrical', book, JSON.stringify(snapshot)])).rows[0].version
     await pg.query('update quotes set pricing_book_version_id=$1 where id=$2', [saved.id, quote])
     await expect(pg.query('update quote_pricing_versions set trade=$1 where id=$2', ['plumbing', saved.id])).rejects.toThrow('immutable')
     await expect(pg.query('update quotes set pricing_book_version_id=null where id=$1', [quote])).rejects.toThrow('immutable')

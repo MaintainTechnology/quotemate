@@ -1,0 +1,762 @@
+{
+  "version": 1,
+  "scale": {
+    "stated": "1:100 @ A1",
+    "sheet_size": "A1",
+    "pdf_page": [
+      2383.94,
+      1683.78
+    ],
+    "calibration": {
+      "method": "dimension_string",
+      "reference_mm": 10130,
+      "factor": 35.28,
+      "delta_pct": 0.01
+    }
+  },
+  "sheets": [
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 1,
+      "number": "A0000",
+      "title": "TITLE SHEET",
+      "revision": "8",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 2,
+      "number": "A0001",
+      "title": "LOCATION PLAN",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 3,
+      "number": "A1000",
+      "title": "SITE PLAN STAGE 1 - EXISTING & DEMOLITION",
+      "revision": "12",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "site_plan",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 4,
+      "number": "A1000A",
+      "title": "SITE PLAN STAGE 1 - PROPOSED",
+      "revision": "6",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "site_plan",
+      "used": true
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 5,
+      "number": "A1001",
+      "title": "SITE PLAN STAGE 2 - EXISTING & DEMOLITION",
+      "revision": "6",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "site_plan",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 6,
+      "number": "A1001A",
+      "title": "SITE PLAN STAGE 2 - PROPOSED",
+      "revision": "12",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "site_plan",
+      "used": true
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 7,
+      "number": "A1002",
+      "title": "GROUND FLOOR PLAN - STAGE 1",
+      "revision": "6",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 8,
+      "number": "A1003",
+      "title": "FIRST FLOOR PLAN - STAGE 1",
+      "revision": "6",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 9,
+      "number": "A1004",
+      "title": "GROUND FLOOR PLAN - STAGE 2",
+      "revision": "11",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 10,
+      "number": "A1005",
+      "title": "FIRST FLOOR PLAN - STAGE 2",
+      "revision": "11",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 11,
+      "number": "A1006",
+      "title": "RCP- GROUND FLOOR PLAN",
+      "revision": "3",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 12,
+      "number": "A1007",
+      "title": "RCP- FIRST FLOOR PLAN",
+      "revision": "3",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 13,
+      "number": "A2000",
+      "title": "ELEVATIONS - HOUSE 1",
+      "revision": "10",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "elevation",
+      "used": true
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 14,
+      "number": "A2001",
+      "title": "ELEVATIONS - HOUSE 2",
+      "revision": "11",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "elevation",
+      "used": true
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 15,
+      "number": "A2100",
+      "title": "BUILDING SECTIONS",
+      "revision": "6",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "section",
+      "used": true
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 16,
+      "number": "A3000",
+      "title": "RENDERS",
+      "revision": "10",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 17,
+      "number": "A3001",
+      "title": "RENDERS",
+      "revision": "10",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 18,
+      "number": "A3002",
+      "title": "RENDERS",
+      "revision": "9",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 19,
+      "number": "A3003",
+      "title": "RENDERS",
+      "revision": "9",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 20,
+      "number": "A4000",
+      "title": "GLAZING SCHEDULE",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 21,
+      "number": "A4001",
+      "title": "DOOR SCHEDULE",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 22,
+      "number": "A5000",
+      "title": "WALL TYPES",
+      "revision": "6",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 23,
+      "number": "A5001",
+      "title": "DRIVEWAY CROSSOVER DETAIL",
+      "revision": "11",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 24,
+      "number": "A5002",
+      "title": "CARPORT DETAILS",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 25,
+      "number": "A5003",
+      "title": "TYPICAL BALCONY DETAILS",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 26,
+      "number": "A5005",
+      "title": "INTERNAL STAIR DETAILS - HOUSE 1",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 27,
+      "number": "A5006",
+      "title": "INTERNAL STAIR DETAILS - HOUSE 2",
+      "revision": "6",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 28,
+      "number": "A6000",
+      "title": "TYPICAL GF BATHROOM & LAUNDRY DETAILS",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 29,
+      "number": "A6001",
+      "title": "TYPICAL FF BATHROOM DETAILS",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 30,
+      "number": "A6002",
+      "title": "TYPICAL ENSUITE DETAILS",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+      "page": 31,
+      "number": "A6003",
+      "title": "TYPICAL FF KITCHEN DETAILS",
+      "revision": "5",
+      "status_text": "BUILDING APPROVAL",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 1,
+      "number": "S000",
+      "title": "PROJECT STRUCTURAL NOTES",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 2,
+      "number": "S011",
+      "title": "SLAB & FOOTING PLAN SHEET 1",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 3,
+      "number": "S012",
+      "title": "SLAB & FOOTING PLAN SHEET 2",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 4,
+      "number": "S020",
+      "title": "SLAB & FOOTING DETAILS SHEET 1",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 5,
+      "number": "S021",
+      "title": "SLAB & FOOTING DETAILS SHEET 2",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 6,
+      "number": "S022",
+      "title": "SLAB & FOOTING DETAILS SHEET 3",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 7,
+      "number": "S023",
+      "title": "SLAB & FOOTING DETAILS SHEET 4",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 8,
+      "number": "S050",
+      "title": "GROUND FLOOR SLAB BOTTOM REINFORCEMENT",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 9,
+      "number": "S051",
+      "title": "GROUND FLOOR SLAB TOP REINFORCEMENT",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 10,
+      "number": "S100",
+      "title": "FLOOR FRAMING PLAN",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 11,
+      "number": "S200",
+      "title": "ROOF FRAMING PLAN",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "roof_framing",
+      "used": true
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 12,
+      "number": "S210",
+      "title": "FRAMING DETAILS SHEET 1",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 13,
+      "number": "S211",
+      "title": "FRAMING DETAILS SHEET 2",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 14,
+      "number": "S212",
+      "title": "FRAMING DETAILS SHEET 3",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 15,
+      "number": "S213",
+      "title": "FRAMING DETAILS SHEET 4",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 16,
+      "number": "S300",
+      "title": "WALL BRACING PLAN SHEET 1",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 17,
+      "number": "S301",
+      "title": "WALL BRACING PLAN SHEET 2",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf",
+      "page": 18,
+      "number": "S310",
+      "title": "BRACING DETAILS",
+      "revision": "0",
+      "status_text": "CONSTRUCTION ISSUE",
+      "kind": "other",
+      "used": false
+    }
+  ],
+  "structures": [
+    {
+      "id": "S1",
+      "label": "House 1",
+      "role": "primary",
+      "source": "plans",
+      "planes": [
+        {
+          "id": "S1-P1",
+          "plan_dims_mm": [
+            10130,
+            9600
+          ],
+          "polygon_mm": null,
+          "plan_area_m2": 97.25,
+          "pitch_deg": 5,
+          "pitch_source": "note",
+          "fall": "south, to the street",
+          "profile": "Lysaght Custom Orb",
+          "finish_tag": "RF:01",
+          "sloped_area_m2": 97.62,
+          "confidence": "high",
+          "evidence": [
+            {
+              "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+              "page": 6,
+              "text": "A1001A rev 12: written 10130 × 9600. The drawn outline agrees within 3 mm, and so do the A2100 rev 6 sections.",
+              "bbox": null
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "eave",
+          "length_m": 10.13,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "high_side",
+          "length_m": 10.13,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "barge",
+          "length_m": 9.6,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "barge",
+          "length_m": 9.6,
+          "source": "measured",
+          "confidence": "high"
+        }
+      ],
+      "exclusions": []
+    },
+    {
+      "id": "S2",
+      "label": "House 2",
+      "role": "primary",
+      "source": "plans",
+      "planes": [
+        {
+          "id": "S2-P1",
+          "plan_dims_mm": [
+            9600,
+            10130
+          ],
+          "polygon_mm": null,
+          "plan_area_m2": 97.25,
+          "pitch_deg": 5,
+          "pitch_source": "note",
+          "fall": "south, to the street",
+          "profile": "Lysaght Custom Orb",
+          "finish_tag": "RF:01",
+          "sloped_area_m2": 97.62,
+          "confidence": "high",
+          "evidence": [
+            {
+              "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+              "page": 6,
+              "text": "A1001A rev 12: written 9600 × 10130. The drawn outline agrees within 2 mm, and so do the A2100 rev 6 sections.",
+              "bbox": null
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "eave",
+          "length_m": 9.6,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "high_side",
+          "length_m": 9.6,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "barge",
+          "length_m": 10.13,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "barge",
+          "length_m": 10.13,
+          "source": "measured",
+          "confidence": "high"
+        }
+      ],
+      "exclusions": []
+    },
+    {
+      "id": "S3",
+      "label": "Carport, west bay",
+      "role": "secondary",
+      "source": "plans",
+      "planes": [
+        {
+          "id": "S3-P1",
+          "plan_dims_mm": [
+            3219,
+            5599
+          ],
+          "polygon_mm": null,
+          "plan_area_m2": 18.02,
+          "pitch_deg": 3,
+          "pitch_source": "note",
+          "fall": "south, to the parking",
+          "profile": "Lysaght Trimdek",
+          "finish_tag": "RF:03",
+          "sloped_area_m2": 18.04,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+              "page": 6,
+              "text": "Width 3219 written on A5002 rev 5. Length 5599 scaled from the A1001A outline at 1:100; it isn't dimensioned.",
+              "bbox": null
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "eave",
+          "length_m": 3.219,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "high_side",
+          "length_m": 3.219,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "barge",
+          "length_m": 5.599,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "apron",
+          "length_m": 5.599,
+          "source": "derived",
+          "confidence": "medium"
+        }
+      ],
+      "exclusions": []
+    },
+    {
+      "id": "S4",
+      "label": "Carport, east bay",
+      "role": "secondary",
+      "source": "plans",
+      "planes": [
+        {
+          "id": "S4-P1",
+          "plan_dims_mm": [
+            3220,
+            5599
+          ],
+          "polygon_mm": null,
+          "plan_area_m2": 18.03,
+          "pitch_deg": 3,
+          "pitch_source": "note",
+          "fall": "south, to the parking",
+          "profile": "Lysaght Trimdek",
+          "finish_tag": "RF:03",
+          "sloped_area_m2": 18.05,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf",
+              "page": 6,
+              "text": "Width 3220 written on A5002 rev 5. Length 5599 scaled from the A1001A outline at 1:100; it isn't dimensioned.",
+              "bbox": null
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "eave",
+          "length_m": 3.22,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "high_side",
+          "length_m": 3.22,
+          "source": "measured",
+          "confidence": "high"
+        },
+        {
+          "type": "apron",
+          "length_m": 5.599,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "barge",
+          "length_m": 5.599,
+          "source": "derived",
+          "confidence": "medium"
+        }
+      ],
+      "exclusions": []
+    }
+  ],
+  "scope": {
+    "includes": [
+      "Roof sheeting: Lysaght Custom Orb (RF:01) on both houses at 5°, and Lysaght Trimdek (RF:03) on both carport bays at 3°.",
+      "Every roof edge: gutter, high side, barge and wall junction, as plan and true lengths.",
+      "Insulation under the Custom Orb: Anticon 60 mm R1.6 faced blanket with spacers (A2100), the same area as the house roofs."
+    ],
+    "excludes": [],
+    "questions": [
+      "Which stages does this quote cover? The drawings put House 2 and both carport bays in Stage 1 (A1000A), and House 1 in Stage 2 (A1001A).",
+      "Are the Colorbond gutters and 100 × 100 downpipes (Pearl White, RF:02) part of the roofing package?",
+      "The drawings give no colour for the Custom Orb or the Trimdek.",
+      "The carport roof length isn't dimensioned. It scales to 5.60 m on the 1:100 site plan. Confirm it before ordering.",
+      "No vents, flues or exhaust fans are shown on either house roof. Confirm there are none."
+    ]
+  }
+}

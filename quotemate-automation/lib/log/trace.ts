@@ -32,6 +32,7 @@ export type TraceStep =
   | 'dispatch'           // outbound SMS / WhatsApp / email
   | 'vapi_inbound'       // /api/vapi/webhook
   | 'quote_view'         // customer hits /q/[token]
+  | 'plan_takeoff'       // qm-roofing-takeoff: one row per stage attempt, substep = the stage
 
 export type TraceStatus = 'ok' | 'warn' | 'err'
 

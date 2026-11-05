@@ -31,7 +31,7 @@ import {
 } from '@/lib/roofing/save-as-quote-helpers'
 import { roofingScopeShort, stampScopeShort } from '@/lib/quote/scope-short'
 import { SaveAsQuoteRequestSchema } from '@/lib/roofing/save-as-quote-schema'
-import type { RoofMetrics, RoofingQuotePrice } from '@/lib/roofing/types'
+import { isPlanMeasurement, type RoofMetrics, type RoofingQuotePrice } from '@/lib/roofing/types'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { loadTenantRoofingPricingContext } from '@/lib/roofing/pricing-authority'
 import { publicWebUrl } from '@/lib/sms/public-origin'
@@ -87,13 +87,25 @@ export async function POST(req: Request) {
   const { data: measurement, error: measurementError } = await supabase
     .from('roofing_measurements')
     .select(
-      'id, quote_id, quote_share_token, address, postcode, state, quote, included_indices, customer_name, customer_phone',
+      'id, quote_id, quote_share_token, address, postcode, state, provider, quote, included_indices, customer_name, customer_phone',
     )
     .eq('measure_token', measure_token)
     .eq('tenant_id', tenant.id)
     .maybeSingle()
   if (measurementError || !measurement) {
     return Response.json({ ok: false, error: 'measurement_not_found' }, { status: 404 })
+  }
+  // A measurement from a builder's plans becomes a builder's quote in P4,
+  // which has no payment link: never a homeowner's quote (DEC-009, DEC-022).
+  if (isPlanMeasurement(measurement.provider)) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'plans_measurement',
+        detail: "A measurement from a builder's plans isn't promoted to a customer quote",
+      },
+      { status: 409 },
+    )
   }
   const storedAuthority =
     measurement.quote && typeof measurement.quote === 'object'

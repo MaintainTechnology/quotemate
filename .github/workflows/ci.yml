@@ -9,13 +9,19 @@
 # a module the same commit forgot to include. A local pre-push hook cannot see
 # that, because the developer's working tree still has both files.
 #
-# Nothing here blocks a push or requires an approval.
+# Nothing here blocks a push or requires an approval. It also runs on pull
+# requests, so a change that arrives by PR is checked before its merge deploys.
 
 name: ci
 
 on:
+  pull_request:
   push:
     branches: [main]
+
+# It only reads the code, so its token can't write.
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -23,7 +29,9 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # 24.04, not ubuntu-latest: Playwright 1.60 can't install Chromium on
+    # 26.04, and the browser recovery test needs one.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         # There is no package.json at the repo root — the app is this subdir.
@@ -44,6 +52,11 @@ jobs:
           cache-dependency-path: quotemate-automation/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
+
+      # tests/commercial-painting-browser-recovery.test.ts drives a real
+      # headless Chromium, which the runner has none of until Playwright
+      # installs it.
+      - run: pnpm exec playwright install --with-deps chromium
 
       - run: pnpm typecheck
 

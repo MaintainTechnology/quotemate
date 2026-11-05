@@ -5,7 +5,13 @@
 //   plan-pdfs/<requestId>/report.pdf
 // and commercial painting run documents (PDFs AND site photos):
 //   plan-pdfs/paint/<runId>/<uploadId>.<ext>
-// 32MB cap (Anthropic PDF ceiling), private — reads happen server-side or
+// and roof plan takeoff runs (qm-roofing-takeoff), plus their eval fixtures:
+//   plan-pdfs/roofing/<tenantId>/<runId>/<uploadId>.pdf
+//   plan-pdfs/eval/<fixture>/
+// 50MB cap since migration 223, for takeoff plan sets; the SMS and painting
+// upload routes keep their own 32MB checks (the Anthropic PDF ceiling).
+// Re-running this script re-applies the cap, so keep it in step with 223.
+// Private — reads happen server-side or
 // via short-lived signed URLs. The MIME allowlist matches the painting
 // upload routes (app/api/tenant/commercial-painting/upload/{sign,complete}
 // — browsers PUT files straight to storage via signed URLs): PDF + images.
@@ -20,7 +26,7 @@ const supabase = createClient(
 
 const SPEC = {
   public: false,
-  fileSizeLimit: 32 * 1024 * 1024,
+  fileSizeLimit: 50 * 1024 * 1024,
   allowedMimeTypes: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'],
 }
 
@@ -38,5 +44,5 @@ if (existing) {
     console.error('createBucket failed:', error.message)
     process.exit(1)
   }
-  console.log('OK — plan-pdfs bucket created (private, 32MB, application/pdf).')
+  console.log('OK — plan-pdfs bucket created (private, 50MB, PDF and images).')
 }
