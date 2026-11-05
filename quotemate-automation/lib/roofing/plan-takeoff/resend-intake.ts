@@ -53,12 +53,16 @@ const ENTITIES: Array<[RegExp, string]> = [[/&nbsp;/g, ' '], [/&lt;/g, '<'], [/&
 /** Plain text from an email's HTML, for one with no text part: blocks and
  *  breaks become line breaks, other tags go, and the common entities are
  *  decoded once (`&amp;` last). A tag stops at the next angle bracket, so a
- *  run of unclosed ones can't be rescanned. */
+ *  run of unclosed ones can't be rescanned. One pass can still leave a tag
+ *  rebuilt from the pieces round the one it took (`<<b>script>`), so every
+ *  raw bracket left after it goes too, in the same linear time; a bracket the
+ *  sender wrote as `&lt;` is text, decoded after. */
 export function htmlToText(html: string): string {
   let text = html.slice(0, 500_000)
     .replace(/<br\b[^<>]*>/gi, '\n')
     .replace(BLOCK, '\n')
     .replace(/<[^<>]*>/g, '')
+    .replace(/[<>]/g, '')
   for (const [pattern, value] of ENTITIES) text = text.replace(pattern, value)
   return text.replace(/&amp;/g, '&')
     .split('\n').map((line) => line.trim()).join('\n')

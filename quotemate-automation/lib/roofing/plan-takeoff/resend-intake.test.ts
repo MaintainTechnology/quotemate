@@ -67,6 +67,19 @@ describe('htmlToText', () => {
     htmlToText('<'.repeat(400_000))
     expect(performance.now() - started).toBeLessThan(1000)
   })
+
+  it('leaves no tag behind, even one a single pass rebuilds from the pieces round another', () => {
+    expect(htmlToText('<<b>script>alert(1)<</b>/script>')).toBe('scriptalert(1)/script')
+    expect(htmlToText('Site <scr<b>ipt notes')).toBe('Site script notes')
+    // A bracket the sender wrote as an entity is text, and stays.
+    expect(htmlToText('5 &lt; 6 &gt; 4')).toBe('5 < 6 > 4')
+  })
+
+  it('strips nested brackets in bounded time', () => {
+    const started = performance.now()
+    htmlToText('<'.repeat(200_000) + 'a' + '>'.repeat(200_000))
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
 })
 
 describe('fetchResendMessage', () => {
