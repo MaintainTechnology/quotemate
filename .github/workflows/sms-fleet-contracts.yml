@@ -42,6 +42,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: quotemate-automation/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Headless Chromium for the browser recovery test
+        run: pnpm exec playwright install --with-deps chromium
       - name: Website and quote contract tests without live providers
         run: node scripts/test-sms-audit-offline.mjs --artifacts="$RUNNER_TEMP/website-offline-tests" --maxWorkers=2
       - name: Required standalone tool, form, approval and recovery contracts

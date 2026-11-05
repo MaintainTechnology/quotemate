@@ -47,6 +47,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # tests/commercial-painting-browser-recovery.test.ts drives a real
+      # headless Chromium, which the runner has none of until Playwright
+      # installs it.
+      - run: pnpm exec playwright install --with-deps chromium
+
       - run: pnpm typecheck
 
       # `pnpm test` (not bare `vitest run`) — the script sets
