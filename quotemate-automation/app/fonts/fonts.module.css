@@ -1,0 +1,34 @@
+/* Fallback faces exactly as next/font/google generated them: Arial resized to
+   each font's metrics. They show before the font loads and for characters the
+   font lacks (e.g. "→"). next/font/local would compute slightly different
+   numbers from the files, so its automatic fallback is off (index.ts). */
+@font-face {
+  font-family: "Manrope Fallback";
+  src: local("Arial");
+  ascent-override: 103.31%;
+  descent-override: 29.07%;
+  line-gap-override: 0%;
+  size-adjust: 103.19%;
+}
+
+@font-face {
+  font-family: "JetBrains Mono Fallback";
+  src: local("Arial");
+  ascent-override: 75.79%;
+  descent-override: 22.29%;
+  line-gap-override: 0%;
+  size-adjust: 134.59%;
+}
+
+/* The variables the next/font/google calls defined, with the same values. */
+.manrope {
+  --font-manrope: "Manrope", "Manrope Fallback";
+}
+
+.jetbrainsMono {
+  --font-jetbrains-mono: "JetBrains Mono", "JetBrains Mono Fallback";
+}
+
+.fontMono {
+  --font-mono: "JetBrains Mono", "JetBrains Mono Fallback";
+}

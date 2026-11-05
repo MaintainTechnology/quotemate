@@ -2,27 +2,13 @@
 //
 // Static React Server Component. Brand: Maintain design system
 // (dark navy + orange, all-caps display, numbered cards).
-// Styles in page.module.css; fonts (Manrope + JetBrains Mono) loaded via
-// next/font/google so they're self-hosted on Vercel.
+// Styles in page.module.css; fonts (Manrope + JetBrains Mono) are the
+// self-hosted files in app/fonts.
 
 import type { Metadata } from 'next'
-import { Manrope, JetBrains_Mono } from 'next/font/google'
 import Link from 'next/link'
+import { manrope, fontMono } from '@/app/fonts'
 import styles from './page.module.css'
-
-const manrope = Manrope({
-  subsets: ['latin'],
-  weight: ['400', '700', '800'],
-  variable: '--font-manrope',
-  display: 'swap',
-})
-
-const jbMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '600', '700'],
-  variable: '--font-mono',
-  display: 'swap',
-})
 
 export const metadata: Metadata = {
   title: 'Tradie Onboarding Plan · QuoteMax',
@@ -111,7 +97,7 @@ const ACTIVATE_CARDS: Card[] = [
 
 export default function TradieOnboardingPlan() {
   return (
-    <main className={`${manrope.variable} ${jbMono.variable} ${styles.page}`}>
+    <main className={`${manrope.variable} ${fontMono.variable} ${styles.page}`}>
       {/* ─── HERO ─── */}
       <header className={styles.hero}>
         <svg
