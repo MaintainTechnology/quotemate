@@ -17,7 +17,7 @@ import {
 import { renderReportDocument } from './report-chrome'
 
 /** Capture the multipart form Gotenberg would have received. */
-async function captureForm(): Promise<FormData> {
+async function captureForm(options?: { singlePage?: boolean }): Promise<FormData> {
   let captured: FormData | undefined
   vi.stubGlobal(
     'fetch',
@@ -27,7 +27,7 @@ async function captureForm(): Promise<FormData> {
     }),
   )
   vi.stubEnv('GOTENBERG_URL', 'http://gotenberg.test')
-  await renderPdfFromHtml('<html><body>hi</body></html>')
+  await renderPdfFromHtml('<html><body>hi</body></html>', options)
   if (!captured) throw new Error('fetch was not called')
   return captured
 }
@@ -53,6 +53,12 @@ describe('renderPdfFromHtml — continuous single page', () => {
 
   it('does not pin a page range — Gotenberg sets that itself for singlePage', async () => {
     expect((await captureForm()).get('nativePageRanges')).toBeNull()
+  })
+
+  it('prints A4 pages when asked, for a document whose tail must never be cut', async () => {
+    const form = await captureForm({ singlePage: false })
+    expect(form.get('singlePage')).toBeNull()
+    expect(form.get('paperHeight')).toBe('11.7')
   })
 })
 

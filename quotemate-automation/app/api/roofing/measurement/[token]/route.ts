@@ -12,7 +12,7 @@ import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { roofMeasurementVersion } from '@/lib/roofing/measurement-version'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
-import type { MultiRoofQuote, RoofJobIntent } from '@/lib/roofing/types'
+import { isPlanMeasurement, type MultiRoofQuote, type RoofJobIntent } from '@/lib/roofing/types'
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
 import { denormFromSelection, sanitizeIndices, structureCount } from '@/lib/roofing/selection'
 import { detectSolarForJob } from '@/lib/roofing/solar-detect'
@@ -170,7 +170,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
     if (!pricing) {
       return Response.json({ ok: false, error: 'tenant_pricing_required' }, { status: 422 })
     }
-    const repriced = repriceWithEdgeOverrides(row.quote, parsed.data.edges, pricing.rateCard)
+    const repriced = repriceWithEdgeOverrides(row.quote, parsed.data.edges, pricing.rateCard, {
+      planGeometry: isPlanMeasurement(row.provider),
+    })
     const updatedQuote = { ...repriced, pricing_authority: pricing.authority }
     const total = structureCount(updatedQuote)
     const included = sanitizeIndices(

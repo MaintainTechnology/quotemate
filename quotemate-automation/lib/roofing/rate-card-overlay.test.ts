@@ -5,9 +5,12 @@ import { DEFAULT_ROOFING_RATE_CARD } from './pricing'
 import {
   EDITABLE_MATERIALS,
   MAX_RATE_PER_M2,
+  NEW_WORK_MATERIALS,
+  buildNewWorkRatesFromInputs,
   buildOverlayFromInputs,
   effectiveRateCardFromOverlay,
   mergeRoofingRateCard,
+  newWorkRates,
   parseRoofingRateOverlay,
 } from './rate-card-overlay'
 
@@ -427,5 +430,37 @@ describe('edge-works rates, call-out minimum and solar allowance', () => {
     expect(card.valley_flashing_rate_per_lm).toBe(55)
     expect(card.call_out_minimum_ex_gst).toBe(900)
     expect(card.price_edge_works).toBe(true)
+  })
+})
+
+describe('new-work rates (builder quotes, DEC-026)', () => {
+  it('covers every editable material but cement sheet, as no new roof is cement sheet', () => {
+    expect(NEW_WORK_MATERIALS).toEqual(EDITABLE_MATERIALS.filter((m) => m !== 'cement_sheet'))
+  })
+
+  it('reads the stored rates, dropping any that is not a positive number up to the cap', () => {
+    expect(newWorkRates({ rate_per_m2: { colorbond_corrugated: 60, colorbond_trimdek: -5, terracotta_tile: '90', cement_sheet: 40, colorbond_kliplok: MAX_RATE_PER_M2 + 1 } }))
+      .toEqual({ colorbond_corrugated: 60 })
+    expect(newWorkRates(null)).toEqual({})
+  })
+
+  it('checks the dashboard input field by field, a blank clearing that material', () => {
+    expect(buildNewWorkRatesFromInputs({ colorbond_corrugated: '62', colorbond_kliplok: 84, concrete_tile: '', terracotta_tile: null, cement_sheet: 40 }))
+      .toEqual({ ok: true, rates: { colorbond_corrugated: 62, colorbond_kliplok: 84 } })
+    const bad = buildNewWorkRatesFromInputs({ colorbond_corrugated: 'abc', colorbond_trimdek: 0, colorbond_spandek: MAX_RATE_PER_M2 + 1 })
+    expect(bad.ok).toBe(false)
+    if (bad.ok) return
+    expect(bad.issues.map((i) => i.field)).toEqual([
+      'new_work_rate_per_m2.colorbond_corrugated',
+      'new_work_rate_per_m2.colorbond_trimdek',
+      'new_work_rate_per_m2.colorbond_spandek',
+    ])
+  })
+
+  it('clears every rate on null, and refuses anything but a map of materials', () => {
+    expect(buildNewWorkRatesFromInputs(null)).toEqual({ ok: true, rates: {} })
+    for (const raw of ['60', [60], 60]) {
+      expect(buildNewWorkRatesFromInputs(raw)).toMatchObject({ ok: false, issues: [{ field: 'new_work_rate_per_m2' }] })
+    }
   })
 })

@@ -13,24 +13,33 @@ import { verifyClerkSessionToken } from '@/lib/clerk/verify'
 // again. Module-scoped map is enough — emails are stable and the set is tiny.
 const _clerkEmailCache = new Map<string, string | null>()
 
-/** Fetch the caller's primary email from Clerk when the session token didn't
- *  carry it (Clerk omits `email` from session tokens by default). Only used as
- *  the resolver's email fallback, i.e. after an id lookup miss. Uses the
+type ClerkAddress = { emailAddress: string; verification: { status: string } | null }
+
+/** The caller's address as the email fallback may use it: one Clerk has
+ *  verified, the primary first. An unverified address is anyone's claim. */
+export function verifiedClerkEmail(user: {
+  primaryEmailAddress?: ClerkAddress | null
+  emailAddresses?: ClerkAddress[]
+}): string | null {
+  const verified = (address?: ClerkAddress | null) => address?.verification?.status === 'verified'
+  const chosen = verified(user.primaryEmailAddress) ? user.primaryEmailAddress : user.emailAddresses?.find(verified)
+  return chosen?.emailAddress?.toLowerCase() ?? null
+}
+
+/** Fetch the caller's verified email from Clerk, never the session token's own
+ *  `email` claim, which carries whatever the session template renders. Only used
+ *  as the resolver's email fallback, i.e. after an id lookup miss. Uses the
  *  environment's OWN CLERK_SECRET_KEY, so dev looks up test users and prod looks
  *  up live users. Returns null (never throws) so a Clerk outage just falls
  *  through to "no tenant" rather than 500ing the request. */
 async function resolveClerkEmail(identity: Identity): Promise<string | null> {
-  if (identity.email) return identity.email
   if (identity.provider !== 'clerk') return null
   if (_clerkEmailCache.has(identity.userId)) return _clerkEmailCache.get(identity.userId) ?? null
   const secretKey = process.env.CLERK_SECRET_KEY
   if (!secretKey) return null
   try {
     const user = await createClerkClient({ secretKey }).users.getUser(identity.userId)
-    const email =
-      user.primaryEmailAddress?.emailAddress?.toLowerCase() ??
-      user.emailAddresses?.[0]?.emailAddress?.toLowerCase() ??
-      null
+    const email = verifiedClerkEmail(user)
     _clerkEmailCache.set(identity.userId, email)
     return email
   } catch {

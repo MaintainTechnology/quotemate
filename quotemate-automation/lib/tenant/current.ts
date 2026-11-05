@@ -109,10 +109,15 @@ export async function tenantFromRequest(
   // tenant either way. READ-ONLY: we never write the id back, so the other
   // environment keeps resolving too (no see-saw). No-ops when no email is
   // available (e.g. a Clerk token with no email claim and no resolveEmail dep).
-  if (!tenant) {
-    const email =
-      identity.email ??
-      (deps.resolveEmail ? await deps.resolveEmail(identity).catch(() => null) : null)
+  // Clerk only: Clerk verifies the address it vouches for, while a Supabase
+  // email proves nothing (/api/auth/signup pre-confirms any address), so a
+  // Supabase caller resolves by owner_user_id alone.
+  if (!tenant && identity.provider === 'clerk') {
+    // The address the resolver finds Clerk has verified, when one is wired (as
+    // it always is in production); the token's own claim only without one.
+    const email = deps.resolveEmail
+      ? await deps.resolveEmail(identity).catch(() => null)
+      : identity.email
     if (email) {
       const { data: byEmail } = await deps.supabase
         .from('tenants')

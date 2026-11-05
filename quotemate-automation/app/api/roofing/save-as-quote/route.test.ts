@@ -198,6 +198,14 @@ describe('POST /api/roofing/save-as-quote pricing authority', () => {
     expect(h.queries.some((query) => query.ops.some((op) => op.op === 'insert'))).toBe(false)
   })
 
+  it.each(['plans', 'hybrid'])('never promotes a %s measurement from a builder\'s plans to a customer quote', async (provider) => {
+    h.results.push({ data: measurement({ provider }), error: null })
+    const response = await POST(request())
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ ok: false, error: 'plans_measurement' })
+    expect(h.queries.some((query) => query.ops.some((op) => op.op === 'insert'))).toBe(false)
+  })
+
   it.each([
     ['zero price', () => {
       const quote = storedQuote()

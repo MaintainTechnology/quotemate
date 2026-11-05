@@ -16866,6 +16866,35 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
         </div>
       </Link>
 
+      {/* Plan takeoffs (TKO-19): roofs read off a builder's plans by the
+          takeoff service, shown only where NEXT_PUBLIC_TAKEOFF_API_URL is set. */}
+      {process.env.NEXT_PUBLIC_TAKEOFF_API_URL ? (
+        <Link
+          href="/dashboard/roofing/takeoffs"
+          className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+        >
+          <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+            02
+          </span>
+          <div className="flex-1">
+            <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
+              Plan takeoff
+            </div>
+            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+              Measure from plans
+            </h3>
+            <p className="mt-4 text-base leading-relaxed text-text-sec">
+              Upload a builder&rsquo;s plan set. The roofs are read off the
+              drawings, checked against them, and priced on your rate card,
+              ready to save as a measurement.
+            </p>
+            <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-accent transition-transform group-hover:translate-x-1">
+              Open plan takeoffs <span aria-hidden="true">&rarr;</span>
+            </div>
+          </div>
+        </Link>
+      ) : null}
+
       {/* Saved roofing jobs — history of every "Save job" from the
           measure tool, scoped to this tenant. Click View to open the
           customer quote page (/q/roof/[token]). */}
