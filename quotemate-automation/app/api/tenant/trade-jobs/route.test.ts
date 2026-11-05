@@ -266,6 +266,40 @@ describe('GET /api/tenant/trade-jobs', () => {
     expect(json.jobs[2]).toMatchObject({ id: 'p1', trade: 'painting', tradieHref: '/p/tok-estimate' })
     expect(json.jobs[3]).toMatchObject({ id: 'a1', trade: 'aircon', tradieHref: null })
   })
+
+  it.each(['plans', 'hybrid'])('gives a %s measurement no customer link, only /m', async (provider) => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null }, // tenants lookup
+      {
+        data: [
+          {
+            id: 'r1',
+            address: '59 Grange Rd',
+            combined_area_m2: 231.33,
+            public_token: 'tok-roof',
+            measure_token: 'tok-measure',
+            provider,
+            confirmed_at: '2026-11-03T01:00:00Z',
+            routing: 'tradie_review',
+            created_at: '2026-11-03T01:00:00Z',
+          },
+        ],
+        error: null,
+      }, // roofing_measurements
+      { data: [], error: null }, // solar_estimates
+      { data: [], error: null }, // painting_measurements
+      { data: [], error: null }, // paint_runs
+      { data: [], error: null }, // aircon_recommendations
+    )
+    const res = await GET(
+      new Request('http://localhost/api/tenant/trade-jobs', {
+        headers: { authorization: 'Bearer token-1' },
+      }),
+    )
+    const json = (await res.json()) as { jobs: Array<Record<string, unknown>> }
+    expect(json.jobs).toEqual([expect.objectContaining({ id: 'r1', trade: 'roofing', href: null, tradieHref: '/m/tok-measure' })])
+  })
 })
 
 describe('DELETE /api/tenant/trade-jobs', () => {

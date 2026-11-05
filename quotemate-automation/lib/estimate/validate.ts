@@ -123,8 +123,9 @@ function n(v: number | string): number {
 /** The `source` sentinel for a line item the tradie explicitly added as a
  *  custom/manual line (e.g. "Remove existing hot water system", "Supply &
  *  install 2x skylights"). Such lines are grounded by the human who typed
- *  them, not the catalogue: `validateQuoteGrounding` exempts them from the
- *  per-line price/unit/category check, and `resolveLineAnchor` refuses to
+ *  them, not the catalogue: a trusted caller can explicitly allow them in
+ *  `validateQuoteGrounding` after authenticating a human edit. The marker
+ *  alone is not authority. `resolveLineAnchor` refuses to
  *  anchor them so a coincidental price match never trips duplicate
  *  detection. The exemption is scoped STRICTLY to this sentinel — every
  *  other source (catalogue `material:`/`assembly:`, labour, callout,
@@ -134,6 +135,19 @@ export const MANUAL_LINE_SOURCE = 'tradie_manual'
 /** True when a line item is a tradie-entered manual/custom line. */
 export function isManualLine(li: any): boolean {
   return String(li?.source ?? '').trim().toLowerCase() === MANUAL_LINE_SOURCE
+}
+
+export type GroundingValidationOptions = {
+  /** Set only for an authenticated, explicit human save. Model-generated
+   * drafts (including AI edit proposals) must never grant this permission. */
+  allowManualLines?: boolean
+}
+
+function finiteManualNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -743,6 +757,7 @@ export function validateQuoteGrounding(
   draft: any,
   pricingBook: PricingBookForValidation,
   candidates: CandidatePrices,
+  options: GroundingValidationOptions = {},
 ): GroundingResult {
   // Inspection-required quotes don't carry line items to validate.
   if (draft?.needs_inspection === true) return { valid: true }
@@ -892,12 +907,30 @@ export function validateQuoteGrounding(
 
     for (let i = 0; i < tier.line_items.length; i++) {
       const li = tier.line_items[i]
-      // Manual lines are grounded by the human who typed them, not the
-      // catalogue — skip the per-line price/unit/category gate. The line
-      // still counts toward the tier subtotal (recomputed by the caller),
-      // and the per-tier labour-hours floor above is unaffected: a manual
-      // material/scope line does not substitute for required labour.
-      if (isManualLine(li)) continue
+      // A model can emit any source string. Only the authenticated human
+      // save path may grant a manual-price exemption, and arithmetic must
+      // remain valid even when that human supplied the price.
+      if (isManualLine(li)) {
+        const manualPrice = finiteManualNumber(li?.unit_price_ex_gst)
+        const manualQuantity = finiteManualNumber(li?.quantity)
+        const manualTotal = finiteManualNumber(li?.total_ex_gst)
+        let manualFailure = ''
+        if (options.allowManualLines !== true) {
+          manualFailure = 'tradie_manual prices require an authenticated explicit human save; model-generated source markers are not price authority'
+        } else if (manualPrice === null || manualPrice < 0 || manualQuantity === null || manualQuantity < 0) {
+          manualFailure = 'manual line requires a finite nonnegative price and quantity'
+        } else if (li?.total_ex_gst !== undefined && (manualTotal === null || Math.abs(manualTotal - manualQuantity * manualPrice) > 0.01)) {
+          manualFailure = 'manual line total_ex_gst must equal quantity multiplied by unit_price_ex_gst'
+        }
+        if (manualFailure) failures.push({
+          tier: tierKey, lineIndex: i,
+          description: String(li?.description ?? '(no description)'),
+          unit: String(li?.unit ?? '?'),
+          unit_price_ex_gst: Number(li?.unit_price_ex_gst),
+          expected: manualFailure,
+        })
+        continue
+      }
       const price = Number(li?.unit_price_ex_gst)
       const description = String(li?.description ?? '(no description)')
       const unit = String(li?.unit ?? '?')
@@ -906,6 +939,21 @@ export function validateQuoteGrounding(
       // verbatim for the failure message so the original spelling is visible
       // to operators reading risk_flags.
       const unitNorm = unit.toLowerCase().trim()
+      const sourceNorm = String(li?.source ?? '').toLowerCase().trim()
+      const catalogueSource = /^(?:material|assembly)(?::|$)/.test(sourceNorm)
+      // Existing drafts also tag assembly labour with assembly:<id>. It is
+      // still labour at the price-book rate, but the claimed assembly must
+      // exist in this tenant/trade's candidate set before that rate applies.
+      const assemblyLabourRef = sourceNorm.startsWith('assembly:') ? extractRowRef(li?.source) : null
+      const knownAssemblyLabour = assemblyLabourRef?.type === 'assembly' && assemblyById.has(assemblyLabourRef.id)
+      const calloutSource = ['callout', 'after_hours_callout', 'emergency_callout'].includes(sourceNorm)
+      const hourlySource = ['labour', 'risk_buffer', 'apprentice', 'senior'].includes(sourceNorm)
+      // Older drafts omitted the source on real call-out lines. Keep that
+      // narrow compatibility path, but a matching dollar amount alone must
+      // never turn a product or an each-priced assessment into a call-out.
+      const legacyNamedCallout =
+        (sourceNorm === '' || isAfterHours(li)) &&
+        /\bcall[\s-]?out\b/i.test(description)
 
       if (!Number.isFinite(price)) {
         failures.push({
@@ -919,7 +967,13 @@ export function validateQuoteGrounding(
       let valid = false
       let expected = ''
 
-      if (unitNorm === 'hr') {
+      if ((catalogueSource && unitNorm === 'hr' && !knownAssemblyLabour) || (hourlySource && unitNorm !== 'hr')) {
+        expected = catalogueSource
+          ? 'hourly assembly labour requires an in-scope assembly row; material lines require their own catalogue price'
+          : `source "${sourceNorm}" requires unit hr; each-priced work requires its own catalogue row`
+      } else if (calloutSource && unitNorm !== 'each') {
+        expected = 'call-out source requires unit each'
+      } else if (unitNorm === 'hr') {
         // Labour rates: hourly_rate, apprentice_rate, OR senior_rate when
         // configured. No semantic category check — labour lines are
         // intrinsically generic. Adding senior_rate fixes the case where
@@ -942,14 +996,10 @@ export function validateQuoteGrounding(
           ? `pricing_book.hourly_rate ($${hourly}), apprentice_rate ($${apprentice}), or senior_rate ($${senior})${afterHoursNote}`
           : `pricing_book.hourly_rate ($${hourly}) or apprentice_rate ($${apprentice})${afterHoursNote}`
       } else if (
-        li?.source === 'callout' ||
-        (unitNorm === 'each' && within(price, callOut)) ||
-        // P-1 — after-hours callout: accept the inflated price ONLY when the
-        // line is explicitly marked as after-hours/emergency.
-        (afterHoursCallout !== null && unitNorm === 'each' && isAfterHours(li) && within(price, afterHoursCallout))
+        unitNorm === 'each' && (calloutSource || legacyNamedCallout)
       ) {
-        // Call-out — unit is 'each' but price matches call_out_minimum
-        // (or the after-hours variant when tagged).
+        // The charge identity establishes eligibility for a call-out rate;
+        // price equality never establishes the charge identity.
         valid =
           within(price, callOut) ||
           (afterHoursCallout !== null && isAfterHours(li) && within(price, afterHoursCallout))
@@ -958,6 +1008,8 @@ export function validateQuoteGrounding(
             ? `, or after-hours call-out ($${afterHoursCallout.toFixed(2)}) when line tagged after-hours`
             : ''
         expected = `pricing_book.call_out_minimum ($${callOut})${afterHoursNote}`
+      } else if (isAfterHours(li)) {
+        expected = 'after-hours source requires hourly labour or a named call-out; products require a catalogue row'
       } else if (
         unitNorm === 'each' ||
         unitNorm === 'lm' ||
@@ -1089,6 +1141,22 @@ export function validateQuoteGrounding(
           tier: tierKey, lineIndex: i, description, unit,
           unit_price_ex_gst: price,
           expected,
+        })
+      }
+    }
+
+    if (options.allowManualLines === true && tier.line_items.some(isManualLine) && tier.subtotal_ex_gst !== undefined) {
+      const subtotal = finiteManualNumber(tier.subtotal_ex_gst)
+      const calculated = tier.line_items.reduce((sum: number, line: any) => {
+        const price = finiteManualNumber(line?.unit_price_ex_gst)
+        const quantity = finiteManualNumber(line?.quantity)
+        return price === null || quantity === null ? Number.NaN : sum + Math.round(price * quantity * 100) / 100
+      }, 0)
+      if (subtotal === null || !Number.isFinite(calculated) || Math.abs(subtotal - calculated) > 0.01) {
+        failures.push({
+          tier: tierKey, lineIndex: -1, description: '(manual tier subtotal)',
+          unit: 'each', unit_price_ex_gst: Number(tier.subtotal_ex_gst),
+          expected: 'tier subtotal_ex_gst must equal the sum of its line quantities multiplied by unit prices',
         })
       }
     }

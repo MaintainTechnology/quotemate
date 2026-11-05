@@ -29,6 +29,12 @@ const MATERIALS = [
 
 type MaterialKey = (typeof MATERIALS)[number][0]
 
+/** Builder quotes' rates (DEC-026): a new roof is any material but cement
+ *  sheet, and there is no default for new work. */
+type NewWorkKey = Exclude<MaterialKey, 'cement_sheet'>
+const NEW_WORK = MATERIALS.filter(([key]) => key !== 'cement_sheet') as ReadonlyArray<readonly [NewWorkKey, string]>
+const BLANK_NEW_WORK = Object.fromEntries(NEW_WORK.map(([key]) => [key, ''])) as Record<NewWorkKey, string>
+
 type Defaults = {
   reroof_rate_per_m2: Record<MaterialKey, number>
   multi_storey_loading_pct: number
@@ -67,6 +73,7 @@ type Overrides = {
   call_out_minimum_ex_gst?: number | null
   solar_detach_reinstate_base_ex_gst?: number | null
   solar_detach_reinstate_per_array_ex_gst?: number | null
+  new_work_rate_per_m2?: Partial<Record<MaterialKey, number>>
 }
 
 /** Accessory rate fields — key, label, unit hint. Quantities are entered
@@ -138,6 +145,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
     solar_detach_reinstate_base_ex_gst: '',
     solar_detach_reinstate_per_array_ex_gst: '',
   })
+  const [newWork, setNewWork] = useState<Record<NewWorkKey, string>>(BLANK_NEW_WORK)
   const [edgeWorksMode, setEdgeWorksMode] = useState<'' | 'true' | 'false'>('')
   const [upgradeMat, setUpgradeMat] = useState<MaterialKey | ''>('')
   const [gstMode, setGstMode] = useState<'' | 'true' | 'false'>('')
@@ -175,6 +183,9 @@ export function RoofRatesEditor({ accessToken }: Props) {
         terracotta_tile: stringify(o.reroof_rate_per_m2.terracotta_tile),
         cement_sheet: stringify(o.reroof_rate_per_m2.cement_sheet),
       })
+      setNewWork(
+        Object.fromEntries(NEW_WORK.map(([key]) => [key, stringify(o.new_work_rate_per_m2?.[key])])) as Record<NewWorkKey, string>,
+      )
       setMultiStorey(stringifyPct(o.multi_storey_loading_pct))
       setAsbestos(stringifyPct(o.asbestos_loading_pct))
       setComplexity(stringifyPct(o.complexity_loading_pct))
@@ -246,6 +257,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
           call_out_minimum_ex_gst: dollars.call_out_minimum_ex_gst === '' ? null : dollars.call_out_minimum_ex_gst,
           solar_detach_reinstate_base_ex_gst: dollars.solar_detach_reinstate_base_ex_gst === '' ? null : dollars.solar_detach_reinstate_base_ex_gst,
           solar_detach_reinstate_per_array_ex_gst: dollars.solar_detach_reinstate_per_array_ex_gst === '' ? null : dollars.solar_detach_reinstate_per_array_ex_gst,
+          new_work_rate_per_m2: Object.fromEntries(NEW_WORK.map(([key]) => [key, newWork[key] === '' ? null : newWork[key]])),
         }
         const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/roofing-rates', {
@@ -276,7 +288,8 @@ export function RoofRatesEditor({ accessToken }: Props) {
         setSaving(false)
       }
     },
-    [accessToken, rates, multiStorey, asbestos, complexity, upgradeMat, gstMode, load],
+    // Every field the body reads: a missing one would save a stale value.
+    [accessToken, rates, newWork, multiStorey, asbestos, complexity, accessories, edgeRates, dollars, edgeWorksMode, upgradeMat, gstMode, load],
   )
 
   if (!hasPricingBook) {
@@ -347,6 +360,31 @@ export function RoofRatesEditor({ accessToken }: Props) {
                 ariaLabel={`${label} $/m²`}
               />
               <Caption error={fe} defaultHint={def !== undefined ? `Default $${def}/m²` : 'Default unavailable'} />
+            </label>
+          )
+        })}
+      </div>
+
+      {/* ── New work ────────────────────────────────────────────── */}
+      <SectionHeader
+        title="New work · builder quotes"
+        subtitle="Your $/m² for a new roof, priced from a builder's plans. There's no default: a builder quote needs your rate for every material it uses."
+      />
+      <div className="mt-4 grid gap-5 sm:grid-cols-2">
+        {NEW_WORK.map(([key, label]) => {
+          const fe = fieldErrors[`new_work_rate_per_m2.${key}`]
+          return (
+            <label key={key} className="block">
+              <FieldLabel>{label}</FieldLabel>
+              <CurrencyInput
+                value={newWork[key]}
+                onChange={(v) => setNewWork((r) => ({ ...r, [key]: v }))}
+                placeholder=""
+                disabled={loading || saving}
+                hasError={!!fe}
+                ariaLabel={`${label} new work $/m²`}
+              />
+              <Caption error={fe} defaultHint="No default" />
             </label>
           )
         })}
@@ -557,6 +595,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
               terracotta_tile: '',
               cement_sheet: '',
             })
+            setNewWork(BLANK_NEW_WORK)
             setMultiStorey('')
             setAsbestos('')
             setComplexity('')
@@ -644,12 +683,15 @@ function CurrencyInput({
       >
         $
       </span>
+      {/* No max and any step: the dollar fields go well past $500 (a call-out
+          minimum, a solar allowance) and rates can carry cents, and a browser
+          that rejects one field silently blocks the whole save. The route
+          checks every bound and names the field. */}
       <input
         type="number"
         inputMode="decimal"
         min={0}
-        max={500}
-        step={1}
+        step="any"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -692,7 +734,7 @@ function PctInput({
           inputMode="decimal"
           min={0}
           max={100}
-          step={1}
+          step="any"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={defaultValue !== null ? String(Math.round(defaultValue)) : ''}

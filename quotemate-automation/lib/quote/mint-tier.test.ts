@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  isSiteVisitFirstRow,
   isSiteVisitFirstTrade,
   resolveBookUnpaidAction,
   resolveGenericMintTier,
@@ -135,6 +136,22 @@ describe('resolveBookUnpaidAction — /q/[token]/book (R3)', () => {
         nextTier: 'better',
       }),
     ).toEqual({ kind: 'expired' })
+  })
+})
+
+describe('EV charger supply-only payment routing', () => {
+  it('does not turn a priced supply-only option into a $99 site visit', () => {
+    expect(isSiteVisitFirstRow({
+      trade: 'electrical', quoteKind: 'initial', serviceMode: 'supply_only',
+    })).toBe(false)
+    expect(resolveGenericMintTier('better', 'electrical', 'initial', 'supply_only'))
+      .toEqual({ kind: 'passthrough' })
+    expect(resolveGenericMintTier('inspection', 'electrical', 'initial', 'supply_only'))
+      .toEqual({ kind: 'refuse' })
+    expect(resolveBookUnpaidAction({
+      trade: 'electrical', holdExpired: false, needsInspection: false,
+      nextTier: 'better', quoteKind: 'initial', serviceMode: 'supply_only',
+    })).toEqual({ kind: 'pay', tier: 'better' })
   })
 })
 

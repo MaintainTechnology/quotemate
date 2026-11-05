@@ -1,11 +1,12 @@
 import { smsIntakeWorkIdentity } from '@/lib/sms/intake-work'
+import { customerPropertyPhase, normaliseCustomerPhase } from '@/lib/sms/phase-evidence'
 import { attributeSmsWorkTenant } from '@/lib/sms/durable-work'
 import { createClient } from '@supabase/supabase-js'
 import { durableAfter as after, currentSmsWork, enqueueSmsWork, enqueueEstimateWork, internalWorkPayload, runSmsWorkNow, withFencedSmsClient, assertSmsWorkOwnership, smsWorkCheckpoint, smsWorkFetch } from '@/lib/sms/durable-work'
 import { smsDeliveryWorkScope } from '@/lib/sms/work-delivery-context'
 import { updateSmsDeliveryContext } from '@/lib/sms/delivery-context'
 import { structureIntake } from '@/lib/intake/structure'
-import { deriveTradeFromJobType } from '@/lib/intake/schema'
+import { deriveTradeFromJobType, type Intake } from '@/lib/intake/schema'
 import { embedIntake } from '@/lib/intake/embed'
 import { evaluateIntakeQuality, missingRequiredFields } from '@/lib/intake/quality'
 import { reconcileJobType } from '@/lib/intake/job-type-reconcile'
@@ -24,6 +25,12 @@ import {
   type ChosenProduct,
 } from '@/lib/sms/product-options'
 import { photoDeclined } from '@/lib/sms/quote-readiness'
+import {
+  isEvSupplyMode,
+  normaliseEvServiceMode,
+  suppliedByForEvServiceMode,
+  type EvServiceMode,
+} from '@/lib/quote/ev-service-mode'
 
 // WP9 — feed a mid-chat product pick into the estimate. Flag-gated;
 // OFF (default) ⇒ this never runs and the transcript is unchanged.
@@ -74,7 +81,7 @@ export function scheduleIntakeLeadPush(
 /** Phase answers that mean THREE-PHASE in a customer's own words. Matched
  *  exactly (after trim + lowercase) so a stray mention inside prose never
  *  routes a job to inspection — only a real slot answer does. */
-const THREE_PHASE_SLOT_ANSWERS = new Set(['three-phase', 'three phase', '3 phase', '3-phase'])
+// Supported slot spellings are shared with customer-provenance extraction.
 
 /**
  * R6(c) (2026-09-02) — deterministic three-phase gate for the SMS path.
@@ -98,8 +105,7 @@ export function enforceSmsThreePhaseInspection<T extends { inspection_required: 
   intake: T,
   phaseAnswer: string | null | undefined,
 ): T {
-  const answer = String(phaseAnswer ?? '').trim().toLowerCase()
-  if (!THREE_PHASE_SLOT_ANSWERS.has(answer)) return intake
+  if (normaliseCustomerPhase(phaseAnswer) !== 'three') return intake
   if (intake.inspection_required === true) return intake
   return { ...intake, inspection_required: true }
 }
@@ -127,6 +133,191 @@ export function resolveAddressProvenance(
   return remembered
     ? { address_source: 'none', remembered_address: remembered }
     : { address_source: 'none' }
+}
+
+/**
+ * Read the receptionist's explicit EV service decision from its canonical
+ * slot. Deliberately do not inspect `supplied_by` or conversation prose here:
+ * "can you supply?" proves supply interest, but it does not distinguish a
+ * supply-only order from supply-and-install.
+ */
+export function smsEvServiceModeFromConversationState(
+  state: unknown,
+): EvServiceMode | undefined {
+  const serviceMode = (state as
+    | { slots?: { service_mode?: unknown } }
+    | null
+    | undefined)?.slots?.service_mode
+  return normaliseEvServiceMode(serviceMode)
+}
+
+type SmsEvIntakeReconciliation = {
+  intake: Intake
+  allowChosenProduct: boolean
+  retainInstallationPhotos: boolean
+}
+
+/**
+ * Unknown is represented by the absence of a canonical mode. Once either the
+ * receptionist or the structurer has identified an EV request, that absence is
+ * a hard stop: no intake/estimate handoff is allowed until the customer answers
+ * the explicit three-way question.
+ */
+export function unresolvedEvServiceModeBlocksHandoff(
+  intakeJobType: string | null | undefined,
+  dialogJobType: string | null | undefined,
+  serviceMode: EvServiceMode | undefined,
+): boolean {
+  const isEvRequest =
+    intakeJobType === 'ev_charger' ||
+    dialogJobType === 'ev_charger' ||
+    serviceMode !== undefined
+  return isEvRequest && serviceMode === undefined
+}
+
+export function storedEvServiceMode(
+  intake: Pick<Intake, 'scope'>,
+): EvServiceMode | undefined {
+  return normaliseEvServiceMode(
+    (intake.scope as unknown as { specs?: { service_mode?: unknown } } | null)
+      ?.specs?.service_mode,
+  )
+}
+
+/** A canonical mode correction invalidates the already-structured intake. */
+export function evServiceModeChangedSinceIntake(
+  intake: Pick<Intake, 'scope'>,
+  currentMode: EvServiceMode | undefined,
+): boolean {
+  return !!currentMode && storedEvServiceMode(intake) !== currentMode
+}
+
+/**
+ * Keep only state compatible with the newly-selected mode, but deliberately
+ * make the checkpoint non-usable so the full transcript is structured again.
+ */
+export function invalidateEvIntakeAfterModeChange(
+  intake: Intake,
+  previousMode: EvServiceMode | undefined,
+  currentMode: EvServiceMode,
+): Intake {
+  const scope: Record<string, unknown> = {
+    ...(intake.scope as unknown as Record<string, unknown>),
+    description: '',
+  }
+  // An install-only/legacy intake cannot be proof of a later charger choice.
+  // Supply-to-supply corrections may retain the customer's compatible pick.
+  if (!isEvSupplyMode(previousMode) && isEvSupplyMode(currentMode)) {
+    delete scope.chosen_product
+  }
+  return {
+    ...intake,
+    scope: scope as unknown as Intake['scope'],
+    confidence: 'LOW',
+    confidence_reason:
+      'EV service mode changed — intake must be rebuilt from the customer transcript.',
+  }
+}
+
+/**
+ * Carry the receptionist's explicit EV service mode across the probabilistic
+ * structuring boundary. This is the canonical handoff into the estimator.
+ *
+ * The mode is authoritative only for an EV conversation/intake. A legacy EV
+ * intake with no explicit mode is made deliberately non-usable and stripped of
+ * product/site state. The route then stops before persistence/estimation (or
+ * sanitises an already-persisted stale row) until the three-way answer exists.
+ */
+export function reconcileSmsEvServiceModeIntake(
+  intake: Intake,
+  serviceMode: EvServiceMode | undefined,
+  dialogJobType?: string | null,
+): SmsEvIntakeReconciliation {
+  const isEvConversation =
+    intake.job_type === 'ev_charger' ||
+    dialogJobType === 'ev_charger' ||
+    serviceMode !== undefined
+  if (!isEvConversation) {
+    return {
+      intake,
+      allowChosenProduct: true,
+      retainInstallationPhotos: true,
+    }
+  }
+
+  const scope = (intake.scope ?? {}) as unknown as Record<string, unknown>
+  const specs = (scope.specs ?? {}) as Record<string, unknown>
+  const allowChosenProduct = isEvSupplyMode(serviceMode)
+  const nextScope: Record<string, unknown> = { ...scope }
+
+  if (!allowChosenProduct) delete nextScope.chosen_product
+
+  // No explicit mode means no inference and no quote-ready state. Clear both
+  // halves of the stale fork: supplier/product data cannot imply a sale, while
+  // installation/site data cannot imply an install or a paid visit. Emptying
+  // the description makes an already-persisted row fail evaluateIntakeQuality,
+  // so the next explicit answer is fully re-structured from the SMS transcript.
+  if (!serviceMode) {
+    const nextSpecs: Record<string, unknown> = { ...specs }
+    delete nextSpecs.service_mode
+    delete nextSpecs.supplied_by
+    delete nextSpecs.photo_declined
+    nextScope.specs = nextSpecs
+    nextScope.description = ''
+    delete nextScope.is_new_install
+    delete nextScope.existing_wiring
+    delete nextScope.indoor_outdoor
+    return {
+      intake: {
+        ...intake,
+        scope: nextScope as unknown as Intake['scope'],
+        access: undefined,
+        property: undefined,
+        inspection_required: false,
+        confidence: 'LOW',
+        confidence_reason:
+          'EV service mode is unresolved — customer must choose supply only, installation only, or both.',
+      },
+      allowChosenProduct: false,
+      retainInstallationPhotos: false,
+    }
+  }
+
+  const nextSpecs: Record<string, unknown> = {
+    ...specs,
+    service_mode: serviceMode,
+    supplied_by: suppliedByForEvServiceMode(serviceMode),
+  }
+  nextScope.specs = nextSpecs
+
+  if (serviceMode !== 'supply_only') {
+    return {
+      intake: { ...intake, scope: nextScope as unknown as Intake['scope'] },
+      allowChosenProduct,
+      retainInstallationPhotos: true,
+    }
+  }
+
+  // Supply-only is a product order, not an electrical site job. Remove the
+  // fields that can make renderers or estimators describe an installation.
+  delete nextSpecs.photo_declined
+  delete nextScope.is_new_install
+  delete nextScope.existing_wiring
+  delete nextScope.indoor_outdoor
+  nextScope.description =
+    'Supply an EV charger unit only. Installation, electrical work and site attendance are excluded.'
+
+  return {
+    intake: {
+      ...intake,
+      scope: nextScope as unknown as Intake['scope'],
+      access: undefined,
+      property: undefined,
+      inspection_required: false,
+    },
+    allowChosenProduct: true,
+    retainInstallationPhotos: false,
+  }
 }
 
 // Channel-agnostic intake handler.
@@ -216,6 +407,9 @@ export async function POST(req: Request) {
   // R17 — the dialog/slot-extractor's job_type, captured at function scope so it
   // can be reconciled against the structurer's job_type after structuring.
   let dialogJobType: string | null = null
+  // Explicit three-way EV service decision from the receptionist. Undefined is
+  // intentional: supplier interest alone must never become installation scope.
+  let dialogEvServiceMode: EvServiceMode | undefined
   // R6(c) — the customer's own phase answer, read straight off the dialog
   // slots so the three-phase gate below never depends on model discretion.
   let dialogRequestedPhase: string | null = null
@@ -243,6 +437,24 @@ export async function POST(req: Request) {
       return Response.json({ error: 'sms conversation not found' }, { status: 404 })
     }
 
+    // Read the canonical dialog decision before the idempotency branch. A
+    // recovered intake is not trustworthy merely because it is non-empty: the
+    // customer may since have corrected the mode, or a legacy row may predate
+    // the three-way service-mode contract entirely.
+    const conversationSlots = (convo.conversation_state as
+      | {
+          slots?: {
+            job_type?: string
+            service_mode?: unknown
+            requested_specs?: Record<string, unknown>
+          }
+        }
+      | null)?.slots
+    const slotJobType = conversationSlots?.job_type
+    dialogJobType = slotJobType ?? null
+    dialogEvServiceMode = smsEvServiceModeFromConversationState(convo.conversation_state)
+    if (slotJobType) tradeHint = deriveTradeFromJobType(slotJobType)
+
     // ─────── Idempotency short-circuit (2026-05-19 "bug zapper" fix) ───────
     // The SMS inbound webhook fires this endpoint inside a withRetry wrapper.
     // If the fetch from the inbound's after() block aborts mid-flight (Vercel
@@ -265,15 +477,135 @@ export async function POST(req: Request) {
       ? existingIntakeQuery.eq('id', convo.intake_id).eq('tenant_id', convo.tenant_id)
       : existingIntakeQuery.eq('sms_source_key', `sms:${conversationId}`)).maybeSingle()
     if (existingError) throw new Error(`Intake recovery lookup failed: ${existingError.message}`)
-    if (existingIntake && evaluateIntakeQuality(existingIntake) !== 'empty') {
-      await enqueueEstimateWork(existingIntake.id, convo.tenant_id)
-      // Replaying intake may recover a missing review task, but must never
-      // demote a conversation whose quote is already saved or owner-released.
-      if (!convo.quote_id) await supabase.from('sms_conversations')
-        .update({ intake_id: existingIntake.id, quote_stage: 'estimate_pending', status: 'structuring' })
-        .eq('id', conversationId).is('quote_id', null)
-      return Response.json({ ok: true, intakeId: existingIntake.id,
-        stage: convo.quote_id ? (convo.quote_stage ?? 'quote_saved') : 'estimate_pending', idempotent: true })
+    if (existingIntake) {
+      // Once a quote exists, this retry has nothing left to recover. In
+      // particular, never rewrite the intake underneath a released/public row;
+      // quote corrections go through the authenticated quote workflow.
+      if (convo.quote_id) {
+        return Response.json({
+          ok: true,
+          intakeId: existingIntake.id,
+          stage: convo.quote_stage ?? 'quote_saved',
+          idempotent: true,
+        })
+      }
+      const existingEvContext =
+        existingIntake.job_type === 'ev_charger' ||
+        dialogJobType === 'ev_charger' ||
+        dialogEvServiceMode !== undefined
+      let recoveredIntake = existingIntake
+
+      if (existingEvContext) {
+        const previousMode = storedEvServiceMode(existingIntake as unknown as Intake)
+        const modeChanged = evServiceModeChangedSinceIntake(
+          existingIntake as unknown as Intake,
+          dialogEvServiceMode,
+        )
+        const modeReconciliation = reconcileSmsEvServiceModeIntake(
+          existingIntake as unknown as Intake,
+          dialogEvServiceMode,
+          dialogJobType,
+        )
+        const reconciliation = modeChanged && dialogEvServiceMode
+          ? {
+              ...modeReconciliation,
+              intake: invalidateEvIntakeAfterModeChange(
+                modeReconciliation.intake,
+                previousMode,
+                dialogEvServiceMode,
+              ),
+            }
+          : modeReconciliation
+        const { data: corrected, error: correctionError } = await supabase
+          .from('intakes')
+          .update({
+            scope: reconciliation.intake.scope,
+            access: reconciliation.intake.access ?? null,
+            property: reconciliation.intake.property ?? null,
+            inspection_required: reconciliation.intake.inspection_required,
+            confidence: reconciliation.intake.confidence,
+            confidence_reason: reconciliation.intake.confidence_reason,
+            ...(reconciliation.retainInstallationPhotos ? {} : { photo_paths: [] }),
+          })
+          .eq('id', existingIntake.id)
+          .eq('tenant_id', convo.tenant_id)
+          .select('*')
+          .single()
+        if (correctionError || !corrected) {
+          throw new Error(`EV intake recovery correction failed: ${correctionError?.message ?? 'missing corrected row'}`)
+        }
+        recoveredIntake = corrected
+        if (modeChanged) {
+          log.step('EV service mode changed — rebuilding stale intake from transcript', {
+            intakeId: existingIntake.id,
+            serviceMode: dialogEvServiceMode,
+          })
+        }
+      }
+
+      if (unresolvedEvServiceModeBlocksHandoff(
+        recoveredIntake.job_type,
+        dialogJobType,
+        dialogEvServiceMode,
+      )) {
+        const { error: holdError } = await supabase
+          .from('sms_conversations')
+          .update({
+            status: 'open',
+            quote_stage: null,
+            product_choice: null,
+            photo_urls: [],
+            photo_paths: [],
+            photo_request_sent_at: null,
+            photos_completed_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', conversationId)
+        if (holdError) throw new Error(`EV service-mode hold failed: ${holdError.message}`)
+        return Response.json({
+          ok: true,
+          intakeId: existingIntake.id,
+          gated: 'ev_service_mode',
+          idempotent: true,
+        })
+      }
+
+      if (evaluateIntakeQuality(recoveredIntake) === 'empty') {
+        // A previously unresolved row was intentionally made non-usable. Once
+        // the customer supplies a mode, fall through and rebuild it from the
+        // full transcript instead of reviving stripped stale state.
+      } else {
+        await enqueueEstimateWork(existingIntake.id, convo.tenant_id)
+        // Replaying intake may recover a missing review task, but must never
+        // demote a conversation whose quote is already saved or owner-released.
+        if (!convo.quote_id) await supabase.from('sms_conversations')
+          .update({ intake_id: existingIntake.id, quote_stage: 'estimate_pending', status: 'structuring' })
+          .eq('id', conversationId).is('quote_id', null)
+        return Response.json({ ok: true, intakeId: existingIntake.id,
+          stage: convo.quote_id ? (convo.quote_stage ?? 'quote_saved') : 'estimate_pending', idempotent: true })
+      }
+    }
+
+    // Defense in depth for a fresh/stale handoff. The inbound receptionist
+    // normally prevents `finish` while this is unknown, but this internal route
+    // can be retried independently. Stop before loading photos or invoking the
+    // structurer so an ambiguous request cannot create a quote-ready intake.
+    if (unresolvedEvServiceModeBlocksHandoff(null, dialogJobType, dialogEvServiceMode)) {
+      const { error: holdError } = await supabase
+        .from('sms_conversations')
+        .update({
+          status: 'open',
+          quote_stage: null,
+          product_choice: null,
+          photo_urls: [],
+          photo_paths: [],
+          photo_request_sent_at: null,
+          photos_completed_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId)
+      if (holdError) throw new Error(`EV service-mode hold failed: ${holdError.message}`)
+      return Response.json({ ok: true, gated: 'ev_service_mode' })
     }
 
     const { data: messages } = await supabase
@@ -307,16 +639,25 @@ export async function POST(req: Request) {
     if (WP9_ENABLED) {
       try {
         const pc = (convo.product_choice ?? null) as ProductChoiceState | null
-        const directive = describeChosenProductDirective(pc)
-        if (directive) {
-          transcript = `Customer product selection (authoritative):\n  - ${directive}\n\n` + transcript
-          log.step('WP9 — chosen product injected into intake transcript', {
+        const evProductContext = slotJobType === 'ev_charger' || dialogEvServiceMode !== undefined
+        const allowProductSelection = !evProductContext || isEvSupplyMode(dialogEvServiceMode)
+        if (allowProductSelection) {
+          const directive = describeChosenProductDirective(pc)
+          if (directive) {
+            transcript = `Customer product selection (authoritative):\n  - ${directive}\n\n` + transcript
+            log.step('WP9 — chosen product injected into intake transcript', {
+              conversationId,
+            })
+          }
+          // Capture the structured pick → force-applied to the draft below
+          // (deterministic, not just a hint).
+          chosenProductForIntake = chosenProductFromChoice(pc)
+        } else if (pc) {
+          log.step('WP9 — ignored stale EV product outside a supply-bearing service mode', {
             conversationId,
+            serviceMode: dialogEvServiceMode ?? 'unknown',
           })
         }
-        // Capture the structured pick → force-applied to the draft below
-        // (deterministic, not just a hint).
-        chosenProductForIntake = chosenProductFromChoice(pc)
       } catch (e) {
         log.err('WP9 product-choice injection failed (non-fatal)', e as Error)
       }
@@ -328,18 +669,12 @@ export async function POST(req: Request) {
     tenantId = (convo.tenant_id as string | null) ?? null
     leadPushAlreadySent = !!convo.lead_push_sent_at
 
-    // v5: derive tradeHint from the SMS dialog's already-classified job_type.
-    // The extractor classifies plumbing job_types per v5; passing the hint
-    // forward grounds Opus in the right trade before structuring the intake.
-    const slotJobType = (convo.conversation_state as { slots?: { job_type?: string } } | null)?.slots?.job_type
-    if (slotJobType) {
-      tradeHint = deriveTradeFromJobType(slotJobType)
-    }
-    dialogJobType = slotJobType ?? null
-    dialogRequestedPhase =
-      (convo.conversation_state as
-        { slots?: { requested_specs?: { phase?: string } } } | null)
-        ?.slots?.requested_specs?.phase ?? null
+    dialogRequestedPhase = customerPropertyPhase({
+      requestedSpecs: conversationSlots?.requested_specs,
+      history: (messages ?? []).map((message) => ({
+        direction: message.direction as 'inbound' | 'outbound', body: message.body ?? '',
+      })),
+    })
 
     // Photos arrive on the SMS path through TWO surfaces — both feed
     // structureIntake the same way:
@@ -371,6 +706,16 @@ export async function POST(req: Request) {
       : []
 
     photoPaths = Array.from(new Set([...mmsPhotoPaths, ...uploadedPhotoPaths]))
+
+    // A supply-only order has no installation site. Do not send old MMS/site
+    // photos through vision and do not persist them onto the product order.
+    // The conversation row's buffer is still cleared later by the normal
+    // successful-draft path, preventing those photos bleeding into a new job.
+    if (dialogEvServiceMode === 'supply_only') {
+      photoUrls = []
+      photoPaths = []
+      log.ok('EV supply-only mode — installation photos excluded from intake')
+    }
 
     // RE-SIGN before vision. The URLs stored on sms_messages.photo_urls and
     // sms_conversations.photo_urls were signed when the photo arrived and last
@@ -417,12 +762,14 @@ export async function POST(req: Request) {
     // R9 — did the customer decline the photo ask? Same predicate the SMS
     // readiness gate uses, so the intake records exactly what let the quote
     // through without a photo.
-    dialogPhotoDeclined = photoDeclined(
-      (messages ?? []).map((m) => ({
-        direction: (m.direction as 'inbound' | 'outbound') ?? 'inbound',
-        body: String(m.body ?? ''),
-      })) as Parameters<typeof photoDeclined>[0],
-    )
+    if (dialogEvServiceMode !== 'supply_only') {
+      dialogPhotoDeclined = photoDeclined(
+        (messages ?? []).map((m) => ({
+          direction: (m.direction as 'inbound' | 'outbound') ?? 'inbound',
+          body: String(m.body ?? ''),
+        })) as Parameters<typeof photoDeclined>[0],
+      )
+    }
 
     log.ok('SMS conversation stitched', {
       messages: messages?.length ?? 0,
@@ -466,7 +813,7 @@ export async function POST(req: Request) {
   let intakeModelIdx = 0
 
   log.step(`running intake — model cascade: ${INTAKE_MODEL_CASCADE.map(m => m.label).join(' → ')}, up to ${INTAKE_MODEL_CASCADE.length} attempts`, { tradeHint })
-  const intake = await smsWorkCheckpoint('structured_intake', () => withRetry(
+  let intake = await smsWorkCheckpoint('structured_intake', () => withRetry(
     () => {
       const m = INTAKE_MODEL_CASCADE[Math.min(intakeModelIdx++, INTAKE_MODEL_CASCADE.length - 1)]
       return structureIntake(transcript, photoUrls, tradeHint, m.id)
@@ -494,11 +841,65 @@ export async function POST(req: Request) {
     risks: intake.risks?.length ?? 0,
   })
 
+  // The dialog's explicit service decision outranks model re-interpretation.
+  // Reconcile immediately after structuring so every downstream consumer sees
+  // one canonical mode and the legacy supplier field derived from it.
+  const evServiceReconciliation = reconcileSmsEvServiceModeIntake(
+    intake,
+    dialogEvServiceMode,
+    dialogJobType,
+  )
+  intake = evServiceReconciliation.intake
+  if (!evServiceReconciliation.allowChosenProduct) chosenProductForIntake = null
+  if (!evServiceReconciliation.retainInstallationPhotos) {
+    photoUrls = []
+    photoPaths = []
+    dialogPhotoDeclined = false
+  }
+  if (unresolvedEvServiceModeBlocksHandoff(
+    intake.job_type,
+    dialogJobType,
+    dialogEvServiceMode,
+  )) {
+    // This catches sources where the EV classification appears only after
+    // structuring (including the legacy voice path). No embedding, intake row,
+    // preview, Stripe session or estimation job is created from this result.
+    if (sourceChannel === 'sms' && conversationId) {
+      const { error: holdError } = await supabase
+        .from('sms_conversations')
+        .update({
+          status: 'open',
+          quote_stage: null,
+          product_choice: null,
+          photo_urls: [],
+          photo_paths: [],
+          photo_request_sent_at: null,
+          photos_completed_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId)
+      if (holdError) throw new Error(`EV service-mode hold failed: ${holdError.message}`)
+    }
+    log.done('EV service mode unresolved — stopped before intake persistence and estimation')
+    return Response.json({ ok: true, gated: 'ev_service_mode' })
+  }
+  if (dialogEvServiceMode && (intake.job_type === 'ev_charger' || dialogJobType === 'ev_charger')) {
+    log.ok('EV service mode reconciled from receptionist slot', {
+      serviceMode: dialogEvServiceMode,
+      suppliedBy: suppliedByForEvServiceMode(dialogEvServiceMode),
+    })
+  }
+
   // Spec ev-charger-location-photo R9 — record that the customer could not send
   // a photo, so the tradie sees WHY the estimate has none rather than assuming
   // the receptionist forgot to ask. Deterministic and SMS-only: the structurer
   // is never asked to infer it, and it is never set for a job that has photos.
-  if (intake.job_type === 'ev_charger' && dialogPhotoDeclined && photoPaths.length === 0) {
+  if (
+    intake.job_type === 'ev_charger' &&
+    dialogEvServiceMode !== 'supply_only' &&
+    dialogPhotoDeclined &&
+    photoPaths.length === 0
+  ) {
     const scope = intake.scope as unknown as Record<string, unknown>
     const specs = (scope?.specs ?? {}) as Record<string, unknown>
     intake.scope = {
@@ -509,7 +910,16 @@ export async function POST(req: Request) {
   }
 
   // R6(c) — three-phase is a site-visit call, not a prompt suggestion.
-  const phaseGated = enforceSmsThreePhaseInspection(intake, dialogRequestedPhase)
+  if (
+    dialogEvServiceMode !== 'supply_only' &&
+    (dialogRequestedPhase === 'single' || dialogRequestedPhase === 'three')
+  ) {
+    intake.property = { ...intake.property, phase: dialogRequestedPhase }
+  }
+  const phaseGated = enforceSmsThreePhaseInspection(
+    intake,
+    dialogEvServiceMode === 'supply_only' ? null : dialogRequestedPhase,
+  )
   if (phaseGated.inspection_required !== intake.inspection_required) {
     intake.inspection_required = true
     log.ok('three-phase answered explicitly — inspection required (deterministic)', {

@@ -8,7 +8,8 @@
  *
  * A quote in `awaiting_tradie_approval` has NOT been shown to the customer yet
  * — only the explicit Approve action first-contacts them — so an edit must
- * never be their first contact (no-leak-on-held-quotes). Otherwise:
+ * never be their first contact (no-leak-on-held-quotes). A draft also stays
+ * private unless the server has already recorded customer release. Otherwise:
  *   - `notifyCustomer === true`      → always notify (tradie opted in)
  *   - `notifyCustomer === undefined` → legacy default: notify iff a tier price
  *                                      changed (`changedTiersCount > 0`)
@@ -16,10 +17,11 @@
  */
 export function shouldNotifyOnEdit(args: {
   status: string | null | undefined
+  customerReleased: boolean
   notifyCustomer: boolean | undefined
   changedTiersCount: number
 }): boolean {
-  if (args.status === 'awaiting_tradie_approval') return false
+  if (!args.customerReleased || args.status === 'awaiting_tradie_approval') return false
   if (args.notifyCustomer === true) return true
   if (args.notifyCustomer === undefined) return args.changedTiersCount > 0
   return false

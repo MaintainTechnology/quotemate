@@ -4,14 +4,16 @@ import { resolve } from 'node:path'
 import { verifyPublicQuoteSchema, JOB_QUOTE_OPERATION_SCHEMA } from '../lib/quote/public-schema'
 import { publicWebOrigin } from '../lib/sms/public-origin'
 import { tenantPricingReadiness } from '../lib/sms/pricing-readiness'
+import { rank1QuoteCoreEnabled } from '../lib/estimate/rank1-policy'
 
 type Check = { name: string; ok: boolean }
-export function releaseFingerprint(): { sourceHash: string; originCommit: string; trade: string; contractVersion: number } | null {
+export function releaseFingerprint(): { sourceHash: string; originCommit: string; trade: string; contractVersion: number; rank1Required: boolean; rank1Scope: string | null } | null {
   try {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'release-manifest.json'), 'utf8'))
     const attestation = JSON.parse(readFileSync(resolve(process.cwd(), 'build-attestation.json'), 'utf8'))
     if (attestation.version !== 1 || attestation.sourceHash !== manifest.sourceHash) return null
-    return { sourceHash: manifest.sourceHash, originCommit: manifest.originCommit, trade: manifest.trade, contractVersion: manifest.contractVersion }
+    return { sourceHash: manifest.sourceHash, originCommit: manifest.originCommit, trade: manifest.trade, contractVersion: manifest.contractVersion,
+      rank1Required: manifest.rank1Required === true, rank1Scope: manifest.rank1Scope ?? null }
   } catch { return null }
 }
 
@@ -19,14 +21,21 @@ export function releaseFingerprint(): { sourceHash: string; originCommit: string
 export async function receptionistReadiness(trade: string) {
   const checks: Check[] = []
   const release = releaseFingerprint()
-  checks.push({ name: 'release_manifest', ok: release?.contractVersion === 2 && release.trade === trade })
+  checks.push({ name: 'release_manifest', ok: release?.contractVersion === 2 && release.trade === trade &&
+    release.rank1Required && release.rank1Scope === 'all_accounts' })
   try { publicWebOrigin(); checks.push({ name: 'public_web_origin', ok: true }) }
   catch { checks.push({ name: 'public_web_origin', ok: false }) }
   checks.push({ name: 'engine_auth', ok: Boolean(process.env.CRON_SECRET && process.env.SIM_API_KEY && process.env.SMS_SIMULATE_ENABLED === '1') })
   const tenant = process.env.SMS_READINESS_TENANT_ID
   checks.push({ name: 'controlled_tenant', ok: Boolean(tenant) })
+  // Controlled tenants supply readiness evidence only. They do not select who
+  // receives the mandatory policy; an obsolete tenant allowlist has no effect.
+  const rank1Required = release?.rank1Required === true
+  const rank1Policy = rank1QuoteCoreEnabled()
+  checks.push({ name: 'rank1_policy', ok: rank1Policy })
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, trade, release, checks: [...checks, { name: 'database', ok: false }] }
+    return { ok: false, trade, release, checks: [...checks, { name: 'database', ok: false }],
+      capabilities: { conversation: false, quote: false, delivery: false, rank1Required, rank1Policy } }
   }
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } })
@@ -56,7 +65,7 @@ export async function receptionistReadiness(trade: string) {
   if (tenant) {
     try {
       const setup = await db.from('tenants').select('trades,trade,status').eq('id', tenant).abortSignal(AbortSignal.timeout(3000)).maybeSingle()
-      checks.push({ name: 'enabled_trade', ok: !setup.error && setup.data?.trades?.includes(trade) === true && !['suspended','closed'].includes(String(setup.data?.status).toLowerCase()) })
+      checks.push({ name: 'enabled_trade', ok: !setup.error && setup.data?.trades?.includes(trade) === true && String(setup.data?.status).toLowerCase() === 'active' })
       checks.push({ name: 'tenant_pricing', ok: await tenantPricingReadiness(db,tenant,trade,setup.data?.trade ?? null) })
       const proof = await db.from('sms_readiness_evidence').select('passed,verified_at')
         .eq('release_hash',release?.sourceHash ?? '').eq('tenant_id',tenant).eq('trade',trade).eq('tool','sms_quote')
@@ -68,6 +77,7 @@ export async function receptionistReadiness(trade: string) {
     } catch { checks.push({ name: 'tenant_dependency', ok: false }) }
   }
   return { ok: checks.every((c) => c.ok), trade, release, checks,
-    capabilities: { conversation: checks.filter((c) => ['engine_auth','schema:sms_work_jobs','enabled_trade'].includes(c.name)).every((c) => c.ok),
-      quote: checks.every((c) => c.ok), delivery: checks.find((c) => c.name === 'schema:sms_outbox')?.ok === true } }
+    capabilities: { conversation: ['controlled_tenant','engine_auth','schema:sms_work_jobs','enabled_trade'].every((name) => checks.some((c) => c.name === name && c.ok)),
+      quote: checks.every((c) => c.ok), delivery: checks.find((c) => c.name === 'schema:sms_outbox')?.ok === true,
+      rank1Required, rank1Policy } }
 }

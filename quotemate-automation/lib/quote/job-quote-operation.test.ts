@@ -173,8 +173,10 @@ describe('T02 operation route, immutable claim and authoritative readback', () =
     expect(mocks.structure.mock.calls[0][1]).toEqual(['https://storage.example/owned-signed-image'])
     expect((await POST(request({ ...body, ...photos, photo_urls: ['https://rotated.example'] }))).status).toBe(200)
     expect(mocks.structure).toHaveBeenCalledTimes(1)
-    const intake = (await db.query<{ scope: { specs: { supplied_by: string } }; inspection_required: boolean }>('select scope, inspection_required from intakes')).rows[0]
-    expect(intake.scope.specs.supplied_by).toBe('customer'); expect(intake.inspection_required).toBe(true)
+    const intake = (await db.query<{ scope: { specs: { service_mode: string; supplied_by: string }; chosen_product?: unknown }; inspection_required: boolean }>('select scope, inspection_required from intakes')).rows[0]
+    expect(intake.scope.specs).toMatchObject({ service_mode: 'install_only', supplied_by: 'customer' })
+    expect(intake.scope.chosen_product).toBeUndefined()
+    expect(intake.inspection_required).toBe(true)
   })
 
   it('fails closed without a durable claim; controlled pre-intake failure permits only a new operation', async () => {
@@ -187,17 +189,120 @@ describe('T02 operation route, immutable claim and authoritative readback', () =
     expect((await db.query('select * from intakes')).rows).toHaveLength(0)
   })
 
-  it.each([[null, false], ['', false], [' ', false], ['not a price', false], ['-1', false], ['0', true], ['12.35', true]] as const)(
-    'pinned price %s retains explicit zero but never guesses missing/invalid catalogue prices', async (price, pinned) => {
+  it.each([null, '', ' ', 'not a price', '-1', '0'] as const)(
+    'rejects EV supply product price %s before claiming or invoking AI', async (price) => {
       const productId = 'cccccccc-1111-4111-8111-cccccccccccc'
       await db.query('insert into tenant_material_catalogue(id,tenant_id,name,unit_price_ex_gst,category,trade,active) values($1,$2,$3,$4,$5,$6,true)', [productId, A, 'EV product', price, 'ev_charger', 'electrical'])
-      const response = await POST(request({ ...body, answers: { ...body.answers, charger_supply: 'we supply the charger' }, product_id: productId }))
-      expect(await response.json()).toMatchObject({ status: 'completed', pinned, pinRequested: true })
-      const intake = (await db.query<{ scope: { chosen_product?: { price_ex_gst: number } } }>('select scope from intakes')).rows[0]
-      if (pinned) expect(intake.scope.chosen_product?.price_ex_gst).toBe(Number(price))
-      else expect(intake.scope.chosen_product).toBeUndefined()
+      const response = await POST(request({
+        ...body,
+        answers: { service_mode: 'supply_only', vehicle: 'Tesla' },
+        product_id: productId,
+      }))
+      expect(response.status).toBe(409)
+      expect(await response.json()).toMatchObject({ error: 'ev_charger_product_invalid' })
+      expect(mocks.structure).not.toHaveBeenCalled()
+      expect((await db.query('select * from job_quote_operations')).rows).toHaveLength(0)
+      expect((await db.query('select * from intakes')).rows).toHaveLength(0)
     },
   )
+
+  it('requires a mode and a selected product for supply modes before drafting', async () => {
+    const noMode = await POST(request({ ...body, answers: {}, operation_id: undefined }))
+    expect(noMode.status).toBe(400)
+    expect(await noMode.json()).toMatchObject({ error: 'ev_service_mode_required' })
+
+    const noProduct = await POST(request({
+      ...body,
+      answers: { service_mode: 'supply_and_install' },
+      operation_id: undefined,
+    }))
+    expect(noProduct.status).toBe(409)
+    expect(await noProduct.json()).toMatchObject({ error: 'ev_charger_product_required' })
+    expect(mocks.structure).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['archived', 'ev_charger', 'electrical', false],
+    ['wrong category', 'downlight', 'electrical', true],
+    ['wrong trade', 'ev_charger', 'plumbing', true],
+  ] as const)('rejects a %s EV catalogue selection', async (_label, category, productTrade, active) => {
+    const productId = 'cccccccc-1111-4111-8111-cccccccccccc'
+    await db.query(
+      'insert into tenant_material_catalogue(id,tenant_id,name,unit_price_ex_gst,category,trade,active) values($1,$2,$3,$4,$5,$6,$7)',
+      [productId, A, 'EV product', '100', category, productTrade, active],
+    )
+    const response = await POST(request({
+      ...body,
+      answers: { service_mode: 'supply_only' },
+      product_id: productId,
+    }))
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ error: 'ev_charger_product_invalid' })
+    expect(mocks.structure).not.toHaveBeenCalled()
+  })
+
+  it('stores a priced supply-only product and removes stale install/photo scope', async () => {
+    const productId = 'cccccccc-1111-4111-8111-cccccccccccc'
+    await db.query(
+      'insert into tenant_material_catalogue(id,tenant_id,name,unit_price_ex_gst,category,trade,active) values($1,$2,$3,$4,$5,$6,true)',
+      [productId, A, 'EV product', '12.35', 'ev_charger', 'electrical'],
+    )
+    const response = await POST(request({
+      ...body,
+      answers: {
+        service_mode: 'supply_only',
+        vehicle: 'Tesla',
+        room: 'garage',
+        phase: 'three phase (on-site inspection)',
+      },
+      product_id: productId,
+      photo_paths: [path],
+    }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ status: 'completed', pinned: true, pinRequested: true })
+    expect(mocks.sign).not.toHaveBeenCalled()
+    expect(mocks.structure.mock.calls[0][0]).not.toContain('garage')
+    expect(mocks.structure.mock.calls[0][0]).not.toContain('three phase')
+    const intake = (await db.query<{
+      scope: { specs: { service_mode: string; supplied_by: string }; chosen_product: { price_ex_gst: number } }
+      inspection_required: boolean
+      photo_paths: string[] | null
+    }>('select scope, inspection_required, photo_paths from intakes')).rows[0]
+    expect(intake.scope.specs).toMatchObject({ service_mode: 'supply_only', supplied_by: 'tradie' })
+    expect(intake.scope.chosen_product.price_ex_gst).toBe(12.35)
+    expect(intake.inspection_required).toBe(false)
+    expect(intake.photo_paths).toBeNull()
+  })
+
+  it('stores a priced supply-and-install product while retaining installation evidence', async () => {
+    const productId = 'cccccccc-1111-4111-8111-cccccccccccc'
+    await db.query(
+      'insert into tenant_material_catalogue(id,tenant_id,name,unit_price_ex_gst,category,trade,active) values($1,$2,$3,$4,$5,$6,true)',
+      [productId, A, 'EV product', '999.50', 'ev_charger', 'electrical'],
+    )
+    const response = await POST(request({
+      ...body,
+      answers: {
+        service_mode: 'supply_and_install',
+        vehicle: 'Tesla Model Y',
+        room: 'garage',
+        phase: 'single phase',
+      },
+      product_id: productId,
+      photo_paths: [path],
+    }))
+    expect(response.status).toBe(200)
+    expect(mocks.sign).toHaveBeenCalledWith(path)
+    expect(mocks.structure.mock.calls[0][0]).toContain('garage')
+    expect(mocks.structure.mock.calls[0][0]).toContain('single phase')
+    const intake = (await db.query<{
+      scope: { specs: { service_mode: string; supplied_by: string }; chosen_product: { catalogue_id: string; price_ex_gst: number } }
+      photo_paths: string[] | null
+    }>('select scope, photo_paths from intakes')).rows[0]
+    expect(intake.scope.specs).toMatchObject({ service_mode: 'supply_and_install', supplied_by: 'tradie' })
+    expect(intake.scope.chosen_product).toMatchObject({ catalogue_id: productId, price_ex_gst: 999.5 })
+    expect(intake.photo_paths).toEqual([path])
+  })
 
   it('an ambiguous intake INSERT acknowledgement never unlocks or dispatches a duplicate', async () => {
     failIntakeResponse = true

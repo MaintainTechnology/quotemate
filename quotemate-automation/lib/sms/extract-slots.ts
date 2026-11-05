@@ -17,6 +17,12 @@
 
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
+import { deterministicSampling } from '@/lib/llm/sampling'
+import {
+  EvServiceModeSchema,
+  suppliedByForEvServiceMode,
+  type EvServiceMode,
+} from '@/lib/quote/ev-service-mode'
 import { SMS_RECEPTIONIST_MODEL, SMS_RECEPTIONIST_MAX_TOKENS } from './model'
 import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
@@ -69,6 +75,12 @@ export const SlotsSchema = z.object({
   // path so a clarifying-question answer doesn't sit idle for one
   // dialog turn.
   supplied_by: z.enum(['tradie', 'customer']).nullable().optional(),
+  // EV-only service intent. This is deliberately independent from
+  // `supplied_by`: "can you supply?" tells us who may provide the unit, but
+  // not whether the customer wants supply-only or supply + installation.
+  // null/absent means unresolved and must be clarified before installation
+  // questions, product choice, photos, or quote handoff.
+  service_mode: EvServiceModeSchema.nullable().optional(),
   // True when the customer affirmed a verification summary ("yep", "correct",
   // "all good"). The dialog policy reads this to decide finish vs ask.
   verified: z.boolean().nullable().optional(),
@@ -128,11 +140,134 @@ export const SlotExtractionSchema = z.object({
 
 export type SlotExtraction = z.infer<typeof SlotExtractionSchema>
 
+const EV_TOPIC_RE = /\b(?:ev|electric vehicle)\s*charger\b|\b(?:wallbox|wall box|wall connector)\b/i
+const MODE_QUESTION_RE = /\bsuppl(?:y|ied) only\b[\s\S]{0,100}\binstallation only\b[\s\S]{0,100}\b(?:both|supply and install(?:ation)?)\b/i
+const BARE_AFFIRMATION_RE = /^(?:yes|yep|yeah|correct|right|sounds? right|sounds? good|all good|that'?s right|spot on|perfect)[.!\s]*$/i
+const UNKNOWN_MODE_RE = /^(?:not sure|unsure|don'?t know|no idea)[.!\s]*$/i
+
+function explicitModeFromCustomer(message: string, lastAgentMessage: string | null): EvServiceMode | undefined {
+  const text = message.trim()
+  const answeredModeQuestion = !!lastAgentMessage && MODE_QUESTION_RE.test(lastAgentMessage)
+
+  if (
+    /\b(?:supply|provide)(?:\s+(?:the\s+)?(?:charger|unit))?\s*(?:and|&|\+)\s*install(?:ation)?\b/i.test(text) ||
+    /\b(?:both|the two|all of it)\b/i.test(text) && answeredModeQuestion
+  ) return 'supply_and_install'
+
+  if (
+    /\b(?:supply|provide)(?:\s+(?:the\s+)?(?:charger|unit))?\s+only\b/i.test(text) ||
+    /\bonly\s+(?:supply|provide)\b/i.test(text) ||
+    /\bjust\s+(?:supply|provide)(?:\s+(?:the\s+)?(?:charger|unit))?\b/i.test(text) ||
+    /\bno\s+install(?:ation|ing)?\b/i.test(text) ||
+    (answeredModeQuestion && /^(?:supply|supply only|charger supply)[.!\s]*$/i.test(text))
+  ) return 'supply_only'
+
+  if (
+    /\binstall(?:ation)?\s+only\b/i.test(text) ||
+    /\bonly\s+install\b/i.test(text) ||
+    /\bjust\s+(?:need\s+)?(?:the\s+)?install(?:ation|ed|ing)?\b/i.test(text) ||
+    /\b(?:already\s+have|have\s+my\s+own|got\s+my\s+own|customer[- ]supplied)\b[^.?!]{0,80}\b(?:install|installation)\b/i.test(text) ||
+    (answeredModeQuestion && /^(?:install|installation|install only|installation only)[.!\s]*$/i.test(text))
+  ) return 'install_only'
+
+  return undefined
+}
+
+function explicitModeFromConfirmedRecap(
+  customerMessage: string,
+  lastAgentMessage: string | null,
+): EvServiceMode | undefined {
+  if (!lastAgentMessage || !BARE_AFFIRMATION_RE.test(customerMessage.trim())) return undefined
+  if (MODE_QUESTION_RE.test(lastAgentMessage)) return undefined
+
+  const recap = lastAgentMessage
+  if (
+    /\bsupply(?:ing)?\b[^.?!]{0,100}\binstall(?:ation|ing)?\b/i.test(recap) ||
+    /\binstall(?:ation|ing)?\b[^.?!]{0,100}\b(?:we(?:'re| are)|tradie|electrician)\s+(?:will\s+)?suppl(?:y|ying)\b/i.test(recap)
+  ) return 'supply_and_install'
+  if (/\bsupply only\b|\bno\s+install(?:ation|ing)?\b/i.test(recap)) return 'supply_only'
+  if (/\binstall(?:ation)? only\b|\bcustomer[- ]supplied\b|\byou(?:'re| are) supplying (?:the )?(?:charger|unit)\b/i.test(recap)) return 'install_only'
+  return undefined
+}
+
+/**
+ * Deterministic EV service-intent fence applied after the LLM extractor (and
+ * on its failure paths). The model may extract ordinary slots, but it never
+ * gets authority to turn a supply enquiry into installation work.
+ */
+export function deterministicEvServiceModeUpdates(args: {
+  currentJobType?: unknown
+  currentServiceMode?: unknown
+  lastAgentMessage: string | null
+  customerMessage: string
+}): Pick<Slots, 'service_mode' | 'supplied_by'> {
+  const evContext = String(args.currentJobType ?? '').trim().toLowerCase() === 'ev_charger' ||
+    EV_TOPIC_RE.test(args.customerMessage) ||
+    (!!args.lastAgentMessage && (EV_TOPIC_RE.test(args.lastAgentMessage) || MODE_QUESTION_RE.test(args.lastAgentMessage)))
+  if (!evContext) return {}
+
+  const direct = explicitModeFromCustomer(args.customerMessage, args.lastAgentMessage)
+  const confirmed = direct ?? explicitModeFromConfirmedRecap(args.customerMessage, args.lastAgentMessage)
+  if (confirmed) {
+    return { service_mode: confirmed, supplied_by: suppliedByForEvServiceMode(confirmed) }
+  }
+
+  const message = args.customerMessage.trim()
+  if (MODE_QUESTION_RE.test(args.lastAgentMessage ?? '') && UNKNOWN_MODE_RE.test(message)) {
+    return { service_mode: null }
+  }
+
+  // This is the Steve incident boundary: willingness to supply is not a
+  // request for installation. Clear any stale resolved mode and ask the
+  // explicit three-way question on the route/readiness layer.
+  if (/\b(?:can|could|would)\s+(?:you|the\s+tradie)\s+(?:supply|provide)\b|\bdo\s+you\s+(?:supply|provide)\b/i.test(message)) {
+    return { service_mode: null, supplied_by: 'tradie' }
+  }
+
+  // Owning a charger establishes who supplies the unit, but still does not say
+  // whether this enquiry is for installation or merely a compatibility check.
+  if (/\b(?:already\s+have|have\s+my\s+own|got\s+my\s+own|bought)\b[^.?!]{0,70}\b(?:charger|unit|wallbox|wall connector)\b/i.test(message)) {
+    return { service_mode: null, supplied_by: 'customer' }
+  }
+
+  return {}
+}
+
+function reconcileDeterministicEvMode(
+  extraction: SlotExtraction,
+  args: Parameters<typeof deterministicEvServiceModeUpdates>[0],
+): SlotExtraction {
+  const updates: Slots = { ...extraction.updates }
+  // Service mode is money/scope authority. Only deterministic evidence may
+  // populate it; never accept a model-inferred default.
+  delete updates.service_mode
+  const deterministic = deterministicEvServiceModeUpdates(args)
+  Object.assign(updates, deterministic)
+  return {
+    ...extraction,
+    updates,
+    reasoning: Object.keys(deterministic).length > 0
+      ? `${extraction.reasoning}${extraction.reasoning ? '; ' : ''}EV service mode reconciled deterministically`.slice(0, 300)
+      : extraction.reasoning,
+  }
+}
+
+/** Plumbing's form-first choice is outside extracted slots: the LLM cannot
+ * mint a token, reset the chosen gather path or invent a form submission. */
+export type FormOfferPin = { token: string; step: 'offer_form' | 'await_form' | 'gather' }
+function isFormOfferPin(value: unknown): value is FormOfferPin {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const pin = value as Partial<FormOfferPin>
+  return typeof pin.token === 'string' && pin.token.trim().length > 0 &&
+    ['offer_form', 'await_form', 'gather'].includes(String(pin.step))
+}
+
 // Persisted shape of sms_conversations.conversation_state.
 export type ConversationState = {
   slots: Slots
   sources: SlotSources
   last_extracted_at: string | null
+  form_offer?: FormOfferPin | null
   /** R24 clarify gate — how many CONSECUTIVE turns the readiness gate has
    *  blocked a finish, and which facts were missing on the last blocked turn.
    *  The route writes both (app/api/sms/inbound/route.ts) and reads them back
@@ -166,6 +301,7 @@ export function normaliseState(raw: unknown): ConversationState {
     slots: (r.slots && typeof r.slots === 'object') ? r.slots as Slots : {},
     sources: (r.sources && typeof r.sources === 'object') ? r.sources as SlotSources : {},
     last_extracted_at: r.last_extracted_at ?? null,
+    form_offer: isFormOfferPin(r.form_offer) ? r.form_offer : null,
     ...(Number.isFinite(count) && count > 0 ? { clarify_gate_count: count } : {}),
     ...(Array.isArray(r.clarify_missing)
       ? { clarify_missing: r.clarify_missing.filter((c): c is string => typeof c === 'string') }
@@ -232,7 +368,17 @@ export function mergeSlotUpdates(
   let changed = false
 
   for (const [key, rawValue] of Object.entries(updates) as [SlotKey, unknown][]) {
-    if (rawValue === null || rawValue === undefined) continue
+    if (rawValue === null || rawValue === undefined) {
+      // An explicit "not sure" or an ambiguous correction such as "can you
+      // supply?" must be able to clear a previously inferred EV mode. Other
+      // nullable slots retain the established merge semantics.
+      if (key === 'service_mode' && current.slots.service_mode !== undefined) {
+        delete nextSlots.service_mode
+        delete nextSources.service_mode
+        changed = true
+      }
+      continue
+    }
     const oldValue = current.slots[key]
 
     // requested_specs is an accumulating map — specs can be stated across
@@ -269,6 +415,7 @@ export function mergeSlotUpdates(
     slots: nextSlots,
     sources: nextSources,
     last_extracted_at: changed ? new Date().toISOString() : current.last_extracted_at,
+    ...(current.form_offer !== undefined ? { form_offer: current.form_offer } : {}),
   }
 }
 
@@ -500,6 +647,22 @@ EXTRACTION RULES:
         "supply it for me" / "yes please" → 'tradie'.
       - DO NOT infer from a generic affirmation; the words must be about
         WHO PROVIDES THE ITEM.
+  10bb. SERVICE_MODE (EV chargers only — requested transaction):
+      - Values: 'supply_only' | 'install_only' | 'supply_and_install'.
+      - Set ONLY when the customer explicitly chooses one of those three, or
+        affirms an immediately preceding recap that states exactly one mode.
+      - "Supply only" / "just supply it; no install" → 'supply_only'.
+      - "Installation only; I have the charger" → 'install_only'.
+      - "Both" after the three-way question, or "supply and install" →
+        'supply_and_install'.
+      - CRITICAL: "Can you supply?" establishes supplied_by='tradie' but does
+        NOT establish service_mode. OMIT service_mode so the receptionist asks
+        whether they want supply only, installation only, or both.
+      - "I already have the charger" establishes supplied_by='customer' but
+        does NOT by itself establish service_mode unless installation is also
+        explicitly requested.
+      - For 'install_only', preserve a stated customer-owned charger make/model
+        as requested_specs.charger_model. Do not invent a model.
   10c. DISTANCE_TO_EXISTING_POWER (Phase 4 — power_points recipe slot):
       - Captures the distance (in METRES) from the new GPO/power-point
         location to the nearest existing power point the customer
@@ -600,6 +763,12 @@ export async function extractSlots(args: {
    */
   tenantTrades?: ReadonlyArray<'electrical' | 'plumbing'>
 }): Promise<SlotExtraction> {
+  const deterministicModeArgs = {
+    currentJobType: args.state.slots.job_type,
+    currentServiceMode: args.state.slots.service_mode,
+    lastAgentMessage: args.lastAgentMessage,
+    customerMessage: args.customerMessage,
+  }
   // Empty/whitespace inbound shouldn't waste a Sonnet call.
   if (!args.customerMessage.trim()) {
     return { updates: {}, reasoning: 'empty inbound, skipped extraction' }
@@ -699,6 +868,7 @@ export async function extractSlots(args: {
         // every fact in the first place.
         // Upgraded again 2026-07-22 to Sonnet 5, with the rest.
         model: anthropic(SMS_RECEPTIONIST_MODEL),
+        ...deterministicSampling(SMS_RECEPTIONIST_MODEL),
         maxOutputTokens: SMS_RECEPTIONIST_MAX_TOKENS,
         system: SYSTEM_PROMPT,
         prompt: userPrompt,
@@ -723,7 +893,10 @@ export async function extractSlots(args: {
         '[sms/extract-slots] Sonnet returned non-JSON output — returning empty extraction',
         text.slice(0, 200),
       )
-      return { updates: {}, reasoning: 'extractor returned non-JSON output' }
+      return reconcileDeterministicEvMode(
+        { updates: {}, reasoning: 'extractor returned non-JSON output' },
+        deterministicModeArgs,
+      )
     }
 
     const parsed = SlotExtractionSchema.safeParse(JSON.parse(cleaned))
@@ -732,9 +905,12 @@ export async function extractSlots(args: {
         '[sms/extract-slots] Zod validation failed — returning empty extraction',
         parsed.error.message.slice(0, 400),
       )
-      return { updates: {}, reasoning: 'extractor output failed validation' }
+      return reconcileDeterministicEvMode(
+        { updates: {}, reasoning: 'extractor output failed validation' },
+        deterministicModeArgs,
+      )
     }
-    return parsed.data
+    return reconcileDeterministicEvMode(parsed.data, deterministicModeArgs)
   } catch (err: unknown) {
     // Fail-safe path. Logged loudly so the issue is visible in Vercel
     // logs, but the dialog turn continues with the prior state — the
@@ -744,10 +920,10 @@ export async function extractSlots(args: {
       '[sms/extract-slots] all attempts failed — returning empty extraction so the dialog can continue',
       msg.slice(0, 400),
     )
-    return {
+    return reconcileDeterministicEvMode({
       updates: {},
       reasoning: `extractor unavailable: ${msg.slice(0, 120)}`,
-    }
+    }, deterministicModeArgs)
   }
 }
 

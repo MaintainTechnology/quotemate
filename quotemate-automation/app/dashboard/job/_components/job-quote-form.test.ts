@@ -26,6 +26,16 @@ describe('explainFailure', () => {
     expect(explainFailure(502, { error: 'not_entitled', reason: 'quota' })).toMatch(/not enabled on your plan.*quota/i)
   })
 
+  it('explains EV mode and priced-product validation failures', () => {
+    expect(explainFailure(400, { error: 'ev_service_mode_required' })).toMatch(/supply only/i)
+    expect(
+      explainFailure(409, {
+        error: 'ev_charger_product_invalid',
+        reason: 'Choose an active priced charger.',
+      }),
+    ).toBe('Choose an active priced charger.')
+  })
+
   it('tells the tradie to check the Quotes tab when an intake already exists', () => {
     // The dangerous case: retrying a draft that half-succeeded mints a SECOND
     // intake, quote, Stripe session set and tradie SMS.
@@ -78,18 +88,18 @@ describe('suburbFromAddress', () => {
 })
 
 describe('productNameAfterAnswerChange', () => {
-  it('clears a stale EV pin when the customer supplies the charger', () => {
+  it('clears a stale EV pin for installation-only mode', () => {
     expect(
       productNameAfterAnswerChange(
         'ev_charger',
-        'charger_supply',
-        'customer already has the charger',
+        'service_mode',
+        'install_only',
         'Tesla Wall Connector',
       ),
     ).toBe('')
   })
 
-  it('clears a stale EV pin when supply is uncertain', () => {
+  it('clears a stale EV pin when mode is unresolved', () => {
     expect(
       productNameAfterAnswerChange(
         'ev_charger',
@@ -100,7 +110,21 @@ describe('productNameAfterAnswerChange', () => {
     ).toBe('')
   })
 
-  it('retains the EV pin only for the exact tradie-supplied answer', () => {
+  it.each(['supply_only', 'supply_and_install'])(
+    'retains the EV pin for %s',
+    (mode) => {
+    expect(
+      productNameAfterAnswerChange(
+        'ev_charger',
+        'service_mode',
+        mode,
+        'Tesla Wall Connector',
+      ),
+    ).toBe('Tesla Wall Connector')
+    },
+  )
+
+  it('keeps the legacy tradie-supplied answer compatible', () => {
     expect(
       productNameAfterAnswerChange(
         'ev_charger',

@@ -5,6 +5,8 @@ import { smsDeliveryWorkScope } from '@/lib/sms/work-delivery-context'
 import { updateSmsDeliveryContext } from '@/lib/sms/delivery-context'
 import { resumeSavedSmsQuote } from '@/lib/sms/quote-recovery'
 import { runEstimation } from '@/lib/estimate/run'
+import { rank1ReviewResult } from '@/lib/estimate/rank1'
+import { strictEvChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
 import { sanitizeInspectionReason } from '@/lib/estimate/inspection-reason'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { resolveOutboundFromNumber } from '@/lib/sms/outbound-from'
@@ -23,7 +25,6 @@ import { shouldHoldForReview } from '@/lib/quote/review-policy'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createCheckoutSessionsForQuote, createInspectionCheckoutSession, generateShareToken } from '@/lib/stripe/checkout'
 import { connectDestinationForTenantId } from '@/lib/stripe/connect'
-import { withRetry } from '@/lib/util/retry'
 import { decideRouting } from '@/lib/routing/decide'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
@@ -125,11 +126,13 @@ export async function POST(req: Request) {
     log.step('loading intake, pricing_book, caller_number')
     const { data: intake } = await supabase.from('intakes').select('*').eq('id', intakeId).single()
 
-    // v5 multi-trade: pick the pricing_book row matching intake.trade.
-    // Legacy intake rows pre-dating v5 have no trade field — default to
-    // 'electrical' (the original NSW/NECA pilot trade).
-    const intakeTrade = (intake?.trade as 'electrical' | 'plumbing' | undefined) ?? 'electrical'
-    const intakeTenantId = (intake?.tenant_id as string | null) ?? null
+    if (!intake) return Response.json({ ok: false, error: 'intake_not_found' }, { status: 404 })
+    // Never infer a trade or persist/send an unowned quote. Repair the intake
+    // identity explicitly; neither Electrical nor another tenant is a fallback.
+    const intakeTrade = typeof intake.trade === 'string' ? intake.trade.trim() : ''
+    const intakeTenantId = typeof intake.tenant_id === 'string' ? intake.tenant_id.trim() : ''
+    if (!intakeTenantId || !intakeTrade)
+      return Response.json({ ok: false, error: 'intake_identity_review_required' }, { status: 422 })
     updateSmsDeliveryContext({ tenantId: intakeTenantId })
     await attributeSmsWorkTenant(intakeTenantId)
 
@@ -218,8 +221,8 @@ export async function POST(req: Request) {
     // grab the oldest book for the trade" fallback is deliberately gone:
     // it silently quoted one tradie's job on another tradie's rates and
     // markup, with no error a human would notice. If the book can't be
-    // resolved for THIS tenant we route to the paid inspection (below),
-    // with the reason logged — never a silent default.
+    // resolved for THIS tenant we hold an unpriced review draft (below),
+    // never charge the customer for an internal setup gap.
     let tenantBook: Record<string, unknown> | null = null
     if (intakeTenantId) {
       const { data } = await supabase
@@ -241,12 +244,8 @@ export async function POST(req: Request) {
       : null
 
     if (!bookResolution.ok) {
-      // Hard rule fired. We CANNOT price this job (no pricing book that
-      // provably belongs to this tenant). Do not call the estimator, do
-      // not borrow another tradie's numbers — route straight to the $99
-      // inspection with the reason persisted on the quote and logged so
-      // the misconfigured tenant is visible instead of silently wrong.
-      log.err('WP1: pricing_book did not resolve for this tenant — routing to inspection', null, {
+      // Missing configuration is a tradie review task, not site complexity.
+      log.err('pricing_book did not resolve for this tenant — holding for review', null, {
         code: bookResolution.code,
         reason: bookResolution.reason,
         tenant_id: intakeTenantId,
@@ -366,74 +365,30 @@ export async function POST(req: Request) {
     const pricedCheckpoint = await versionedEstimationCheckpoint(supabase, {
       tenantId: intakeTenantId, trade: intakeTrade, book: pricingBook,
       checkpoint: smsWorkCheckpoint,
-      run: async () => {
-    let estimation: Awaited<ReturnType<typeof runEstimation>>
-    if (!bookResolution.ok) {
-      // No valid tenant pricing book → synthesize an inspection-only draft
-      // and SKIP the estimator entirely. There is nothing to price against;
-      // calling the LLM here would only invite a hallucinated number the
-      // grounding validator would reject anyway. Tiers are nulled; the
-      // downstream inspection path forces the $99 total.
-      estimation = {
-        draft: {
-          needs_inspection: true,
-          inspection_reason: bookResolution.reason,
-          scope_of_works: `Site inspection required before this job can be quoted. ${bookResolution.reason}`,
-          scope_short: 'Site inspection required',
-          assumptions: [],
-          risk_flags: [`[pricing-book] ${bookResolution.code}: ${bookResolution.reason}`],
-          optional_upsells: [],
-          estimated_timeframe: 'After site visit (within 5 business days)',
-          gst_note: null,
-          good: null,
-          better: null,
-          best: null,
-        },
-      }
-      log.ok('estimation skipped — inspection-only draft synthesized (WP1 hard rule)', {
-        code: bookResolution.code,
-      })
-    } else {
-      const MODEL_CASCADE = [
-        { id: 'claude-opus-4-8',   label: 'Opus 4.8'   },
-        { id: 'claude-opus-4-7',   label: 'Opus 4.7'   },
-        { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-      ] as const
-      let modelIdx = 0
-
-      log.step(`running estimate — model cascade: ${MODEL_CASCADE.map(m => m.label).join(' → ')}, up to ${MODEL_CASCADE.length} attempts`)
-      estimation = await withRetry(
-        () => {
-          const m = MODEL_CASCADE[Math.min(modelIdx++, MODEL_CASCADE.length - 1)]
-          return runEstimation(
-            intake,
-            bookResolution.pricingBook,
-            m.id,
-            smsConversationState,
-          )
-        },
-        {
-          maxAttempts: MODEL_CASCADE.length,
-          baseDelayMs: 2000,
-          onAttemptFailed: (err, attempt, willRetry) => {
-            const msg = err instanceof Error ? err.message : String(err)
-            const used = MODEL_CASCADE[Math.min(attempt - 1, MODEL_CASCADE.length - 1)]
-            const next = MODEL_CASCADE[Math.min(attempt, MODEL_CASCADE.length - 1)]
-            if (willRetry) {
-              log.err(`${used.label} attempt ${attempt}/${MODEL_CASCADE.length} failed — retrying with ${next.label}`, msg)
-            } else {
-              log.err(`${used.label} attempt ${attempt}/${MODEL_CASCADE.length} failed — giving up`, msg)
-            }
-          },
-        }
-      )
-    }
-    return estimation
+      run: async (capturedPricingVersion) => {
+        if (!bookResolution.ok)
+          return rank1ReviewResult(intake, null, 'An approved tenant pricing book is required before this job can be priced')
+        log.step('running deterministic Quote Core against the captured tenant pricing version')
+        return runEstimation(
+          intake, capturedPricingVersion?.snapshot ?? bookResolution.pricingBook,
+          undefined, smsConversationState,
+          capturedPricingVersion ? { pricingBookVersionId: capturedPricingVersion.id } : null,
+        )
       },
     })
-    const estimation = pricedCheckpoint.estimation
+    const estimation = !pricedCheckpoint.estimation.quoteCore
+      ? rank1ReviewResult(intake, pricedCheckpoint.pricingVersion ? { pricingBookVersionId: pricedCheckpoint.pricingVersion.id } : null,
+          'An older estimation checkpoint has no Quote Core authority; recalculate for tradie review')
+      : pricedCheckpoint.estimation
     pricingBook = pricedCheckpoint.pricingVersion?.snapshot ?? null
     const draft = estimation.draft
+    const quoteCoreReviewHold = estimation.quoteCore?.status === 'review_required'
+
+    if (estimation.serviceModeHold) {
+      log.err('EV service-mode consistency check failed — customer release held', null, {
+        failures: estimation.serviceModeFailures ?? [],
+      })
+    }
 
     // Surface grounding failures clearly in the Vercel logs. Log EVERY
     // failure individually (not just the first) — when the validator
@@ -462,7 +417,7 @@ export async function POST(req: Request) {
       })
     }
     const tierCount = [draft.good, draft.better, draft.best].filter(Boolean).length
-    log.ok('Opus parsed', {
+    log.ok(estimation.quoteCore ? `Quote Core ${estimation.quoteCore.status}` : 'Opus parsed', {
       tiers: tierCount,
       better_total_ex_gst: draft.better?.subtotal_ex_gst ?? 'null',
       scope_short: draft.scope_short ? `"${draft.scope_short}"` : 'absent',
@@ -560,10 +515,20 @@ export async function POST(req: Request) {
           : draft.good
             ? 'good'
             : 'best'
-      selectedTier = chosenKey
-      selectedSubtotal = draft[chosenKey]?.subtotal_ex_gst ?? 0
-      gst = pricingBook?.gst_registered ? +(selectedSubtotal * 0.10).toFixed(2) : 0
-      total = +(selectedSubtotal + gst).toFixed(2)
+      selectedTier = draft[chosenKey] ? chosenKey : null
+      const calculation = draft[chosenKey]?.calculation
+      if (estimation.quoteCore?.status === 'priced') {
+        if (!calculation || calculation.tenantId !== intakeTenantId ||
+            calculation.pricingBookVersionId !== pricedCheckpoint.pricingVersion?.id)
+          throw new Error('Quote Core calculation does not match the saved tenant pricing version')
+        selectedSubtotal = calculation.subtotalExGstCents / 100
+        gst = calculation.gstCents / 100
+        total = calculation.totalIncGstCents / 100
+      } else {
+        selectedSubtotal = draft[chosenKey]?.subtotal_ex_gst ?? 0
+        gst = pricingBook?.gst_registered ? +(selectedSubtotal * 0.10).toFixed(2) : 0
+        total = +(selectedSubtotal + gst).toFixed(2)
+      }
     }
 
     const routing_decision = decideRouting({
@@ -667,9 +632,15 @@ export async function POST(req: Request) {
         ok: !isInspection && !estimation.groundingHold,
         downgraded: !!estimation.downgradedToInspection,
         ...(estimation.groundingHold ? { held_for_review: true } : {}),
+        ...(estimation.quoteCore ? { quote_core: estimation.quoteCore } : {}),
         ...(estimation.groundingFailures?.length
           ? { failures: estimation.groundingFailures }
           : {}),
+        ...(estimation.serviceModeHold
+          ? { ev_service_mode: { ok: false, held_for_review: true, failures: estimation.serviceModeFailures ?? [] } }
+          : intake.job_type === 'ev_charger'
+            ? { ev_service_mode: { ok: true, mode: strictEvChargerServiceModeFromIntake(intake) ?? null } }
+            : {}),
       },
     }).select().single()
     if (quoteInsertError || !quote?.id || !quote?.share_token) throw new Error(`Quote persistence failed: ${quoteInsertError?.message ?? 'missing saved row'}`)
@@ -700,7 +671,7 @@ export async function POST(req: Request) {
     // funnel, so an early-booking discount has nothing to attach to.
     // The offer is read from THIS tenant's pricing_book.overlays — a
     // zero-config tenant (no early_bird overlay) simply gets no offer.
-    if (!isInspection) {
+    if (!isInspection && !quoteCoreReviewHold) {
       const ebConfig = earlyBirdConfigFromOverlays(
         (pricingBook as { overlays?: unknown } | null)?.overlays,
       )
@@ -758,9 +729,11 @@ export async function POST(req: Request) {
     // Charge via the tenant's connected account (2% platform fee, funds held
     // for release on job completion) once Connect onboarding is live;
     // platform-direct otherwise. Never throws.
-    const connect = await connectDestinationForTenantId(supabase, intakeTenantId)
+    const connect = quoteCoreReviewHold ? null : await connectDestinationForTenantId(supabase, intakeTenantId)
 
-    if (!draft.needs_inspection && !siteVisitFirst) {
+    if (quoteCoreReviewHold) {
+      log.ok('Quote Core review draft has no checkout, inspection fee or early-booking offer')
+    } else if (!draft.needs_inspection && !siteVisitFirst) {
       log.step('creating Stripe Checkout Sessions (one per tier, deposit only)')
       try {
         const stripeLinks = await createCheckoutSessionsForQuote({
@@ -838,7 +811,10 @@ export async function POST(req: Request) {
     // is the reference — Gemini edits THAT image. Idempotent: if photo
     // upload already kicked it off (trigger 1), the CAS in
     // generatePreviewImage() skips this call.
-    after(async () => {
+    const strictEvServiceMode = intake.job_type === 'ev_charger'
+      ? strictEvChargerServiceModeFromIntake(intake)
+      : undefined
+    if (strictEvServiceMode !== 'supply_only') after(async () => {
       const previewLog = pipelineLog('dispatch', `preview:${quote!.id.slice(0, 8)}`)
       try {
         const photoPaths = (Array.isArray(intake.photo_paths) ? intake.photo_paths : []) as string[]
@@ -872,7 +848,7 @@ export async function POST(req: Request) {
     // always_review — a customer picking a variant is not a price
     // commitment, so the tradie's explicit "review every quote" toggle
     // wins over the picker signal.
-    const reviewDecision = shouldHoldForReview({
+    const policyReviewDecision = shouldHoldForReview({
       policy: (pricingBook as { review_policy?: string | null } | null)?.review_policy ?? null,
       threshold: (pricingBook as { review_threshold_inc_gst?: number | string | null } | null)
         ?.review_threshold_inc_gst ?? null,
@@ -881,6 +857,14 @@ export async function POST(req: Request) {
       riskFlags,
       tradieDrafted: !!tradieDrafted,
     })
+    const reviewDecision = intake.job_type === 'ev_charger'
+      ? {
+          hold: true as const,
+          reason: estimation.serviceModeHold
+            ? 'ev_service_mode_review_required'
+            : 'ev_tradie_approval_required',
+        }
+      : policyReviewDecision
     log.ok('review-policy decided', {
       hold: reviewDecision.hold,
       reason: reviewDecision.reason,

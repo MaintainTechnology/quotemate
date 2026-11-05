@@ -61,7 +61,7 @@ async function openQuoter(page: Page) {
 
 const questionLabels = [
   'What car is the charger for?',
-  'Who supplies the charger unit?',
+  'What does the customer want?',
   'Where is the charger going (garage, carport, external wall)?',
   'Roughly how far is the switchboard from the charger spot?',
   'Single phase or three phase?',
@@ -73,7 +73,7 @@ test.describe('EV charger dashboard quoter', () => {
   }) => {
     await openQuoter(page)
 
-    const ids = ['f-vehicle', 'f-charger_supply', 'f-room', 'f-switchboard_distance', 'f-phase']
+    const ids = ['f-vehicle', 'f-service_mode', 'f-room', 'f-switchboard_distance', 'f-phase']
     await expect(page.locator('form label').filter({ hasText: questionLabels[0] })).toBeVisible()
     const domOrder = await page.locator(ids.map((id) => `#${id}`).join(', ')).evaluateAll((nodes) =>
       nodes.map((node) => node.id),
@@ -88,10 +88,10 @@ test.describe('EV charger dashboard quoter', () => {
       'not sure',
     ])
     await expect(page.getByLabel(questionLabels[1]).locator('option')).toHaveText([
-      'Not specified',
-      'customer already has the charger',
-      'we supply the charger',
-      'not sure',
+      'Choose an option',
+      'Supply only',
+      'Installation only',
+      'Supply and installation',
     ])
     await expect(page.getByLabel(questionLabels[3]).locator('option')).toHaveText([
       'Not specified',
@@ -107,20 +107,24 @@ test.describe('EV charger dashboard quoter', () => {
       'not sure',
     ])
 
-    await page.getByLabel(questionLabels[1]).selectOption('we supply the charger')
-    const product = page.getByLabel('Product from your catalogue (optional)')
+    await page.getByLabel(questionLabels[1]).selectOption('supply_and_install')
+    const product = page.getByLabel('Product from your catalogue (required)')
     await expect(product).toBeVisible()
     await expect(product.locator('option')).toHaveText([
-      'Let the estimator choose',
+      'Choose a priced EV charger',
       'Tesla Wall Connector (single-phase 7kW) — $890 ex GST',
       'Type 2 7kW wallbox (BYD-compatible) — $1100 ex GST',
     ])
 
     await product.selectOption('Tesla Wall Connector (single-phase 7kW)')
-    await page.getByLabel(questionLabels[1]).selectOption('customer already has the charger')
+    await page.getByLabel(questionLabels[1]).selectOption('install_only')
     await expect(product).toBeHidden()
-    await page.getByLabel(questionLabels[1]).selectOption('we supply the charger')
+    await page.getByLabel(questionLabels[1]).selectOption('supply_and_install')
     await expect(product).toHaveValue('')
+
+    await page.getByLabel(questionLabels[1]).selectOption('supply_only')
+    await expect(page.getByLabel(questionLabels[2])).toBeHidden()
+    await expect(page.getByText('Photo of the spot (optional)')).toBeHidden()
   })
 
   test('posts all five answers and the tenant product id, then starts held-quote navigation', async ({
@@ -134,12 +138,12 @@ test.describe('EV charger dashboard quoter', () => {
     await openQuoter(page)
 
     await page.getByLabel(questionLabels[0]).selectOption('Tesla')
-    await page.getByLabel(questionLabels[1]).selectOption('we supply the charger')
+    await page.getByLabel(questionLabels[1]).selectOption('supply_and_install')
     await page.getByLabel(questionLabels[2]).fill('external wall')
     await page.getByLabel(questionLabels[3]).selectOption('under 5 m')
     await page.getByLabel(questionLabels[4]).selectOption('single phase')
     await page
-      .getByLabel('Product from your catalogue (optional)')
+      .getByLabel('Product from your catalogue (required)')
       .selectOption('Tesla Wall Connector (single-phase 7kW)')
     await page.getByLabel('Address').fill('12 Smith St')
     await page.getByLabel('Suburb').fill('Newtown')
@@ -152,7 +156,7 @@ test.describe('EV charger dashboard quoter', () => {
       product_name: 'Tesla Wall Connector (single-phase 7kW)',
       answers: {
         vehicle: 'Tesla',
-        charger_supply: 'we supply the charger',
+        service_mode: 'supply_and_install',
         room: 'external wall',
         switchboard_distance: 'under 5 m',
         phase: 'single phase',
@@ -169,10 +173,10 @@ test.describe('EV charger dashboard quoter', () => {
   test('is usable at the 390px demo viewport without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openQuoter(page)
-    await page.getByLabel(questionLabels[1]).selectOption('we supply the charger')
+    await page.getByLabel(questionLabels[1]).selectOption('supply_and_install')
 
     for (const label of questionLabels) await expect(page.getByLabel(label)).toBeVisible()
-    await expect(page.getByLabel('Product from your catalogue (optional)')).toBeVisible()
+    await expect(page.getByLabel('Product from your catalogue (required)')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Draft the quote' })).toBeVisible()
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

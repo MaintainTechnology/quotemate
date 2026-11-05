@@ -25,10 +25,19 @@ import { structureIntake } from '@/lib/intake/structure'
 import { embedIntake } from '@/lib/intake/embed'
 import { deriveTradeFromJobType, IntakeSchema } from '@/lib/intake/schema'
 import {
+  answersForJobType,
   allowsPinnedCatalogueProduct,
-  EV_CHARGER_TRADIE_SUPPLY_ANSWER,
+  evServiceModeFromAnswers,
   fieldsForJobType,
+  visibleFieldsForJobType,
 } from '@/lib/quote/job-fields'
+import {
+  evServiceModeLabel,
+  isEvInstallationMode,
+  isEvSupplyMode,
+  suppliedByForEvServiceMode,
+  type EvServiceMode,
+} from '@/lib/quote/ev-service-mode'
 import { RECIPE_SLOT_CODES, recipeSlotsFrom } from '@/lib/quote/recipe-slots'
 import { normaliseAuMobile } from '@/lib/phone/au'
 import { findOrCreateCustomer } from '@/lib/customers/lookup'
@@ -80,7 +89,6 @@ const BodySchema = z.object({
 })
 
 const THREE_PHASE_INSPECTION_ANSWER = 'three phase (on-site inspection)'
-const CUSTOMER_SUPPLIES_EV_CHARGER = 'customer already has the charger'
 
 type IntakeWithScope = {
   scope: Record<string, unknown> & { specs?: Record<string, unknown> }
@@ -104,7 +112,7 @@ export function enforceThreePhaseInspection<T extends { inspection_required: boo
  * model structures the transcript so quote safety never depends on the model
  * inferring the supply enum from prose. "Not sure" deliberately unsets it.
  */
-export function canonicaliseEvChargerSupply<T extends IntakeWithScope>(
+export function canonicaliseEvChargerServiceMode<T extends IntakeWithScope>(
   intake: T,
   jobType: string,
   answers: Record<string, string>,
@@ -112,13 +120,17 @@ export function canonicaliseEvChargerSupply<T extends IntakeWithScope>(
   if (jobType !== 'ev_charger') return intake
   const specs = { ...(intake.scope.specs ?? {}) }
   delete specs.supplied_by
-  if (answers.charger_supply === CUSTOMER_SUPPLIES_EV_CHARGER) {
-    specs.supplied_by = 'customer'
-  } else if (answers.charger_supply === EV_CHARGER_TRADIE_SUPPLY_ANSWER) {
-    specs.supplied_by = 'tradie'
+  delete specs.service_mode
+  const mode = evServiceModeFromAnswers(answers)
+  if (mode) {
+    specs.service_mode = mode
+    specs.supplied_by = suppliedByForEvServiceMode(mode)
   }
   return { ...intake, scope: { ...intake.scope, specs } }
 }
+
+/** Backwards-compatible export for existing route-focused tests/imports. */
+export const canonicaliseEvChargerSupply = canonicaliseEvChargerServiceMode
 
 type PinnedProductRequest = {
   product_id?: string
@@ -149,12 +161,48 @@ export async function POST(req: Request) {
   const gate = await requireFeature(req, trade)
   if (!gate.ok) return Response.json(gate.body, { status: gate.status })
   const tenant = gate.tenant
-  const pinnedProductRequest = filterPinnedProductRequest(body.job_type, body.answers, {
+  const serviceMode = body.job_type === 'ev_charger'
+    ? evServiceModeFromAnswers(body.answers)
+    : undefined
+  if (body.job_type === 'ev_charger' && !serviceMode) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'ev_service_mode_required',
+        issues: ['Choose supply only, installation only, or supply and installation.'],
+      },
+      { status: 400 },
+    )
+  }
+
+  const effectiveAnswers = answersForJobType(body.job_type, body.answers)
+  const effectivePhotoPaths = body.job_type === 'ev_charger' && !isEvInstallationMode(serviceMode)
+    ? []
+    : (body.photo_paths ?? [])
+  const effectivePhotoUrls = body.job_type === 'ev_charger' && !isEvInstallationMode(serviceMode)
+    ? []
+    : (body.photo_urls ?? [])
+  const pinnedProductRequest = filterPinnedProductRequest(body.job_type, effectiveAnswers, {
     product_id: body.product_id,
     product_name: body.product_name,
   })
 
-  if (!validJobQuoteMedia(tenant.id, body)) {
+  if (body.job_type === 'ev_charger' && isEvSupplyMode(serviceMode) && !pinnedProductRequest.product_id) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'ev_charger_product_required',
+        reason: 'Choose an active EV charger with a positive catalogue price before drafting a supply quote.',
+      },
+      { status: 409 },
+    )
+  }
+
+  if (!validJobQuoteMedia(tenant.id, {
+    ...body,
+    photo_paths: effectivePhotoPaths,
+    photo_urls: effectivePhotoUrls,
+  })) {
     return Response.json({ ok: false, error: 'invalid_body', issues: ['Use up to three distinct photos uploaded by this account.'] }, { status: 400 })
   }
   let operation: JobQuoteOperation | undefined
@@ -162,6 +210,56 @@ export async function POST(req: Request) {
   let intakeWriteDispatched = false
 
   try {
+    let resolvedEvProduct: Record<string, unknown> | null = null
+    if (body.job_type === 'ev_charger' && isEvSupplyMode(serviceMode)) {
+      const { data: row, error: productError } = await supabase
+        .from('tenant_material_catalogue')
+        .select('id, name, unit_price_ex_gst, image_path, description, category, trade, properties, active')
+        .eq('id', pinnedProductRequest.product_id!)
+        .eq('tenant_id', tenant.id)
+        .eq('trade', trade)
+        .eq('category', 'ev_charger')
+        .eq('active', true)
+        .maybeSingle()
+
+      if (productError) {
+        return Response.json(
+          {
+            ok: false,
+            error: 'ev_charger_product_check_failed',
+            reason: 'The EV charger catalogue could not be checked. Try again before drafting.',
+          },
+          { status: 503 },
+        )
+      }
+
+      const candidate = row as Record<string, unknown> | null
+      const rawPrice = candidate?.unit_price_ex_gst
+      const price = typeof rawPrice === 'number' || (typeof rawPrice === 'string' && rawPrice.trim() !== '')
+        ? Number(rawPrice)
+        : Number.NaN
+      if (
+        !candidate ||
+        candidate.active !== true ||
+        candidate.category !== 'ev_charger' ||
+        candidate.trade !== trade ||
+        typeof candidate.name !== 'string' ||
+        candidate.name.trim() === '' ||
+        !Number.isFinite(price) ||
+        price <= 0
+      ) {
+        return Response.json(
+          {
+            ok: false,
+            error: 'ev_charger_product_invalid',
+            reason: 'Choose an active EV charger with a positive catalogue price before drafting a supply quote.',
+          },
+          { status: 409 },
+        )
+      }
+      resolvedEvProduct = candidate
+    }
+
     if (body.operation_id) {
       const hash = jobQuoteRequestHash(body)
       const receipt = await claimJobQuoteOperation(supabase, tenant.id, body.operation_id, hash, !!pinnedProductRequest.product_id)
@@ -171,20 +269,31 @@ export async function POST(req: Request) {
       if (!receipt.claimed) return jobQuoteOperationResponse(await readJobQuoteOperation(supabase, receipt.operation))
       operation = receipt.operation
     }
-    const transcript = buildTranscript(body, trade)
+    const transcript = buildTranscript(
+      {
+        ...body,
+        answers: effectiveAnswers,
+        ...(resolvedEvProduct
+          ? { product_name: String(resolvedEvProduct.name) }
+          : {}),
+      },
+      trade,
+    )
     // Spec ev-charger-location-photo R3 — the second argument has always been
     // `photoUrls: string[]` and has always been passed empty from here, so a
     // dashboard job could never use vision. Feeding the freshly-signed URLs
     // costs no signature change and lets the structurer see the spot.
     // URL expiry/rotation never changes request identity. Vision only receives
     // server-signed private objects from the authenticated upload namespace.
-    const photoUrls = await Promise.all((body.photo_paths ?? []).map(path => refreshSignedUrl(path)))
+    const photoUrls = await Promise.all(effectivePhotoPaths.map(path => refreshSignedUrl(path)))
     const structuredIntake = await structureIntake(transcript, photoUrls, trade)
-    const inspectionRoutedIntake = enforceThreePhaseInspection(structuredIntake, body.answers)
-    const intake = canonicaliseEvChargerSupply(
+    const inspectionRoutedIntake = serviceMode === 'supply_only'
+      ? { ...structuredIntake, inspection_required: false }
+      : enforceThreePhaseInspection(structuredIntake, effectiveAnswers)
+    const intake = canonicaliseEvChargerServiceMode(
       inspectionRoutedIntake,
       body.job_type,
-      body.answers,
+      effectiveAnswers,
     )
 
     // The tradie explicitly chose the job type. Opus classifies it again from
@@ -204,7 +313,7 @@ export async function POST(req: Request) {
     // back to default_when_unanswered — 2 metres and 10A, the cheapest band of
     // each — so a 10 m run on a dedicated 20A circuit would quote as a 2 m 10A
     // job, and the 20A/three-phase assembly swap would never fire.
-    intake.scope = { ...intake.scope, ...recipeSlotsFrom(body.answers) } as typeof intake.scope
+    intake.scope = { ...intake.scope, ...recipeSlotsFrom(effectiveAnswers) } as typeof intake.scope
 
     // ── The pinned product ──────────────────────────────────────────
     // The prose directive alone is a hint Opus can override, so nothing
@@ -219,18 +328,23 @@ export async function POST(req: Request) {
     // any figure — and the trade scope is what makes the row resolvable to the
     // validator's candidate set at all.
     if (pinnedProductRequest.product_id) {
-      const { data: row } = await supabase
-        .from('tenant_material_catalogue')
-        .select('id, name, unit_price_ex_gst, image_path, description, category, trade, properties, active')
-        .eq('id', pinnedProductRequest.product_id)
-        .eq('tenant_id', tenant.id)
-        .eq('trade', trade)
-        .maybeSingle()
+      let row = resolvedEvProduct
+      if (!row) {
+        const lookup = await supabase
+          .from('tenant_material_catalogue')
+          .select('id, name, unit_price_ex_gst, image_path, description, category, trade, properties, active')
+          .eq('id', pinnedProductRequest.product_id)
+          .eq('tenant_id', tenant.id)
+          .eq('trade', trade)
+          .maybeSingle()
+        row = lookup.data as Record<string, unknown> | null
+      }
       const rawPrice = (row as { unit_price_ex_gst?: unknown } | null)?.unit_price_ex_gst
       // Null/blank is missing catalogue authority, never a configured zero.
       const price = typeof rawPrice === 'number' || (typeof rawPrice === 'string' && rawPrice.trim() !== '')
         ? Number(rawPrice) : Number.NaN
-      if (row && (row as { active?: boolean }).active !== false && Number.isFinite(price) && price >= 0) {
+      const validPrice = body.job_type === 'ev_charger' ? price > 0 : price >= 0
+      if (row && (row as { active?: boolean }).active !== false && Number.isFinite(price) && validPrice) {
         const r = row as Record<string, unknown>
         intake.scope = {
           ...intake.scope,
@@ -250,8 +364,8 @@ export async function POST(req: Request) {
           },
         } as typeof intake.scope
       } else {
-        // Wrong tenant, wrong trade, archived or unpriced. Fall through to the
-        // prose directive rather than failing the whole draft.
+        // Non-EV catalogue pins retain the legacy best-effort behaviour. EV
+        // supply requests were strictly resolved before the pipeline started.
         console.warn('[job-quote] pinned product not resolvable; falling back to prose', {
           product_id: pinnedProductRequest.product_id,
         })
@@ -335,7 +449,7 @@ export async function POST(req: Request) {
         // The signed URLs are short-lived anyway; they are used in-memory for
         // the structurer's vision pass above and then discarded, and anything
         // that needs a URL later re-signs the path.
-        ...(body.photo_paths?.length ? { photo_paths: body.photo_paths } : {}),
+        ...(effectivePhotoPaths.length ? { photo_paths: effectivePhotoPaths } : {}),
         embedding,
       })
       .select('id')
@@ -458,11 +572,12 @@ export async function POST(req: Request) {
 /**
  * Render the form answers as the prose an intake structurer expects. The
  * pipeline's only input is a transcript, so the form's real job is to
- * produce good prose — which is why JOB_FIELDS carries human-readable option
- * strings rather than canonical enum values.
+ * produce good prose. Canonical enum values are converted to customer-readable
+ * labels at this boundary.
  */
 export function buildTranscript(body: z.infer<typeof BodySchema>, trade: string): string {
   const spec = fieldsForJobType(body.job_type)
+  const effectiveAnswers = answersForJobType(body.job_type, body.answers)
   const lines: string[] = [
     `Job typed directly by the ${trade} tradie in the QuoteMax dashboard — this is the tradie describing a job they have already scoped, not a customer enquiry.`,
     ``,
@@ -487,27 +602,32 @@ export function buildTranscript(body: z.infer<typeof BodySchema>, trade: string)
   // own line on the same catalogue row. The D-1 dedup rule rejects the
   // duplicate and the grounding validator dumps the WHOLE quote to the $99
   // inspection route. Observed end-to-end 2026-07-29 on a 6 m / 2-GPO job.
-  const answered = spec.fields
+  const answered = visibleFieldsForJobType(body.job_type, effectiveAnswers)
     .filter((f) => !(RECIPE_SLOT_CODES as readonly string[]).includes(f.code))
-    .map((f) => [f, (body.answers[f.code] ?? '').trim()] as const)
+    .map((f) => [f, (effectiveAnswers[f.code] ?? '').trim()] as const)
     .filter(([, v]) => v.length > 0)
 
   if (answered.length > 0) {
     lines.push(``, `Job details:`)
-    for (const [f, v] of answered) lines.push(`- ${f.label} ${v}`)
+    for (const [f, v] of answered) {
+      const displayValue = f.code === 'service_mode'
+        ? evServiceModeLabel(v as EvServiceMode)
+        : v
+      lines.push(`- ${f.label} ${displayValue}`)
+    }
   }
 
   // Any answer whose code isn't in this job type's spec — keeps a stale
   // client from silently dropping detail the tradie actually typed.
-  const known = new Set(spec.fields.map((f) => f.code))
-  const extras = Object.entries(body.answers).filter(
+  const known = new Set([...spec.fields.map((f) => f.code), 'charger_supply'])
+  const extras = Object.entries(effectiveAnswers).filter(
     ([k, v]) => !known.has(k) && (v ?? '').trim().length > 0,
   )
   if (extras.length > 0) {
     lines.push(...extras.map(([k, v]) => `- ${k.replace(/_/g, ' ')}: ${v.trim()}`))
   }
 
-  const pinnedProductRequest = filterPinnedProductRequest(body.job_type, body.answers, {
+  const pinnedProductRequest = filterPinnedProductRequest(body.job_type, effectiveAnswers, {
     product_name: body.product_name,
   })
   if (pinnedProductRequest.product_name) {

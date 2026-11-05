@@ -92,6 +92,15 @@ describe('resolveAcceptView', () => {
     expect(v.payHref).toBe('/r/roof/tok_abc123/inspection')
   })
 
+  it('describes a supply-only EV charger acceptance as an order, never a visit or booking', () => {
+    const v = resolveAcceptView({ ...base, productOnly: true })
+    expect(v.mode).toBe('deposit')
+    expect(v.heading).toBe('Accept your charger order')
+    expect(v.ctaLabel).toBe('Accept & pay deposit')
+    expect(v.confirmations.join(' ')).toMatch(/delivery or collection/i)
+    expect(v.confirmations.join(' ')).not.toMatch(/site visit|booking/i)
+  })
+
   it("painting's RELEASED-unpaid call shape resolves to the $99 visit, never a deposit", () => {
     // The paint quote page pins pricesVisible false even on a released quote
     // with a visible price: the tiers are pricing information and the ONE

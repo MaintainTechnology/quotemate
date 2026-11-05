@@ -132,11 +132,14 @@ export async function POST(
   // estimate creation route, so a re-draft prices exactly like a fresh
   // submission of the same details (including the tenant's rate card).
   const baseConfig = await loadSolarConfig(supabase)
-  const { config, rateCard, overlay } = await loadSolarTenantRates(
+  let tenantRates
+  try { tenantRates = await loadSolarTenantRates(
     supabase,
     (row.tenant_id as string | null) ?? null,
     baseConfig,
-  )
+  ) } catch { return Response.json({ ok: false, error: 'tenant_pricing_required',
+    detail: 'Complete this account’s solar rates and GST setting before re-drafting.' }, { status: 422 }) }
+  const { config, rateCard, overlay } = tenantRates
   let redrafted: SolarEstimate
   try {
     const result = await runSolarEstimate({

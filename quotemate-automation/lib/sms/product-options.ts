@@ -27,6 +27,10 @@ import {
 import { reconcileProductSpecs } from '@/lib/estimate/spec-guard'
 import type { RequestedSpecs } from '@/lib/estimate/spec-reconcile'
 import { requiresWeatherproof, productIsWeatherproof } from '@/lib/estimate/weatherproof'
+import {
+  isEvSupplyMode,
+  resolveEvChargerServiceMode,
+} from '@/lib/quote/ev-service-mode'
 
 function num(v: number | string | null | undefined): number {
   if (v === null || v === undefined || v === '') return NaN
@@ -485,17 +489,18 @@ export function categoryForJobType(jobType: string | null | undefined): string |
 }
 
 /**
- * EV charger units are an optional, tradie-supplied catalogue item. When the
- * customer already owns the charger, WP9 must neither offer nor retain a unit
- * choice. Other jobs keep their existing product-option behaviour.
+ * EV charger product choices are valid only when the customer's explicit
+ * service mode includes supply. Missing/legacy `supplied_by: tradie` is
+ * deliberately unresolved: it cannot distinguish supply-only from a combined
+ * supply-and-install request. Other jobs keep their existing behaviour.
  */
 export function productChoiceAllowedForSupply(
   jobType: string | null | undefined,
-  suppliedBy: string | null | undefined,
+  serviceMode: string | null | undefined,
 ): boolean {
   const job = (jobType ?? '').trim().toLowerCase()
-  const supply = (suppliedBy ?? '').trim().toLowerCase()
-  return job !== 'ev_charger' || supply !== 'customer'
+  if (job !== 'ev_charger') return true
+  return isEvSupplyMode(resolveEvChargerServiceMode({ service_mode: serviceMode }))
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   totalIncGstCents,
 } from '@/lib/quote/money'
 import { isSiteVisitFirstRow } from '@/lib/quote/mint-tier'
+import { evChargerServiceModeFromIntake, type EvServiceMode } from '@/lib/quote/ev-service-mode'
 import { formatQuoteAmount, quoteAmount } from '@/lib/quote/display-money'
 
 /** Phase A — caller-supplied display mode flag. 'summary' suppresses the
@@ -51,6 +52,8 @@ export interface QuoteSmsOptions {
   quoteKind?: string | null
   /** Tenant business name — signs off the final-quote message. */
   businessName?: string | null
+  /** Canonical EV service choice. When omitted, the intake scope is read. */
+  serviceMode?: EvServiceMode | null
 }
 
 function pickVariant<T>(variants: readonly T[]): T {
@@ -117,10 +120,11 @@ function capitaliseFirst(s: string): string {
  * preview, not have to tap a link first.
  */
 export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: QuoteSmsOptions): string {
+  const serviceMode = options?.serviceMode ?? evChargerServiceModeFromIntake(intake)
   // Inspection-required quotes use the dedicated inspection layout but
   // still get an "updated" preamble so the customer knows the tradie
   // touched the quote.
-  if (quote.needs_inspection) {
+  if (quote.needs_inspection && serviceMode !== 'supply_only') {
     return buildInspectionQuoteUpdatedSms(intake, quote)
   }
   const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
@@ -128,6 +132,7 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
   const siteVisitFirst = isSiteVisitFirstRow({
     trade: options?.trade,
     quoteKind: options?.quoteKind,
+    serviceMode,
   })
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
@@ -224,7 +229,9 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
     pushPriceHoldLine(lines, quote.price_hold_until)
   }
 
-  lines.push('Reply or call back if anything looks off.')
+  lines.push(serviceMode === 'supply_only'
+    ? 'Reply or call back to confirm your charger order and arrange delivery or collection.'
+    : 'Reply or call back if anything looks off.')
   lines.push('')
   lines.push('- QuoteMax')
 
@@ -1055,7 +1062,11 @@ type Tier = { label: string; subtotal_ex_gst: number | string; line_items?: Line
 type Intake = {
   job_type: string
   caller?: { name?: string } | null
-  scope?: { item_count?: number; description?: string } | null
+  scope?: {
+    item_count?: number
+    description?: string
+    specs?: { service_mode?: unknown; supplied_by?: unknown } | null
+  } | null
 }
 
 type Quote = {
@@ -1228,6 +1239,7 @@ function pickScopeForSms(quote: Quote): string | null {
  * dedicated layout below and are untouched by the trade gate.
  */
 export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOptions): string {
+  const serviceMode = options?.serviceMode ?? evChargerServiceModeFromIntake(intake)
   // A post-site-visit FINAL quote is a different message entirely: one
   // confirmed price, a deposit that credits the $99 already paid, and a
   // balance to come. It must never reach the site-visit branch below.
@@ -1236,7 +1248,7 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   }
   // Inspection-required quotes get a distinct SMS layout — indicative ranges
   // for context, ONE prominent $99 site-visit link, no per-tier pay buttons.
-  if (quote.needs_inspection) {
+  if (quote.needs_inspection && serviceMode !== 'supply_only') {
     return buildInspectionQuoteSms(intake, quote)
   }
   const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
@@ -1244,6 +1256,7 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   const siteVisitFirst = isSiteVisitFirstRow({
     trade: options?.trade,
     quoteKind: options?.quoteKind,
+    serviceMode,
   })
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
@@ -1341,9 +1354,11 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   }
 
   lines.push(
-    siteVisitFirst
-      ? 'Reply or call back if anything looks off.'
-      : 'Reply or call back to confirm a tier and we will book you in.',
+    serviceMode === 'supply_only'
+      ? 'Reply or call back to confirm your charger order and arrange delivery or collection.'
+      : siteVisitFirst
+        ? 'Reply or call back if anything looks off.'
+        : 'Reply or call back to confirm a tier and we will book you in.',
   )
   lines.push('')
   lines.push('- QuoteMax')

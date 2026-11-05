@@ -1,5 +1,6 @@
 import type { DraftLineItem, DraftTier, DraftWithTiers } from './merge-recipes'
 import type { GroundingFailure } from './validate'
+import { optionalUpsellKind } from './optional-extras'
 
 /**
  * R2 (2026-09-02) — OPTIONAL-UPSELL GUARD.
@@ -96,8 +97,33 @@ function appendUnpricedUpsells(
   for (const r of removed) {
     const name = r.description.trim()
     if (!name) continue
-    if (out.some((u) => String(u.name ?? '').trim().toLowerCase() === name.toLowerCase())) continue
-    out.push({ name, price_ex_gst: null, note: 'quoted on site' })
+    // Failed line wording may append a method or assessment qualifier while
+    // the optional list keeps the short prompt label. Clearing the failed
+    // price is conservative; retaining it under that short label is unsafe.
+    const kind = optionalUpsellKind(name) ?? (
+      /^\s*(?:add\s+)?rcbo safety switch\b/i.test(name) ? optionalUpsellKind('Add RCBO safety switch') :
+      /\bswitchboard health check\b/i.test(name) ? optionalUpsellKind('Switchboard health check') :
+      /\b(?:per-property\s+)?compliance certificate\b/i.test(name) ? optionalUpsellKind('Per-property compliance certificate') : null
+    )
+    const matches = out.filter((u) => {
+      const existingName = String(u.name ?? '').trim()
+      return existingName.toLowerCase() === name.toLowerCase() ||
+        (kind !== null && optionalUpsellKind(existingName) === kind)
+    })
+    if (matches.length === 0) {
+      out.push({ name, price_ex_gst: null, note: 'quoted on site' })
+      continue
+    }
+    // A failed line may already have an advertised optional price. Clear
+    // every matching entry and monetary alias instead of preserving that
+    // ungrounded amount through the old name-only deduplication branch.
+    for (const match of matches) {
+      for (const key of Object.keys(match)) {
+        if (/(?:price|amount|total|cost)/i.test(key)) match[key] = null
+      }
+      match.price_ex_gst = null
+      match.note = 'quoted on site'
+    }
   }
   return out
 }

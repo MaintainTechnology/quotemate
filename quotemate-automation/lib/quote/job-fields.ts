@@ -17,16 +17,18 @@
 // + cache + client fetch to replace a typed literal. Add trade_form_fields
 // the day a tradie needs to edit their own fields — not before.
 //
-// PURE — zero imports. quote-readiness.ts can't be imported into a client
-// bundle (its module chain pulls lib/estimate/catalogue + spec-guard), so the
-// content is lifted here rather than re-exported.
-//
-// Option strings are HUMAN-READABLE, not canonical enums, and that is
-// deliberate: the answers are rendered into a prose transcript which
-// structureIntake() re-derives the structured intake from. There is no
-// downstream consumer of a canonical value, so a canonicalisation layer
-// would be dead weight.
+// CLIENT-SAFE. quote-readiness.ts can't be imported into a client bundle (its
+// module chain pulls lib/estimate/catalogue + spec-guard), so the content is
+// lifted here rather than re-exported. The only import is the small shared EV
+// service-mode contract used by both portal and SMS.
 // ════════════════════════════════════════════════════════════════════
+
+import {
+  EV_SERVICE_MODES,
+  isEvSupplyMode,
+  resolveEvChargerServiceMode,
+  type EvServiceMode,
+} from './ev-service-mode'
 
 export type JobField = {
   /** Stable code — mirrors the fact codes in REQUIRED_BY_JOB and, where one
@@ -38,6 +40,9 @@ export type JobField = {
   type: 'number' | 'select' | 'text'
   /** Choices for `type: 'select'`. Written into the transcript verbatim. */
   options?: readonly string[]
+  /** A server-side guard still enforces critical fields; this drives native
+   * browser validation and the required marker on the dashboard. */
+  required?: boolean
 }
 
 export type JobFormSpec = {
@@ -196,10 +201,11 @@ export const JOB_FIELDS: Record<string, JobFormSpec> = {
         options: ['Tesla', 'BYD', 'another EV', 'not sure'],
       },
       {
-        code: 'charger_supply',
-        label: 'Who supplies the charger unit?',
+        code: 'service_mode',
+        label: 'What does the customer want?',
         type: 'select',
-        options: ['customer already has the charger', 'we supply the charger', 'not sure'],
+        options: EV_SERVICE_MODES,
+        required: true,
       },
       {
         code: 'room',
@@ -412,8 +418,57 @@ export function fieldsForJobType(jobType: string | null | undefined): JobFormSpe
   return JOB_FIELDS[(jobType ?? '').trim()] ?? { fields: GENERIC, usuallyInspection: true }
 }
 
-/** Exact portal/API contract for adding a tenant-stocked charger unit. */
+/** Legacy portal answer retained for old clients and stored requests. */
 export const EV_CHARGER_TRADIE_SUPPLY_ANSWER = 'we supply the charger'
+
+export const EV_CHARGER_SERVICE_MODE_FIELD_CODE = 'service_mode'
+
+const EV_INSTALLATION_FIELD_CODES = new Set(['room', 'switchboard_distance', 'phase'])
+
+/** Canonical service-mode reader for current and legacy dashboard answers. */
+export function evServiceModeFromAnswers(
+  answers: Record<string, string> | null | undefined,
+): EvServiceMode | undefined {
+  return resolveEvChargerServiceMode({
+    service_mode: answers?.service_mode,
+    charger_supply: answers?.charger_supply,
+  })
+}
+
+/**
+ * Supply-only jobs have no site installation scope. Keep the product/vehicle
+ * context visible, but remove distance, phase and location fields so stale
+ * answers cannot turn a supply request back into an installation quote.
+ */
+export function visibleFieldsForJobType(
+  jobType: string | null | undefined,
+  answers: Record<string, string> | null | undefined,
+): readonly JobField[] {
+  const fields = fieldsForJobType(jobType).fields
+  if (jobType !== 'ev_charger' || evServiceModeFromAnswers(answers) !== 'supply_only') {
+    return fields
+  }
+  return fields.filter((field) => !EV_INSTALLATION_FIELD_CODES.has(field.code))
+}
+
+/** Canonicalise legacy mode answers and discard hidden installation answers. */
+export function answersForJobType(
+  jobType: string | null | undefined,
+  answers: Record<string, string>,
+): Record<string, string> {
+  if (jobType !== 'ev_charger') return answers
+
+  const next = { ...answers }
+  const mode = evServiceModeFromAnswers(answers)
+  delete next.charger_supply
+  if (mode) next.service_mode = mode
+  else delete next.service_mode
+
+  if (mode === 'supply_only') {
+    for (const code of EV_INSTALLATION_FIELD_CODES) delete next[code]
+  }
+  return next
+}
 
 /**
  * Non-EV jobs retain the existing optional catalogue picker. EV installs may
@@ -424,8 +479,5 @@ export function allowsPinnedCatalogueProduct(
   jobType: string | null | undefined,
   answers: Record<string, string> | null | undefined,
 ): boolean {
-  return (
-    jobType !== 'ev_charger' ||
-    answers?.charger_supply === EV_CHARGER_TRADIE_SUPPLY_ANSWER
-  )
+  return jobType !== 'ev_charger' || isEvSupplyMode(evServiceModeFromAnswers(answers))
 }

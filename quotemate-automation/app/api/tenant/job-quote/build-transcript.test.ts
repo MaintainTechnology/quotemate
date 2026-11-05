@@ -65,13 +65,13 @@ describe('buildTranscript', () => {
   // ...but a NON-recipe job type's answers must survive. ev_charger's phase
   // question was coded `circuit_required` and so was filtered out for every job
   // type, losing the fact that forces an inspection on three-phase work.
-  it('keeps all five EV charger answers in registry order', () => {
+  it('keeps all five installation EV charger answers in registry order', () => {
     const t = buildTranscript(
       body({
         job_type: 'ev_charger',
         answers: {
           vehicle: 'Tesla',
-          charger_supply: 'we supply the charger',
+          service_mode: 'supply_and_install',
           room: 'external wall',
           switchboard_distance: '5–10 m',
           phase: 'three phase (on-site inspection)',
@@ -81,7 +81,7 @@ describe('buildTranscript', () => {
     )
     const orderedLines = [
       'What car is the charger for? Tesla',
-      'Who supplies the charger unit? we supply the charger',
+      'What does the customer want? Supply and installation',
       'Where is the charger going (garage, carport, external wall)? external wall',
       'Roughly how far is the switchboard from the charger spot? 5–10 m',
       'Single phase or three phase? three phase (on-site inspection)',
@@ -92,6 +92,26 @@ describe('buildTranscript', () => {
       expect(index, `missing transcript line: ${line}`).toBeGreaterThan(previousIndex)
       previousIndex = index
     }
+  })
+
+  it('removes stale installation details from a supply-only transcript', () => {
+    const t = buildTranscript(
+      body({
+        job_type: 'ev_charger',
+        answers: {
+          vehicle: 'BYD',
+          service_mode: 'supply_only',
+          room: 'garage',
+          switchboard_distance: 'over 10 m',
+          phase: 'three phase (on-site inspection)',
+        },
+      }),
+      'electrical',
+    )
+    expect(t).toContain('What does the customer want? Supply only')
+    expect(t).not.toContain('garage')
+    expect(t).not.toContain('over 10 m')
+    expect(t).not.toContain('three phase')
   })
 
   it('carries an answer whose code is not in the spec through the extras fallback', () => {
@@ -126,32 +146,35 @@ describe('buildTranscript', () => {
     expect(t).toMatch(/quote THIS product/i)
   })
 
-  it('ignores a stale EV product name when the customer supplies the charger', () => {
+  it('ignores a stale EV product name for installation-only mode', () => {
     const t = buildTranscript(
       body({
         job_type: 'ev_charger',
-        answers: { charger_supply: 'customer already has the charger' },
+        answers: { service_mode: 'install_only' },
         product_name: 'Tesla Wall Connector',
       }),
       'electrical',
     )
-    expect(t).toContain('customer already has the charger')
+    expect(t).toContain('Installation only')
     expect(t).not.toContain('Tesla Wall Connector')
     expect(t).not.toMatch(/quote THIS product/i)
   })
 
-  it('retains an EV product directive for the exact tradie-supplied answer', () => {
+  it.each(['supply_only', 'supply_and_install'])(
+    'retains an EV product directive for %s',
+    (serviceMode) => {
     const t = buildTranscript(
       body({
         job_type: 'ev_charger',
-        answers: { charger_supply: 'we supply the charger' },
+        answers: { service_mode: serviceMode },
         product_name: 'Tesla Wall Connector',
       }),
       'electrical',
     )
     expect(t).toContain('Tesla Wall Connector')
     expect(t).toMatch(/quote THIS product/i)
-  })
+    },
+  )
 
   it('appends the free-text notes last so they read as context, not an answer', () => {
     const t = buildTranscript(body({ notes: 'Tight ceiling space.' }), 'electrical')
@@ -191,25 +214,28 @@ describe('filterPinnedProductRequest', () => {
     product_name: 'Tesla Wall Connector',
   }
 
-  it('drops both EV pin fields for a customer-supplied charger', () => {
+  it('drops both EV pin fields for installation-only mode', () => {
     expect(
       filterPinnedProductRequest(
         'ev_charger',
-        { charger_supply: 'customer already has the charger' },
+        { service_mode: 'install_only' },
         request,
       ),
     ).toEqual({})
   })
 
-  it('retains both EV pin fields only for the exact tradie-supplied answer', () => {
-    expect(
-      filterPinnedProductRequest(
-        'ev_charger',
-        { charger_supply: 'we supply the charger' },
-        request,
-      ),
-    ).toEqual(request)
-  })
+  it.each(['supply_only', 'supply_and_install'])(
+    'retains both EV pin fields for %s',
+    (serviceMode) => {
+      expect(
+        filterPinnedProductRequest(
+          'ev_charger',
+          { service_mode: serviceMode },
+          request,
+        ),
+      ).toEqual(request)
+    },
+  )
 
   it('preserves the existing pin behaviour for non-EV jobs', () => {
     expect(filterPinnedProductRequest('downlights', {}, request)).toEqual(request)
@@ -225,20 +251,21 @@ describe('canonicaliseEvChargerSupply', () => {
   })
 
   it.each([
-    ['customer already has the charger', 'customer'],
-    ['we supply the charger', 'tradie'],
-  ])('maps the exact portal answer %s to %s', (answer, expected) => {
+    ['supply_only', 'tradie'],
+    ['install_only', 'customer'],
+    ['supply_and_install', 'tradie'],
+  ])('maps service mode %s to supplier %s', (mode, expected) => {
     expect(
       canonicaliseEvChargerSupply(intake('wrong'), 'ev_charger', {
-        charger_supply: answer,
+        service_mode: mode,
       }).scope.specs,
-    ).toEqual({ supplied_by: expected, smart: true })
+    ).toEqual({ service_mode: mode, supplied_by: expected, smart: true })
   })
 
   it.each(['not sure', ''])('unsets model-inferred supply for %s', (answer) => {
     expect(
       canonicaliseEvChargerSupply(intake('customer'), 'ev_charger', {
-        charger_supply: answer,
+        service_mode: answer,
       }).scope.specs,
     ).toEqual({ smart: true })
   })

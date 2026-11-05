@@ -235,15 +235,14 @@ function PaintingEstimatePageInner() {
         }),
       })
       const json = (await res.json()) as
-        | { ok: true; id: string; public_token: string; estimate_token: string }
+        | { ok: true; id: string; public_token: string; estimate_token: string; reviewUrl: string }
         | { ok: false; error?: string; detail?: string }
       if (json.ok) {
         setSavedId(json.id)
         setSavedToken(json.public_token)
         setSaveState('saved')
-        // The estimate is now a first-class entity — open its tradie-facing
-        // results page on a unique hash link (mirrors roofing's /m redirect).
-        router.push(`/p/${json.estimate_token}`)
+        // Saving is not approval. Review the server-calculated snapshot first.
+        router.push(json.reviewUrl)
       } else {
         setSaveState('error')
         setSaveErr(json.detail ?? json.error ?? 'Could not save the job.')

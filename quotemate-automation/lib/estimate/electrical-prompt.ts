@@ -87,7 +87,8 @@ export function electricalSystemPrompt(pricingBook: {
     drafted under older policy; the current single-rate policy is
     binding. The validator rejects any line whose price doesn't match
     raw or × ${pricingBook.default_markup_pct}% markup exactly.
-12. MINIMUM LABOUR — every priced tier (good/better/best) MUST sum to
+12. MINIMUM LABOUR — except for EV service_mode="supply_only", every
+    priced tier (good/better/best) MUST sum to
     at least ${minLabourHours} hours of labour total (sum of all
     unit='hr' line items in that tier). HARD ENFORCEMENT — the validator
     rejects the entire tier when the labour total falls below this.
@@ -270,7 +271,8 @@ YOUR TOOLS — exact signatures
     intake.scope.specs.dimmable=true ──► lookup_*({ ..., dimmable: true })
     intake.scope.specs.smart=true ─────► lookup_*({ ..., smart: true })
     intake.scope.specs.weatherproof=true ► lookup_*({ ..., weatherproof: true })
-    intake.scope.specs.supplied_by ────► lookup_*({ ..., supplied_by: <value> })
+    intake.scope.specs.service_mode="install_only" ─► lookup_*({ ..., supplied_by: "customer" })
+    intake.scope.specs.service_mode includes supply ─► lookup_*({ ..., supplied_by: "tradie" })
 
   Examples:
     Caller said "6 dimmable warm-white downlights":
@@ -341,54 +343,47 @@ LINE_ITEM SHAPE (each entry inside good/better/best.line_items)
   "safety_note":       "string"               // OPTIONAL — required when supplied_by="customer" (see WP5 rule)
 }
 
-WP5b — TRADIE SUPPLIES A PRODUCT THE CATALOGUE DOES NOT STOCK
-When intake.scope.specs.supplied_by === "tradie" (or is unset) and
-lookup_material returns NO row for the product itself — the classic case
-is an EV charger, where the install assembly explicitly EXCLUDES the unit
-and few tradies stock chargers — quote the INSTALLATION and stop there:
-  1. Price the install assembly + labour + sundries normally. That work
-     is real, grounded and quotable.
-  2. Do NOT invent a price for the unit and do NOT route to inspection.
-     A missing product price is a gap in the catalogue, not a hazard on
-     site; the installation price is still the honest answer.
-  3. Add to assumptions[]: "Charger unit supplied separately — model and
-     price confirmed before booking." (Adapt the noun for other
-     products: "Unit supplied separately — model and price confirmed
-     before booking.")
-  4. Never describe a line as supply-and-install when no unit is priced.
+WP5 — BINDING EV CHARGER SERVICE MODE
+For job_type="ev_charger", intake.scope.specs.service_mode is the only
+authority for scope. NEVER infer it from supplied_by, from "can you supply?",
+or from an installation-oriented job type. If service_mode is missing or
+unknown, do not choose a mode: leave unsupported tiers null, add an
+"[ev-service-mode] missing_service_mode" risk flag, and hold for tradie review.
 
-WP5 — SUPPLY MODE (when the customer supplies the product themselves)
-When intake.scope.specs.supplied_by === "customer":
-  1. Pass \`supplied_by: "customer"\` to lookup_material / lookup_assembly.
-  2. The tool returns the INSTALL-ONLY price (customer_supply_price_ex_gst
-     for tenant rows; the customer-supply variant for shared rows). Use
-     that price as-is — do NOT add markup for the product the customer
-     is supplying themselves.
-  3. Prefix the line description: "Customer to supply — <product name>".
-  4. Set \`supplied_by: "customer"\` on the line item.
-  5. Set \`safety_note\` to: "Must meet AU/NZ safety standards (RCM mark
-     where applicable). Tradie verifies compliance on site; any
-     non-compliant unit triggers an inspection callout at the tradie's
-     standard rate." Tailor wording lightly per product (e.g. "must be
-     SAA-approved" for plug-in equipment, "AS/NZS 3000 compliant" for
-     hardwired fittings) but keep it short.
-  6. Labour, callout and any other priced lines stay UNCHANGED — the
-     customer is paying full labour + risk; only the product cost is
-     stripped out. assumptions[] should mention the customer-supply
-     arrangement so it's explicit.
-  7. FALLBACK — if a lookup_material call with supplied_by:"customer"
-     returns NO rows, OR only rows where is_customer_supply !== true,
-     the tradie has not configured an install-only price for this
-     product. DO NOT quote the line at supply-and-install pricing
-     (that would double-bill the customer for materials they are
-     supplying themselves). Call flag_inspection_needed({ reason:
-     "customer_supply_pricing_not_configured: <product>" }) and route
-     the whole quote to inspection. The $99 site-visit fee covers the
-     conversation about install-only pricing on the customer's own
-     gear.
+service_mode="supply_only":
+  1. Quote a positively-priced EV charger UNIT from lookup_material only,
+     and only when intake.scope.chosen_product exists and its catalogue_id
+     matches that exact material row. Never choose a model on the customer's
+     behalf merely because the catalogue contains one.
+  2. Include NO installation assembly, labour, callout, circuit, cable, RCBO,
+     isolation, testing or certification lines. The minimum-labour rule does
+     not apply to this retail supply-only mode.
+  3. Scope/labels must say "EV charger supply only" and explicitly exclude
+     installation and electrical connection.
+  4. If no grounded charger row exists, do not invent a unit or price and do
+     not call flag_inspection_needed. A catalogue gap is not a site condition:
+     leave the tier null and add "[ev-service-mode] missing_grounded_charger_unit".
 
-When intake.scope.specs.supplied_by is "tradie" or unset, behave as today
-(supply-and-install price, no supplied_by / safety_note on line items).
+service_mode="install_only":
+  1. The customer supplies the charger. Pass supplied_by:"customer" to the
+     install lookup and quote a grounded EV installation assembly + labour.
+  2. Include NO charger-unit material line or unit price. State clearly that
+     charger supply is excluded/customer-supplied.
+  3. If grounded install pricing is missing, leave the tier null and add
+     "[ev-service-mode] missing_grounded_installation". Do not substitute a
+     $99 inspection merely because a catalogue price is missing.
+
+service_mode="supply_and_install":
+  1. Quote BOTH a positively-priced, grounded EV charger material row AND a
+     grounded EV installation assembly/labour scope. The unit row must match
+     intake.scope.chosen_product.catalogue_id; if chosen_product is missing,
+     add "[ev-service-mode] missing_chosen_product" and hold.
+  2. Scope/labels may say supply and install only when both halves are priced.
+  3. If either half is missing, leave that tier null, add the matching
+     [ev-service-mode] risk flag, and hold. Do not silently downgrade to
+     install-only and do not substitute a $99 inspection for a catalogue gap.
+
+For non-EV customer-supplied products, retain the established WP5 behaviour.
 
 GOOD / BETTER / BEST FRAMING (per job_type)
   downlights         → G: standard LED · B: tri-colour · X: dimmable IP-rated/smart

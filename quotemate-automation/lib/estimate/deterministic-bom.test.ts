@@ -150,3 +150,100 @@ describe('buildDeterministicTiers — fallback + safe-failure', () => {
     expect(matLine(r.tiers!.good).unit_price_ex_gst).toBeCloseTo(10, 5)
   })
 })
+
+describe('Rank 1 authority path', () => {
+  const strictInput = (): DeterministicTierInput => ({
+    ...BASE,
+    tenantMaterials: DL_CATALOGUE.map((row, index) => ({ ...row, id: `product-${index}` })),
+    authority: {
+      tenantId: 'tenant-a', pricingBookVersionId: 'book-1', recipeSourceId: 'tenant-recipe-1',
+      approvedCatalogueIds: ['product-0', 'product-1', 'product-2'], gstRegistered: true,
+      serviceMode: 'supply_and_install', minLabourHours: 2,
+    },
+  })
+
+  it('returns exact cents and approved source provenance in every tier, including the labour minimum', () => {
+    const result = buildDeterministicTiers(strictInput())
+    expect(result.tiers).not.toBeNull()
+    expect(result.tiers!.good.subtotal_ex_gst).toBe(245)
+    expect(result.tiers!.good.calculation).toMatchObject({
+      version: 'quote-core-v1', tenantId: 'tenant-a', pricingBookVersionId: 'book-1', recipeSourceId: 'tenant-recipe-1',
+      subtotalExGstCents: 24500, gstCents: 2450, totalIncGstCents: 26950,
+      labourPolicy: { recipeHours: '1.5', minimumHours: '2', billableHours: '2' },
+      lines: [{ sourceId: 'product-0', sourceUnitPriceCents: 1000, unitPriceCents: 1250, totalExGstCents: 2500 },
+        { sourceId: 'pricing_book:book-1:hourly_rate', quantity: '2', unitPriceCents: 11000, totalExGstCents: 22000 }],
+    })
+    for (const tier of ['good', 'better', 'best'] as const) {
+      const calculation = result.tiers![tier].calculation!
+      expect(calculation.subtotalExGstCents).toBe(calculation.lines.reduce((sum, line) => sum + line.totalExGstCents, 0))
+    }
+  })
+
+  it('computes a half-cent markup exactly rather than preserving the composer float total', () => {
+    const input = strictInput()
+    input.markupPct = 0.5
+    input.tenantMaterials.forEach((row) => { row.unit_price_ex_gst = '1.00' })
+    const result = buildDeterministicTiers(input)
+    expect(matLine(result.tiers!.good)).toMatchObject({ unit_price_ex_gst: 1.01, total_ex_gst: 2.02 })
+  })
+
+  it('rejects a missing approved catalogue price even when a shared fallback exists', () => {
+    const input = strictInput()
+    input.bom = [{ material_category: 'sundry', quantity: 1, required: true }]
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'missing_price' })
+  })
+
+  it('refuses ambiguous same-tier products rather than choosing source row order', () => {
+    const input = strictInput()
+    input.tenantMaterials.push({ ...input.tenantMaterials[0], id: 'duplicate-choice' })
+    input.authority!.approvedCatalogueIds.push('duplicate-choice')
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'ambiguous_source' })
+    input.tierLadder = [{ category: 'downlight', tier: 'good', catalogue_id: 'product-0' }]
+    expect(buildDeterministicTiers(input).tiers).not.toBeNull()
+  })
+
+  it('does not silently replace missing, inactive, unapproved or wrong-category pinned products', () => {
+    for (const mutation of ['missing', 'inactive', 'unapproved', 'wrong-category']) {
+      const input = strictInput()
+      input.chosenProduct = { category: 'downlight', tier: 'good', catalogue_id: mutation === 'missing' ? 'absent' : 'product-0' }
+      if (mutation === 'inactive') input.tenantMaterials[0].active = false
+      if (mutation === 'unapproved') input.authority!.approvedCatalogueIds = ['product-1', 'product-2']
+      if (mutation === 'wrong-category') input.tenantMaterials[0].category = 'switch'
+      expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'unapproved_source' })
+    }
+  })
+
+  it('rejects conflicting tier pins and duplicate product IDs', () => {
+    const input = strictInput()
+    input.tierLadder = [{ category: 'downlight', tier: 'good', catalogue_id: 'product-0' },
+      { category: 'downlight', tier: 'good', catalogue_id: 'product-1' }]
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'ambiguous_source' })
+    input.tierLadder = []
+    input.tenantMaterials.push({ ...input.tenantMaterials[0] })
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'ambiguous_source' })
+  })
+
+  it.each(['supply_only', 'install_only'] as const)('holds %s until recipe component roles exist', (serviceMode) => {
+    const input = strictInput(); input.authority!.serviceMode = serviceMode
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'unsupported_service_mode' })
+  })
+
+  it('rejects missing tenant/book authority and malformed or absent labour policy', () => {
+    const input = strictInput(); input.authority!.pricingBookVersionId = ''
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'missing_authority' })
+    for (const value of ['', '-1', '0x10', '0.12345678901234567890']) {
+      const invalid = strictInput(); invalid.authority!.minLabourHours = value
+      expect(buildDeterministicTiers(invalid)).toMatchObject({ tiers: null, code: 'invalid_quantity' })
+    }
+  })
+
+  it('refuses float artefacts from upstream quantity scaling and duplicate approved IDs', () => {
+    const input = strictInput()
+    input.bom = [{ material_category: 'downlight', quantity: 0.1 * 3, required: true }]
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'invalid_quantity' })
+    input.bom[0].quantity = '0.125'
+    expect(buildDeterministicTiers(input).tiers).not.toBeNull()
+    input.authority!.approvedCatalogueIds.push('product-0')
+    expect(buildDeterministicTiers(input)).toMatchObject({ tiers: null, code: 'ambiguous_source' })
+  })
+})

@@ -34,6 +34,7 @@ import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DEFAULT_SOLAR_RATE_CARD } from './pricing'
 import type { SolarConfig, SolarRateCard } from './types'
+import { hasCompleteSolarRateOverlay } from './complete-rate-card'
 
 /** $/kW bounds — a $0 rate would zero the quote; cap guards fat-fingers. */
 export const MIN_RATE_PER_KW = 0
@@ -263,10 +264,15 @@ export function buildSolarOverlayFromInputs(inputs: SolarDashboardInputs): Parse
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OverlayClient = SupabaseClient<any, any, any, any, any>
 
+export class SolarPricingSetupError extends Error {
+  constructor() { super('Complete this account’s solar rates and GST setting before estimating.') }
+}
+
 /**
  * One-call composite for the estimate/redraft/select-building routes:
  * load the tenant overlay, merge the rate card, and apply the STC-price
- * override onto the config. No overlay → the exact pre-override inputs.
+ * override onto the config. Every live quote path requires a complete tenant
+ * card first; defaults remain available only to offline calculators/editors.
  */
 export async function loadSolarTenantRates(
   supabase: OverlayClient,
@@ -274,6 +280,7 @@ export async function loadSolarTenantRates(
   config: SolarConfig,
 ): Promise<{ config: SolarConfig; rateCard: SolarRateCard; overlay: SolarRateOverlay }> {
   const overlay = await loadSolarRateOverlay(supabase, tenantId)
+  if (!tenantId || !hasCompleteSolarRateOverlay(overlay)) throw new SolarPricingSetupError()
   const rateCard = mergeSolarRateCard(config.default_rate_card, overlay)
   const stc = stcPriceFromOverlay(overlay)
   return {
@@ -295,23 +302,23 @@ export async function loadSolarRateOverlay(
 ): Promise<SolarRateOverlay> {
   if (!tenantId) return {}
   try {
-    let row = (
-      await supabase
+    const preferred = await supabase
         .from('pricing_book')
         .select('overlays')
         .eq('tenant_id', tenantId)
         .eq('trade', 'solar')
         .maybeSingle()
-    ).data as { overlays?: unknown } | null
+    if (preferred.error) return {}
+    let row = preferred.data as { overlays?: unknown } | null
     if (!row) {
-      row = (
-        await supabase
+      const fallback = await supabase
           .from('pricing_book')
           .select('overlays')
           .eq('tenant_id', tenantId)
           .limit(1)
           .maybeSingle()
-      ).data as { overlays?: unknown } | null
+      if (fallback.error) return {}
+      row = fallback.data as { overlays?: unknown } | null
     }
     const overlays = row?.overlays as { solar_rate_card?: unknown } | null | undefined
     const parsed = parseSolarRateOverlay(overlays?.solar_rate_card)

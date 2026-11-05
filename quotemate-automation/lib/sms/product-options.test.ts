@@ -285,14 +285,16 @@ describe('categoryForJobType', () => {
 })
 
 describe('productChoiceAllowedForSupply', () => {
-  it('suppresses EV charger unit choices when the customer already owns the unit', () => {
-    expect(productChoiceAllowedForSupply('ev_charger', 'customer')).toBe(false)
-    expect(productChoiceAllowedForSupply(' EV_CHARGER ', ' CUSTOMER ')).toBe(false)
+  it('allows EV charger choices only when the explicit service mode includes supply', () => {
+    expect(productChoiceAllowedForSupply('ev_charger', 'supply_only')).toBe(true)
+    expect(productChoiceAllowedForSupply(' EV_CHARGER ', ' SUPPLY_AND_INSTALL ')).toBe(true)
+    expect(productChoiceAllowedForSupply('ev_charger', 'install_only')).toBe(false)
   })
 
-  it('allows a tradie-supplied EV unit and preserves all non-EV product flows', () => {
-    expect(productChoiceAllowedForSupply('ev_charger', 'tradie')).toBe(true)
-    expect(productChoiceAllowedForSupply('ev_charger', undefined)).toBe(true)
+  it('fails closed for unresolved/legacy EV values and preserves non-EV product flows', () => {
+    expect(productChoiceAllowedForSupply('ev_charger', 'tradie')).toBe(false)
+    expect(productChoiceAllowedForSupply('ev_charger', 'customer')).toBe(false)
+    expect(productChoiceAllowedForSupply('ev_charger', undefined)).toBe(false)
     expect(productChoiceAllowedForSupply('ceiling_fans', 'customer')).toBe(true)
   })
 })

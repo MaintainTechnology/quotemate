@@ -9,14 +9,14 @@
 // Auth: same bearer-token pattern as the rest of the painting surface.
 
 import { createClient } from '@supabase/supabase-js'
-import { after } from 'next/server'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { SavePaintingSchema } from '@/lib/painting/request-schema'
 import { buildSavedPaintingRow } from '@/lib/painting/save-row'
-import { generatePaintAfterImage } from '@/lib/painting/paint-after'
+import { loadPaintingRateCard } from '@/lib/painting/quote-dispatch'
+import { estimatePainting } from '@/lib/painting/measure'
 
 export const dynamic = 'force-dynamic'
-// after(): the AI repaint pre-warm below takes 10–20 s.
+// Saving recomputes the authoritative estimate before owner review.
 export const maxDuration = 60
 
 const supabase = createClient(
@@ -49,6 +49,10 @@ export async function POST(req: Request) {
   if (!auth) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+  if (!auth.tenantId) {
+    return Response.json({ ok: false, error: 'tenant_pricing_required',
+      detail: 'Create an owned painting account and complete its pricing before saving a quote.' }, { status: 422 })
+  }
 
   let body: unknown
   try {
@@ -65,13 +69,23 @@ export async function POST(req: Request) {
     )
   }
 
+  const rateCard = await loadPaintingRateCard(supabase, auth.tenantId, null)
+  if (!rateCard) return Response.json({ ok: false, error: 'tenant_pricing_required',
+    detail: 'Complete this account’s painting rates and GST setting before saving.' }, { status: 422 })
+  // The browser supplies scope, not price authority. Rebuild the measurement,
+  // tiers and tax using this account's complete rate card; never persist an
+  // arbitrary client estimate, source claim or monetary override on creation.
+  const computed = await estimatePainting(parsed.data.address, parsed.data.inputs, { rateCard })
+  if (!computed.ok) return Response.json({ ok: false, error: computed.code, detail: computed.detail }, { status: 422 })
   const row = buildSavedPaintingRow({
     tenantId: auth.tenantId,
     userId: auth.userId,
-    data: parsed.data,
-    // A dashboard save is tradie-authored + reviewed inline, so release it
-    // immediately — the customer quote page shows prices straight away.
-    releasedAt: new Date().toISOString(),
+    data: { ...parsed.data, source: computed.estimate.provider, estimate: {
+      ...computed.estimate,
+      pricing_authority: { source: 'tenant_painting_rate_card', tenant_id: auth.tenantId,
+        rate_card: rateCard, calculation: 'painting-v1' },
+    } },
+    releasedAt: null,
   })
 
   const { data, error } = await supabase
@@ -87,19 +101,14 @@ export async function POST(req: Request) {
     )
   }
 
-  // Pre-warm the AI repaint preview AFTER the response (a dashboard save is
-  // released immediately, so this row is render-eligible) — by the time the
-  // tradie or customer opens the quote the "after" image is already cached.
-  // Best-effort and CAS-guarded; never throws.
-  const publicToken = data.public_token as string
-  after(() => generatePaintAfterImage(publicToken))
-
   return Response.json(
     {
       ok: true,
       id: data.id as string,
       public_token: data.public_token as string,
       estimate_token: data.estimate_token as string,
+      reviewUrl: `/dashboard/quote-review?family=paint&id=${encodeURIComponent(data.id as string)}`,
+      status: 'awaiting_tradie_approval',
     },
     { status: 200 },
   )

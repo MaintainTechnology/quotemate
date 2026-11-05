@@ -53,7 +53,10 @@ export function gotenbergConfigured(): boolean {
  * A4 fallback on a Gotenberg build that predates the flag (unknown form fields
  * are ignored, not rejected).
  */
-export async function renderPdfFromHtml(html: string): Promise<Buffer> {
+export async function renderPdfFromHtml(
+  html: string,
+  options: { singlePage?: boolean } = {},
+): Promise<Buffer> {
   const base = process.env.GOTENBERG_URL?.trim().replace(/\/$/, '')
   if (!base) throw new Error('GOTENBERG_URL is not set')
 
@@ -66,9 +69,13 @@ export async function renderPdfFromHtml(html: string): Promise<Buffer> {
   form.set('marginBottom', String(PDF_MARGIN_IN))
   form.set('marginLeft', String(PDF_MARGIN_IN))
   form.set('marginRight', String(PDF_MARGIN_IN))
-  // One continuous page instead of A4 page-by-page. Safe here because every
-  // caller renders through renderReportDocument, which pins the body width.
-  form.set('singlePage', 'true')
+  // One continuous page instead of A4 page-by-page. Every caller renders
+  // through renderReportDocument, which pins the body width, but that is not
+  // the whole story: measured on 3 Nov 2026 with the chrome's web fonts, the
+  // page still came out short at some text lengths, and Gotenberg drops what
+  // falls past it (the closing "Please Note" went missing at 6 of 21 lengths).
+  // A document whose tail must never be lost asks for A4 pages instead.
+  if (options.singlePage ?? true) form.set('singlePage', 'true')
 
   const res = await fetch(`${base}${CONVERT_PATH}`, {
     method: 'POST',

@@ -111,6 +111,37 @@ describe('stripUngroundedUpsellLines (R2)', () => {
     ])
   })
 
+  it('clears an existing optional price and every monetary alias when its line fails grounding', () => {
+    const input = { ...draft(), optional_upsells: [{
+      name: 'Switchboard health check', price_ex_gst: 150, price_inc_gst: 165,
+      unit_price_ex_gst: 150, total_ex_gst: 150, amount: 150, note: 'Only $165',
+    }] }
+    const result = stripUngroundedUpsellLines(input, [failure()])
+    expect(result.draft.optional_upsells).toEqual([{
+      name: 'Switchboard health check', price_ex_gst: null, price_inc_gst: null,
+      unit_price_ex_gst: null, total_ex_gst: null, amount: null, note: 'quoted on site',
+    }])
+    expect(input.optional_upsells[0].price_ex_gst).toBe(150)
+  })
+
+  it('clears every equivalent optional entry rather than retaining a differently worded priced duplicate', () => {
+    const input = { ...draft(), optional_upsells: [
+      { name: 'Switchboard health check', price_ex_gst: 150 },
+      { name: 'Switchboard health check and load assessment', price_ex_gst: 150 },
+      { name: 'Annual smoke alarm health check', price_ex_gst: 70 },
+    ] }
+    const result = stripUngroundedUpsellLines(input, [failure()])
+    expect(result.draft.optional_upsells.map((upsell) => upsell.price_ex_gst)).toEqual([null, null, 70])
+  })
+
+  it('clears the short optional RCBO price when the failed tier line has an installation qualifier', () => {
+    const description = 'Add RCBO safety switch - installation and testing'
+    const input = { ...draft(), best: { line_items: [labour, install, { ...healthCheck, description, unit_price_ex_gst: 95 }], subtotal_ex_gst: 575 },
+      optional_upsells: [{ name: 'Add RCBO safety switch', price_ex_gst: 95 }] }
+    const result = stripUngroundedUpsellLines(input, [failure({ description, unit_price_ex_gst: 95 })])
+    expect(result.draft.optional_upsells).toEqual([{ name: 'Add RCBO safety switch', price_ex_gst: null, note: 'quoted on site' }])
+  })
+
   it('never mutates the input draft', () => {
     const input = draft()
     const before = JSON.stringify(input)

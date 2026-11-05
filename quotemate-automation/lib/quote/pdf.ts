@@ -33,6 +33,11 @@ import {
   type EvEstimateImage,
 } from './report-html-ev-charger'
 import { jobMethod } from './job-method'
+import {
+  deriveEvSupplyOnlyDisplayTier,
+  resolveAuthorizedEvManualChargerLineIndexes,
+} from './ev-supply-presentation'
+import { resolveEvChargerServiceMode, type EvServiceMode } from './ev-service-mode'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
 import { quotePropertyVisuals } from './property-visuals'
 import { tradieProfile } from './tradie-profile'
@@ -86,7 +91,7 @@ import { publicWebOrigin, publicWebUrl } from '@/lib/sms/public-origin'
 import { loadQuoteReportPricing } from './report-pricing'
 import { QuotePricingVersionError } from './pricing-version'
 import { quoteEditRevision } from './edit-authority'
-import { quoteCustomerReleaseRevision } from './customer-release'
+import { evSupplyOnlyHasInspectionRouteState, quoteCustomerReleaseRevision } from './customer-release'
 
 const BUCKET = 'quote-pdfs'
 
@@ -266,6 +271,7 @@ type QuotePdfRow = {
   better: QuoteReportTier
   best: QuoteReportTier
   selected_tier: 'good' | 'better' | 'best' | null
+  status?: string | null
   total_inc_gst: number | null
   pricing_book_version_id: string | null
   scope_of_works: string | null
@@ -273,9 +279,11 @@ type QuotePdfRow = {
    *  "Job details". The PDF now prints it too (report template v8). */
   scope_short: string | null
   assumptions: string[] | null
+  risk_flags?: string[] | null
   estimated_timeframe: string | null
   needs_inspection: boolean | null
   inspection_reason: string | null
+  stripe_links?: Record<string, unknown> | null
   display_mode: string | null
   parent_quote_id: string | null
   pdf_path: string | null
@@ -401,7 +409,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
       // and a column missing from this select fails the whole read — which would
       // cost every electrical/plumbing quote its PDF on a pre-194 deploy. The EV
       // path reads it in its own best-effort select instead (spec R5/R6).
-      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, total_inc_gst, pricing_book_version_id, scope_of_works, scope_short, assumptions, estimated_timeframe, needs_inspection, inspection_reason, display_mode, parent_quote_id, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct, created_at, optional_upsells, quote_kind, deposit_pct, preview_status, preview_image_paths',
+      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, status, total_inc_gst, pricing_book_version_id, scope_of_works, scope_short, assumptions, risk_flags, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, display_mode, parent_quote_id, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct, created_at, optional_upsells, quote_kind, deposit_pct, preview_status, preview_image_paths',
     )
     .eq('id', quoteId)
     .maybeSingle<QuotePdfRow>()
@@ -633,6 +641,14 @@ export function renderQuoteDocumentHtml(
   ev: EvChargerEstimateInput | null = null,
 ): string {
   input = { ...input, reportStyle: process.env.FULL_QUOTE_DOC === 'true' ? validateReportStyle(input.reportStyle) : null }
+  // EV service mode has a binding deterministic presentation. An older
+  // authored report may contradict any canonical mode (supply-only can promise
+  // installation, install-only can promise a supplied unit, and combined can
+  // exclude it). Force every resolved EV quote through the shared template so
+  // FULL_QUOTE_DOC cannot reintroduce stale contract text.
+  if (ev) {
+    return buildEvChargerEstimateHtml({ ...ev, reportStyle: input.reportStyle })
+  }
   if (process.env.FULL_QUOTE_DOC === 'true' && reportDoc && typeof reportDoc === 'object') {
     const body = serializeReportDoc(reportDoc as ReportDoc, {
       good: input.good,
@@ -645,24 +661,6 @@ export function renderQuoteDocumentHtml(
     })
     return buildQuoteReportHtmlFromBody(input, body)
   }
-  // Spec ev-charger-estimate-template R1 — the EV charger estimate document,
-  // for electrical ev_charger quotes only. Deliberately AFTER the report_doc
-  // branch: a tradie who authored a document in the editor has overridden the
-  // template, and that must keep winning.
-  //
-  // R16 — a bug in this template degrades to the generic report, never to a
-  // failed send. The quote SMS is built and dispatched around this call; a
-  // throw here would surface to the draft route's outer catch and replace the
-  // customer's quote with the "we hit a snag" fallback.
-  if (ev) {
-    try {
-      return buildEvChargerEstimateHtml({ ...ev, reportStyle: input.reportStyle })
-    } catch (e) {
-      console.error('[quote-pdf] EV estimate template failed, using generic report', {
-        error: e instanceof Error ? e.message : String(e),
-      })
-    }
-  }
   return buildQuoteReportHtml(input)
 }
 
@@ -671,6 +669,19 @@ export function renderQuoteDocumentHtml(
  *  unit-tested in report-html-ev-charger.test.ts. */
 function isEvChargerEstimate(ctx: QuoteReportContext): boolean {
   return isEvChargerJob(ctx.intake?.job_type, ctx.intakeTrade)
+}
+
+/** Customer EV documents fail closed when the canonical service mode is
+ * unresolved, or when a supply-only persisted tier still contains install
+ * work. Hiding those rows would leave the immutable subtotal unexplained. */
+function evQuoteDocumentNeedsReview(ctx: QuoteReportContext): boolean {
+  if (!isEvChargerEstimate(ctx)) return false
+  const serviceMode = readEvScope(ctx.intake?.scope).serviceMode
+  if (!serviceMode) return true
+  if (serviceMode !== 'supply_only') return false
+  if (evSupplyOnlyHasInspectionRouteState(ctx.quote as unknown as Record<string, unknown>)) return true
+  return ctx.visibleTierKeys.length === 0 || ctx.visibleTierKeys.some((key) =>
+    deriveEvSupplyOnlyDisplayTier(ctx.quote[key]).status === 'review_required')
 }
 
 /** Everything the EV estimate needs that the base context does not carry.
@@ -683,7 +694,9 @@ type EvEstimateExtras = {
   siteAddress: string | null
   exclusions: string[]
   chargerUnitIds: string[]
+  assemblyRows: NonNullable<EvChargerEstimateInput['assemblyRows']>
   suppliedBy: 'tradie' | 'customer' | null
+  serviceMode: EvServiceMode | null
   chosenProductImagePath: string | null
   chosenProductName: string | null
 }
@@ -737,18 +750,23 @@ async function resolveEstimateRef(quoteId: string): Promise<string> {
 function readEvScope(scope: unknown): {
   description: string | null
   suppliedBy: 'tradie' | 'customer' | null
+  serviceMode: EvServiceMode | null
   chosenProductImagePath: string | null
   chosenProductName: string | null
 } {
   const s = (scope ?? {}) as {
     description?: unknown
-    specs?: { supplied_by?: unknown }
+    specs?: { supplied_by?: unknown; service_mode?: unknown; charger_supply?: unknown }
     chosen_product?: { image_path?: unknown; name?: unknown }
   }
   const supplied = s.specs?.supplied_by
   return {
     description: typeof s.description === 'string' ? s.description : null,
     suppliedBy: supplied === 'tradie' || supplied === 'customer' ? supplied : null,
+    // Same canonical resolver as the public quote and SMS presentation. The
+    // one safe legacy inference is customer-owned -> install_only; tradie-owned
+    // remains ambiguous because it cannot distinguish supply-only from combined.
+    serviceMode: resolveEvChargerServiceMode(s.specs) ?? null,
     chosenProductImagePath:
       typeof s.chosen_product?.image_path === 'string' ? s.chosen_product.image_path : null,
     chosenProductName: typeof s.chosen_product?.name === 'string' ? s.chosen_product.name : null,
@@ -791,7 +809,9 @@ async function loadEvEstimateExtras(ctx: QuoteReportContext): Promise<EvEstimate
     siteAddress: ctx.intake?.address ?? ctx.intake?.suburb ?? null,
     exclusions: [],
     chargerUnitIds: [],
+    assemblyRows: [],
     suppliedBy: scope.suppliedBy,
+    serviceMode: scope.serviceMode,
     chosenProductImagePath: scope.chosenProductImagePath,
     chosenProductName: scope.chosenProductName,
   }
@@ -823,11 +843,13 @@ async function loadEvEstimateExtras(ctx: QuoteReportContext): Promise<EvEstimate
     const [shared, custom] = await Promise.all([
       supabase()
         .from('shared_assemblies')
-        .select('default_exclusions')
+        .select('id, name, description, default_exclusions')
+        .eq('trade', 'electrical')
         .in('id', assemblyIds),
       supabase()
         .from('tenant_custom_assemblies')
-        .select('default_exclusions')
+        .select('id, name, description, default_exclusions')
+        .eq('tenant_id', ctx.quote.tenant_id)
         .in('id', assemblyIds),
     ])
     if (shared.error) {
@@ -846,6 +868,7 @@ async function loadEvEstimateExtras(ctx: QuoteReportContext): Promise<EvEstimate
       ...(shared.data ?? []),
       ...(custom.data ?? []),
     ].flatMap((r) => splitExclusions((r as { default_exclusions?: unknown }).default_exclusions))
+    extras.assemblyRows = [...(shared.data ?? []), ...(custom.data ?? [])]
   }
 
   // R4 — which line is the charger UNIT, so it lands in fit-off rather than the
@@ -855,6 +878,7 @@ async function loadEvEstimateExtras(ctx: QuoteReportContext): Promise<EvEstimate
       .from('tenant_material_catalogue')
       .select('id')
       .eq('tenant_id', ctx.quote.tenant_id)
+      .eq('trade', 'electrical')
       .eq('category', 'ev_charger')
     if (error) {
       console.error('[quote-pdf] EV estimate: charger catalogue unavailable', {
@@ -864,6 +888,21 @@ async function loadEvEstimateExtras(ctx: QuoteReportContext): Promise<EvEstimate
     } else {
       extras.chargerUnitIds = (data ?? []).map((r) => String((r as { id: unknown }).id))
     }
+  }
+
+  // Shared charger products use the same material:<id> source prefix. Resolve
+  // only references on this quote and retain its stored historical prices.
+  const sharedMaterialIds = [...new Set([...ctx.visibleTierSet].flatMap((key) =>
+    (ctx.quote[key]?.line_items ?? []).flatMap((line) => {
+      const source = 'source' in line && typeof line.source === 'string' ? line.source : ''
+      const id = /^material:([A-Za-z0-9_-]+)$/.exec(source)?.[1]
+      return id ? [id] : []
+    }),
+  ))]
+  if (sharedMaterialIds.length) {
+    const { data } = await supabase().from('shared_materials').select('id')
+      .eq('trade', 'electrical').eq('category', 'ev_charger').in('id', sharedMaterialIds)
+    extras.chargerUnitIds.push(...(data ?? []).map((row) => String(row.id)))
   }
 
   return extras
@@ -924,7 +963,8 @@ async function resolveEvImages(
   // never from here. A document render must never make a billable AI call, so a
   // status that is not ready/partial simply contributes nothing and the next
   // download picks it up once the render lands.
-  if (ctx.quote.preview_status === 'ready' || ctx.quote.preview_status === 'partial') {
+  if (extras.serviceMode !== 'supply_only' &&
+      (ctx.quote.preview_status === 'ready' || ctx.quote.preview_status === 'partial')) {
     const renderPaths = Array.isArray(ctx.quote.preview_image_paths)
       ? ctx.quote.preview_image_paths
       : []
@@ -939,7 +979,7 @@ async function resolveEvImages(
       }
     }
   }
-  if (ctx.quote.intake_id && candidates.length < EV_MAX_IMAGES) {
+  if (extras.serviceMode !== 'supply_only' && ctx.quote.intake_id && candidates.length < EV_MAX_IMAGES) {
     const { data, error } = await supabase()
       .from('intakes')
       .select('photo_paths')
@@ -999,7 +1039,7 @@ function buildEvEstimateInput(
 ): EvChargerEstimateInput {
   const { quote, visibleTierSet } = ctx
   const scope = readEvScope(ctx.intake?.scope)
-  const method = jobMethod('electrical', 'ev_charger')
+  const method = scope.serviceMode === 'supply_only' ? null : jobMethod('electrical', 'ev_charger')
   const good = visibleTierSet.has('good') ? quote.good : null
   const better = visibleTierSet.has('better') ? quote.better : null
   const best = visibleTierSet.has('best') ? quote.best : null
@@ -1014,13 +1054,13 @@ function buildEvEstimateInput(
     siteAddress: extras.siteAddress,
     scopeOfWorks: quote.scope_of_works,
     descriptionOfWorks: deriveEvDescriptionOfWorks({
-      scopeDescription: scope.description,
+      scopeDescription: quote.scope_of_works || scope.description,
       methodSteps: method?.steps ?? null,
       lineItems,
     }),
     assumptions: quote.assumptions,
     exclusions: extras.exclusions,
-    optionalUpsells: (quote.optional_upsells ?? [])
+    optionalUpsells: (scope.serviceMode === 'supply_only' ? [] : quote.optional_upsells ?? [])
       .filter((u) => typeof u?.name === 'string' && u.name.trim())
       .map((u) => ({ name: String(u.name), price_ex_gst: u.price_ex_gst ?? null })),
     images,
@@ -1033,7 +1073,12 @@ function buildEvEstimateInput(
     quoteViewUrl: publicWebUrl(`/q/${quote.share_token}`),
     estimatedTimeframe: quote.estimated_timeframe,
     suppliedBy: extras.suppliedBy,
+    serviceMode: extras.serviceMode,
     chargerUnitIds: extras.chargerUnitIds,
+    authorizedManualChargerLineIndexes: Object.fromEntries((['good', 'better', 'best'] as const).map((key) => [key,
+      resolveAuthorizedEvManualChargerLineIndexes({ tierName: key, tier: quote[key], riskFlags: quote.risk_flags }),
+    ])),
+    assemblyRows: extras.assemblyRows,
     generatedAt: quote.created_at ? new Date(quote.created_at) : undefined,
   }
 }
@@ -1053,6 +1098,7 @@ export async function renderQuoteReportHtml(quoteId: string): Promise<string | n
   // Download PDF" placeholder — which serves the tender — instead of a
   // misleading generic Good/Better/Best document the customer never receives.
   if (tradeRendersOwnQuotePdf(ctx.intakeTrade)) return null
+  if (evQuoteDocumentNeedsReview(ctx)) return null
   const branding = await loadTenantBranding(supabase(), ctx.quote.tenant_id, ctx.intakeTrade)
   // Live preview: reference the token-gated satellite proxy directly (relative
   // URL — the preview renders on the app origin), exactly like the customer
@@ -1102,6 +1148,13 @@ export async function ensureQuotePdf(
     const ctx = await loadQuoteReportContext(quoteId)
     if (!ctx) return null
     const { quote, intakeTrade, tierMode, visibleTierKeys, recommendedTier } = ctx
+
+    if (evQuoteDocumentNeedsReview(ctx)) {
+      if (opts.strictPricing || opts.expectedReleaseRevision !== undefined) {
+        throw new QuotePricingVersionError('quote_pricing_review_required')
+      }
+      return null
+    }
 
     // Bind the separately loaded renderer row to the exact reviewed release.
     // SQL's final CAS alone cannot detect A -> B (render) -> A (release).

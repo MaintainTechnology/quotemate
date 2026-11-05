@@ -90,32 +90,47 @@ describe('renderQuoteDocumentHtml — document selection (R1/R17)', () => {
     )
   })
 
-  it('falls back to the generic report rather than throwing when the EV build fails', () => {
-    // R16 — a template bug must degrade to the generic report, never to a
-    // failed send: the quote SMS is dispatched around this call.
+  it('fails closed rather than exposing generic legacy scope when the EV build fails', () => {
     const poisoned = {
       ...evInput,
       get good(): never {
         throw new Error('boom')
       },
     } as unknown as EvChargerEstimateInput
-    const html = renderQuoteDocumentHtml(genericInput, null, poisoned)
-    expect(html).toContain('Quotation')
-    expect(html).not.toContain('<div class="quote-title">ESTIMATE</div>')
+    expect(() => renderQuoteDocumentHtml(genericInput, null, poisoned)).toThrow('boom')
   })
 
-  it('lets a tradie-authored report_doc win over the EV template', () => {
-    // FULL_QUOTE_DOC='true' is set in the fleet env. A tradie who authored a
-    // document in the editor has overridden the template on purpose.
+  it.each([
+    ['supply_only', 'Install and certify the charger'],
+    ['install_only', 'We supply the charger unit'],
+    ['supply_and_install', 'Charger unit excluded and priced separately'],
+  ] as const)('keeps canonical %s EV rendering ahead of a contradictory report_doc', (serviceMode, staleText) => {
+    // FULL_QUOTE_DOC='true' is set in the fleet env, but arbitrary authored
+    // narrative cannot override the binding EV service mode.
     vi.stubEnv('FULL_QUOTE_DOC', 'true')
     try {
       const doc = {
         version: 1,
-        blocks: [{ type: 'heading', content: [{ text: 'Tradie authored' }] }],
+        blocks: [{ type: 'heading', content: [{ text: staleText }] }],
       }
-      const html = renderQuoteDocumentHtml(genericInput, doc, evInput)
-      expect(html).toContain('Tradie authored')
-      expect(html).not.toContain('<div class="quote-title">ESTIMATE</div>')
+      const product = {
+        description: 'EV charger unit', source: 'material:charger-unit', catalogue_id: 'charger-unit',
+        quantity: 1, unit: 'each', unit_price_ex_gst: 800, total_ex_gst: 800,
+      }
+      const modeTier = serviceMode === 'supply_only'
+        ? { label: 'Supply only', subtotal_ex_gst: 800, line_items: [product] }
+        : serviceMode === 'supply_and_install'
+          ? { ...TIER, subtotal_ex_gst: TIER.subtotal_ex_gst + 800, line_items: [...TIER.line_items, product] }
+          : TIER
+      const html = renderQuoteDocumentHtml(genericInput, doc, {
+        ...evInput,
+        serviceMode,
+        suppliedBy: serviceMode === 'install_only' ? 'customer' : 'tradie',
+        chargerUnitIds: ['charger-unit'],
+        good: modeTier,
+      })
+      expect(html).not.toContain(staleText)
+      expect(html).toContain('<div class="ev-title">ESTIMATE</div>')
     } finally {
       vi.unstubAllEnvs()
     }

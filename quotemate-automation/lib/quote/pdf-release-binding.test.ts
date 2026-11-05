@@ -84,6 +84,9 @@ beforeEach(() => {
   vi.stubEnv('FULL_QUOTE_DOC', 'true'); vi.stubEnv('SMS_QUOTE_PDF_MMS', '0')
   h.rows.quotes = { id: quoteId, tenant_id: 'tenant-id', intake_id: 'intake-id',
     status: 'awaiting_tradie_approval', share_token: 'owned-token', quote_kind: 'initial',
+    // Historical redelivery isolates renderer-vs-reviewed-snapshot races.
+    // Fresh initial authority has separate real promotion/core regressions.
+    sent_at: '2026-09-01T00:00:00Z',
     selected_tier: 'good', good: { label: 'Owned work', subtotal_ex_gst: 100.05, line_items: [] },
     better: null, best: null, total_inc_gst: 100.05, applied_discount_pct: 0,
     pricing_book_version_id: 'version-id', deposit_pct: 30, needs_inspection: false, paid_at: null,

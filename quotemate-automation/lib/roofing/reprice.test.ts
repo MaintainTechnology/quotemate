@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { repriceWithEdgeOverrides } from './reprice'
-import { priceMultiRoof } from './pricing'
+import { priceMultiRoof, slopedAreaFromFootprint } from './pricing'
 import type { RoofMetrics, RoofUserInputs } from './types'
 
 const metrics = (o: Partial<RoofMetrics> = {}): RoofMetrics => ({
@@ -127,6 +127,31 @@ describe('repriceWithEdgeOverrides', () => {
     expect(s.inputs.pitch).toBe('very_steep')
     expect(s.metrics.sloped_area_m2).toBeNull()
     expect(s.price.routing.decision).toBe('inspection_required')
+  })
+
+  it('keeps each structure\'s label through a re-price, edited or not', () => {
+    const quote = priceMultiRoof({
+      structures: [
+        { buildingId: 'S1', role: 'primary', label: 'House 1', metrics: metrics(), inputs: inputs() },
+        { buildingId: 'S3', role: 'secondary', label: 'Carport, 1 of 2', metrics: metrics({ footprint_m2: 18 }), inputs: inputs() },
+      ],
+    })
+    const after = repriceWithEdgeOverrides(quote, [{ index: 2, hips: 0 }])
+    expect(after.structures.map((s) => s.label)).toEqual(['House 1', 'Carport, 1 of 2'])
+  })
+
+  it('a pitch edit on a plan measurement recomputes its area from the exact footprint; an aerial one keeps the bucket', () => {
+    const quote = priceMultiRoof({
+      structures: [{
+        buildingId: 'S1', role: 'primary',
+        metrics: metrics({ footprint_m2: 97.25, sloped_area_m2: 97.62, pitch_degrees: 5 }),
+        inputs: inputs({ pitch: 'shallow' }),
+      }],
+    })
+    const plan = repriceWithEdgeOverrides(quote, [{ index: 1, pitch_degrees: 10 }], undefined, { planGeometry: true })
+    expect(plan.structures[0].metrics.sloped_area_m2).toBe(Math.round((97.25 / Math.cos(Math.PI / 18)) * 100) / 100)
+    const aerial = repriceWithEdgeOverrides(quote, [{ index: 1, pitch_degrees: 10 }])
+    expect(aerial.structures[0].metrics.sloped_area_m2).toBe(slopedAreaFromFootprint(97.25, 'shallow'))
   })
 
   it('form and storeys overrides flow into routing and loadings', () => {

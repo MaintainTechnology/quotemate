@@ -27,6 +27,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { expireCheckoutSession } from '@/lib/stripe/checkout'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { isPlanMeasurement } from '@/lib/roofing/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +86,7 @@ export async function GET(req: Request) {
     settle(
       supabase
         .from('roofing_measurements')
-        .select('id, address, combined_area_m2, public_token, measure_token, confirmed_at, routing, created_at')
+        .select('id, address, combined_area_m2, public_token, measure_token, provider, confirmed_at, routing, created_at')
         .eq('tenant_id', tenantId)
         .is('quote_share_token', null)
         .order('created_at', { ascending: false })
@@ -145,7 +146,9 @@ export async function GET(req: Request) {
         : r.routing === 'inspection_required'
           ? 'inspection'
           : 'draft',
-      href: r.public_token ? `/q/roof/${r.public_token}` : null,
+      // A plan measurement has no customer page: it reaches a customer only as
+      // P4's builder quote, so its card opens /m alone (TKO-19).
+      href: !isPlanMeasurement(r.provider) && r.public_token ? `/q/roof/${r.public_token}` : null,
       tradieHref: r.measure_token ? `/m/${r.measure_token}` : null,
       createdAt: (r.created_at as string | null) ?? null,
     })

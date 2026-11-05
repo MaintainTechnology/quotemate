@@ -12,7 +12,8 @@ const h = vi.hoisted(() => {
     trade: 'electrical', paintLeads: [] as Row[], roofLeads: [] as Row[], failPaintSave: false, failPaintRead: false, losePaintSaveResponse: false,
     failStateTrade: '', stateFailureMode: '', outboxes: [] as Row[], llm: false, loseCheckpointResponse: '',
     roofMeasurements: [] as Row[], failRoofLead: '', failUnlock: false, failPhotoEnqueue: false,
-    solarReferences: [] as Row[], failSolarProfile: '', realDialogGuards: false,
+    solarReferences: [] as Row[], failSolarProfile: '', realDialogGuards: false, realEvReadiness: false,
+    workId: 'inbound-work-1', receiptId: 'SM-customer-links', sequence: 1,
     writes: [] as Array<{ table: string; action: string; filters?: Row; profile?: unknown }> }
   const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
   const client = { from(table: string) {
@@ -114,11 +115,11 @@ const h = vi.hoisted(() => {
     }
     throw new Error(`Unexpected fixture RPC: ${name}`)
   } }
-  return { state, client, clone, dialog: vi.fn(), send: vi.fn(), signupSend: vi.fn(), enqueue: vi.fn(), carrier: vi.fn(), specialist: vi.fn(), screen: vi.fn(), measure: vi.fn(), extract: vi.fn(), solarTurn: vi.fn() }
+  return { state, client, clone, dialog: vi.fn(), send: vi.fn(), signupSend: vi.fn(), enqueue: vi.fn(), carrier: vi.fn(), specialist: vi.fn(), screen: vi.fn(), measure: vi.fn(), extract: vi.fn(), solarTurn: vi.fn(), handoff: vi.fn() }
 })
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
 vi.mock('@/lib/sms/durable-work', () => ({
-  currentSmsWork: () => ({ jobId: 'inbound-work-1', ownerToken: 'owner-1', turnId: 'turn-1', sequence: 1, job: { checkpoint: h.state.checkpoints } }),
+  currentSmsWork: () => ({ jobId: h.state.workId, ownerToken: 'owner-1', turnId: `turn-${h.state.sequence}`, sequence: h.state.sequence, job: { checkpoint: h.state.checkpoints } }),
   withFencedSmsClient: (client: unknown) => client, assertSmsWorkOwnership: async () => {}, attributeSmsWorkTenant: async () => {}, smsWorkFetch: vi.fn(),
   durableAfter: (callback: () => Promise<unknown>) => h.state.callbacks.push(callback),
   smsWorkCheckpoint: async (key: string, operation: () => Promise<unknown>) => {
@@ -152,8 +153,13 @@ vi.mock('@/lib/onboard/invitation-codes', () => ({ checkInvitationCode: async ()
 vi.mock('@/lib/onboard/intent-tokens', () => ({ createOrGetActiveIntent: async () => ({ token: 'saved-signup-token', reused: h.state.reused }) }))
 vi.mock('@/lib/log/trace', () => ({ recordTrace: async () => {} }))
 vi.mock('@/lib/sms/extract-slots', async (original) => ({ ...await original<object>(), extractSlots: h.extract }))
-vi.mock('@/lib/sms/quote-readiness', async (original) => ({ ...await original<object>(), evaluateQuoteReadiness: () => ({ ready: true, missing: [] }) }))
+vi.mock('@/lib/sms/quote-readiness', async (original) => {
+  const actual = await original<typeof import('@/lib/sms/quote-readiness')>()
+  return { ...actual, evaluateQuoteReadiness: (args: Parameters<typeof actual.evaluateQuoteReadiness>[0]) =>
+    h.state.realEvReadiness ? actual.evaluateQuoteReadiness(args) : { ready: true, missing: [] } }
+})
 vi.mock('@/lib/sms/gpo-guard', () => ({ buildGpoInspectionOverride: () => null }))
+vi.mock('@/lib/sms/human-handoff', () => ({ persistHumanHandoff: h.handoff }))
 vi.mock('@/lib/sms/photo-request-trigger', async (original) => {
   const actual = await original<typeof import('@/lib/sms/photo-request-trigger')>()
   return { ...actual, shouldSendPhotoRequest: (args: Parameters<typeof actual.shouldSendPhotoRequest>[0]) =>
@@ -171,13 +177,14 @@ vi.mock('@/lib/roofing/roof-after', () => ({ generateRoofAfterImage: vi.fn() }))
 import { POST } from './route'
 import { dispatchDurably } from '@/lib/sms/durable-outbox'
 import { withSmsDeliveryContext } from '@/lib/sms/delivery-context'
+import { EV_SERVICE_MODE_QUESTION } from '@/lib/sms/quote-readiness'
 
 async function attempt(body = 'Yes, those details are correct.') {
   h.state.callbacks = []
-  await withSmsDeliveryContext({ workId: 'inbound-work-1', workOwner: 'owner-1', turnId: 'turn-1', tenantId: 'tenant-1', conversationId: 'conversation-1' }, async () => {
+  await withSmsDeliveryContext({ workId: h.state.workId, workOwner: 'owner-1', turnId: `turn-${h.state.sequence}`, tenantId: 'tenant-1', conversationId: 'conversation-1' }, async () => {
   const response = await POST(new Request('https://offline-engine.invalid/api/sms/inbound', {
     method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ From: '+61411111111', To: '+61488888888', MessageSid: 'SM-customer-links', Body: body }),
+    body: new URLSearchParams({ From: '+61411111111', To: '+61488888888', MessageSid: h.state.receiptId, Body: body }),
   }))
   expect(response.status).toBe(200)
   for (const callback of h.state.callbacks) await callback()
@@ -208,7 +215,8 @@ beforeEach(() => {
   h.state.failStateTrade = ''; h.state.stateFailureMode = ''; h.state.outboxes = []; h.state.llm = false; h.state.loseCheckpointResponse = ''
   h.state.roofMeasurements = []; h.state.failRoofLead = ''; h.state.failUnlock = false; h.state.failPhotoEnqueue = false
   h.state.solarReferences = []; h.state.failSolarProfile = ''
-  h.state.realDialogGuards = false; h.state.writes = []
+  h.state.realDialogGuards = false; h.state.realEvReadiness = false; h.state.writes = []
+  h.state.workId = 'inbound-work-1'; h.state.receiptId = 'SM-customer-links'; h.state.sequence = 1
   h.state.conversation = { id: 'conversation-1', tenant_id: 'tenant-1', from_number: '+61411111111', to_number: '+61488888888',
     status: 'open', turn_count: 2, intake_id: null, quote_id: null, assumptions_made: [], last_message_at: new Date().toISOString(),
     photo_request_token: 'saved-photo-token',
@@ -220,11 +228,250 @@ beforeEach(() => {
   h.enqueue.mockResolvedValue({ id: 'intake-work-1' })
   h.extract.mockReset().mockResolvedValue({ updates: {} })
   h.solarTurn.mockReset()
+  h.handoff.mockReset().mockResolvedValue({ id: 'human-task-1', notified: true })
   h.carrier.mockResolvedValue({ ok: true, channel: 'sms', sid: 'SM-accepted-form', status: 'queued' })
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs() })
+
+function nextReceipt() {
+  h.state.sequence += 1
+  h.state.workId = `inbound-work-${h.state.sequence}`
+  h.state.receiptId = `SM-customer-links-${h.state.sequence}`
+  h.state.checkpoints = {}
+}
+
+describe('plumbing form-first route uses durable review-first requests', () => {
+  function plumbingFixture() {
+    h.state.trade = 'plumbing'
+    vi.stubEnv('SMS_WORKER_SERVICE', 'plumbing')
+    h.state.conversation.conversation_state = { slots: { first_name: 'Sam', job_type: 'blocked_drain' }, sources: {} }
+    h.send.mockImplementation(input => dispatchDurably(input, h.carrier))
+  }
+
+  it('offers one owned form before dialog and does not enqueue estimation', async () => {
+    plumbingFixture()
+    await attempt('Can you fix a blocked drain?')
+    expect(h.state.roofLeads).toHaveLength(1) // shared trade_lead_requests fixture
+    expect(h.state.roofLeads[0]).toMatchObject({ trade: 'plumbing', tenant_id: 'tenant-1', conversation_id: 'conversation-1' })
+    const profile = h.state.conversation.conversation_state as { form_offer: { token: string; step: string } }
+    expect(profile.form_offer).toEqual({ token: h.state.roofLeads[0].token, step: 'offer_form' })
+    expect(h.state.outboxes).toHaveLength(1)
+    const payload = h.state.outboxes[0].payload as { text: string }
+    expect(payload.text).toContain(`https://quotemax.com.au/quote-request/${profile.form_offer.token}`)
+    expect(payload.text).toContain('the tradie will review your request before any quote is sent')
+    expect(h.dialog).not.toHaveBeenCalled(); expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('recovers a committed form reply checkpoint without reminting or repeating the carrier send', async () => {
+    plumbingFixture(); h.state.loseCheckpointResponse = 'plumbing_form_reply'
+    await expect(attempt('Can you fix a blocked drain?')).rejects.toThrow('Checkpoint committed but response lost')
+    expect(h.carrier).toHaveBeenCalledTimes(1)
+    const token = h.state.roofLeads[0].token
+    await attempt('Can you fix a blocked drain?')
+    expect(h.state.roofLeads).toHaveLength(1); expect(h.state.roofLeads[0].token).toBe(token)
+    expect(h.state.outboxes).toHaveLength(1); expect(h.carrier).toHaveBeenCalledTimes(1)
+    expect(h.dialog).not.toHaveBeenCalled(); expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('keeps the form pin through extraction and acknowledges the next receipt without estimation', async () => {
+    plumbingFixture(); await attempt('Can you fix a blocked drain?')
+    const token = h.state.roofLeads[0].token
+    nextReceipt(); await attempt("I'll use the form")
+    expect((h.state.conversation.conversation_state as { form_offer: unknown }).form_offer).toEqual({ token, step: 'await_form' })
+    expect(h.state.roofLeads).toHaveLength(1); expect(h.state.outboxes).toHaveLength(2)
+    expect(h.dialog).not.toHaveBeenCalled(); expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('resumes Q&A on a refusal and preserves the new address rather than re-offering', async () => {
+    plumbingFixture(); await attempt('Can you fix a blocked drain?')
+    const token = h.state.roofLeads[0].token
+    nextReceipt()
+    h.extract.mockResolvedValue({ updates: { address: '12 Smith St, Brisbane QLD 4000' } })
+    h.dialog.mockResolvedValue({ action: 'reply', job_type_guess: 'blocked_drain', ready_for_intake: false,
+      reply_to_send: 'Which drain is blocked?', assumptions_made: [], request_photo_link: false, offer_product_choice: false })
+    await attempt('No, ask here. The address is 12 Smith St, Brisbane QLD 4000')
+    const profile = h.state.conversation.conversation_state as { form_offer: unknown; slots: { address: string } }
+    expect(profile.form_offer).toEqual({ token, step: 'gather' })
+    expect(profile.slots.address).toBe('12 Smith St, Brisbane QLD 4000')
+    expect(h.state.roofLeads).toHaveLength(1); expect(h.dialog).toHaveBeenCalledTimes(1)
+    expect(h.enqueue).not.toHaveBeenCalled()
+  })
+})
+
+describe('EV photo dispatch uses the same resolved job and required facts as readiness', () => {
+  function evFixture(complete: boolean) {
+    h.state.realDialogGuards = true; h.state.realEvReadiness = true
+    h.state.conversation.conversation_state = { slots: { first_name: 'Sam', suburb: 'Sydney', job_type: 'ev_charger', supplied_by: 'tradie', service_mode: 'supply_and_install' }, sources: {} }
+    const facts = complete ? ['BYD Atto 3', 'Can you supply?', 'Garage', '6m', 'Single phase, spare capacity'] : ['Can you supply?', '6m', 'Three phase, spare capacity']
+    h.state.messages = facts.map((body, index) => ({ direction: 'inbound', body, created_at: new Date(Date.now() - 10_000 + index).toISOString() }))
+    h.dialog.mockResolvedValue({ action: 'finish', job_type_guess: 'unknown', ready_for_intake: true,
+      reply_to_send: 'Thanks, those details are ready.', assumptions_made: [], request_photo_link: true, offer_product_choice: false })
+  }
+
+  it('asks the exact three-way mode question before install questions or handoff', async () => {
+    h.state.realDialogGuards = true; h.state.realEvReadiness = true
+    h.state.conversation.conversation_state = { slots: {
+      first_name: 'Steve', suburb: 'Harboard', job_type: 'ev_charger', supplied_by: 'tradie',
+    }, sources: {} }
+    h.state.messages = [
+      { direction: 'inbound', body: 'Can you do EV chargers', created_at: new Date(Date.now() - 3_000).toISOString() },
+      { direction: 'outbound', body: 'Is the charger already on-site, and if so what model is it?', created_at: new Date(Date.now() - 2_000).toISOString() },
+    ]
+    h.dialog.mockResolvedValue({ action: 'finish', job_type_guess: 'ev_charger', ready_for_intake: true,
+      reply_to_send: 'Roughly how far is the parking spot from the switchboard?', assumptions_made: [], request_photo_link: true, offer_product_choice: true })
+
+    await attempt('Not on site... can you supply')
+
+    const texts = h.send.mock.calls.map(([call]) => String(call.text))
+    expect(texts.at(-1)).toBe(EV_SERVICE_MODE_QUESTION)
+    expect(texts.some((text) => /how far|phase|\/upload\//i.test(text))).toBe(false)
+    expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('keeps an unresolved EV mode in the three-way ask across turns even with a stale cap counter', async () => {
+    vi.stubEnv('SMS_CLARIFYING_TURN_CAP', '2')
+    h.state.realDialogGuards = true; h.state.realEvReadiness = true
+    h.state.conversation.conversation_state = {
+      slots: {
+        first_name: 'Steve', suburb: 'Harboard', job_type: 'ev_charger', supplied_by: 'tradie',
+      },
+      sources: {},
+      clarify_gate_count: 1,
+      clarify_missing: ['service_mode'],
+    }
+    h.dialog.mockResolvedValue({ action: 'escalate_inspection', job_type_guess: 'ev_charger', ready_for_intake: false,
+      reply_to_send: 'We need a $99 site visit.', assumptions_made: [], request_photo_link: false, offer_product_choice: false,
+      reason_for_escalation: 'installation details unavailable' })
+
+    await attempt('Can you supply?')
+    nextReceipt()
+    await attempt('Which options do you have?')
+
+    const texts = h.send.mock.calls.map(([call]) => String(call.text))
+    expect(texts.slice(-2)).toEqual([EV_SERVICE_MODE_QUESTION, EV_SERVICE_MODE_QUESTION])
+    expect(texts.at(-1)).toBe(EV_SERVICE_MODE_QUESTION)
+    expect(texts.join(' ')).not.toMatch(/\$99|inspection|site visit|\/upload\//i)
+    expect(h.handoff).not.toHaveBeenCalled()
+    expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('suppresses installation questions and photos for supply-only', async () => {
+    h.state.realDialogGuards = true; h.state.realEvReadiness = true
+    h.state.conversation.conversation_state = { slots: {
+      first_name: 'Steve', suburb: 'Harboard', job_type: 'ev_charger',
+      supplied_by: 'tradie', service_mode: 'supply_only',
+    }, sources: {} }
+    h.state.messages = [
+      { direction: 'inbound', body: 'Supply only please, it is for a Tesla Model Y', created_at: new Date(Date.now() - 1_000).toISOString() },
+    ]
+    h.dialog.mockResolvedValue({ action: 'ask', job_type_guess: 'ev_charger', ready_for_intake: false,
+      reply_to_send: 'Roughly how far is the parking spot from the switchboard?', assumptions_made: [], request_photo_link: true, offer_product_choice: false })
+
+    await attempt('Yes, supply only')
+
+    const texts = h.send.mock.calls.map(([call]) => String(call.text))
+    expect(texts.join(' ')).not.toMatch(/how far|switchboard|phase|\/upload\//i)
+    expect(h.enqueue).toHaveBeenCalledWith(expect.objectContaining({ kind: 'intake' }))
+  })
+
+  it('suppresses a site-visit escalation for supply-only', async () => {
+    h.state.realDialogGuards = true; h.state.realEvReadiness = true
+    h.state.conversation.conversation_state = { slots: {
+      first_name: 'Steve', suburb: 'Harboard', job_type: 'ev_charger',
+      supplied_by: 'tradie', service_mode: 'supply_only',
+    }, sources: {} }
+    h.state.messages = [
+      { direction: 'inbound', body: 'Supply only please, it is for a Tesla Model Y', created_at: new Date(Date.now() - 1_000).toISOString() },
+    ]
+    h.dialog.mockResolvedValue({ action: 'escalate_inspection', job_type_guess: 'ev_charger', ready_for_intake: false,
+      reply_to_send: 'We need a $99 site visit to check the switchboard.', assumptions_made: [], request_photo_link: false,
+      offer_product_choice: false, reason_for_escalation: 'switchboard capacity unknown' })
+
+    await attempt('Supply only')
+
+    const texts = h.send.mock.calls.map(([call]) => String(call.text))
+    expect(texts.join(' ')).not.toMatch(/\$99|site visit|switchboard|\/upload\//i)
+    expect(h.enqueue).toHaveBeenCalledWith(expect.objectContaining({ kind: 'intake' }))
+  })
+
+  it('keeps a supply-only compatibility gap out of inspection after the real multi-turn clarify cap', async () => {
+    vi.stubEnv('SMS_CLARIFYING_TURN_CAP', '2')
+    h.state.realDialogGuards = true; h.state.realEvReadiness = true
+    h.state.conversation.conversation_state = { slots: {
+      first_name: 'Steve', suburb: 'Harboard', job_type: 'ev_charger',
+      supplied_by: 'tradie', service_mode: 'supply_only',
+    }, sources: {} }
+    h.dialog.mockResolvedValue({
+      action: 'finish',
+      job_type_guess: 'ev_charger',
+      ready_for_intake: true,
+      reply_to_send: 'Thanks, your quote is ready.',
+      assumptions_made: [],
+      request_photo_link: true,
+      offer_product_choice: true,
+    })
+
+    await attempt("I'm not sure yet")
+    expect(h.state.conversation.conversation_state).toMatchObject({
+      clarify_gate_count: 1,
+      clarify_missing: ['service_question:0'],
+    })
+    h.state.messages.push({
+      direction: 'outbound',
+      body: String(h.send.mock.calls.at(-1)?.[0]?.text ?? ''),
+      created_at: new Date().toISOString(),
+    })
+
+    nextReceipt()
+    await attempt('Okay')
+
+    const texts = h.send.mock.calls.map(([call]) => String(call.text))
+    expect(texts[0]).toMatch(/which electric vehicle/i)
+    expect(texts.at(-1)).toMatch(/tradie review.*supply-only/i)
+    expect(texts.join(' ')).not.toMatch(/\$99|inspection|site visit|switchboard|\/upload\//i)
+    expect(h.handoff).toHaveBeenCalledTimes(1)
+    expect(h.handoff).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-1',
+      conversationId: 'conversation-1',
+      requestKey: 'ev-supply-compatibility:conversation-1',
+      trade: 'electrical',
+    }))
+    expect(h.state.conversation.status).toBe('open')
+    expect(h.state.conversation.product_choice).toBeUndefined()
+    expect(h.state.conversation.photo_request_sent_at).toBeUndefined()
+    expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('sends the required EV template with a sticky EV slot and unknown model guess, then waits for the photo', async () => {
+    evFixture(true)
+    await attempt()
+    const texts = h.send.mock.calls.map(([call]) => String(call.text))
+    const upload = texts.find((text) => text.includes('/upload/saved-photo-token'))
+    expect(upload).toContain('send a photo of the spot where the charger will go')
+    expect(upload).not.toMatch(/optional|not required/i)
+    expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('holds an early photo request and quote handoff while vehicle and location remain missing', async () => {
+    evFixture(false)
+    await attempt()
+    const texts = h.send.mock.calls.map(([call]) => String(call.text))
+    expect(texts.some((text) => text.includes('/upload/'))).toBe(false)
+    expect(texts.join(' ')).toMatch(/which electric vehicle/i)
+    expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('does not send another photo request after an explicit decline', async () => {
+    evFixture(true)
+    h.state.messages.push({ direction: 'outbound', body: 'Please send a photo of the charger spot', created_at: new Date(Date.now() - 500).toISOString() },
+      { direction: 'inbound', body: 'I cannot send a photo', created_at: new Date(Date.now() - 400).toISOString() })
+    await attempt()
+    expect(h.send.mock.calls.some(([call]) => String(call.text).includes('/upload/'))).toBe(false)
+    expect(h.enqueue).toHaveBeenCalledWith(expect.objectContaining({ kind: 'intake' }))
+  })
+})
 
 function savedRoofPaintProfileFixture(trade: 'roofing' | 'painting') {
   h.state.trade = trade; vi.stubEnv('SMS_WORKER_SERVICE', trade)

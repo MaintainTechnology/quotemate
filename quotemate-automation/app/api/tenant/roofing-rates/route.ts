@@ -16,8 +16,12 @@ import { createClient } from '@supabase/supabase-js'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import {
   EDITABLE_MATERIALS,
+  NEW_WORK_MATERIALS,
+  NEW_WORK_RATES_KEY,
+  buildNewWorkRatesFromInputs,
   buildOverlayFromInputs,
   effectiveRateCardFromOverlay,
+  newWorkRates,
   parseRoofingRateOverlay,
 } from '@/lib/roofing/rate-card-overlay'
 import { DEFAULT_ROOFING_RATE_CARD } from '@/lib/roofing/pricing'
@@ -77,7 +81,7 @@ export async function GET(req: Request) {
   }
   const book = await findPrimaryPricingBook(tenant)
   const overlay = book?.overlays as
-    | { roofing_rate_card?: unknown }
+    | { roofing_rate_card?: unknown; roofing_new_work_rates?: unknown }
     | null
     | undefined
   const parsed = parseRoofingRateOverlay(overlay?.roofing_rate_card)
@@ -85,6 +89,7 @@ export async function GET(req: Request) {
   return Response.json({
     ok: true,
     materials: EDITABLE_MATERIALS,
+    new_work_materials: NEW_WORK_MATERIALS,
     defaults: {
       reroof_rate_per_m2: DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2,
       multi_storey_loading_pct: DEFAULT_ROOFING_RATE_CARD.multi_storey_loading_pct,
@@ -122,6 +127,8 @@ export async function GET(req: Request) {
       call_out_minimum_ex_gst: overrideObj.call_out_minimum_ex_gst ?? null,
       solar_detach_reinstate_base_ex_gst: overrideObj.solar_detach_reinstate_base_ex_gst ?? null,
       solar_detach_reinstate_per_array_ex_gst: overrideObj.solar_detach_reinstate_per_array_ex_gst ?? null,
+      // Builder quotes' rates (DEC-026). No defaults: none are used for new work.
+      new_work_rate_per_m2: newWorkRates(overlay?.[NEW_WORK_RATES_KEY]),
     },
     has_pricing_book: !!book,
   })
@@ -155,12 +162,19 @@ export async function PATCH(req: Request) {
   // + upgrade material + gst flag). buildOverlayFromInputs handles
   // partial bodies (any key omitted falls back to the default).
   const built = buildOverlayFromInputs(body as Record<string, unknown>)
-  if (!built.ok) {
+  // New-work rates ride in the same save as the card (DEC-026); a save
+  // without them leaves the stored ones as they are.
+  const newWork = 'new_work_rate_per_m2' in body
+    ? buildNewWorkRatesFromInputs((body as Record<string, unknown>).new_work_rate_per_m2)
+    : null
+  if (!built.ok || (newWork && !newWork.ok)) {
+    const issues = [...(built.ok ? [] : built.issues), ...(newWork && !newWork.ok ? newWork.issues : [])]
     return Response.json(
-      { ok: false, error: 'validation_failed', issues: built.issues },
+      { ok: false, error: 'validation_failed', issues },
       { status: 400 },
     )
   }
+  const newRates = newWork?.ok ? newWork.rates : null
 
   const book = await findPrimaryPricingBook(tenant)
   if (!book) {
@@ -181,9 +195,14 @@ export async function PATCH(req: Request) {
     book.overlays && typeof book.overlays === 'object' && !Array.isArray(book.overlays)
       ? (book.overlays as Record<string, unknown>)
       : {}
-  const nextOverlays = {
+  const nextOverlays: Record<string, unknown> = {
     ...existingOverlays,
     roofing_rate_card: built.overlay,
+  }
+  if (newRates) {
+    // All cleared removes the key, and builder quotes refuse until rates are set.
+    if (Object.keys(newRates).length) nextOverlays[NEW_WORK_RATES_KEY] = { rate_per_m2: newRates }
+    else delete nextOverlays[NEW_WORK_RATES_KEY]
   }
   const { error: upErr } = await supabase
     .from('pricing_book')
@@ -202,5 +221,6 @@ export async function PATCH(req: Request) {
     ok: true,
     overrides: built.overlay.reroof_rate_per_m2 ?? {},
     effective_rate_per_m2: effective.reroof_rate_per_m2,
+    new_work_rate_per_m2: newWorkRates(nextOverlays[NEW_WORK_RATES_KEY]),
   })
 }

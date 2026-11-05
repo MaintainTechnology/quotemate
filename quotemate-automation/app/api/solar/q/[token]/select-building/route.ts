@@ -8,8 +8,8 @@
 // deterministic engine for THAT building's footprint centroid (skipping
 // geocode/address-validation via opts.targetLocation) and RE-POINTS the
 // row at the new estimate — same public_token, so the customer link is
-// stable (mirrors redraft). Each building's full estimate is cached in
-// solar_building_cache so switching back is instant (no Google re-fetch).
+// stable (mirrors redraft). Unversioned cached monetary estimates cannot
+// authorize a new selection; the deterministic engine reprices each change.
 //
 // Gating (selectBuildingEligibility): a switch is allowed only while the
 // estimate is UNRELEASED (confirmed_at IS NULL) — a released quote must not
@@ -17,7 +17,7 @@
 // estimate to quote a different building.
 //
 // PUBLIC, share-token-gated (the token is the capability — mirrors the
-// other /q/[token] routes). Money path unchanged: the engine + cache are
+// other /q/[token] routes). Money path unchanged: the deterministic engine is
 // the only price source; this route only re-points WHICH building.
 //
 // Next 16: params is a Promise (awaited); force-dynamic; the heavy heatmap
@@ -30,7 +30,7 @@ import { after } from 'next/server'
 import { z } from 'zod'
 import { runSolarEstimate } from '@/lib/solar/intake'
 import { loadSolarConfig } from '@/lib/solar/config'
-import { depositPctFromOverlay, loadSolarRateOverlay, loadSolarTenantRates } from '@/lib/solar/rate-card-overlay'
+import { depositPctFromOverlay, loadSolarTenantRates } from '@/lib/solar/rate-card-overlay'
 import { geocodeAddress } from '@/lib/solar/geocode'
 import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
 import { applySolarSunAssets } from '@/lib/solar/sun-assets'
@@ -216,36 +216,23 @@ export async function POST(
     )
   }
 
-  // ── CACHE HIT: a previously-computed estimate for this building. SKIPPED
-  //    for the custom path — the free-clicked point changes every click, so a
-  //    cached 'custom' estimate would be for a different roof. ────────────
-  let computed: SolarEstimate | null = null
-  if (!isCustom) {
-    const { data: cached } = await supabase
-      .from('solar_building_cache')
-      .select('estimate')
-      .eq('estimate_id', row.id)
-      .eq('building_id', buildingId)
-      .maybeSingle()
-    if (cached?.estimate) {
-      const cachedEstimate = cached.estimate as SolarEstimate
-      if (estimateLocationMatchesTarget(cachedEstimate, target.centroid)) {
-        computed = cachedEstimate
-      }
-    }
-  }
+  // Missing prices cannot be revived from a previously computed estimate.
+  let tenantRates
+  try { tenantRates = await loadSolarTenantRates(supabase, row.tenant_id as string | null,
+    await loadSolarConfig(supabase)) }
+  catch { return Response.json({ ok: false, error: 'tenant_pricing_required',
+    detail: 'Complete this account’s solar rates and GST setting before changing buildings.' }, { status: 422 }) }
 
-  // ── CACHE MISS: run the engine at the building's centroid. Identical
+  // Cached full estimates have no tenant rate-card revision binding. They may
+  // contain defaults or superseded rates, so never restore their money. Fact
+  // caches inside providers remain available; pricing always runs afresh.
+  let computed: SolarEstimate
+  // Run the engine at the building's centroid. Identical
   //    wiring to the redraft route, plus opts.targetLocation so the
   //    coverage gate / Solar API / dataLayers use this building's point
   //    rather than re-geocoding the address.
-  if (!computed) {
-    const baseConfig = await loadSolarConfig(supabase)
-    const { config, rateCard } = await loadSolarTenantRates(
-      supabase,
-      (row.tenant_id as string | null) ?? null,
-      baseConfig,
-    )
+  {
+    const { config, rateCard } = tenantRates
     try {
       const result = await runSolarEstimate({
         input: inputs.input,
@@ -284,21 +271,6 @@ export async function POST(
       )
     }
 
-    // Cache the per-building estimate (instant switch-back).
-    const { error: cacheErr } = await supabase
-      .from('solar_building_cache')
-      .upsert(
-        {
-          estimate_id: row.id,
-          building_id: buildingId,
-          estimate: computed,
-          computed_at: new Date().toISOString(),
-        },
-        { onConflict: 'estimate_id,building_id' },
-      )
-    if (cacheErr) {
-      console.warn('[solar/select-building] cache upsert failed (non-fatal)', cacheErr.message)
-    }
   }
 
   // ── NO-COVERAGE: Google Solar has no imagery for this building (manual/
@@ -329,12 +301,8 @@ export async function POST(
   const quoteVariant: 'instant' | 'felt' =
     row.quote_variant === 'felt' ? 'felt' : 'instant'
   const nextBuildings = updateBuildingStatus(buildings, buildingId, 'ready')
-  // Tenant deposit % — loaded here (not only on the cache-miss branch) so a
-  // cache-hit building switch stamps the same deposit as a fresh compute.
-  const depositOverlay = await loadSolarRateOverlay(
-    supabase,
-    (row.tenant_id as string | null) ?? null,
-  )
+  // Use the same captured tenant overlay as this pricing run.
+  const depositOverlay = tenantRates.overlay
   const payloads = buildSolarRowPayloads({
     estimate: computed,
     tenantId: (row.tenant_id as string | null) ?? '',

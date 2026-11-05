@@ -169,6 +169,14 @@ describe('resolvePayRedirect — no-slots guard', () => {
     })
   })
 
+  it('does not require appointment slots for a product-only order', () => {
+    expect(resolvePayRedirect({
+      ...base,
+      tier: 'better',
+      requiresBooking: false,
+    })).toEqual({ kind: 'stripe' })
+  })
+
   it('never blocks an already-paid quote — it is not being charged again', () => {
     expect(resolvePayRedirect({ ...base, tier: 'better', paid: true })).toEqual({
       kind: 'paid',

@@ -6,12 +6,13 @@ import { transpileModule, ModuleKind } from 'typescript'
 import { receptionistSourceHash } from '../scripts/receptionist-release-fingerprint.mjs'
 import { tenantPricingReadiness } from '../lib/sms/pricing-readiness'
 import { JOB_QUOTE_OPERATION_SCHEMA } from '../lib/quote/public-schema'
+import { rank1QuoteCoreEnabled } from '../lib/estimate/rank1-policy'
 
 const generatedHashes = { 'src/runtime/readiness.ts': 'unchanged-worker' }
 const buildInputHashes = { 'package-lock.json': 'unchanged-lock' }
 
 it('the real compiled readiness probe rejects old evidence after a website-only approval change', async () => {
-  const before = { trade: 'electrical', generatedHashes, buildInputHashes,
+  const before = { trade: 'electrical', generatedHashes, buildInputHashes, rank1Required: true, rank1Scope: 'all_accounts',
     platformContractHashes: { 'lib/quote/customer-release.ts': 'approval-before' } }
   const after = { ...before, platformContractHashes: { 'lib/quote/customer-release.ts': 'approval-after' } }
   let manifest = { ...before, contractVersion: 2, sourceHash: receptionistSourceHash(before) }
@@ -50,6 +51,7 @@ it('the real compiled readiness probe rejects old evidence after a website-only 
       if (name.endsWith('public-schema')) return { verifyPublicQuoteSchema: async () => ({ families: [] }),JOB_QUOTE_OPERATION_SCHEMA }
       if (name.endsWith('public-origin')) return { publicWebOrigin: () => 'https://website.example' }
       if (name.endsWith('pricing-readiness')) return { tenantPricingReadiness }
+      if (name.endsWith('rank1-policy')) return { rank1QuoteCoreEnabled }
       throw new Error(`Unexpected runtime dependency: ${name}`)
     },
   })
@@ -76,4 +78,15 @@ it('rejects a trade identity without website hashes and preserves the existing f
     .toThrow('requires website contract hashes')
   expect(receptionistSourceHash({ trade: 'front-desk', generatedHashes, buildInputHashes }))
     .toBe(createHash('sha256').update(JSON.stringify({ generatedHashes, buildInputHashes })).digest('hex'))
+})
+
+it('binds all-account Rank 1 designation for every trade without rewriting historical candidate hashes', () => {
+  const legacy = { trade: 'electrical', generatedHashes, buildInputHashes, platformContractHashes: { contract: 'same' } }
+  expect(receptionistSourceHash({ ...legacy, rank1Required: false })).toBe(receptionistSourceHash(legacy))
+  expect(receptionistSourceHash({ ...legacy, rank1Required: true })).not.toBe(receptionistSourceHash(legacy))
+  for (const trade of ['electrical','plumbing','roofing','painting','solar']) {
+    const old = { ...legacy, trade, rank1Required: true }
+    expect(receptionistSourceHash({ ...old, rank1Scope: 'all_accounts' })).not.toBe(receptionistSourceHash(old))
+    expect(() => receptionistSourceHash({ ...old, rank1Scope: 'pilot' })).toThrow('all accounts')
+  }
 })

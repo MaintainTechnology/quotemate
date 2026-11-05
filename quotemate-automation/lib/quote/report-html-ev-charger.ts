@@ -39,6 +39,9 @@ import {
 } from '../pdf/report-chrome'
 import { asMoneyNumber, totalIncGstCents } from './money'
 import { clampDiscountPct } from './early-bird'
+import { deriveEvSupplyPresentation, reconcileEvSupplyScope, reconcileEvSupplyAssumptions, reconcileEvSupplyExclusions } from './ev-supply-presentation'
+import { filterIncludedOptionalUpsells, type OptionalExtrasAssembly } from '../estimate/optional-extras'
+import type { EvServiceMode } from './ev-service-mode'
 
 /** Body-template key folded into quotes.pdf_signature (R15). Bump on any change
  *  to this template's OUTPUT so cached EV PDFs — and only those — regenerate.
@@ -47,8 +50,10 @@ import { clampDiscountPct } from './early-bird'
  *  the customer's own photo (spec ev-charger-location-photo R12/R14).
  *  ev3 — direction 1B "Numbered & banded": the full-bleed summary band with its
  *  hero total, numbered section heads, hairline lists, facing Inclusions /
- *  Exclusions cards, one white card per tier and the accent accept band. */
-export const EV_ESTIMATE_TEMPLATE_KEY = 'ev3'
+ *  Exclusions cards, one white card per tier and the accent accept band.
+ *  ev4 — reconcile charger supply against each option's priced unit evidence.
+ *  ev5 — render supply-only orders without installation/site-visit content. */
+export const EV_ESTIMATE_TEMPLATE_KEY = 'ev6'
 
 /** How long the printed estimate says its prices stand (R7). Presentational:
  *  derived at render, never stored, and it gates nothing in the funnel. */
@@ -126,7 +131,7 @@ export type EvChargerEstimateInput = {
   /** Bullets for "Description of Works" (R8), resolved by the caller. */
   descriptionOfWorks?: string[] | null
   assumptions?: string[] | null
-  /** Omit to derive from the visible tiers' line items (R9). */
+  /** Omit to derive from the selected (or first visible) tier's line items (R9). */
   inclusions?: string[] | null
   /** The priced assemblies' default_exclusions, loaded by the caller (R9). */
   exclusions?: string[] | null
@@ -143,9 +148,16 @@ export type EvChargerEstimateInput = {
   estimatedTimeframe?: string | null
   /** intakes.scope.specs.supplied_by — drives the charger-unit exclusion (R9). */
   suppliedBy?: 'tradie' | 'customer' | null
+  /** Canonical customer choice. Unlike suppliedBy, this distinguishes a
+   * supply-only sale from a combined supply-and-install job. */
+  serviceMode?: EvServiceMode | null
   /** Catalogue ids known to be EV charger UNITS, so the unit line lands in
    *  Phase 2 with its mounting rather than in the rough-in (R4). */
   chargerUnitIds?: string[] | null
+  /** Unit lines explicitly entered through the authenticated tradie save boundary. */
+  authorizedManualChargerLineIndexes?: Partial<Record<'good' | 'better' | 'best', number[]>>
+  /** Referenced assembly descriptions for checking which optional extras are already included. */
+  assemblyRows?: OptionalExtrasAssembly[]
   generatedAt?: Date
 }
 
@@ -257,12 +269,14 @@ export const EV_SWITCHBOARD_CAPACITY_NOTE = {
 //     items printed directly above it, and is simply false for a tenant whose
 //     pricing_book.gst_registered is off.
 
-export function evEstimateTerms(gstRegistered: boolean): string[] {
+export function evEstimateTerms(gstRegistered: boolean, serviceMode?: EvServiceMode | null): string[] {
   return [
     'This is an estimate, not a contract.',
     `Prices are valid for ${EV_ESTIMATE_VALID_DAYS} days from the date of this estimate.`,
     'Final price may vary based on actual work performed.',
-    'A $99 refundable site visit fee confirms your booking and is credited toward your final quote.',
+    serviceMode === 'supply_only'
+      ? 'This estimate is for charger supply only. Installation and electrical work are excluded.'
+      : 'A $99 refundable site visit fee confirms your booking and is credited toward your final quote.',
     gstRegistered
       ? 'All prices are in Australian dollars. Line items are shown ex GST; the total includes 10% GST.'
       : 'All prices are in Australian dollars and are not subject to GST.',
@@ -314,18 +328,15 @@ function visibleTiers(
 }
 
 /** Every visible tier's line items, in tier order. */
-function allLineItems(input: EvChargerEstimateInput): EvEstimateLineItem[] {
-  return visibleTiers(input).flatMap((t) => t.tier.line_items ?? [])
-}
-
 /**
  * Inclusions, derived from what is actually priced (R9): one bullet per distinct
- * line-item description across the visible tiers. Nothing new is asked of the
+ * line-item description in the selected tier. Nothing new is asked of the
  * model — the priced lines ARE the inclusions.
  */
 export function deriveEvInclusions(input: EvChargerEstimateInput): string[] {
   if (input.inclusions) return dedupeStrings(input.inclusions)
-  return dedupeStrings(allLineItems(input).map((li) => li.description))
+  const tier = (input.selectedTier ? input[input.selectedTier] : null) ?? visibleTiers(input)[0]?.tier
+  return dedupeStrings((tier?.line_items ?? []).map((li) => li.description))
 }
 
 /**
@@ -369,9 +380,14 @@ function splitSentences(text?: string | null): string[] {
  * renders what survives, and is omitted when nothing does.
  */
 export function deriveEvExclusions(input: EvChargerEstimateInput): string[] {
-  const supplied =
-    input.suppliedBy === 'customer' ? ['Supply of the EV charger unit itself.'] : []
-  return dedupeStrings([...supplied, ...(input.exclusions ?? [])])
+  const tier = (input.selectedTier ? input[input.selectedTier] : null) ?? visibleTiers(input)[0]?.tier
+  const tierKey = input.selectedTier && input[input.selectedTier] ? input.selectedTier : visibleTiers(input)[0]?.key
+  const supply = deriveEvSupplyPresentation({
+    jobType: 'ev_charger', serviceMode: input.serviceMode, suppliedBy: input.suppliedBy, tier,
+    chargerCatalogueRows: (input.chargerUnitIds ?? []).map((id) => ({ id, category: 'ev_charger' })),
+    authorizedManualChargerLineIndexes: tierKey ? input.authorizedManualChargerLineIndexes?.[tierKey] : [],
+  })!
+  return reconcileEvSupplyExclusions(input.exclusions, supply)
 }
 
 // ── Body sections ───────────────────────────────────────────────────────
@@ -472,21 +488,33 @@ function tierBlock(
   showLabel: boolean,
 ): string {
   const items = entry.tier.line_items ?? []
+  const supply = deriveEvSupplyPresentation({
+    jobType: 'ev_charger', serviceMode: input.serviceMode, suppliedBy: input.suppliedBy, tier: entry.tier,
+    chargerCatalogueRows: (input.chargerUnitIds ?? []).map((id) => ({ id, category: 'ev_charger' })),
+    authorizedManualChargerLineIndexes: input.authorizedManualChargerLineIndexes?.[entry.key],
+  })!
   const opts = { chargerUnitIds: input.chargerUnitIds }
   const phase1 = items.filter((li) => evChargerPhase(li, opts) === 1)
   const phase2 = items.filter((li) => evChargerPhase(li, opts) === 2)
   // One populated phase ⇒ a single table still numbered "Phase 1", matching the
   // single-phase source estimate (R4).
-  const tables =
-    phase1.length > 0 && phase2.length > 0
+  const tables = input.serviceMode === 'supply_only'
+    // A validated supply-only tier may include supplied accessories (for
+    // example a pedestal or lead) as well as the charger itself. Render the
+    // complete persisted line set so its rows reconcile with the unchanged
+    // subtotal. The PDF boundary rejects any install/labour-contaminated tier
+    // before this renderer is reached.
+    ? phaseTable('Items supplied', items)
+    : phase1.length > 0 && phase2.length > 0
       ? phaseTable(`Phase 1 - ${EV_PHASE_1_TITLE}`, phase1) +
         phaseTable(`Phase 2 - ${EV_PHASE_2_TITLE}`, phase2)
       : phaseTable(
           `Phase 1 - ${phase2.length > 0 ? EV_PHASE_2_TITLE : EV_PHASE_1_TITLE}`,
           phase1.length > 0 ? phase1 : phase2,
         )
+  const safeLabel = reconcileEvSupplyScope(entry.tier.label, supply).replace(supply.supplyNotice, '').trim()
   const heading = showLabel
-    ? `<h2 class="ev-tier-heading">${esc(entry.tier.label || entry.key)}${
+    ? `<h2 class="ev-tier-heading">${esc(safeLabel || entry.key)} — ${esc(supply.priceLabel)}${
         input.selectedTier === entry.key ? ' <span class="chip">Recommended</span>' : ''
       }</h2>`
     : ''
@@ -499,13 +527,16 @@ function tierBlock(
   // finds the end of the Optional Upgrades section by searching forward for
   // `<section class="part ev-phase"`, so renaming it silently breaks that test's
   // "no prices above the tables" assertion rather than failing it loudly.
-  return `${heading}
+  return `${heading}<p class="ev-scope">${esc(supply.supplyNotice)}</p>
   <section class="part ev-phase">${tables}${totals}
   </section>`
 }
 
 function optionalUpgradesSection(input: EvChargerEstimateInput): string {
-  const upsells = (input.optionalUpsells ?? []).filter((u) => (u?.name ?? '').trim())
+  if (input.serviceMode === 'supply_only') return ''
+  const tier = (input.selectedTier ? input[input.selectedTier] : null) ?? visibleTiers(input)[0]?.tier
+  const upsells = filterIncludedOptionalUpsells(input.optionalUpsells, tier, input.assemblyRows)
+    .filter((u) => (u?.name ?? '').trim())
   const note = (n: { title: string; body: string }): string => `
       <div class="ev-note">
         <div class="ev-upgrade-title">${esc(n.title)}</div>
@@ -604,7 +635,7 @@ function summaryBand(
   const site = input.siteAddress
     ? `
         <div>
-          <div class="ev-meta-label">Site Address</div>
+          <div class="ev-meta-label">${input.serviceMode === 'supply_only' ? 'Delivery Address' : 'Site Address'}</div>
           <div class="ev-meta-line ev-meta-line-sub">${esc(input.siteAddress)}</div>
         </div>`
     : ''
@@ -834,20 +865,26 @@ export function buildEvChargerEstimateHtml(input: EvChargerEstimateInput): strin
   const gstRegistered = input.gstRegistered ?? true
   const tiers = visibleTiers(input)
   const showTierLabels = tiers.length > 1
-
-  const description = dedupeStrings(input.descriptionOfWorks ?? [])
-  const assumptions = dedupeStrings(input.assumptions ?? [])
+  const heroTier = (input.selectedTier ? input[input.selectedTier] : null) ?? tiers[0]?.tier ?? null
+  const heroKey = input.selectedTier && input[input.selectedTier] ? input.selectedTier : tiers[0]?.key
+  const supply = deriveEvSupplyPresentation({
+    jobType: 'ev_charger', serviceMode: input.serviceMode, suppliedBy: input.suppliedBy, tier: heroTier,
+    chargerCatalogueRows: (input.chargerUnitIds ?? []).map((id) => ({ id, category: 'ev_charger' })),
+    authorizedManualChargerLineIndexes: heroKey ? input.authorizedManualChargerLineIndexes?.[heroKey] : [],
+  })!
+  const description = input.serviceMode === 'supply_only' ? [] : input.descriptionOfWorks?.length
+    ? deriveEvDescriptionOfWorks({ scopeDescription: reconcileEvSupplyScope(input.descriptionOfWorks.join(' '), supply) })
+    : []
+  const assumptions = reconcileEvSupplyAssumptions(input.assumptions, supply)
   const inclusions = deriveEvInclusions(input)
   const exclusions = deriveEvExclusions(input)
   const images = (input.images ?? []).filter((i) => (i?.src ?? '').trim())
 
-  const scopeLead = (input.scopeOfWorks ?? '').trim()
+  const scopeLead = reconcileEvSupplyScope(input.scopeOfWorks, supply)
 
-  // The hero total mirrors the FIRST visible tier — the one the customer reads
-  // as "the price" when tiers are collapsed to one, and the top of the ladder
-  // when they are not. Null when nothing is priced, so the panel is omitted
+  // The hero total and scope use the selected visible option, matching the
+  // public page. Null when nothing is priced, so the panel is omitted
   // rather than printing $0.00.
-  const heroTier = tiers[0]?.tier ?? null
   const heroTotal = heroTier
     ? aud2(
         evTotals(heroTier, {
@@ -857,7 +894,7 @@ export function buildEvChargerEstimateHtml(input: EvChargerEstimateInput): strin
       )
     : null
 
-  const terms = evEstimateTerms(gstRegistered)
+  const terms = evEstimateTerms(gstRegistered, input.serviceMode)
   // The GST/currency basis is the last term and spans both columns — it
   // qualifies every line above it, so it must not read as one more item.
   const termsHtml = terms

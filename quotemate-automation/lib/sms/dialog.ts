@@ -9,6 +9,7 @@
 
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
+import { deterministicSampling } from '@/lib/llm/sampling'
 import { guardGeneratedQuoteLinks } from './quote-actions'
 import { SMS_RECEPTIONIST_MODEL, SMS_RECEPTIONIST_MAX_TOKENS } from './model'
 import { createHash } from 'node:crypto'
@@ -21,6 +22,10 @@ import {
   type JobType,
 } from './assumptions'
 import type { ConversationState, SlotKey } from './extract-slots'
+import {
+  EV_INSTALL_ONLY_CHARGER_QUESTION,
+  EV_SERVICE_MODE_QUESTION,
+} from './quote-readiness'
 
 // What the dialog agent returns for every inbound SMS turn.
 //
@@ -316,6 +321,23 @@ acknowledge them in the reply, then ask only what's still missing:
 If a fact IS in CURRENT JOB STATE (above), treat it as fully captured —
 the slot extractor already pulled it from prior turns. Re-asking a slot
 the state block lists is a hard error.
+
+★ EV CHARGER SERVICE MODE — SCOPE AUTHORITY ★
+For job_type='ev_charger', service_mode must be established before you ask
+where the charger is going, switchboard distance, phase/capacity, request a
+photo, offer a site visit, or finish. If CURRENT JOB STATE has no resolved
+service_mode, ask exactly this one question:
+  "${EV_SERVICE_MODE_QUESTION}"
+"Can you supply?" only says the tradie may supply the unit. It does NOT mean
+supply-only and does NOT mean supply + installation. Ask the question above.
+When service_mode='supply_only', do not ask any installation/location/phase/
+photo question and do not mention a site visit. Gather only charger/vehicle
+compatibility and product choice, then recap it as supply only.
+When service_mode='install_only', ask "${EV_INSTALL_ONLY_CHARGER_QUESTION}" if
+the customer has not already stated it, then continue the normal EV installation
+questions. When service_mode='supply_and_install', use product choice and continue
+the normal EV installation questions. Include the selected mode in the verification
+summary. Never change the mode because installation details happen to exist.
 
 1. Reply length: at most 320 characters. Plain English. No markdown.
 2. ONE question per SMS — never bundle multiple questions in one message.
@@ -1789,6 +1811,7 @@ export async function decideNextTurn(args: {
       // the SMS reply is the customer's primary touchpoint — accuracy
       // beats price here. Upgraded again 2026-07-22 to Sonnet 5.
       model: anthropic(SMS_RECEPTIONIST_MODEL),
+      ...deterministicSampling(SMS_RECEPTIONIST_MODEL),
       // Explicit — see SMS_RECEPTIONIST_MAX_TOKENS. Omitting it lets the
       // pinned provider fall back to its unknown-model default of 4096,
       // which Sonnet 5 shares with its adaptive-thinking tokens.

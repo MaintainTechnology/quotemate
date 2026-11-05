@@ -64,13 +64,13 @@ export function versionedQuoteGst(quote: Row, saved: QuotePricingVersion | null)
 export async function versionedEstimationCheckpoint<T extends object>(db: SupabaseClient, args: {
   tenantId: string | null; trade: string; book: Row | null;
   checkpoint: <R>(name: string, operation: () => Promise<R>) => Promise<R>;
-  run: () => Promise<T>;
+  run: (captured: QuotePricingVersion | null) => Promise<T>;
 }) {
   type Bound = T & { pricing_context_version: 1; pricing_book_version_id: string | null }
   const result = await args.checkpoint<Bound>('estimation', async () => {
     const captured = args.book && args.tenantId
       ? await captureQuotePricingVersion(db, args.book, args.tenantId, args.trade) : null
-    return { ...await args.run(), pricing_context_version: 1, pricing_book_version_id: captured?.id ?? null }
+    return { ...await args.run(captured), pricing_context_version: 1, pricing_book_version_id: captured?.id ?? null }
   })
   if (!result || result.pricing_context_version !== 1 ||
       (result.pricing_book_version_id !== null && typeof result.pricing_book_version_id !== 'string')) {

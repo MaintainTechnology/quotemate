@@ -7,11 +7,16 @@ const h = vi.hoisted(() => {
     call: { id: 'call-1', transcript: 'Jeph needs an outdoor powerpoint in Bondi', tenant_id: 'tenant-1' } as Record<string, unknown> | null,
     conversation: null as Record<string, unknown> | null,
     intakeInsert: { data: { id: 'intake-1' }, error: null as { message: string } | null },
+    messages: [] as Array<{ direction: 'inbound' | 'outbound'; body: string }>,
+    savedIntakes: [] as Array<Record<string, unknown>>,
+    jobType: 'powerpoint',
   }
   const resultBuilder = (table: string) => {
     const builder = {
       select() { return this }, eq() { return this }, order() { return this }, or() { return this },
-      update() { return this }, insert() { return this }, upsert() { return this },
+      update() { return this },
+      insert(row: Record<string, unknown>) { if (table === 'intakes') state.savedIntakes.push(row); return this },
+      upsert(row: Record<string, unknown>) { if (table === 'intakes') state.savedIntakes.push(row); return this },
       async maybeSingle() { return table === 'intakes' ? { data: null, error: null } : this.single() },
       async single() {
         if (table === 'calls') return { data: state.call, error: null }
@@ -20,7 +25,7 @@ const h = vi.hoisted(() => {
         return { data: null, error: null }
       },
       then(resolve: (value: unknown) => unknown) {
-        if (table === 'sms_messages') return Promise.resolve({ data: [{ direction: 'inbound', body: 'Need a powerpoint', created_at: new Date().toISOString() }], error: null }).then(resolve)
+        if (table === 'sms_messages') return Promise.resolve({ data: state.messages, error: null }).then(resolve)
         return Promise.resolve({ data: null, error: null }).then(resolve)
       },
     }
@@ -47,7 +52,7 @@ vi.mock('@/lib/sms/durable-work', () => ({
 vi.mock('@/lib/push/events', () => ({ enqueuePushEvent: h.enqueue }))
 vi.mock('@/lib/agents/cron', () => ({ isCronAuthorised: () => true }))
 vi.mock('@/lib/intake/structure', () => ({ structureIntake: vi.fn(async () => ({
-  trade: 'electrical', job_type: 'powerpoint', address: null, suburb: 'Bondi',
+  trade: 'electrical', job_type: h.state.jobType, address: null, suburb: 'Bondi',
   scope: { description: 'Install another outdoor powerpoint' }, access: {}, property: {}, risks: [],
   inspection_required: false, caller: { name: 'Jeph' }, timing: {}, confidence: 'HIGH', confidence_reason: 'clear',
 })) }))
@@ -88,6 +93,9 @@ describe('POST /api/intake/structure new-lead hook', () => {
     h.state.call = { id: 'call-1', transcript: 'Jeph needs an outdoor powerpoint in Bondi', tenant_id: 'tenant-1' }
     h.state.conversation = null
     h.state.intakeInsert = { data: { id: 'intake-1' }, error: null }
+    h.state.messages = [{ direction: 'inbound', body: 'Need a powerpoint' }]
+    h.state.savedIntakes = []
+    h.state.jobType = 'powerpoint'
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 200 })))
   })
 
@@ -127,5 +135,37 @@ describe('POST /api/intake/structure new-lead hook', () => {
     expect(response.status).toBe(500)
     expect(h.deferred).toHaveLength(0)
     expect(h.enqueue).not.toHaveBeenCalled()
+  })
+
+  it('forces inspection for the EST-0018 supply_type answer even when the model says false', async () => {
+    h.state.jobType = 'ev_charger'
+    h.state.conversation = { id: 'conversation-1', tenant_id: 'tenant-1', from_number: null,
+      assumptions_made: [], photo_urls: [], photo_paths: [], conversation_state: {
+        slots: { job_type: 'ev_charger', service_mode: 'supply_and_install', supplied_by: 'tradie', requested_specs: { supply_type: 'three-phase' } },
+        sources: { requested_specs: 'from_transcript' },
+      } }
+    h.state.messages = [
+      { direction: 'outbound', body: 'Is the property single-phase or three-phase, and any spare switchboard capacity?' },
+      { direction: 'inbound', body: 'Three-phase,l' },
+      { direction: 'inbound', body: 'Yes spare capacity' },
+    ]
+    expect((await POST(smsRequest())).status).toBe(200)
+    expect(h.state.savedIntakes).toHaveLength(1)
+    expect(h.state.savedIntakes[0]).toMatchObject({ inspection_required: true, property: { phase: 'three' } })
+  })
+
+  it('does not allow an unconfirmed assistant recap to supply the property phase', async () => {
+    h.state.jobType = 'ev_charger'
+    h.state.conversation = { id: 'conversation-1', tenant_id: 'tenant-1', from_number: null,
+      assumptions_made: [], photo_urls: [], photo_paths: [], conversation_state: {
+        slots: { job_type: 'ev_charger', service_mode: 'supply_and_install', requested_specs: { supply_type: 'three-phase' } },
+        sources: { requested_specs: 'from_memory' },
+      } }
+    h.state.messages = [
+      { direction: 'outbound', body: "We'll supply a three-phase charger. Sound right?" },
+      { direction: 'inbound', body: 'Sounds right' },
+    ]
+    expect((await POST(smsRequest())).status).toBe(200)
+    expect(h.state.savedIntakes[0]).toMatchObject({ inspection_required: false, property: {} })
   })
 })

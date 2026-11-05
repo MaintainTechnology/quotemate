@@ -13,6 +13,7 @@ describe('shouldNotifyOnEdit', () => {
     expect(
       shouldNotifyOnEdit({
         status: 'awaiting_tradie_approval',
+        customerReleased: false,
         notifyCustomer: true,
         changedTiersCount: 2,
       }),
@@ -20,6 +21,7 @@ describe('shouldNotifyOnEdit', () => {
     expect(
       shouldNotifyOnEdit({
         status: 'awaiting_tradie_approval',
+        customerReleased: false,
         notifyCustomer: undefined,
         changedTiersCount: 2,
       }),
@@ -27,33 +29,40 @@ describe('shouldNotifyOnEdit', () => {
     expect(
       shouldNotifyOnEdit({
         status: 'awaiting_tradie_approval',
+        customerReleased: false,
         notifyCustomer: false,
         changedTiersCount: 0,
       }),
     ).toBe(false)
   })
 
-  it('notifies when the tradie explicitly opts in (and the quote is not held)', () => {
+  it('notifies when the tradie explicitly opts in after customer release', () => {
     expect(
-      shouldNotifyOnEdit({ status: 'sent', notifyCustomer: true, changedTiersCount: 0 }),
+      shouldNotifyOnEdit({ status: 'sent', customerReleased: true, notifyCustomer: true, changedTiersCount: 0 }),
     ).toBe(true)
     expect(
-      shouldNotifyOnEdit({ status: 'draft', notifyCustomer: true, changedTiersCount: 0 }),
+      shouldNotifyOnEdit({ status: 'draft', customerReleased: true, notifyCustomer: true, changedTiersCount: 0 }),
     ).toBe(true)
   })
 
   it('never notifies when the tradie chose save-quietly', () => {
     expect(
-      shouldNotifyOnEdit({ status: 'sent', notifyCustomer: false, changedTiersCount: 2 }),
+      shouldNotifyOnEdit({ status: 'sent', customerReleased: true, notifyCustomer: false, changedTiersCount: 2 }),
     ).toBe(false)
   })
 
   it('legacy default (notify undefined): notifies iff a tier price changed', () => {
     expect(
-      shouldNotifyOnEdit({ status: 'sent', notifyCustomer: undefined, changedTiersCount: 1 }),
+      shouldNotifyOnEdit({ status: 'sent', customerReleased: true, notifyCustomer: undefined, changedTiersCount: 1 }),
     ).toBe(true)
     expect(
-      shouldNotifyOnEdit({ status: 'sent', notifyCustomer: undefined, changedTiersCount: 0 }),
+      shouldNotifyOnEdit({ status: 'sent', customerReleased: true, notifyCustomer: undefined, changedTiersCount: 0 }),
     ).toBe(false)
+  })
+
+  it.each(['draft', 'awaiting_tradie_approval', null, undefined])('never first-contacts an unreleased %s quote', status => {
+    for (const notifyCustomer of [true, false, undefined]) {
+      expect(shouldNotifyOnEdit({ status, customerReleased: false, notifyCustomer, changedTiersCount: 1 })).toBe(false)
+    }
   })
 })

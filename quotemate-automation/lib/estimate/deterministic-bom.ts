@@ -43,7 +43,18 @@ import {
   type QuoteLine,
   type TierLadderEntry,
   type ChosenProductAnchor,
+  resolveTierForBrandRange,
 } from './catalogue'
+import {
+  calculateAuthoritativeQuote,
+  exactMarkedUpCents,
+  exactPriceCents,
+  exactDecimalNumber,
+  type ApprovedQuoteSource,
+  type QuoteCalculation,
+  type QuoteCoreFailureCode,
+  type QuoteServiceMode,
+} from './quote-core'
 
 const TIERS: Tier[] = ['good', 'better', 'best']
 
@@ -79,6 +90,20 @@ export interface DeterministicTierInput {
   /** Present-recipe authority gate: required categories may only consume an
    * active tenant catalogue price, never a shared/global fallback. */
   requireTenantMaterialAuthority?: boolean
+  /** Server attestation from the tenant-scoped, versioned pricing snapshot.
+   * Never construct this from model output or assume a shared recipe is approved. */
+  authority?: DeterministicQuoteAuthority
+}
+
+export interface DeterministicQuoteAuthority {
+  tenantId: string
+  pricingBookVersionId: string
+  recipeSourceId: string
+  approvedCatalogueIds: string[]
+  gstRegistered: boolean
+  serviceMode: QuoteServiceMode
+  /** Explicit approved book policy; no hidden fallback to a two-hour charge. */
+  minLabourHours: number | string
 }
 
 export interface DeterministicTier {
@@ -89,6 +114,8 @@ export interface DeterministicTier {
    *  each tier can hold a different product, so a smart light on Better earns
    *  the pairing step while the plain one on Good does not. */
   headlineProperties?: Record<string, unknown> | null
+  /** Present only for the strict authority path; persist with the tier snapshot. */
+  calculation?: QuoteCalculation
 }
 export interface DeterministicTiers {
   good: DeterministicTier
@@ -98,17 +125,19 @@ export interface DeterministicTiers {
 
 export type DeterministicResult =
   | { tiers: DeterministicTiers; reason?: undefined }
-  | { tiers: null; reason: string; code?: 'missing_tenant_recipe_price' }
+  | { tiers: null; reason: string; code?: 'missing_tenant_recipe_price' | QuoteCoreFailureCode }
 
 /**
  * Build good/better/best deterministically from a recipe × catalogue.
  * Returns `{ tiers:null, reason }` whenever the job cannot be honoured
- * safely — the caller MUST then fall back to the existing Opus draft
- * (no regression, never a partial/holed quote).
+ * safely. With authority supplied, failure requires tradie review and must
+ * never fall back to model-authored prices. Legacy callers retain their
+ * existing fallback policy.
  */
 export function buildDeterministicTiers(
   input: DeterministicTierInput,
 ): DeterministicResult {
+  if (input.authority) return buildAuthoritativeTiers(input, input.authority)
   if (!Array.isArray(input.bom) || input.bom.length === 0) {
     return { tiers: null, reason: 'no recipe for this job' }
   }
@@ -203,4 +232,132 @@ export function buildDeterministicTiers(
   }
 
   return { tiers: out as DeterministicTiers }
+}
+
+/** Strict adapter over the existing condition-aware recipe composer. Monetary
+ * output is replaced by Quote Core cents, and a failed authority never yields
+ * a partial tier. Legacy callers retain their existing selection behaviour. */
+function buildAuthoritativeTiers(
+  input: DeterministicTierInput,
+  authority: DeterministicQuoteAuthority,
+): DeterministicResult {
+  const fail = (code: QuoteCoreFailureCode, reason: string): DeterministicResult => ({ tiers: null, code, reason })
+  const id = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+  if (!id(authority.tenantId) || !id(authority.pricingBookVersionId) || !id(authority.recipeSourceId) ||
+      !Array.isArray(authority.approvedCatalogueIds) || typeof authority.gstRegistered !== 'boolean') {
+    return fail('missing_authority', 'Verified tenant, pricing book version, recipe and catalogue authority are required')
+  }
+  // Recipes currently have no component service-role metadata. Guessing which
+  // parts remain on install-only/supply-only jobs would create incorrect scope.
+  if (authority.serviceMode !== 'supply_and_install') {
+    return fail('unsupported_service_mode', 'This recipe does not declare supply-only/install-only component roles; tradie review is required')
+  }
+  if (!Array.isArray(input.bom) || input.bom.length === 0) return fail('missing_price', 'No approved recipe for this job')
+  const hourlyCents = exactPriceCents(input.hourlyRate)
+  if (hourlyCents === null || hourlyCents <= 0) return fail('invalid_amount', 'No valid approved hourly rate')
+  const minimum = exactDecimalNumber(authority.minLabourHours, 6)
+  if (minimum === null || minimum < 0 ||
+      exactDecimalNumber(input.labourHours, 6) === null || input.labourHours < 0) {
+    return fail('invalid_quantity', 'Recipe labour and minimum labour policy must be explicit non-negative hours')
+  }
+  if (!Number.isFinite(input.markupPct) || input.markupPct < 0) return fail('invalid_markup', 'Approved markup is invalid')
+  const labourHours = Math.max(input.labourHours, minimum)
+  for (const line of input.bom) {
+    if (exactDecimalNumber(line.quantity, 6) === null) return fail('invalid_quantity', `Recipe quantity must be exact to at most six decimal places: ${line.material_category}`)
+  }
+  const approved = new Set(authority.approvedCatalogueIds)
+  if (approved.size !== authority.approvedCatalogueIds.length || authority.approvedCatalogueIds.some((value) => !id(value))) {
+    return fail('ambiguous_source', 'Approved catalogue IDs must be present and unique')
+  }
+  const allIds = new Set<string>()
+  for (const row of input.tenantMaterials) {
+    if (row.id && allIds.has(row.id)) return fail('ambiguous_source', `Duplicate catalogue ID: ${row.id}`)
+    if (row.id) allIds.add(row.id)
+  }
+  const categoryKey = (value: string) => value.trim().toLowerCase()
+  const tiers: Partial<DeterministicTiers> = {}
+  for (const tier of TIERS) {
+    let problem: { code: QuoteCoreFailureCode; reason: string } | null = null
+    const sources = new Map<string, ApprovedQuoteSource>()
+    const resolveMaterial = (line: BomLine) => {
+      const category = categoryKey(line.material_category)
+      const ladder = (input.tierLadder ?? []).filter((entry) => categoryKey(entry.category) === category && entry.tier === tier)
+      if (new Set(ladder.map((entry) => entry.catalogue_id)).size > 1) {
+        problem = { code: 'ambiguous_source', reason: `Multiple ${tier} product pins for ${category}` }
+        return null
+      }
+      const customer = input.chosenProduct?.tier === tier && categoryKey(input.chosenProduct.category) === category
+        ? input.chosenProduct.catalogue_id : null
+      const explicitId = customer ?? ladder[0]?.catalogue_id ?? line.catalogue_id
+      const candidates = input.tenantMaterials.filter((row) =>
+        categoryKey(row.category) === category && row.active === true && id(row.id) && approved.has(row.id))
+      let selected: TenantMaterial | undefined
+      if (explicitId) {
+        selected = candidates.find((row) => row.id === explicitId)
+        if (!selected) {
+          problem = { code: 'unapproved_source', reason: `Pinned product is missing, inactive or unapproved: ${explicitId}` }
+          return null
+        }
+      } else {
+        const scored = candidates.map((row) => ({ row, score:
+          (resolveTierForBrandRange(row.brand, row.range_series, row.tier_hint) === tier ? 2 : 0) +
+          (row.is_preferred === true ? 1 : 0),
+        })).sort((a, b) => b.score - a.score)
+        if (scored.length > 1 && scored[0].score === scored[1].score) {
+          problem = { code: 'ambiguous_source', reason: `No unique approved ${tier} product for ${category}` }
+          return null
+        }
+        selected = scored[0]?.row
+      }
+      if (!selected?.id) {
+        problem = { code: 'missing_price', reason: `No approved tenant price for ${category}` }
+        return null
+      }
+      const cents = exactPriceCents(selected.unit_price_ex_gst)
+      const markedUp = cents === null ? null : exactMarkedUpCents(cents, input.markupPct)
+      if (cents === null || cents <= 0 || markedUp === null) {
+        problem = { code: 'invalid_amount', reason: `Invalid approved catalogue price: ${selected.id}` }
+        return null
+      }
+      sources.set(selected.id, {
+        id: selected.id, tenantId: authority.tenantId, pricingBookVersionId: authority.pricingBookVersionId,
+        approved: true, active: true, kind: 'catalogue', unitPriceCents: cents,
+      })
+      return { name: selected.name, markedUpPrice: markedUp / 100, catalogue_id: selected.id,
+        image_path: selected.image_path, properties: selected.properties }
+    }
+    const built = buildBomQuoteLines({ bom: input.bom, resolveMaterial, labourHours, labourRate: input.hourlyRate })
+    if (problem) {
+      const { code, reason } = problem as { code: QuoteCoreFailureCode; reason: string }
+      return fail(code, reason)
+    }
+    if (built.missingRequired.length > 0) return fail('missing_price', `Required recipe lines are not priceable: ${built.missingRequired.join(', ')}`)
+    const labourSourceId = `pricing_book:${authority.pricingBookVersionId}:hourly_rate`
+    sources.set(labourSourceId, {
+      id: labourSourceId, tenantId: authority.tenantId, pricingBookVersionId: authority.pricingBookVersionId,
+      approved: true, active: true, kind: 'labour_rate', unitPriceCents: hourlyCents,
+    })
+    const result = calculateAuthoritativeQuote({
+      ...authority,
+      sources: [...sources.values()],
+      lines: built.lines.map((line, index) => ({
+        id: `${tier}:${index}`, sourceId: line.source === 'labour' ? labourSourceId : line.catalogue_id ?? '',
+        role: line.source === 'labour' ? 'labour' : 'material',
+        quantity: line.quantity, markupPct: line.source === 'labour' ? 0 : input.markupPct,
+      })),
+    })
+    if (!result.ok) return fail(result.code, result.reason)
+    tiers[tier] = {
+      line_items: built.lines.map((line, index) => ({ ...line,
+        unit_price_ex_gst: result.calculation.lines[index].unitPriceCents / 100,
+        total_ex_gst: result.calculation.lines[index].totalExGstCents / 100,
+      })),
+      subtotal_ex_gst: result.calculation.subtotalExGstCents / 100,
+      headlineProperties: built.headlineProperties ?? null,
+      calculation: { ...result.calculation, labourPolicy: {
+        recipeHours: String(input.labourHours), minimumHours: String(authority.minLabourHours), billableHours: String(labourHours),
+      } },
+    }
+  }
+  return { tiers: tiers as DeterministicTiers }
 }

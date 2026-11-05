@@ -77,6 +77,8 @@ export type ResolveAcceptInput = {
    *  balance requested on completion. Drops that bullet and re-labels the CTA.
    *  Defaults false, so every existing caller is byte-identical. */
   visitDone?: boolean
+  /** A supply-only product order: payment confirms fulfilment, not a site visit. */
+  productOnly?: boolean
   /** Site-visit fee copy. Defaults "$99". */
   siteVisitFee?: string
   /** Override the deposit short-link. Surfaces NOT backed by public.quotes
@@ -111,6 +113,7 @@ export function resolveAcceptView(input: ResolveAcceptInput): AcceptView {
     depositLabel,
     confirmsSiteVisit = true,
     visitDone = false,
+    productOnly = false,
     siteVisitFee = '$99',
     depositHref,
     inspectionHref,
@@ -131,16 +134,22 @@ export function resolveAcceptView(input: ResolveAcceptInput): AcceptView {
   if (pricesVisible && !priceExpired) {
     const confirmations: string[] = []
     if (priceLabel) confirmations.push(`You accept the quoted price of ${priceLabel}.`)
-    if (confirmsSiteVisit && !visitDone) {
+    if (productOnly) {
+      confirmations.push(
+        depositLabel
+          ? `Next: pay the ${depositLabel} to confirm your charger order. Your tradie will arrange delivery or collection.`
+          : 'Next: pay the deposit to confirm your charger order. Your tradie will arrange delivery or collection.',
+      )
+    } else if (confirmsSiteVisit && !visitDone) {
       confirmations.push('You confirm the site visit / start time on the next step.')
     }
-    if (visitDone) {
+    if (!productOnly && visitDone) {
       confirmations.push(
         depositLabel
           ? `Next: pay the ${depositLabel} to confirm the job; the balance is requested by your tradie on completion.`
           : 'Next: pay the deposit to confirm the job; the balance is requested by your tradie on completion.',
       )
-    } else {
+    } else if (!productOnly) {
       confirmations.push(
         depositLabel
           ? `Next: secure your booking with the ${depositLabel}, credited to the final invoice.`
@@ -151,8 +160,8 @@ export function resolveAcceptView(input: ResolveAcceptInput): AcceptView {
       mode: 'deposit',
       payHref: depositHref ?? `/r/${token}/${tier}`,
       acceptTier: tier,
-      ctaLabel: visitDone ? 'Accept & pay deposit' : 'Accept & confirm booking',
-      heading: visitDone ? 'Accept your final quote' : 'Accept your quote',
+      ctaLabel: productOnly || visitDone ? 'Accept & pay deposit' : 'Accept & confirm booking',
+      heading: productOnly ? 'Accept your charger order' : visitDone ? 'Accept your final quote' : 'Accept your quote',
       confirmations,
       actionable: true,
     }

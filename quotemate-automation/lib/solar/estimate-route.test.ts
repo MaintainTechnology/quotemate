@@ -26,6 +26,11 @@ const fakeTenant = {
   twilio_sms_number: '+61480000000',
 }
 
+const completeSolarRates = { install_rate_per_kw: { standard_panels: 1200, premium_panels: 1500 },
+  multi_storey_loading_pct: 0, complex_roof_loading_pct: 0, call_out_minimum_ex_gst: 0,
+  gst_registered: true, stc_price_aud: 35 }
+let tenantRates: unknown = completeSolarRates
+
 // Supabase query builder stub — returns fakeTenant by default.
 // Individual tests can override maybeSingleImpl to simulate 404.
 let maybySingleImpl = vi.fn().mockResolvedValue({ data: fakeTenant, error: null })
@@ -40,6 +45,11 @@ const quoteInsertSingleImpl = vi.fn().mockResolvedValue({
 
 // Build a chainable query-builder stub.
 function buildQueryStub(tableName: string) {
+  if (tableName === 'pricing_book') {
+    const query = { select: () => query, eq: () => query, limit: () => query,
+      maybeSingle: async () => ({ data: { overlays: { solar_rate_card: tenantRates } }, error: null }) }
+    return query
+  }
   if (tableName === 'tenants') {
     return {
       select: () => ({
@@ -219,8 +229,19 @@ const VALID_BODY = {
 describe('POST /api/solar/[tenantSlug]/estimate — unit (stubbed supabase)', () => {
   beforeEach(() => {
     capturedRunArgs = null
+    tenantRates = completeSolarRates
     maybySingleImpl.mockResolvedValue({ data: fakeTenant, error: null })
     vi.clearAllMocks()
+  })
+
+  it('returns actionable setup-required and does not run the engine for incomplete tenant prices', async () => {
+    tenantRates = {}
+    const POST = await getPostHandler()
+    const response = await POST(buildRequest(VALID_BODY), buildCtx())
+    expect(response.status).toBe(422)
+    expect(await response.json()).toMatchObject({ error: 'tenant_pricing_required' })
+    expect(capturedRunArgs).toBeNull()
+    expect(insertSingleImpl).not.toHaveBeenCalled()
   })
 
   it('returns 404 when the tenant is not found', async () => {

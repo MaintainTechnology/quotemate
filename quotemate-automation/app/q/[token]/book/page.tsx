@@ -36,6 +36,7 @@ import { tzForState } from '@/lib/quote/availability'
 import { BrandMark } from '@/app/_components/BrandMark'
 import { BookingCalendar, type CalendarDay } from '@/app/q/_chrome/BookingCalendar'
 import { toCalendarDays } from '@/app/q/_chrome/calendar-days'
+import { evChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,14 +95,21 @@ export default async function BookingPage(props: {
   // visitor's outcome can't change — and always the RAW intakes.trade, so an
   // unresolvable trade fails open to today's behaviour like the mint route does.
   let unpaidTrade: string | null = null
-  if (!isPaid && quote.intake_id) {
+  let evServiceMode: string | undefined
+  if (quote.intake_id) {
     const { data: intakeRow } = await supabase
       .from('intakes')
-      .select('trade')
+      .select('job_type,trade,scope')
       .eq('id', quote.intake_id as string)
       .maybeSingle()
-    unpaidTrade = (intakeRow?.trade as string | null) ?? null
+    if (!isPaid) unpaidTrade = (intakeRow?.trade as string | null) ?? null
+    evServiceMode = intakeRow?.job_type === 'ev_charger'
+      ? evChargerServiceModeFromIntake(intakeRow)
+      : undefined
   }
+  // A supply-only charger sale has no appointment. Direct/stale /book links
+  // return to the order rather than consuming a tradie's availability slot.
+  if (evServiceMode === 'supply_only') redirect(`/q/${token}`)
 
   // Lapsed price — block booking entirely; pricing may have changed since the
   // quote was sent. An already-paid quote has transacted and is exempt, as are
@@ -120,6 +128,7 @@ export default async function BookingPage(props: {
         needsInspection: !!(quote as { needs_inspection?: boolean | null }).needs_inspection,
         nextTier: tier,
         quoteKind,
+        serviceMode: evServiceMode,
       })
 
   if (unpaidAction?.kind === 'expired') {

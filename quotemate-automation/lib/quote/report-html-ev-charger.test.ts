@@ -204,11 +204,11 @@ describe('buildEvChargerEstimateHtml — sections', () => {
     expect(html).toContain('12 Sept 2026')
   })
 
-  it('omits a section entirely — heading included — when it has no content', () => {
+  it('omits empty optional sections but preserves the required supply clarification', () => {
     const html = buildEvChargerEstimateHtml(
       baseInput({ assumptions: [], exclusions: [], descriptionOfWorks: [] }),
     )
-    expect(html).not.toContain('Assumptions')
+    expect(html).toContain('Charger supply responsibility has not been confirmed')
     expect(html).not.toContain('>Exclusions<')
     expect(html).not.toContain('Description of Works')
     // The sections that always have content still render.
@@ -359,12 +359,12 @@ describe('derivations', () => {
 
   it('adds the charger unit to exclusions when the customer supplies it', () => {
     const out = deriveEvExclusions(baseInput({ suppliedBy: 'customer' }))
-    expect(out[0]).toBe('Supply of the EV charger unit itself.')
+    expect(out).toContain('Charger unit supply — supplied by the customer.')
   })
 
-  it('does not add that exclusion when the tradie supplies the unit', () => {
+  it('explicitly excludes an unpriced charger even when the tradie will supply it', () => {
     const out = deriveEvExclusions(baseInput({ suppliedBy: 'tradie' }))
-    expect(out).not.toContain('Supply of the EV charger unit itself.')
+    expect(out).toContain('Charger unit supply and its cost — to be confirmed and priced by the tradie.')
   })
 
   it('prefers the customer description, then the authored method, then labour lines', () => {
@@ -382,10 +382,76 @@ describe('derivations', () => {
 
 describe('template key', () => {
   it('is stable so cached EV PDFs regenerate only on a deliberate bump', () => {
-    // ev3 — direction 1B "Numbered & banded" (EST-0006 redesign). The bump is
-    // what makes already-cached EV PDFs re-render into the new template; it
-    // must never be changed casually, which is why this pin exists.
-    expect(EV_ESTIMATE_TEMPLATE_KEY).toBe('ev3')
+    // ev6 — supply-only documents include every safe supplied-item row so the
+    // visible breakdown reconciles exactly with the immutable tier subtotal.
+    expect(EV_ESTIMATE_TEMPLATE_KEY).toBe('ev6')
+  })
+})
+
+describe('supply-only EV charger document', () => {
+  it('shows the priced unit and excludes installation, electrical work and the $99 visit', () => {
+    const html = buildEvChargerEstimateHtml(baseInput({
+      serviceMode: 'supply_only',
+      suppliedBy: 'tradie',
+      scopeOfWorks: 'Supply and install an EV charger on a new dedicated circuit.',
+      descriptionOfWorks: ['Install the charger and test the circuit.'],
+      assumptions: ['Switchboard capacity confirmed on site.'],
+      optionalUpsells: [{ name: 'Surge protection', price_ex_gst: 100 }],
+      chargerUnitIds: ['charger-unit'],
+      good: {
+        label: 'Supply and install charger',
+        subtotal_ex_gst: 800,
+        line_items: [{
+          description: '7kW EV charger unit', quantity: 1, unit: 'each',
+          unit_price_ex_gst: 800, total_ex_gst: 800,
+          source: 'material:charger-unit', catalogue_id: 'charger-unit',
+        }],
+      },
+      better: null,
+      best: null,
+      selectedTier: 'good',
+    }))
+    expect(html).toContain('Supply only')
+    expect(html).toContain('Items supplied')
+    expect(html).toContain('Installation and all electrical work are excluded')
+    expect(html).not.toContain('$99 refundable site visit')
+    expect(html).not.toContain('Switchboard capacity confirmed on site')
+    expect(html).not.toContain('Optional Upgrades &amp; Recommendations')
+    expect(html).not.toContain('Install the charger and test the circuit')
+  })
+
+  it('shows safe supplied accessories and reconciles their rows to the stored subtotal', () => {
+    const html = buildEvChargerEstimateHtml(baseInput({
+      serviceMode: 'supply_only',
+      suppliedBy: 'tradie',
+      scopeOfWorks: 'EV charger supply only. Installation and all electrical work are excluded.',
+      chargerUnitIds: ['charger-unit'],
+      good: {
+        label: 'Supply only',
+        subtotal_ex_gst: 900,
+        line_items: [
+          {
+            description: '7kW EV charger unit', quantity: 1, unit: 'each',
+            unit_price_ex_gst: 800, total_ex_gst: 800,
+            source: 'material:charger-unit', catalogue_id: 'charger-unit',
+          },
+          {
+            description: 'EV charger pedestal', quantity: 1, unit: 'each',
+            unit_price_ex_gst: 100, total_ex_gst: 100,
+            source: 'material:pedestal', catalogue_id: 'pedestal',
+          },
+        ],
+      },
+      better: null,
+      best: null,
+      selectedTier: 'good',
+    }))
+    const suppliedTable = html.slice(html.indexOf('Items supplied'), html.indexOf('Subtotal (ex GST)'))
+    expect(suppliedTable).toContain('7kW EV charger unit')
+    expect(suppliedTable).toContain('EV charger pedestal')
+    expect(suppliedTable).toContain('$900.00')
+    expect(html).toContain('Subtotal (ex GST):</span><span class="num">$900.00')
+    expect(html).toContain('Total:</span><span class="num">$990.00')
   })
 })
 

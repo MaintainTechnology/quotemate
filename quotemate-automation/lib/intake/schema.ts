@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { EvServiceModeSchema } from '@/lib/quote/ev-service-mode'
 
 export const IntakeSchema = z.object({
   // Trade routing — required at root, not optional, to keep below the
@@ -57,6 +58,7 @@ export const IntakeSchema = z.object({
       dimmable: z.boolean().optional(),
       smart: z.boolean().optional(),                  // Wi-Fi / app control / smart-home compatible
       weatherproof: z.boolean().optional(),           // IP-rated for outdoor / wet-area use
+      service_mode: EvServiceModeSchema.optional(),   // explicit EV scope; supplied_by is derived below
       supplied_by: z.enum(['tradie', 'customer']).optional(),  // who provides the fitting itself
       // WP5 / R26 — hot-water energy source. PRICING-CRITICAL for plumbing
       // hot_water jobs: it selects the HWS assembly family (electric vs gas

@@ -68,6 +68,54 @@ export const EDITABLE_MATERIALS: ReadonlyArray<RoofMaterial> = [
   'cement_sheet',
 ] as const
 
+// ── New-work rates (TKO-22, DEC-026) ─────────────────────────────────
+// A builder quote prices a new roof only on the tenant's own rates for new
+// work, kept beside the card as `overlays.roofing_new_work_rates.rate_per_m2`.
+// There is no default: re-roof rates include stripping the old roof.
+
+/** The overlay key, beside `roofing_rate_card`. Saving the card keeps it. */
+export const NEW_WORK_RATES_KEY = 'roofing_new_work_rates'
+
+/** Materials a new roof can be: every editable one but cement sheet. */
+export const NEW_WORK_MATERIALS: ReadonlyArray<RoofMaterial> = EDITABLE_MATERIALS.filter((m) => m !== 'cement_sheet')
+
+/** The stored new-work rates: each a positive number up to the cap. */
+export function newWorkRates(raw: unknown): Partial<Record<RoofMaterial, number>> {
+  const given = (raw as { rate_per_m2?: Record<string, unknown> } | null | undefined)?.rate_per_m2 ?? {}
+  const rates: Partial<Record<RoofMaterial, number>> = {}
+  for (const material of NEW_WORK_MATERIALS) {
+    const rate = given[material]
+    if (typeof rate === 'number' && Number.isFinite(rate) && rate > MIN_RATE_PER_M2 && rate <= MAX_RATE_PER_M2) {
+      rates[material] = rate
+    }
+  }
+  return rates
+}
+
+/** The dashboard's new-work rates, checked as the card's rates are. A blank
+ *  clears that material, and null clears them all. */
+export function buildNewWorkRatesFromInputs(raw: unknown):
+  | { ok: true; rates: Partial<Record<RoofMaterial, number>> }
+  | { ok: false; issues: Array<{ field: string; message: string }> } {
+  if (raw === null || raw === undefined) return { ok: true, rates: {} }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, issues: [{ field: 'new_work_rate_per_m2', message: 'Rates must be given per material.' }] }
+  }
+  const issues: Array<{ field: string; message: string }> = []
+  const rates: Partial<Record<RoofMaterial, number>> = {}
+  for (const material of NEW_WORK_MATERIALS) {
+    const value = (raw as Record<string, unknown>)[material]
+    if (value === null || value === undefined || value === '') continue
+    const n = typeof value === 'number' ? value : Number(value)
+    const field = `new_work_rate_per_m2.${material}`
+    if (!Number.isFinite(n)) issues.push({ field, message: 'Rate must be a number.' })
+    else if (n <= MIN_RATE_PER_M2) issues.push({ field, message: 'Rate must be greater than 0.' })
+    else if (n > MAX_RATE_PER_M2) issues.push({ field, message: `Rate must be at most $${MAX_RATE_PER_M2}/m².` })
+    else rates[material] = n
+  }
+  return issues.length ? { ok: false, issues } : { ok: true, rates }
+}
+
 /** What the dashboard PATCH sends. Blank inputs ARE allowed (we
  *  interpret them as "no override → fall back to default"); we accept
  *  null and undefined for the same reason. */

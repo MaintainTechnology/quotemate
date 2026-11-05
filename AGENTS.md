@@ -49,7 +49,7 @@ These were settled after substantive re-evaluation (see iteration history at the
 | Frontend + API | Next.js (App Router) on Vercel |
 | Auth, DB, storage, RLS | Supabase (Postgres + pgvector) |
 | Background workflows | Vercel Workflow (WDK) or Inngest |
-| LLM | Codex (Opus for the heavy reasoning step, Haiku for routing) via Vercel AI Gateway |
+| LLM | Direct Anthropic through Vercel AI SDK + `@ai-sdk/anthropic`; no AI Gateway. Rank 1 price/release safeguards apply to all accounts (v26); no tenant pilot allowlist or monetary model fallback. |
 | Voice agent (v3 only) | Vapi + Deepgram + ElevenLabs |
 | SMS | Twilio (AU long codes) |
 | Payments | Stripe AU + Stripe Connect Express |

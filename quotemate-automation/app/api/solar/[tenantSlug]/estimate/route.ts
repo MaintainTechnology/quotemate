@@ -104,7 +104,11 @@ export async function POST(
   // Per-tenant rates: pricing_book.overlays.solar_rate_card merged onto
   // the defaults (+ STC-price override onto the config). No overlay →
   // identical inputs to the pre-override behaviour.
-  const { config, rateCard, overlay } = await loadSolarTenantRates(supabase, tenant.id, baseConfig)
+  let tenantRates
+  try { tenantRates = await loadSolarTenantRates(supabase, tenant.id, baseConfig) }
+  catch { return Response.json({ ok: false, error: 'tenant_pricing_required',
+    detail: 'The installer must complete its solar rates and GST setting before estimating.' }, { status: 422 }) }
+  const { config, rateCard, overlay } = tenantRates
   // Derive DNSP/network from the postcode (for feed-in tariff + export
   // limit). Falls back to 'default' when no exact match is found, which
   // routes through config.feed_in.default_aud_per_kwh — always safe.

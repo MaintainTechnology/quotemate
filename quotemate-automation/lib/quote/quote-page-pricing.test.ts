@@ -6,7 +6,7 @@ const h = vi.hoisted(() => {
   const rows: Record<string, Record<string, unknown> | null> = {}
   const errors: Record<string, unknown> = {}
   const reads: Array<{ table: string; fields: string; filters: Record<string, unknown> }> = []
-  const client = { from: (table: string) => {
+  const client = { rpc: async () => ({ data: 18, error: null }), from: (table: string) => {
     const read = { table, fields: '', filters: {} as Record<string, unknown> }; reads.push(read)
     const q = {
       select: (fields: string) => { read.fields = fields; return q },
@@ -41,6 +41,7 @@ import PublicQuotePage from '@/app/q/[token]/page'
 import { QuotePricingReview } from '@/app/q/_chrome/QuotePricingReview'
 import { QuoteUnavailable } from '@/app/q/_chrome/QuoteUnavailable'
 import { TradeTiers } from '@/app/q/[token]/TradeTiers'
+import { evIncidentTier, evIncidentScope, evIncidentAssumptions, evIncidentUpsells } from '@/tests/fixtures/ev-charger-est0018'
 const params = () => ({ params: Promise.resolve({ token: 'saved-token' }) })
 function textOf(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number') return String(value)
@@ -93,6 +94,142 @@ describe('actual dashboard saved price reader', () => {
   })
 })
 describe('actual public quote saved price reader', () => {
+  it.each([true, false])('recognises a manual charger unit only with stored edit provenance: %s', async (authorised) => {
+    Object.assign(h.rows.intakes!, { job_type: 'ev_charger', scope: { specs: { service_mode: 'supply_and_install', supplied_by: 'tradie' } } })
+    Object.assign(h.rows.quotes!, {
+      better: { label: 'EV estimate', subtotal_ex_gst: 1200, line_items: [
+        { description: 'EV charger unit', source: 'tradie_manual', quantity: 1, unit: 'each', unit_price_ex_gst: 1000, total_ex_gst: 1000 },
+        { description: 'Installation labour', source: 'labour', quantity: 2, unit: 'hr', unit_price_ex_gst: 100, total_ex_gst: 200 },
+      ] }, total_inc_gst: 1200, scope_of_works: 'Supply and install an EV charger. Charger unit supply excluded.',
+      risk_flags: authorised ? ['tradie_manual_line:better#0'] : [],
+    })
+    const html = renderToStaticMarkup(await PublicQuotePage(params()))
+    expect(html.includes('Supply and installation estimate')).toBe(authorised)
+    expect(html.includes('Charger unit supply and its cost')).toBe(!authorised)
+    expect(html.includes('tradie_manual_line:')).toBe(false)
+    expect(html.includes('1,200')).toBe(true)
+  })
+  it('reconciles the stored EV incident without presenting installation charges as charger supply', async () => {
+    Object.assign(h.rows.intakes!, { job_type: 'ev_charger', scope: { specs: { service_mode: 'supply_and_install', supplied_by: 'tradie' } } })
+    Object.assign(h.rows.quotes!, {
+      better: evIncidentTier, scope_of_works: evIncidentScope, assumptions: evIncidentAssumptions,
+      optional_upsells: evIncidentUpsells, total_inc_gst: 881.1,
+      risk_flags: ['Switchboard capacity needs verification.', '[upsell-guard] ungrounded_lines_stripped: Add RCBO safety switch'],
+    })
+    Object.assign(h.rows.quote_pricing_versions!.snapshot as object, { gst_registered: true })
+    const html = renderToStaticMarkup(await PublicQuotePage(params()))
+    expect(html.includes('Installation estimate (charger unit excluded)')).toBe(true)
+    expect(html.includes('Charger unit supply and its cost')).toBe(true)
+    expect(html.includes('Supply and install a 7kW')).toBe(false)
+    expect(html.includes('Items supplied')).toBe(false)
+    expect(html.includes('upsell-guard')).toBe(false)
+    expect(html.includes('Switchboard capacity needs verification.')).toBe(true)
+    expect(html.includes('Add RCBO safety switch')).toBe(false)
+    expect(html.includes('881.10')).toBe(true)
+    const optionalStart = html.indexOf('Optional upgrades')
+    const optionalEnd = html.indexOf('Good to know', optionalStart)
+    expect(optionalStart).toBeGreaterThan(0)
+    expect(optionalEnd).toBeGreaterThan(optionalStart)
+    const optional = html.slice(optionalStart, optionalEnd)
+    expect(optional.includes('Switchboard health check')).toBe(false)
+    expect(evIncidentTier.subtotal_ex_gst).toBe(801)
+  })
+  it('renders a structurally clean supply-only product tier without stale installation, labour, certification or $99 content', async () => {
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger',
+      scope: { specs: { service_mode: 'supply_only', supplied_by: 'tradie' } },
+    })
+    Object.assign(h.rows.quotes!, {
+      better: {
+        label: 'Supply and install EV charger', subtotal_ex_gst: 800,
+        line_items: [{
+          description: 'EV charger unit', source: 'tradie_manual', quantity: 1,
+          unit: 'each', unit_price_ex_gst: 800, total_ex_gst: 800,
+        }],
+      },
+      total_inc_gst: 800,
+      scope_of_works: 'Supply and install the charger, including testing and certification.',
+      assumptions: ['Four hours on-site installation labour.'],
+      risk_flags: ['tradie_manual_line:better#0'],
+    })
+
+    const html = renderToStaticMarkup(await PublicQuotePage(params()))
+    expect(html).toContain('EV charger supply only')
+    expect(html).toContain('EV charger unit')
+    expect(html).toContain('Installation and all electrical work are excluded')
+    expect(html).not.toContain('Supply and install EV charger')
+    expect(html).not.toContain('testing and certification')
+    expect(html).not.toContain('Four hours on-site installation labour')
+    expect(html).not.toContain('$99')
+    expect(html).not.toContain('Pay $99')
+  })
+
+  it('fails closed instead of hiding priced installation rows from a supply-only total', async () => {
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger',
+      scope: { specs: { service_mode: 'supply_only', supplied_by: 'tradie' } },
+    })
+    Object.assign(h.rows.quotes!, {
+      better: {
+        label: 'Supply and install', subtotal_ex_gst: 1000,
+        line_items: [
+          { description: 'EV charger unit', source: 'tradie_manual', quantity: 1, unit: 'each', unit_price_ex_gst: 800, total_ex_gst: 800 },
+          { description: 'Installation labour', source: 'labour', quantity: 2, unit: 'hr', unit_price_ex_gst: 100, total_ex_gst: 200 },
+        ],
+      },
+      total_inc_gst: 1000,
+      scope_of_works: 'Supply and install the charger, including certification.',
+      risk_flags: ['tradie_manual_line:better#0'],
+    })
+
+    const view = await PublicQuotePage(params())
+    expect(view.type).toBe(QuotePricingReview)
+    expect(view.props).toEqual({
+      scope: 'EV charger supply only. Installation and all electrical work are excluded.',
+    })
+    expect(JSON.stringify(view)).not.toContain('Installation labour')
+    expect(JSON.stringify(view)).not.toContain('certification')
+  })
+
+  it.each([
+    ['inspection state', () => { h.rows.quotes!.needs_inspection = true }],
+    ['missing pricing evidence', () => { h.rows.quote_pricing_versions = null }],
+  ])('keeps supply-only %s in a safe review view with no inspection route', async (_name, arrange) => {
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger',
+      scope: { specs: { service_mode: 'supply_only', supplied_by: 'tradie' } },
+    })
+    Object.assign(h.rows.quotes!, {
+      better: { label: 'Charger supplied', subtotal_ex_gst: 800, line_items: [{
+        description: 'EV charger unit', source: 'tradie_manual', quantity: 1,
+        unit: 'each', unit_price_ex_gst: 800, total_ex_gst: 800,
+      }] },
+      scope_of_works: 'Supply and install with testing and certification.',
+      risk_flags: ['tradie_manual_line:better#0'],
+    })
+    arrange()
+
+    const view = await PublicQuotePage(params())
+    expect(view.type).toBe(QuotePricingReview)
+    expect(view.props.scope).toBe('EV charger supply only. Installation and all electrical work are excluded.')
+    expect(view.props.inspectionUrl).toBeUndefined()
+    expect(JSON.stringify(view)).not.toContain('testing and certification')
+  })
+
+  it('fails closed when an EV quote has no canonical or safely inferred service mode', async () => {
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger', scope: { specs: { supplied_by: 'tradie' } },
+    })
+    h.rows.quotes!.scope_of_works = 'Supply and install with testing and certification.'
+
+    const view = await PublicQuotePage(params())
+    expect(view.type).toBe(QuotePricingReview)
+    expect(view.props).toEqual({
+      scope: 'EV charger service scope needs confirmation before this quote can be shown.',
+    })
+    expect(JSON.stringify(view)).not.toContain('testing and certification')
+    expect(JSON.stringify(view)).not.toContain('inspectionUrl')
+  })
   it('uses saved false GST and tier mode after the current book changes or disappears', async () => {
     const view = await PublicQuotePage(params())
     expect(JSON.stringify(view)).toContain('No GST')

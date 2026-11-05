@@ -13,12 +13,23 @@ const exporter = fs.readFileSync('scripts/export-receptionist.mjs', 'utf8')
 const graphSource = exporter.slice(exporter.indexOf('const EXTS ='), exporter.indexOf('/** npm package name'))
 const collectClosure = runInNewContext(`${graphSource}; collectClosure`, { ...fs, ...path, SRC_ROOT: root })
 const directory = fs.mkdtempSync(path.join(tmpdir(), 'qm-release-contract-'))
-afterAll(() => fs.rmSync(directory, { recursive: true, force: true }))
+// The complete website closure creates hundreds of fixture files. Windows
+// antivirus/file-system cleanup may exceed Vitest's 10s hook default even when
+// every contract assertion passed; this budget affects teardown only.
+afterAll(() => fs.rmSync(directory, { recursive: true, force: true }), 30_000)
 
 describe('website dependency compatibility contract', () => {
   it('includes transitive approval, document and rendering helpers outside a service closure', () => {
     const files = collectPlatformContractFiles(collectClosure, root)
     expect(files).toContain('lib/quote/customer-release.ts')
+    expect(files).toContain('lib/quote/release-authority.ts')
+    for (const entry of ['app/api/painting/estimate/route.ts','app/api/painting/save/route.ts',
+      'app/api/roofing/save/route.ts','app/api/roofing/save-as-quote/route.ts',
+      'app/api/solar/[tenantSlug]/estimate/route.ts','app/api/solar/redraft/[token]/route.ts',
+      'app/api/solar/q/[token]/select-building/route.ts']) {
+      expect(PLATFORM_CONTRACT_ENTRIES).toContain(entry)
+      expect(files).toContain(entry)
+    }
     expect(files).toContain('lib/quote/page-owner.ts')
     expect(files).toContain('lib/roofing/approved-promotion.ts')
     expect(files).toContain('lib/quote/pdf.ts')
@@ -70,6 +81,9 @@ describe('website dependency compatibility contract', () => {
   })
 
   it.each([
+    ['lib/painting/measure.ts', 'app/api/painting/save/route.ts'],
+    ['lib/solar/rate-card-overlay.ts', 'app/api/solar/q/[token]/select-building/route.ts'],
+    ['lib/quote/release-authority.ts', 'app/api/roofing/save-as-quote/route.ts'],
     ['lib/aircon/save-recommendation.ts', 'app/api/aircon/recommend/route.ts'],
     ['lib/commercial-painting/saved-quote.ts', 'app/api/tenant/commercial-painting/save-quote/route.ts'],
     ['lib/commercial-painting/price.ts', 'app/api/tenant/commercial-painting/price/route.ts'],
@@ -113,7 +127,11 @@ describe('website dependency compatibility contract', () => {
   })
 
   it('rejects an old manifest missing any newly required creation entry', () => {
-    for (const entry of ['app/api/tenant/commercial-painting/run/[id]/route.ts','app/api/tenant/commercial-painting/run/[id]/corrections/route.ts','app/dashboard/_components/commercial-painting/CommercialPaintingTab.tsx',
+    for (const entry of ['app/api/painting/estimate/route.ts','app/api/painting/save/route.ts',
+      'app/api/roofing/save/route.ts','app/api/roofing/save-as-quote/route.ts',
+      'app/api/solar/[tenantSlug]/estimate/route.ts','app/api/solar/redraft/[token]/route.ts',
+      'app/api/solar/q/[token]/select-building/route.ts',
+      'app/api/tenant/commercial-painting/run/[id]/route.ts','app/api/tenant/commercial-painting/run/[id]/corrections/route.ts','app/dashboard/_components/commercial-painting/CommercialPaintingTab.tsx',
       'app/api/aircon/recommend/route.ts', 'app/api/aircon/plan/route.ts',
       'app/api/tenant/commercial-painting/price/route.ts', 'app/api/tenant/commercial-painting/save-quote/route.ts',
       'app/api/quote/[id]/request-final-payment/route.ts',

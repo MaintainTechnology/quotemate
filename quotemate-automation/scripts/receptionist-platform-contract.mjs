@@ -14,6 +14,12 @@ export const PLATFORM_CONTRACT_ENTRIES = [
   'app/api/quote/[id]/request-final-payment/route.ts',
   'app/api/quote/[id]/issue-final/route.ts',
   'app/api/sms/quote-release/route.ts', 'app/api/sms/status/route.ts',
+  // Direct dashboard/public specialist paths must obey the same price authority
+  // as SMS. Their changes invalidate worker evidence even without SMS imports.
+  'app/api/painting/estimate/route.ts', 'app/api/painting/save/route.ts',
+  'app/api/roofing/save/route.ts', 'app/api/roofing/save-as-quote/route.ts',
+  'app/api/solar/[tenantSlug]/estimate/route.ts', 'app/api/solar/redraft/[token]/route.ts',
+  'app/api/solar/q/[token]/select-building/route.ts',
   'app/api/tenant/sms-delivery/route.ts',
   'app/api/tenant/followups/text/route.ts', 'app/api/tenant/followups/events/route.ts',
   'app/api/tenant/followups/call/route.ts',

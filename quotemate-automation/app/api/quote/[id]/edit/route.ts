@@ -47,6 +47,7 @@ import {
   detectCrossTierDuplicates,
   isManualLine,
   type GroundingFailure,
+  type CandidatePrices,
   type PricingBookForValidation,
 } from '@/lib/estimate/validate'
 import { tradeGroundingMode } from '@/lib/quote/report-adapters/registry'
@@ -56,6 +57,14 @@ import { readQuoteDraftReadiness } from '@/lib/quote/job-quote-operation'
 import { type QuoteEditRow, QUOTE_EDIT_FIELDS, quoteEditRevision, validOwnedQuoteBook, preserveLineProvenance } from '@/lib/quote/edit-authority'
 import { finiteQuoteNumber } from '@/lib/quote/numeric-input'
 import { loadQuotePricingVersion, versionedQuoteGst, QuotePricingVersionError, type QuotePricingVersion } from '@/lib/quote/pricing-version'
+import { strictEvChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
+import { assertQuoteReleaseAuthority } from '@/lib/quote/release-authority'
+import { QuoteCoreCustomerReleaseError } from '@/lib/quote/quote-core-release'
+import {
+  assertEvQuoteCustomerReleaseAllowed,
+  EvQuoteCustomerReleaseError,
+  genericQuoteReleased,
+} from '@/lib/quote/customer-release'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -177,7 +186,7 @@ export async function POST(
       // deliberately NOT selected here: this route neither reads nor writes
       // it (Section 2 is generated, not tradie-edited in v1), and leaving it
       // unselected keeps this edit path working on a pre-175 database.
-      `${QUOTE_EDIT_FIELDS.join(',')}, share_token, inspection_reason, estimated_timeframe, scope_of_works, assumptions, display_mode`,
+      `${QUOTE_EDIT_FIELDS.join(',')}, share_token, inspection_reason, estimated_timeframe, scope_of_works, assumptions, display_mode, sent_at, customer_released_at, grounding_result`,
     )
     .eq('id', quoteId)
     .maybeSingle<QuoteEditRow>()
@@ -237,6 +246,10 @@ export async function POST(
   if (!intake || intake.tenant_id !== tenant.id || typeof intake.trade !== 'string' || !intake.trade.trim()) {
     return Response.json({ ok: false, error: 'quote_pricing_review_required' }, { status: 409 })
   }
+  const evServiceMode = String(intake.job_type ?? '').trim().toLowerCase() === 'ev_charger'
+    ? strictEvChargerServiceModeFromIntake(intake)
+    : undefined
+  const wasCustomerReleased = genericQuoteReleased(quote)
 
   // ─── Pricing context for GST handling + grounding revalidation ─
   // H-2 — we need the full pricing book (not just gst_registered) so
@@ -301,6 +314,7 @@ export async function POST(
       unit_price_ex_gst: number
       total_ex_gst: number
       source?: string
+      catalogue_id?: string
       supplied_by?: 'tradie' | 'customer'
       safety_note?: string
     }>
@@ -337,16 +351,22 @@ export async function POST(
     if (provenance.some((item) => item === null)) {
       return Response.json({ ok: false, error: 'line_provenance_conflict', tier: key }, { status: 409 })
     }
-    const lineItems = edit.line_items.map((li, index) => ({
+    const lineItems = edit.line_items.map((li, index) => {
+      const originalIndex = provenance[index]!.original_line_index
+      const catalogueId = originalIndex === undefined ? undefined : existing.line_items?.[originalIndex]?.catalogue_id
+      return {
       description: li.description,
       quantity: li.quantity,
       unit: li.unit || existing.line_items?.[0]?.unit || 'hr',
       unit_price_ex_gst: +li.unit_price_ex_gst.toFixed(2),
       total_ex_gst: +(li.quantity * +li.unit_price_ex_gst.toFixed(2)).toFixed(2),
       source: provenance[index]!.source,
+      // Preserve server-known product identity; caller JSON cannot replace it.
+      ...(catalogueId !== undefined ? { catalogue_id: catalogueId } : {}),
       ...(provenance[index]!.supplied_by !== undefined ? { supplied_by: provenance[index]!.supplied_by } : {}),
       ...(provenance[index]!.safety_note !== undefined ? { safety_note: provenance[index]!.safety_note } : {}),
-    }))
+      }
+    })
     const subtotal = +lineItems
       .reduce((acc, li) => acc + li.total_ex_gst, 0)
       .toFixed(2)
@@ -420,6 +440,7 @@ export async function POST(
   }
 
   let groundingFailures: ReturnType<typeof validateQuoteGrounding> = { valid: true }
+  let releaseCandidates: CandidatePrices | null = null
   // Grounding gate runs ONLY for catalogue trades (electrical/plumbing).
   // Tradie-authored trades (solar/roof/paint) have no catalogue to validate
   // against — the edit saves as the tradie's own prices, with the dashboard
@@ -449,7 +470,11 @@ export async function POST(
       editedDraft,
       pricingBookForValidation,
       candidates,
+      // Ownership and line provenance were checked above. This endpoint is
+      // the explicit human Save action; AI proposals do not get this grant.
+      { allowManualLines: true },
     )
+    releaseCandidates = candidates
 
     // R8 (2026-06-18) — CROSS-TIER dedup must see ALL THREE tiers, not just
     // the edited ones. The surgical per-tier gate above nulls untouched
@@ -575,7 +600,9 @@ export async function POST(
   // for any quote that wasn't booked yet).
   const appliedDiscountPct = ((quote.applied_discount_pct as number | null | undefined) ?? 0)
   const storedDepositPct = quote.deposit_pct
-  if (changedTiers.length && quoteKind === 'initial' && !isSiteVisitFirstRow({ trade: intakeTrade, quoteKind }) &&
+  if (changedTiers.length && quoteKind === 'initial' && !isSiteVisitFirstRow({
+    trade: intakeTrade, quoteKind, serviceMode: evServiceMode,
+  }) &&
       (typeof storedDepositPct !== 'number' || !Number.isFinite(storedDepositPct) || storedDepositPct < 1 || storedDepositPct > 90)) {
     return Response.json({ ok: false, error: 'quote_pricing_review_required' }, { status: 409 })
   }
@@ -601,16 +628,9 @@ export async function POST(
     // tiers regardless of whether the customer is SMS'd now.
     pdf_path: null,
     pdf_signature: null,
-    // M-3 (2026-05-25) — only bump status when an actual price changed.
-    // A label-only or description-only edit shouldn't transition the
-    // quote from 'draft' to 'sent' (that signals tradie price-ownership
-    // downstream — e.g. follow-up automation treats 'sent' as formally
-    // quoted, vs 'draft' as still-being-fixed). Tradies routinely use
-    // the editor for typo fixes; those should stay 'draft'.
-    // A FINAL quote is sent ONLY by the explicit Send button (spec R4): the
-    // tradie prices it on site over several saves, and auto-flipping it to
-    // 'sent' would both mislabel the pipeline and let the follow-up queues
-    // start chasing a quote the customer has never seen.
+    // Editing never grants first-release authority or advances delivery.
+    // Initial and final drafts need explicit approve/send; even a requested
+    // update notification is only permitted after an existing release.
     status: quote.status,
     // 2026-07-02 — restart the 7-day price hold whenever a price actually
     // changed. The /q expired banner tells the customer to "reply for a
@@ -653,6 +673,33 @@ export async function POST(
     updateBody.risk_flags = merged
   }
 
+  // Once a quote has reached the customer, its public URL is already live.
+  // Validate the complete post-edit row before the first UPDATE. Core money
+  // must remain bound to its approved server trace even for a quiet/forced edit.
+  // A changed scope or price needs a recalculated version, not stripped proof.
+  if (wasCustomerReleased) {
+    try {
+      await assertQuoteReleaseAuthority(supabase, { ...quote, ...updateBody }, tenant.id, intake)
+      await assertEvQuoteCustomerReleaseAllowed(supabase, {
+        quote: { ...quote, ...updateBody },
+        intake,
+        tenantId: tenant.id,
+        pricingBook,
+        candidates: releaseCandidates,
+      })
+    } catch (error) {
+      if (error instanceof QuoteCoreCustomerReleaseError) {
+        return Response.json({ ok: false, error: error.code, reason: error.reason,
+          hint: 'Recalculate and review a new quote version, or use the authorised manual-final flow. This released quote has not been changed.',
+        }, { status: error.status })
+      }
+      if (error instanceof EvQuoteCustomerReleaseError) {
+        return Response.json({ ok: false, error: error.code, failures: error.failures }, { status: error.status })
+      }
+      return Response.json({ ok: false, error: 'customer_release_check_unavailable' }, { status: 503 })
+    }
+  }
+
   let save = supabase
     .from('quotes')
     .update(updateBody)
@@ -665,6 +712,18 @@ export async function POST(
     save = value == null ? save.is(key, null) : save.eq(key,
       typeof value === 'object' ? JSON.stringify(value) : value)
   }
+  // Release timestamps are deliberately outside QUOTE_EDIT_FIELDS (they are
+  // not editable content), but they are part of this write's CAS boundary.
+  // Approval keeps status=awaiting_tradie_approval while stamping
+  // customer_released_at, so status alone cannot detect a concurrent release.
+  save = quote.customer_released_at == null
+    ? save.is('customer_released_at', null)
+    : save.eq('customer_released_at', quote.customer_released_at)
+  save = quote.sent_at == null ? save.is('sent_at', null) : save.eq('sent_at', quote.sent_at)
+  // Evidence is not an editable field, but a concurrent evidence change must
+  // not race this already-validated customer-visible update.
+  save = quote.grounding_result == null ? save.is('grounding_result', null)
+    : save.eq('grounding_result', JSON.stringify(quote.grounding_result))
   const { data: persisted, error: updErr } = await save.select(QUOTE_EDIT_FIELDS.join(',')).maybeSingle<QuoteEditRow>()
   if (updErr) {
     return Response.json(
@@ -682,7 +741,9 @@ export async function POST(
   // deposit per click from the row's stored total, so a tier Session minted
   // here would be unreachable — and a stale one left behind could be paid at
   // a price the tradie has just changed.
-  if (quoteKind !== 'initial' || isSiteVisitFirstRow({ trade: intakeTrade, quoteKind })) {
+  if (quoteKind !== 'initial' || isSiteVisitFirstRow({
+    trade: intakeTrade, quoteKind, serviceMode: evServiceMode,
+  })) {
     // Electrical/plumbing sell ONE thing: the flat $99 site visit (spec
     // elec-plumb-site-visit-first). A G/B/B Session minted here would be
     // permanently unreachable — /r/<token>/<tier> 302s those tiers onto the
@@ -764,6 +825,10 @@ export async function POST(
     linkSave = value == null ? linkSave.is(key, null) : linkSave.eq(key,
       typeof value === 'object' ? JSON.stringify(value) : value)
   }
+  linkSave = quote.customer_released_at == null
+    ? linkSave.is('customer_released_at', null)
+    : linkSave.eq('customer_released_at', quote.customer_released_at)
+  linkSave = quote.sent_at == null ? linkSave.is('sent_at', null) : linkSave.eq('sent_at', quote.sent_at)
   const { data: linked, error: linkError } = await linkSave.select(QUOTE_EDIT_FIELDS.join(',')).maybeSingle<QuoteEditRow>()
   if (linkError || !linked) checkoutSync = 'pending'
 
@@ -795,6 +860,7 @@ export async function POST(
     checkoutSync === 'complete' && quoteKind === 'initial' &&
     shouldNotifyOnEdit({
       status: quote.status as string | null | undefined,
+      customerReleased: wasCustomerReleased,
       notifyCustomer: edits.notify_customer,
       changedTiersCount: changedTiers.length,
     })
@@ -803,9 +869,27 @@ export async function POST(
     after(async () => {
       try {
         const { data: current, error: currentError } = await supabase.from('quotes')
-          .select(QUOTE_EDIT_FIELDS.join(',')).eq('id', quoteId).eq('tenant_id', tenant.id).maybeSingle<QuoteEditRow>()
-        if (currentError || !current || current.paid_at ||
+          .select(`${QUOTE_EDIT_FIELDS.join(',')},grounding_result,scope_of_works,sent_at,customer_released_at`)
+          .eq('id', quoteId).eq('tenant_id', tenant.id).maybeSingle<QuoteEditRow>()
+        if (currentError || !current || current.paid_at || !genericQuoteReleased(current) ||
             quoteEditRevision(current) !== quoteEditRevision(linked ?? persisted)) return
+        try {
+          await assertQuoteReleaseAuthority(supabase, current, tenant.id, intake)
+          await assertEvQuoteCustomerReleaseAllowed(supabase, {
+            quote: current,
+            intake,
+            tenantId: tenant.id,
+            pricingBook,
+            candidates: releaseCandidates,
+          })
+        } catch (error) {
+          console.warn('[quote/edit] customer notify skipped — release invariant failed', {
+            quoteId,
+            code: error instanceof EvQuoteCustomerReleaseError || error instanceof QuoteCoreCustomerReleaseError
+              ? error.code : 'customer_release_check_unavailable',
+          })
+          return
+        }
         // Resolve customer phone through a 4-source fallback chain.
         // intake.caller.phone is often EMPTY STRING on SMS-sourced quotes
         // (the structurer doesn't always backfill it from the conversation
@@ -944,7 +1028,7 @@ export async function POST(
               // only the $99 site visit, so the revised-quote message needs that
               // link even when stripe_links still holds G/B/B only.
               // /r/<token>/inspection mints a fresh Session per click.
-              ...(isSiteVisitFirstRow({ trade: intakeTrade, quoteKind })
+              ...(isSiteVisitFirstRow({ trade: intakeTrade, quoteKind, serviceMode: evServiceMode })
                 ? { inspection: `${appUrl}/r/${quote.share_token as string}/inspection` }
                 : null),
             },
@@ -987,6 +1071,7 @@ export async function POST(
             // above already excludes children, so the builder is correct on
             // its own inputs rather than relying on a caller-side guard.
             quoteKind,
+            serviceMode: evServiceMode,
           },
         )
         // Best-effort MMS attach of the refreshed PDF (shared helper signs
@@ -999,20 +1084,8 @@ export async function POST(
           signMediaUrl: signQuotePdfUrl,
         })
         if (result.ok) {
-          // Provider acceptance is distinct from a quiet edit. A held quote
-          // never enters this path, and a later edit/payment cannot be stamped
-          // sent by an older queued callback.
-          if (quote.status === 'draft') {
-            let accepted = supabase.from('quotes').update({ status: 'sent', sent_at: new Date().toISOString() })
-              .eq('id', quoteId).eq('tenant_id', tenant.id).is('paid_at', null)
-            for (const key of QUOTE_EDIT_FIELDS) {
-              if (['id', 'tenant_id', 'paid_at'].includes(key)) continue
-              const value = current[key]
-              accepted = value == null ? accepted.is(key, null) : accepted.eq(key,
-                typeof value === 'object' ? JSON.stringify(value) : value)
-            }
-            await accepted.select('id').maybeSingle()
-          }
+          // This is only a correction to an already released quote. Initial
+          // release and sent_at belong exclusively to explicit approve/send.
           console.log('[quote/edit] customer notify sent', {
             quoteId,
             channel: result.channel,

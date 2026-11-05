@@ -1,4 +1,4 @@
-import { genericQuoteReleased } from '@/lib/quote/customer-release'
+import { evSupplyOnlyHasInspectionRouteState, genericQuoteReleased } from '@/lib/quote/customer-release'
 import { isQuotePageOwner } from '@/lib/quote/page-owner'
 import { QuoteAwaitingReview } from '@/app/q/_chrome/QuoteAwaitingReview'
 import { QuotePricingReview } from '@/app/q/_chrome/QuotePricingReview'
@@ -62,6 +62,15 @@ import { allocateIncGst } from '@/lib/quote/line-allocation'
 import { quoteAmount, formatQuoteAmount, quotePriceStack } from '@/lib/quote/display-money'
 import { jobMethod, METHOD_DISCLAIMER } from '@/lib/quote/job-method'
 import {
+  deriveEvSupplyPresentation,
+  deriveEvSupplyOnlyDisplayTier,
+  reconcileEvSupplyScope,
+  reconcileEvSupplyAssumptions,
+  resolveAuthorizedEvManualChargerLineIndexes,
+  type EvSupplyCatalogueRow,
+} from '@/lib/quote/ev-supply-presentation'
+import { customerVisibleRiskFlags, filterIncludedOptionalUpsells, type OptionalExtrasAssembly } from '@/lib/estimate/optional-extras'
+import {
   isEvChargerJob,
   deriveEvInclusions,
   deriveEvExclusions,
@@ -93,6 +102,7 @@ import TradieEditor from './TradieEditor'
 import { AcceptBlock } from '../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
 import { asQuoteKind, isSiteVisitFirstRow } from '@/lib/quote/mint-tier'
+import { evChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
 import { computePriceHoldUntil, priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import {
@@ -358,6 +368,24 @@ export default async function PublicQuotePage(props: {
   // the generic card AND log a warning here on the customer surface.
   const tradeFormat = resolveTradeFormat(intakeTrade)
   const isRoofing = tradeFormat.key === 'roofing'
+  const isEvChargerQuote = isEvChargerJob(intake.job_type as string | null, intakeTrade)
+  const evServiceMode = isEvChargerQuote
+    ? evChargerServiceModeFromIntake(intake)
+    : undefined
+  const evSupplyOnly = evServiceMode === 'supply_only'
+  const pricingReviewScope = evSupplyOnly
+    ? 'EV charger supply only. Installation and all electrical work are excluded.'
+    : quote.scope_of_works as string | null
+  // An absent/ambiguous mode must never fall through to the generic
+  // electrical site-visit funnel or expose legacy install/supply promises.
+  // Safe legacy customer-owned values resolve to install_only above; tradie
+  // supply alone remains deliberately ambiguous.
+  if (isEvChargerQuote && !evServiceMode) {
+    return <QuotePricingReview scope="EV charger service scope needs confirmation before this quote can be shown." />
+  }
+  if (evSupplyOnly && evSupplyOnlyHasInspectionRouteState(quote)) {
+    return <QuotePricingReview scope={pricingReviewScope} />
+  }
   // Spec elec-plumb-site-visit-first (2026-08-06) — electrical + plumbing sell
   // ONE customer payment: the flat $99 refundable site inspection. The G/B/B
   // prices stay visible as information; the tradie confirms the price on site.
@@ -377,6 +405,7 @@ export default async function PublicQuotePage(props: {
   const siteVisitFirst = isSiteVisitFirstRow({
     trade: (intake as { trade?: string | null } | null)?.trade ?? null,
     quoteKind,
+    serviceMode: evServiceMode,
   })
 
   // ── Solar → dedicated page redirect ──────────────────────────────
@@ -395,7 +424,7 @@ export default async function PublicQuotePage(props: {
     quotePricing = await loadQuoteReportPricing(supabase, quote, intake)
   } catch (error) {
     if (error instanceof QuotePricingVersionError && error.status === 409) {
-      return <QuotePricingReview scope={quote.scope_of_works}
+      return <QuotePricingReview scope={pricingReviewScope}
         inspectionUrl={quoteKind === 'initial' && !quote.paid_at && (siteVisitFirst || quote.needs_inspection)
           ? `/r/${encodeURIComponent(token)}/inspection` : undefined} />
     }
@@ -403,7 +432,7 @@ export default async function PublicQuotePage(props: {
   }
   const gstRegistered = quotePricing.gstRegistered
   if (!quote.needs_inspection && !siteVisitFirst && storedDepositPercent(quote.deposit_pct) === null) {
-    return <QuotePricingReview scope={quote.scope_of_works} />
+    return <QuotePricingReview scope={pricingReviewScope} />
   }
 
   // Pull the roof-hero stats off the intake scope when this IS a roofing
@@ -463,6 +492,35 @@ export default async function PublicQuotePage(props: {
     .eq('trade', intakeTrade)
     .eq('tenant_id', quoteTenantId)
   const { data: pricingBook } = await pricingBookQuery.maybeSingle()
+
+  // Resolve the customer-visible tier set before any image-generation or
+  // lifecycle side effect. A legacy supply-only row with raw installation
+  // charges fails closed to review: filtering those rows while keeping the
+  // persisted subtotal would make the breakdown lie about its total.
+  const tierMode = asQuoteTierMode(
+    quotePricing.pricingVersion ? quotePricing.pricingVersion.snapshot.quote_tier_mode as string | null
+      : (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode,
+  )
+  const visibleTierKeys = resolveVisibleTiers({
+    mode: tierMode,
+    present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
+    selectedTier: (quote.selected_tier as string | null) ?? null,
+  })
+  const visibleTierSet = new Set<'good' | 'better' | 'best'>(visibleTierKeys)
+  const tierCount = visibleTierKeys.length
+  const showRecommendedBadge = visibleTierKeys.length > 1
+  const supplyOnlyDisplayTiers: Partial<Record<'good' | 'better' | 'best', Tier>> = {}
+  if (evSupplyOnly) {
+    for (const key of visibleTierKeys) {
+      const result = deriveEvSupplyOnlyDisplayTier(quote[key] as Tier)
+      if (result.status === 'review_required') {
+        return <QuotePricingReview scope={pricingReviewScope} />
+      }
+      supplyOnlyDisplayTiers[key] = result.tier as Tier
+    }
+  }
+  const customerTier = (key: 'good' | 'better' | 'best'): Tier =>
+    evSupplyOnly ? (supplyOnlyDisplayTiers[key] ?? null) : (quote[key] as Tier)
 
   // ─── Tradie identity (letterhead) ───────────────────────────────
   // Scope strictly by the quote's tenant_id (same compliance reasoning as the
@@ -666,7 +724,7 @@ export default async function PublicQuotePage(props: {
   // (roofing / commercial painting / …) are measured deterministically from
   // satellite or plan documents — the room-install visuals are wrong there,
   // so both the sections AND the Gemini generation triggers are gated off.
-  const showInstallVisuals = tradeFormat.usesGenericCard
+  const showInstallVisuals = tradeFormat.usesGenericCard && !evSupplyOnly
   const needsPreview = showInstallVisuals && previewStatus === 'idle' && photoPaths.length > 0
   const needsSamples = showInstallVisuals && samplesStatus === 'idle'
   if (needsPreview || needsSamples) {
@@ -812,24 +870,6 @@ export default async function PublicQuotePage(props: {
     !isPaid && !isInspection && !siteVisitFirst && !isChildRow && !ebApplied &&
     ebStatus.state === 'live'
 
-  // Mig 142 — resolve which tier(s) the customer sees for THIS feature's mode.
-  // Presentation-only: the full good/better/best stays persisted for the tradie
-  // (the TradieEditor overlay below still gets all three). selected_tier drives
-  // the 'single' mode; an inspection quote has no priced tiers so this is [].
-  const tierMode = asQuoteTierMode(
-    quotePricing.pricingVersion ? quotePricing.pricingVersion.snapshot.quote_tier_mode as string | null
-      : (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode,
-  )
-  const visibleTierKeys = resolveVisibleTiers({
-    mode: tierMode,
-    present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
-    selectedTier: (quote.selected_tier as string | null) ?? null,
-  })
-  const visibleTierSet = new Set<'good' | 'better' | 'best'>(visibleTierKeys)
-  const tierCount = visibleTierKeys.length
-  // When only one option is shown it IS the offer — no "recommended" badge.
-  const showRecommendedBadge = visibleTierKeys.length > 1
-
   // ─── Presentation-only helpers for the reskinned sheet ──────────────
   // Everything below reuses the pricing computations already established
   // above (lib/quote/money displayIncGst / displayDeposit, the /r/<token>/<key>
@@ -938,7 +978,7 @@ export default async function PublicQuotePage(props: {
       ctaHref: `/r/${token}/inspection`,
     }
   } else if (featuredKey) {
-    const fTier = quote[featuredKey] as Tier
+    const fTier = customerTier(featuredKey)
     if (fTier) {
       const fInc = tierIncGst(fTier)
       const fDep = tierDeposit(fTier)
@@ -962,7 +1002,7 @@ export default async function PublicQuotePage(props: {
   // quote (deposit path) and the paid confirmation. Inspection/held quotes are
   // owned by the InspectionBlock / RoofingIndicativeBanner $99 CTA above, so
   // the block is rendered only when !isInspection.
-  const acceptFeaturedTier = featuredKey ? (quote[featuredKey] as Tier) : null
+  const acceptFeaturedTier = featuredKey ? customerTier(featuredKey) : null
   const acceptInc = acceptFeaturedTier ? tierIncGst(acceptFeaturedTier) : 0
   const acceptDep = acceptFeaturedTier ? tierDeposit(acceptFeaturedTier) : null
   const acceptView = resolveAcceptView({
@@ -992,6 +1032,8 @@ export default async function PublicQuotePage(props: {
     // The site visit has already happened on a final row, so the deposit-mode
     // strings must not promise to confirm one on the next step (spec R5).
     visitDone: isFinalRow,
+    confirmsSiteVisit: !evSupplyOnly,
+    productOnly: evSupplyOnly,
     depositHref: isFinalRow ? `/r/${token}/deposit` : undefined,
   })
 
@@ -1063,7 +1105,9 @@ export default async function PublicQuotePage(props: {
   const letterheadEmail = (tenantIdentity?.owner_email ?? '').trim() || null
 
   // Hero photo — first customer photo, else first AI preview, else none.
-  const heroPhotoSrc = customerPhotoUrls[0] ?? previewImageUrls[0] ?? null
+  const heroPhotoSrc = evSupplyOnly
+    ? null
+    : customerPhotoUrls[0] ?? previewImageUrls[0] ?? null
 
   // Hero headline (component uppercases them): the warm "G'day {name}," /
   // "your {job} quote" style from the reference quote surface. jobLabel is the
@@ -1072,7 +1116,7 @@ export default async function PublicQuotePage(props: {
   const heroLine1 = `G'day ${firstName},`
   const heroLine2 = `your ${jobLabel} quote`
   const heroStatus: { label: string; tone: 'await' | 'booked' } = isPaid
-    ? { label: 'Deposit paid', tone: 'booked' }
+    ? { label: evSupplyOnly ? 'Order confirmed' : 'Deposit paid', tone: 'booked' }
     : isInspection
       ? { label: 'Site visit', tone: 'await' }
       : { label: 'Awaiting you', tone: 'await' }
@@ -1094,6 +1138,10 @@ export default async function PublicQuotePage(props: {
           : `Your final quote after the site visit. ${gstRegistered ? 'Price includes GST.' : 'No GST is charged.'} Accept with a ${finalPct}% deposit - your $${INSPECTION_FEE_AUD} site visit is credited.`
   const heroGreeting = isFinalRow
     ? finalGreeting
+    : evSupplyOnly
+      ? isPaid
+        ? 'Your charger order is confirmed. Your tradie will contact you to arrange delivery or collection.'
+        : `This quote is for charger supply only. Installation and electrical work are excluded. Tap to confirm the order with a ${depositPct ?? 30}% deposit.`
     : isInspection
     ? `This job needs a quick on-site visit before a real price can be locked in. The visit is $99, refundable and credited toward your final quote.`
     : tierCount === 1
@@ -1386,6 +1434,8 @@ export default async function PublicQuotePage(props: {
       evSuppliedByRaw === 'tradie' || evSuppliedByRaw === 'customer' ? evSuppliedByRaw : null
     let evEstimateRef: string | null = null
     let evExclusions: string[] = []
+    let evChargerRows: EvSupplyCatalogueRow[] = []
+    let evAssemblyRows: OptionalExtrasAssembly[] = []
     if (isEvEstimate) {
       // Separate best-effort select, matching the booked-visit block above:
       // ASSIGN, don't just read. Reading only would let this page show the
@@ -1414,7 +1464,7 @@ export default async function PublicQuotePage(props: {
         ...new Set(
           visibleTierKeys
             .flatMap((k) => {
-              const t = quote[k] as Tier
+              const t = customerTier(k)
               return Array.isArray(t?.line_items) ? t!.line_items! : []
             })
             .map((li) => /^assembly:(.+)$/i.exec(((li as { source?: string }).source ?? '').trim()))
@@ -1424,12 +1474,14 @@ export default async function PublicQuotePage(props: {
       ]
       if (assemblyIds.length > 0) {
         const [shared, custom] = await Promise.all([
-          supabase.from('shared_assemblies').select('default_exclusions').in('id', assemblyIds),
+          supabase.from('shared_assemblies').select('id, name, description, default_exclusions').eq('trade', 'electrical').in('id', assemblyIds),
           supabase
             .from('tenant_custom_assemblies')
-            .select('default_exclusions')
+            .select('id, name, description, default_exclusions')
+            .eq('tenant_id', quoteTenantId)
             .in('id', assemblyIds),
         ])
+        evAssemblyRows = [...(shared.data ?? []), ...(custom.data ?? [])]
         evExclusions = [...(shared.data ?? []), ...(custom.data ?? [])].flatMap((r) => {
           const text = (r as { default_exclusions?: unknown }).default_exclusions
           return typeof text === 'string'
@@ -1439,6 +1491,27 @@ export default async function PublicQuotePage(props: {
                 .filter(Boolean)
             : []
         })
+      }
+
+      // Resolve unit identity independently of installation assemblies. Stored
+      // line prices remain authoritative when the current catalogue is repriced.
+      const materialIds = [...new Set(visibleTierKeys.flatMap((k) => {
+        const tier = customerTier(k)
+        return (tier?.line_items ?? []).flatMap((line) => {
+          const ref = line as { source?: string; catalogue_id?: string }
+          const id = /^material:([A-Za-z0-9_-]+)$/.exec(ref.source ?? '')?.[1]
+          return [id, ref.catalogue_id].filter((value): value is string => Boolean(value))
+        })
+      }))]
+      if (materialIds.length) {
+        const [tenantUnits, sharedUnits] = await Promise.all([
+          supabase.from('tenant_material_catalogue').select('id, category')
+            .eq('tenant_id', quoteTenantId).eq('trade', 'electrical')
+            .eq('category', 'ev_charger').in('id', materialIds),
+          supabase.from('shared_materials').select('id, category')
+            .eq('trade', 'electrical').eq('category', 'ev_charger').in('id', materialIds),
+        ])
+        evChargerRows = [...(tenantUnits.data ?? []), ...(sharedUnits.data ?? [])]
       }
 
       // The document's identity and terms, mirrored into the credential footer
@@ -1461,13 +1534,32 @@ export default async function PublicQuotePage(props: {
       // Replace the generic terms line with the estimate's own, so the page
       // never promises a deposit the funnel refuses to take.
       const termsAt = footerRows.findIndex((r) => r.k === 'Terms')
-      const evTerms = evEstimateTerms(gstRegistered).join(' ')
+      const evTerms = evEstimateTerms(gstRegistered, evServiceMode).join(' ')
       if (termsAt >= 0) footerRows[termsAt] = { k: 'Terms', v: evTerms }
       else footerRows.push({ k: 'Terms', v: evTerms })
     }
 
-    const featuredTier = featuredKey ? (quote[featuredKey] as Tier) : null
+    const featuredTier = featuredKey ? customerTier(featuredKey) : null
     const featuredLines = Array.isArray(featuredTier?.line_items) ? featuredTier!.line_items! : []
+    const evManualUnitIndexes = Object.fromEntries((['good', 'better', 'best'] as const).map((key) => [key,
+      resolveAuthorizedEvManualChargerLineIndexes({ tierName: key, tier: customerTier(key), riskFlags: quote.risk_flags }),
+    ]))
+    const evSupply = isEvEstimate ? deriveEvSupplyPresentation({
+      jobType: 'ev_charger', serviceMode: evServiceMode, suppliedBy: evSuppliedBy, tier: featuredTier,
+      chargerCatalogueRows: evChargerRows,
+      authorizedManualChargerLineIndexes: featuredKey ? evManualUnitIndexes[featuredKey] : [],
+    }) : null
+    const displayScope = evSupply
+      ? reconcileEvSupplyScope(quote.scope_of_works, evSupply)
+      : quote.scope_of_works as string | null
+    const displayAssumptions = evSupply
+      ? reconcileEvSupplyAssumptions(quote.assumptions, evSupply)
+      : (Array.isArray(quote.assumptions) ? quote.assumptions as string[] : [])
+    const displayRiskFlags = customerVisibleRiskFlags(quote.risk_flags)
+    const evOptionalUpsells = filterIncludedOptionalUpsells(
+      quote.optional_upsells as Array<{ name?: string; price_ex_gst?: number | null }> | null,
+      featuredTier, evAssemblyRows,
+    )
 
     // The materials behind the quote. Every field comes off the persisted line
     // items (which already carry the estimator's typed row refs + the WP4
@@ -1479,7 +1571,7 @@ export default async function PublicQuotePage(props: {
       trade: intakeTrade,
     })
     const hours = labourHours(featuredLines)
-    const method = jobMethod(intakeTrade, intake?.job_type as string | null)
+    const method = evSupplyOnly ? null : jobMethod(intakeTrade, intake?.job_type as string | null)
 
     const websiteUrl = safeWebsiteUrl(tenantIdentity?.website_url)
     const tradieName = tenantIdentity?.business_name ?? 'Your tradie'
@@ -1497,7 +1589,7 @@ export default async function PublicQuotePage(props: {
     const placeLabel =
       [intake?.address, intake?.suburb].filter(Boolean).join(', ').trim() || null
     const calLinks =
-      isPaid && scheduledAt
+      !evSupplyOnly && isPaid && scheduledAt
         ? (() => {
             const { start, end } = resolveEventWindow(scheduledAt, scheduledWindow)
             return buildCalendarLinks({
@@ -1649,15 +1741,19 @@ export default async function PublicQuotePage(props: {
             {/* The three blocks that were numbered sections 02/03/04. Each is
                 the SAME component in `nested` mode — the upload flow and the
                 preview polling are untouched, only their chrome differs. */}
-            <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} nested />
-            <PreviewSection
-              shareToken={token}
-              initialPreviewStatus={previewStatus}
-              initialPreviewImageUrls={previewImageUrls}
-              initialSamplesStatus={samplesStatus}
-              initialSampleImageUrls={sampleImageUrls}
-              nested
-            />
+            {showInstallVisuals ? (
+              <>
+                <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} nested />
+                <PreviewSection
+                  shareToken={token}
+                  initialPreviewStatus={previewStatus}
+                  initialPreviewImageUrls={previewImageUrls}
+                  initialSamplesStatus={samplesStatus}
+                  initialSampleImageUrls={sampleImageUrls}
+                  nested
+                />
+              </>
+            ) : null}
           </div>
         ),
       },
@@ -1670,7 +1766,7 @@ export default async function PublicQuotePage(props: {
                 one-liner the PDF prints) is the fallback for a quote with no
                 scope paragraph at all. */}
             <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-              {(quote.scope_of_works as string | null)?.trim() ||
+              {displayScope?.trim() ||
                 jobDetailsSentence(scopeShort, quote.scope_of_works as string | null) ||
                 'Scope confirmed with you before any work is booked.'}
             </p>
@@ -1690,7 +1786,7 @@ export default async function PublicQuotePage(props: {
                 ...(materials.length > 0
                   ? [
                       {
-                        k: 'Items supplied',
+                        k: evSupplyOnly ? 'Charger supplied' : isEvEstimate ? 'Priced work & materials' : 'Items supplied',
                         v: String(materials.length),
                         sub: materials.length === 1 ? 'line' : 'lines',
                       },
@@ -1802,7 +1898,7 @@ export default async function PublicQuotePage(props: {
                             ? `${m.quantity} hr`
                             : `${m.quantity} × ${m.unit}`}
                           {m.unitPriceExGst > 0 ? ` @ $${fmt(m.unitPriceExGst)} ex GST` : ''}
-                          {m.kind === 'assembly' ? ' · supply & install' : ''}
+                          {m.kind === 'assembly' ? (isEvEstimate ? ' · installation work' : ' · supply & install') : ''}
                         </div>
                       </div>
                     </div>
@@ -1883,14 +1979,14 @@ export default async function PublicQuotePage(props: {
                 near the old page footer. They are safety and consumer-law
                 content — folding them into Job details keeps the five-section
                 shape without dropping anything the customer needs. */}
-            {Array.isArray(quote.risk_flags) && quote.risk_flags.length > 0 ? (
+            {displayRiskFlags.length > 0 ? (
               <div>
                 <h4 style={{ ...subHeading, color: 'var(--warning-bright)' }}>Things to be aware of</h4>
                 <div style={{ marginTop: 11, display: 'grid', gap: 10 }}>
-                  {(quote.risk_flags as Array<string | { description?: string }>).map((r, i) => (
+                  {displayRiskFlags.map((r, i) => (
                     <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-sec)' }}>
                       <span aria-hidden="true" style={{ color: 'var(--warning-bright)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>!</span>
-                      <span>{typeof r === 'string' ? r : (r?.description ?? JSON.stringify(r))}</span>
+                      <span>{r}</span>
                     </div>
                   ))}
                 </div>
@@ -1906,9 +2002,10 @@ export default async function PublicQuotePage(props: {
                   const inclusions = deriveEvInclusions({
                     businessName: '',
                     estimateRef: evEstimateRef ?? quoteRef,
-                    good: visibleTierSet.has('good') ? (quote.good as Tier) : null,
-                    better: visibleTierSet.has('better') ? (quote.better as Tier) : null,
-                    best: visibleTierSet.has('best') ? (quote.best as Tier) : null,
+                    good: visibleTierSet.has('good') ? customerTier('good') : null,
+                    better: visibleTierSet.has('better') ? customerTier('better') : null,
+                    best: visibleTierSet.has('best') ? customerTier('best') : null,
+                    selectedTier: featuredKey,
                   })
                   return inclusions.length > 0 ? (
                     <div>
@@ -1928,11 +2025,15 @@ export default async function PublicQuotePage(props: {
                   const exclusions = deriveEvExclusions({
                     businessName: '',
                     estimateRef: evEstimateRef ?? quoteRef,
-                    good: null,
-                    better: null,
-                    best: null,
+                    good: visibleTierSet.has('good') ? customerTier('good') : null,
+                    better: visibleTierSet.has('better') ? customerTier('better') : null,
+                    best: visibleTierSet.has('best') ? customerTier('best') : null,
                     exclusions: evExclusions,
                     suppliedBy: evSuppliedBy,
+                    serviceMode: evServiceMode,
+                    chargerUnitIds: evChargerRows.map((row) => String(row.id)),
+                    authorizedManualChargerLineIndexes: evManualUnitIndexes,
+                    selectedTier: featuredKey,
                   })
                   return exclusions.length > 0 ? (
                     <div>
@@ -1948,7 +2049,7 @@ export default async function PublicQuotePage(props: {
                     </div>
                   ) : null
                 })()}
-                <div>
+                {!evSupplyOnly ? <div>
                   <h4 style={subHeading}>Optional upgrades &amp; recommendations</h4>
                   <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
                     {[EV_SURGE_PROTECTION_NOTE, EV_SWITCHBOARD_CAPACITY_NOTE].map((n) => (
@@ -1961,7 +2062,7 @@ export default async function PublicQuotePage(props: {
                     ))}
                     {/* A price shows ONLY when a catalogue row produced one —
                         never a figure this page invented. */}
-                    {(Array.isArray(quote.optional_upsells) ? (quote.optional_upsells as Array<{ name?: string; price_ex_gst?: number | null }>) : [])
+                    {evOptionalUpsells
                       .filter((u) => (u?.name ?? '').trim())
                       .map((u, i) => (
                         <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
@@ -1976,15 +2077,15 @@ export default async function PublicQuotePage(props: {
                         </div>
                       ))}
                   </div>
-                </div>
+                </div> : null}
               </>
             ) : null}
 
-            {(Array.isArray(quote.assumptions) && quote.assumptions.length > 0) || quote.gst_note ? (
+            {displayAssumptions.length > 0 || quote.gst_note ? (
               <div>
                 <h4 style={subHeading}>Good to know</h4>
                 <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
-                  {(Array.isArray(quote.assumptions) ? (quote.assumptions as string[]) : []).map((a, i) => (
+                  {displayAssumptions.map((a, i) => (
                     <div key={i} style={{ display: 'flex', gap: 11, fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
                       <span aria-hidden="true" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>○</span>
                       <span>{a}</span>
@@ -2080,9 +2181,14 @@ export default async function PublicQuotePage(props: {
               // up independently would drift a dollar or more from the headline.
               <div style={{ display: 'grid', gap: 16 }}>
                 {(['good', 'better', 'best'] as const)
-                  .filter((k) => visibleTierSet.has(k) && !!quote[k])
+                  .filter((k) => visibleTierSet.has(k) && !!customerTier(k))
                   .map((k) => {
-                    const t = quote[k] as NonNullable<Tier>
+                    const t = customerTier(k) as NonNullable<Tier>
+                    const tierSupply = isEvEstimate ? deriveEvSupplyPresentation({
+                      jobType: 'ev_charger', serviceMode: evServiceMode, suppliedBy: evSuppliedBy, tier: t,
+                      chargerCatalogueRows: evChargerRows,
+                      authorizedManualChargerLineIndexes: evManualUnitIndexes[k],
+                    }) : null
                     const lines = Array.isArray(t.line_items) ? t.line_items : []
                     const stack = quotePriceStack(t.subtotal_ex_gst ?? 0, {
                       discountPct: ebApp,
@@ -2134,7 +2240,7 @@ export default async function PublicQuotePage(props: {
                               color: 'var(--accent)',
                             }}
                           >
-                            {isFinalRow ? 'Final quote' : tierCount === 1 ? 'Your quote' : k}
+                            {tierSupply?.priceLabel ?? (isFinalRow ? 'Final quote' : tierCount === 1 ? 'Your quote' : k)}
                             {recommended ? ' · most popular' : ''}
                           </span>
                           <span
@@ -2153,7 +2259,11 @@ export default async function PublicQuotePage(props: {
                         <div style={{ marginTop: 5, ...microNote, textAlign: 'right' }}>
                           {gstRegistered ? 'inc GST' : 'No GST'}{stack.discountPct > 0 ? ` · ${stack.discountPct}% off applied` : ''}
                         </div>
-                        {cleanTierLabel(t.label) ? (
+                        {tierSupply ? (
+                          <p style={{ margin: '9px 0 0', fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
+                            {tierSupply.supplyNotice}
+                          </p>
+                        ) : cleanTierLabel(t.label) ? (
                           <p style={{ margin: '9px 0 0', fontSize: 13, lineHeight: 1.45, color: 'var(--text-sec)' }}>
                             {cleanTierLabel(t.label)}
                           </p>
@@ -2322,10 +2432,16 @@ export default async function PublicQuotePage(props: {
       {
         // The visit is behind a final row, so the section is about what
         // happens next on the job — never about booking another one.
-        title: isFinalRow ? 'Next steps' : 'Your site visit',
+        title: isFinalRow ? 'Next steps' : evSupplyOnly ? 'Your charger order' : 'Your site visit',
         body: (
           <div style={{ ...blockBody, gap: 14, maxWidth: 460 }}>
-            {isFinalRow ? (
+            {evSupplyOnly ? (
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                {isPaid
+                  ? 'Payment received. Your tradie will contact you to arrange delivery or collection of the charger.'
+                  : `Accept the supply-only quote below and pay the ${depositPct ?? 30}% deposit. Your tradie will then arrange delivery or collection. No installation or site visit is included.`}
+              </p>
+            ) : isFinalRow ? (
               // Ordered FIRST so a paid final row can never fall into the
               // "Pick your visit time" / /book branches below: the customer
               // has had their visit, and a child row must never reach the

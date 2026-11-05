@@ -31,9 +31,11 @@ const state: {
    *  eq('trade', …) filter and returns the FIRST row when unfiltered. */
   pricingBooks?: Row[]
   intake: Row
+  candidates?: Row
   updErr: unknown
   quoteErr?: unknown
   raceOnSave?: boolean
+  raceReleaseOnSave?: boolean
   version?: Row
 } = {
   user: null,
@@ -88,6 +90,10 @@ vi.mock('@supabase/supabase-js', () => ({
         if (update) {
           captured.effects.push('save')
           if (state.raceOnSave) { (state.quote as Record<string, unknown>).paid_at = 'paid'; state.raceOnSave = false }
+          if (state.raceReleaseOnSave) {
+            (state.quote as Record<string, unknown>).customer_released_at = '2026-09-15T00:00:00.000Z'
+            state.raceReleaseOnSave = false
+          }
           if (state.updErr) return { data: null, error: state.updErr }
           const current = state.quote as Record<string, unknown>
           if (!current || Object.entries(filters).some(([key, value]) => {
@@ -133,12 +139,12 @@ vi.mock('@/lib/filestore/minimize', () => ({
   buildQuoteKbText: () => ({ markdown: '', contentHash: 'h' }),
 }))
 vi.mock('@/lib/estimate/run', () => ({
-  loadCandidatePrices: vi.fn(async () => ({ material: [], assembly: [] })),
+  loadCandidatePrices: vi.fn(async () => state.candidates ?? ({ material: [], assembly: [] })),
 }))
 vi.mock('@/lib/estimate/validate', () => ({
-  validateQuoteGrounding: () => ({ valid: true }),
+  validateQuoteGrounding: vi.fn(() => ({ valid: true })),
   detectCrossTierDuplicates: () => [],
-  isManualLine: () => false,
+  isManualLine: (line: { source?: string }) => line.source?.trim().toLowerCase() === 'tradie_manual',
 }))
 
 import { POST } from './route'
@@ -146,6 +152,8 @@ import { createCheckoutSessionForTier, expireCheckoutSession } from '@/lib/strip
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { quoteEditRevision } from '@/lib/quote/edit-authority'
 import { readQuoteDraftReadiness } from '@/lib/quote/job-quote-operation'
+import { validateQuoteGrounding } from '@/lib/estimate/validate'
+import { buildRank1Estimation } from '@/lib/estimate/rank1'
 
 const params = { params: Promise.resolve({ id: 'q1' }) }
 
@@ -189,6 +197,7 @@ beforeEach(() => {
   captured.callbacks = []
   captured.effects = []
   state.raceOnSave = false
+  state.raceReleaseOnSave = false
   state.quoteErr = null
   state.user = { id: 'owner-1' }
   state.userErr = null
@@ -222,7 +231,225 @@ beforeEach(() => {
   state.pricingBook = { id: 'pb1', tenant_id: 't1', trade: 'roofing', gst_registered: true }
   state.pricingBooks = undefined
   state.version = null
+  state.candidates = undefined
   state.intake = { tenant_id: 't1', trade: 'roofing', job_type: 'reroof', caller: null, scope: null }
+})
+
+describe('released Quote Core edits retain immutable pricing authority', () => {
+  async function configureCore() {
+    const intake = { id: 'i1', tenant_id: 't1', trade: 'electrical', job_type: 'downlights',
+      address: '10 Test Street', confidence: 'HIGH', inspection_required: false,
+      caller: { phone: '+61400000000' }, scope: { item_count: 2, specs: { supplied_by: 'tradie' } } }
+    const book = { id: 'pb1', tenant_id: 't1', trade: 'electrical', gst_registered: true,
+      hourly_rate: 110, default_markup_pct: 25, min_labour_hours: 1.5, call_out_minimum: 100 }
+    const result = await buildRank1Estimation({ intake, pricingBook: book, context: { pricingBookVersionId: 'v1' },
+      loadInputs: async () => ({ input: {
+        bom: [{ material_category: 'downlight', quantity: 2, required: true }],
+        tenantMaterials: [{ id: 'product-a', name: 'Downlight', category: 'downlight', active: true, unit_price_ex_gst: 10 }],
+        sharedMaterials: [], hourlyRate: 110, labourHours: 1.5, markupPct: 25,
+      }, assemblyName: 'Replace downlights', recipeSourceId: 'recipe-a', recipeRowIds: ['row-a'],
+      taskRows: { tenant: [], shared: [] } }),
+    })
+    expect(result.quoteCore?.status).toBe('priced')
+    Object.assign(state.quote as object, { ...result.draft, quote_kind: 'initial', status: 'sent',
+      sent_at: '2026-09-01T00:00:00Z', pricing_book_version_id: 'v1', total_inc_gst: 209,
+      grounding_result: { ok: true, quote_core: result.quoteCore },
+    })
+    state.intake = intake
+    state.pricingBook = book
+    state.version = { id: 'v1', tenant_id: 't1', trade: 'electrical', pricing_book_id: 'pb1',
+      content_hash: 'a'.repeat(64), snapshot: book }
+    const quote = state.quote as Record<string, unknown>
+    const tier = quote.better as { label: string; line_items: Array<Record<string, unknown>> }
+    return { expected_revision: quoteEditRevision(quote), notify_customer: false, better: {
+      label: tier.label, line_items: tier.line_items.map((line, original_line_index): Record<string, unknown> => ({ ...line, original_line_index })),
+    } }
+  }
+
+  it.each(['price', 'quantity', 'scope', 'force'] as const)('rejects a released %s edit before save or provider work', async change => {
+    const body = await configureCore()
+    const before = structuredClone(state.quote)
+    if (change === 'scope') body.better.line_items[0].description = 'Different binding work'
+    else if (change === 'quantity') body.better.line_items[0].quantity = 999
+    else body.better.line_items[0].unit_price_ex_gst = 999
+    const response = await POST(req({ ...body, force: change === 'force' }, 'tok'), params)
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ error: 'quote_core_review_required', hint: expect.stringContaining('new quote version') })
+    expect(state.quote).toEqual(before)
+    expect(captured.effects).toEqual([])
+    expect(captured.callbacks).toHaveLength(0)
+    expect(dispatchQuoteWithPdf).not.toHaveBeenCalled()
+  })
+
+  it('preserves the server catalogue identity through an unchanged price save', async () => {
+    const body = await configureCore()
+    const response = await POST(req(body, 'tok'), params)
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200)
+    expect((captured.quotesUpdate?.better as { line_items: unknown[] }).line_items[0])
+      .toMatchObject({ catalogue_id: 'product-a' })
+    expect(captured.quotesUpdate).not.toHaveProperty('grounding_result')
+  })
+
+  it('rechecks core evidence at queued delivery and skips a tampered snapshot', async () => {
+    const body = await configureCore()
+    expect((await POST(req({ ...body, notify_customer: true }, 'tok'), params)).status).toBe(200)
+    expect(captured.callbacks).toHaveLength(1)
+    ;(state.quote as Record<string, unknown>).grounding_result = { quote_core: { status: 'review_required' } }
+    await captured.callbacks[0]()
+    expect(dispatchQuoteWithPdf).not.toHaveBeenCalled()
+  })
+})
+
+describe('authenticated human manual-price authority', () => {
+  const manualBody = { better: { label: 'EV installation', line_items: [
+    { description: 'Installation labour', quantity: 2, unit: 'hr', unit_price_ex_gst: 110, source: 'labour' },
+    { description: 'Supply specified EV charger unit', quantity: 1, unit: 'each', unit_price_ex_gst: 700, source: 'tradie_manual' },
+  ] }, notify_customer: false }
+
+  it('allows a real human manual save after ownership checks and records its provenance', async () => {
+    state.intake = { tenant_id: 't1', trade: 'electrical', job_type: 'ev_charger', caller: null, scope: null }
+    state.pricingBook = { id: 'pb1', tenant_id: 't1', trade: 'electrical', gst_registered: true,
+      hourly_rate: 110, apprentice_rate: 60, call_out_minimum: 150, default_markup_pct: 30, min_labour_hours: 2 }
+    const actual = await vi.importActual<typeof import('@/lib/estimate/validate')>('@/lib/estimate/validate')
+    vi.mocked(validateQuoteGrounding).mockImplementationOnce(actual.validateQuoteGrounding)
+    const result = await POST(req(manualBody, 'tok'), params)
+    expect(result.status).toBe(200)
+    expect(vi.mocked(validateQuoteGrounding)).toHaveBeenCalledWith(
+      expect.any(Object), expect.any(Object), expect.any(Object), { allowManualLines: true },
+    )
+    expect(captured.quotesUpdate?.risk_flags).toContain('tradie_manual_line:better#1')
+    expect((captured.quotesUpdate?.better as { subtotal_ex_gst: number }).subtotal_ex_gst).toBe(920)
+  })
+
+  it.each(['unauthenticated', 'other_tenant'])('cannot grant manual price authority to %s', async (actor) => {
+    if (actor === 'unauthenticated') state.user = null
+    else (state.quote as Record<string, unknown>).tenant_id = 'another-tenant'
+    const result = await POST(req(manualBody, 'tok'), params)
+    expect([401, 403]).toContain(result.status)
+    expect(vi.mocked(validateQuoteGrounding)).not.toHaveBeenCalled()
+    expect(captured.quotesUpdate).toBeNull()
+  })
+})
+
+describe('released EV edits preserve the canonical customer-visible service mode', () => {
+  const unit = {
+    description: 'EV charger unit', quantity: 1, unit: 'each', unit_price_ex_gst: 800,
+    total_ex_gst: 800, source: 'material:unit-1',
+  }
+  const install = {
+    description: 'Install EV charger', quantity: 1, unit: 'each', unit_price_ex_gst: 400,
+    total_ex_gst: 400, source: 'assembly:install-1',
+  }
+  const labour = {
+    description: 'Licensed electrician labour', quantity: 2, unit: 'hr', unit_price_ex_gst: 100,
+    total_ex_gst: 200, source: 'labour',
+  }
+
+  function configure(mode: 'supply_only' | 'install_only' | 'supply_and_install' | undefined, lines: typeof unit[]) {
+    const subtotal = lines.reduce((sum, line) => sum + line.total_ex_gst, 0)
+    Object.assign(state.quote as object, {
+      status: 'sent', quote_kind: 'initial', good: null, best: null,
+      scope_of_works: mode === 'supply_only' ? 'Supply only the EV charger. Installation excluded. Electrical work excluded.'
+        : mode === 'install_only' ? 'Install the customer-supplied EV charger.' : 'Supply and install the EV charger.',
+      total_inc_gst: Number((subtotal * 1.1).toFixed(2)),
+      better: {
+        label: 'EV charger', line_items: structuredClone(lines),
+        subtotal_ex_gst: subtotal,
+      },
+    })
+    state.intake = {
+      tenant_id: 't1', trade: 'electrical', job_type: 'ev_charger', caller: null,
+      scope: {
+        specs: { ...(mode ? { service_mode: mode } : {}) },
+        ...(mode === 'supply_only' || mode === 'supply_and_install'
+          ? { chosen_product: { catalogue_id: 'unit-1' } }
+          : {}),
+      },
+    }
+    state.pricingBook = {
+      id: 'pb1', tenant_id: 't1', trade: 'electrical', gst_registered: true,
+      hourly_rate: 100, apprentice_rate: 60, call_out_minimum: 100,
+      default_markup_pct: 0, min_labour_hours: 1,
+    }
+    state.candidates = {
+      material: [{ sourceId: 'unit-1', sourceName: 'EV charger unit', price: 800, categories: new Set(['ev_charger']) }],
+      assembly: [{ sourceId: 'install-1', sourceName: 'Install EV charger', price: 400, categories: new Set(['ev_charger']) }],
+    }
+  }
+
+  function edit(lines: typeof unit[]) {
+    const current = ((state.quote as Record<string, unknown>).better as { line_items: typeof unit[] }).line_items
+    return {
+      expected_revision: quoteEditRevision(state.quote as Record<string, unknown>),
+      notify_customer: false,
+      better: {
+        label: 'Revised EV charger',
+        line_items: lines.map((line) => {
+          const original_line_index = current.findIndex((saved) => saved.source === line.source)
+          if (original_line_index >= 0) return { ...line, original_line_index }
+          const { source: _source, ...manual } = line
+          void _source
+          return manual
+        }),
+      },
+    }
+  }
+
+  it.each([
+    ['supply_only', [unit], [unit, install]],
+    ['install_only', [install, labour], [install, labour, unit]],
+    ['supply_and_install', [unit, install, labour], [install, labour]],
+  ] as const)('blocks a released %s edit that changes its promised service', async (mode, current, proposed) => {
+    configure(mode, Array.from(current))
+    const response = await POST(req(edit(Array.from(proposed)), 'tok'), params)
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ error: 'ev_service_mode_review_required' })
+    expect(captured.effects).not.toContain('save')
+    expect(captured.quotesUpdate).toBeNull()
+  })
+
+  it('blocks a released EV edit with unknown service mode before the first write', async () => {
+    configure(undefined, [install, labour])
+    const response = await POST(req(edit([install, labour]), 'tok'), params)
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      error: 'ev_service_mode_review_required',
+      failures: expect.arrayContaining([expect.objectContaining({ code: 'missing_service_mode' })]),
+    })
+    expect(captured.effects).not.toContain('save')
+  })
+
+  it.each([
+    ['supply_only', [unit]],
+    ['install_only', [install, labour]],
+    ['supply_and_install', [unit, install, labour]],
+  ] as const)('allows a released, catalogue-consistent %s correction', async (mode, lines) => {
+    configure(mode, Array.from(lines))
+    const response = await POST(req(edit(Array.from(lines)), 'tok'), params)
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200)
+    expect(captured.effects).toContain('save')
+  })
+
+  it('allows an unreleased inconsistent EV correction to be saved but never notifies the customer', async () => {
+    configure('supply_only', [unit])
+    Object.assign(state.quote as object, { status: 'awaiting_tradie_approval' })
+    const response = await POST(req({ ...edit([unit, install]), notify_customer: true }, 'tok'), params)
+    expect(response.status).toBe(200)
+    expect(captured.effects).toContain('save')
+    expect(captured.callbacks).toHaveLength(0)
+    expect(dispatchQuoteWithPdf).not.toHaveBeenCalled()
+  })
+
+  it('loses the conditional write if approval releases the EV quote after it was read', async () => {
+    configure('supply_only', [unit])
+    Object.assign(state.quote as object, { status: 'awaiting_tradie_approval', customer_released_at: null })
+    state.raceReleaseOnSave = true
+    const response = await POST(req(edit([unit, install]), 'tok'), params)
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ error: 'quote_changed' })
+    expect(captured.quotesUpdate).toBeNull()
+    expect(dispatchQuoteWithPdf).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/quote/[id]/edit — pricing book is scoped to the quote trade', () => {
@@ -447,26 +674,42 @@ describe('POST edit — revision, provenance and delivery boundaries', () => {
     expect(captured.effects).toEqual([])
   })
 
-  it('never stamps a requested notification Sent before provider acceptance', async () => {
+  it.each([true, undefined])('never first-sends a draft from an edit with notify=%s', async (notify_customer) => {
     Object.assign(state.quote as object, { status: 'draft' })
     Object.assign(state.intake as object, { caller: { phone: '+61400000000' } })
-    const response = await POST(req({ ...EDIT_BODY, notify_customer: true }, 'tok'), params)
+    const response = await POST(req({ ...EDIT_BODY, notify_customer }, 'tok'), params)
     expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ persisted: true, notification_requested: false })
     expect((state.quote as Record<string, unknown>).status).toBe('draft')
-    expect(captured.callbacks).toHaveLength(1)
-    await captured.callbacks[0]()
-    expect(dispatchQuoteWithPdf).toHaveBeenCalledTimes(1)
-    expect((state.quote as Record<string, unknown>).status).toBe('sent')
+    expect(captured.callbacks).toHaveLength(0)
+    expect(dispatchQuoteWithPdf).not.toHaveBeenCalled()
+    expect(captured.quotesUpdate).not.toHaveProperty('sent_at')
     expect(captured.effects[0]).toBe('save')
   })
 
-  it('keeps draft when notification fails', async () => {
-    Object.assign(state.quote as object, { status: 'draft' })
+  it('does not let body fields forge release or manual-final authority', async () => {
+    Object.assign(state.quote as object, { status: 'draft', quote_kind: 'initial' })
+    const response = await POST(req({ ...EDIT_BODY, notify_customer: true, status: 'sent', quote_kind: 'final',
+      sent_at: '2026-09-01', customer_released_at: '2026-09-01', grounding_result: {},
+    }, 'tok'), params)
+    expect(response.status).toBe(200)
+    expect(state.quote).toMatchObject({ status: 'draft', quote_kind: 'initial' })
+    expect(captured.quotesUpdate).not.toHaveProperty('sent_at')
+    expect(captured.quotesUpdate).not.toHaveProperty('customer_released_at')
+    expect(captured.quotesUpdate).not.toHaveProperty('grounding_result')
+    expect(captured.callbacks).toHaveLength(0)
+  })
+
+  it.each([true, false])('retains a historical draft release without stamping sent_at when update delivery succeeds=%s', async (ok) => {
+    Object.assign(state.quote as object, { status: 'draft', customer_released_at: '2026-09-01T00:00:00Z' })
     Object.assign(state.intake as object, { caller: { phone: '+61400000000' } })
-    vi.mocked(dispatchQuoteWithPdf).mockResolvedValueOnce({ ok: false, smsAttempt: { code: 1, reason: 'failed' } } as never)
+    if (!ok) vi.mocked(dispatchQuoteWithPdf).mockResolvedValueOnce({ ok: false, smsAttempt: { code: 1, reason: 'failed' } } as never)
     await POST(req({ ...EDIT_BODY, notify_customer: true }, 'tok'), params)
+    expect(captured.callbacks).toHaveLength(1)
     await captured.callbacks[0]()
+    expect(dispatchQuoteWithPdf).toHaveBeenCalledTimes(1)
     expect((state.quote as Record<string, unknown>).status).toBe('draft')
+    expect(captured.quotesUpdate).not.toHaveProperty('sent_at')
   })
 
   it('surfaces an acknowledged save with pending checkout reconciliation on provider failure', async () => {

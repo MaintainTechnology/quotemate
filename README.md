@@ -6,6 +6,8 @@ QuoteMax is a mobile-first quoting tool built for residential trade owner-operat
 
 The goal is simple: **reclaim the evenings tradies currently lose to admin, and stop wasting trips on jobs that were never going to convert.**
 
+**Current release boundary:** v1 remains portal-first; voice described below is a later premium vision, not a v1 release commitment. Rank 1 applies to all accounts across the existing SMS and portal/API quotation paths, with no Atomic Electrical entitlement or tenant rollout allowlist. It keeps direct Anthropic through the Vercel AI SDK (no AI Gateway), approved tenant data, deterministic Quote Core or trade-specific calculators, and authenticated tradie approval before new customer quote release. Historical prices are not current price authority; incomplete coverage means unpriced review. This is not production certification; see the [system-wide rollout record](docs/audits/2026-09-23-rank1-systemwide-rollout.md) and [strategy v26](docs/strategy.md).
+
 ---
 
 ## The problem
@@ -25,7 +27,7 @@ Existing job-management tools (ServiceM8, Tradify, AroFlo) handle scheduling and
 ## What QuoteMax does
 
 1. **Captures the job for you** — a dedicated AI receptionist answers the call and asks the right job-specific questions. The moment the call ends, the customer gets an SMS with a one-tap link to add photos — optional, races the quote draft, lifts confidence when it arrives.
-2. **Drafts the quote** — an AI engine generates a structured quote (scope, line items, labour, materials, exclusions, risks) using the tradie's own pricing book and prior quote history.
+2. **Drafts the quote** — AI structures the job; deterministic calculators use the tradie's approved pricing to produce a reviewable quote. Any permitted history is non-monetary reference only, never today's price authority.
 3. **Routes for review** — quotable jobs become saved drafts for authenticated tradie approval; complex work becomes a review or paid-inspection proposal. Customer quotes are sent only after approval.
 4. **Sends a polished customer experience** — mobile-first, branded quote with Good / Better / Best options and a one-tap deposit button.
 5. **Closes the loop** — availability nudges, SMS follow-ups, calendar booking on accept.
@@ -91,30 +93,30 @@ Availability nudge → Follow-up engine → Job won → Calendar + CRM
 
 ## Tech stack
 
-What's actually wired today:
+Implemented stack (historical deployment labels below are not a current live-readiness audit):
 
 | Layer | Choice |
 |---|---|
 | Frontend + API | Next.js 16 (App Router, React 19) — Vercel (prod) / Railway (Docker) |
 | Auth, DB, storage | Supabase (Postgres 17 + pgvector), PKCE auth, `intake-photos` storage |
-| LLM | Anthropic Claude via the Vercel AI SDK — Opus 4.7 for intake + estimation, Sonnet 4.6 for SMS dialog |
+| LLM | Anthropic Claude directly via the Vercel AI SDK; typed intake and customer dialogue, not monetary authority; no AI Gateway |
 | Vision | Claude vision (job photos) |
 | Image gen | Google Gemini (quote preview + per-tier sample images) |
-| Voice agent | Vapi (Deepgram STT, ElevenLabs TTS) — **live** |
+| Voice agent | Vapi (Deepgram STT, ElevenLabs TTS) — historical early implementation (v6); not promoted to the v1 wedge or reverified by this system-wide SMS hardening work |
 | SMS / WhatsApp | Twilio (AU long codes), SMS-first with WhatsApp fallback |
 | Payments | Stripe (test mode), Connect Express wired; the flat $99 refundable site visit (roofing/painting/electrical/plumbing) or a per-tier deposit (solar/commercial painting) — see `docs/strategy.md` v19/v20 |
 | Email | Resend |
 | Quote document | Mobile HTML page at `/q/[token]` (no PDF in v1) |
 
-Planned but not yet wired: Stripe Connect Express (marketplace fund-split), PostHog analytics, Sentry error tracking, the eval framework.
+The local Rank 1 core replay/evaluation harness is implemented; human-graded accuracy, conversational replay and live deployment evidence remain outstanding. Other historical roadmap claims below require a separate current audit.
 
 ---
 
 ## Project status
 
-**Built and running** (as of 2026-05-18). The application lives in [`quotemate-automation/`](quotemate-automation/); the repo root holds planning docs and design assets.
+**Historical implementation snapshot (2026-05-18), not a current readiness certification.** The application lives in [`quotemate-automation/`](quotemate-automation/); the repo root holds planning docs and design assets. The September v24–v26 release gates supersede older automatic-release descriptions.
 
-- **Voice and SMS intake are both live end-to-end** — a customer calls or texts a tradie's QuoteMax number, the AI captures the job, Opus drafts a Good/Better/Best quote grounded strictly in that trade's pricing book, and the customer gets a mobile quote page with a Stripe deposit (or a $99 inspection for complex jobs).
+- **Voice and SMS intake were reported shipped in the historical snapshot** — this is not current carrier or customer-journey evidence. New customer quotes require explicit tradie approval; the all-account Rank 1 policy requires deterministic prices and holds unsupported work for review without a monetary model fallback.
 - **Multi-trade is live**: electrical (NSW), plumbing (QLD), and review-required roofing run on the same platform.
 - **Roofing measurement** uses a deterministic Geoscape/form fallback today. The planned semantic-edge feature is source-gated and remains review-required; see strategy v14/v15.
 - Current work: self-serve tradie onboarding (auto-provisioned number, pricing book, and AI brand voice per tradie).
@@ -141,7 +143,7 @@ Originally planned as five phases to a paid pilot launch. Where the build actual
 | **3b — SMS intake** | Full SMS quoting agent, parity with voice path | Done |
 | **5 — Multi-trade + onboarding** | Plumbing alongside electrical; self-serve tradie onboarding | In progress (multi-trade live; onboarding building) |
 | **4 — Conversion engine** | Availability nudge, follow-up sequence, calendar, CRM | Partial (tradie notify + booking live; follow-up sequence not yet) |
-| Hardening | Stripe Connect Express, eval framework, multi-tenant RLS | Not yet started |
+| Hardening | Rank 1 evaluation, pricing authority, tenant isolation and system-wide safeguards | All-account source policy; per-trade graded and live acceptance gates outstanding (v26) |
 
 **Initial wedge:** **electrical (NSW, residential)** — joined by **plumbing (Brisbane, residential)** in v5 (2026-05-11). Two parallel single-trade pilots keep each pricing book + assembly library focused before going broad. The original "easy 5" remain the base auto-quoteable jobs; v22 adds one deliberately gated EV-charger exception:
 

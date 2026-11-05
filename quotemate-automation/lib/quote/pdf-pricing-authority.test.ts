@@ -196,7 +196,9 @@ describe('actual saved quote HTML/PDF pricing boundary', () => {
   })
   it('applies style-only changes to the dedicated EV report without replacing its template', async () => {
     vi.stubEnv('FULL_QUOTE_DOC', 'true')
-    h.rows.intakes!.job_type = 'ev_charger'
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger', scope: { specs: { service_mode: 'supply_and_install' } },
+    })
     h.rows.quotes!.report_style = { fontFamily: 'serif', accentColor: '#0F1722', headingStyle: 'bar' }
     const html = await renderQuoteReportHtml('quote-id')
     expect(html).toContain('Prepared For:')
@@ -208,6 +210,86 @@ describe('actual saved quote HTML/PDF pricing boundary', () => {
     expect(html).not.toContain('Quotation</div>')
     await ensureQuotePdf('quote-id')
     expect(h.render).toHaveBeenLastCalledWith(html)
+  })
+  it('renders the complete safe supply-only item set in HTML and PDF without stale install or certification wording', async () => {
+    vi.stubEnv('FULL_QUOTE_DOC', 'true')
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger',
+      scope: { specs: { service_mode: 'supply_only', supplied_by: 'tradie' } },
+    })
+    Object.assign(h.rows.quotes!, {
+      better: {
+        label: 'Supply and install EV charger', subtotal_ex_gst: 900,
+        line_items: [
+          { description: 'EV charger unit', source: 'tradie_manual', quantity: 1, unit: 'each', unit_price_ex_gst: 800, total_ex_gst: 800 },
+          { description: 'EV charger pedestal', source: 'material:pedestal-1', quantity: 1, unit: 'each', unit_price_ex_gst: 100, total_ex_gst: 100 },
+        ],
+      },
+      total_inc_gst: 900,
+      scope_of_works: 'Supply and install on a dedicated circuit with testing and certification.',
+      assumptions: ['Four hours of installation labour on site.'],
+      risk_flags: ['tradie_manual_line:better#0'],
+      report_doc: {
+        version: 1,
+        blocks: [
+          { type: 'heading', content: [{ text: 'Install and certify this charger' }] },
+          { type: 'pricing' },
+        ],
+      },
+    })
+
+    const html = await renderQuoteReportHtml('quote-id')
+    expect(html).toContain('Supply only')
+    expect(html).toContain('Items supplied')
+    expect(html).toContain('EV charger unit')
+    expect(html).toContain('EV charger pedestal')
+    expect(html).toContain('Subtotal (ex GST):</span><span class="num">$900.00')
+    expect(html).not.toContain('Supply and install EV charger')
+    expect(html).not.toContain('testing and certification')
+    expect(html).not.toContain('Install and certify this charger')
+    expect(html).not.toContain('Four hours of installation labour on site')
+    expect(html).not.toContain('$99 refundable site visit')
+
+    expect(await ensureQuotePdf('quote-id')).toBe(pdfPath('PDF'))
+    expect(h.render).toHaveBeenLastCalledWith(html)
+  })
+  it('withholds EV HTML and cached PDF when mode is ambiguous or supply-only rows contain install work', async () => {
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger', scope: { specs: { supplied_by: 'tradie' } },
+    })
+    expect(await renderQuoteReportHtml('quote-id')).toBeNull()
+    expect(await ensureQuotePdf('quote-id')).toBeNull()
+    await expect(ensureQuotePdf('quote-id', { strictPricing: true }))
+      .rejects.toMatchObject({ code: 'quote_pricing_review_required', status: 409 })
+    expect(h.render).not.toHaveBeenCalled()
+    expect(h.download).not.toHaveBeenCalled()
+
+    h.rows.intakes!.scope = {
+      specs: { service_mode: 'supply_only', supplied_by: 'tradie' },
+    }
+    Object.assign(h.rows.quotes!, {
+      better: {
+        label: 'Supply and install', subtotal_ex_gst: 300,
+        line_items: [
+          { description: 'EV charger unit', source: 'tradie_manual', quantity: 1, unit: 'each', unit_price_ex_gst: 200, total_ex_gst: 200 },
+          { description: 'Installation labour', source: 'labour', quantity: 1, unit: 'hr', unit_price_ex_gst: 100, total_ex_gst: 100 },
+        ],
+      },
+      total_inc_gst: 300,
+      risk_flags: ['tradie_manual_line:better#0'],
+    })
+    expect(await renderQuoteReportHtml('quote-id')).toBeNull()
+    expect(await ensureQuotePdf('quote-id')).toBeNull()
+    expect(h.render).not.toHaveBeenCalled()
+    expect(h.download).not.toHaveBeenCalled()
+  })
+  it('uses the shared safe legacy customer-supplied mode resolver for EV documents', async () => {
+    Object.assign(h.rows.intakes!, {
+      job_type: 'ev_charger',
+      scope: { specs: { charger_supply: 'customer already has the charger', supplied_by: 'customer' } },
+    })
+    const html = await renderQuoteReportHtml('quote-id')
+    expect(html).toContain('Installation only. The customer supplies the charger unit')
   })
   it('keeps saved non-GST cents when the current book flips tax or disappears', async () => {
     const first = await renderQuoteReportHtml('quote-id')

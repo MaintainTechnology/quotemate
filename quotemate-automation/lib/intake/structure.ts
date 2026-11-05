@@ -1,5 +1,6 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
+import { deterministicSampling } from '@/lib/llm/sampling'
 import { z } from 'zod'
 import { IntakeSchema, deriveTradeFromJobType, type Intake } from './schema'
 
@@ -195,11 +196,11 @@ export async function structureIntake(
   const isPlumbing = tradeHint === 'plumbing'
   const { object } = await generateObject({
     model: anthropic(modelId),
+    ...deterministicSampling(modelId),
     schema: StructureSchema,
     maxRetries: 0, // wrapper handles retries with logging — no double-retry
-    // Opus 4.7 ignores temperature (extended-thinking model). The AI SDK
-    // warns on every call if it's set, so omit it. Determinism comes from
-    // strict system grounding + structured output, not from temperature.
+    // The shared policy requests temperature 0 only where supported. Current
+    // Opus/Sonnet models reject non-default temperature, top_p and top_k.
     system: `STRICT GROUNDING — non-negotiable, supersedes everything below
 1. ONLY extract what the caller said in the transcript or what is
    visibly present in the photos. Never infer from "what jobs like

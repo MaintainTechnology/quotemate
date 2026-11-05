@@ -8,6 +8,7 @@ import { verifyPublicQuoteSchema,JOB_QUOTE_OPERATION_SCHEMA } from '../lib/quote
 import { DEFAULT_PAINTING_RATE_CARD } from '../lib/painting/pricing'
 import { DEFAULT_SOLAR_CONFIG } from '../lib/solar/config'
 import { DEFAULT_ROOFING_RATE_CARD } from '../lib/roofing/pricing'
+import { rank1QuoteCoreEnabled } from '../lib/estimate/rank1-policy'
 
 type Row=Record<string,unknown>
 const tenant='tenant-1'
@@ -21,7 +22,7 @@ function book(trade: string): Row {
   return {id:'book-1',tenant_id:tenant,trade,gst_registered:true,
     overlays:trade in cards ? {[`${trade}_rate_card`]:structuredClone(cards[trade as keyof typeof cards])} : {}}
 }
-function fixture(rows:Row[],options:{error?:boolean;throwRead?:boolean;wrongTenantResponse?:boolean;schemaError?:string;guard?:string;guardFailure?:string;guardValue?:unknown;proofAt?:unknown}={}) {
+function fixture(rows:Row[],options:{error?:boolean;throwRead?:boolean;wrongTenantResponse?:boolean;schemaError?:string;guard?:string;guardFailure?:string;guardValue?:unknown;proofAt?:unknown;status?:unknown}={}) {
   const reads:{table:string;filters:Record<string,unknown>;signal?:AbortSignal;columns?:string;limit?:number}[]=[]
   const rpcs:{name:string;signal?:AbortSignal}[]=[]
   const db={from(table:string) {
@@ -30,7 +31,7 @@ function fixture(rows:Row[],options:{error?:boolean;throwRead?:boolean;wrongTena
     let zero=false
     const result=()=>{
       if (options.throwRead && table==='pricing_book') throw new Error('offline unavailable')
-      const data=zero ? [] : table==='tenants' ? {trades:[...trades],trade:'electrical',status:'active'}
+      const data=zero ? [] : table==='tenants' ? {trades:[...trades],trade:'electrical',status:'status' in options ? options.status : 'active'}
         : table==='sms_readiness_evidence' ? {passed:true,verified_at:'proofAt' in options ? options.proofAt : new Date().toISOString()}
         : table==='pricing_book' ? rows.filter(row=>options.wrongTenantResponse || Object.entries(read.filters).every(([key,value])=>row[key]===value)) : []
       return {data,error:options.error && table==='pricing_book' ? {code:'XX000'} : table==='job_quote_operations' && options.schemaError ? {code:options.schemaError} : null}
@@ -54,21 +55,22 @@ function fixture(rows:Row[],options:{error?:boolean;throwRead?:boolean;wrongTena
   return {db,reads,rpcs}
 }
 const code=transpileModule(readFileSync('scripts/receptionist-runtime/readiness.ts.template','utf8'),{compilerOptions:{module:ModuleKind.CommonJS}}).outputText
-function runtime(db:SupabaseClient,trade:string,now?:number) {
+function runtime(db:SupabaseClient,trade:string,now?:number,rank1:{required?:boolean;scope?:string|null;env?:Record<string,string|undefined>}={}) {
   const runtimeModule={exports:{}}
   runInNewContext(code,{exports:runtimeModule.exports,module:runtimeModule,AbortSignal,
     Date:class extends Date {static now(){return now ?? Date.now()}},
-    process:{cwd:()=>'/offline',env:{CRON_SECRET:'offline',SIM_API_KEY:'offline',SMS_SIMULATE_ENABLED:'1',SMS_READINESS_TENANT_ID:tenant,NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SERVICE_ROLE_KEY:'offline'}},
+    process:{cwd:()=>'/offline',env:{CRON_SECRET:'offline',SIM_API_KEY:'offline',SMS_SIMULATE_ENABLED:'1',SMS_READINESS_TENANT_ID:tenant,NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SERVICE_ROLE_KEY:'offline',...rank1.env}},
     require:(name:string)=>{
       if (name==='@supabase/supabase-js') return {createClient:()=>db}
-      if (name==='node:fs') return {readFileSync:(file:string)=>JSON.stringify(file.endsWith('build-attestation.json') ? {version:1,sourceHash:'fixture-release'} : {sourceHash:'fixture-release',contractVersion:2,trade})}
+      if (name==='node:fs') return {readFileSync:(file:string)=>JSON.stringify(file.endsWith('build-attestation.json') ? {version:1,sourceHash:'fixture-release'} : {sourceHash:'fixture-release',contractVersion:2,trade,rank1Required:rank1.required ?? true,rank1Scope:'scope' in rank1 ? rank1.scope : 'all_accounts'})}
       if (name==='node:path') return {resolve:(...parts:string[])=>parts.join('/')}
       if (name.endsWith('public-origin')) return {publicWebOrigin:()=> 'https://public.fixture.invalid'}
       if (name.endsWith('public-schema')) return {verifyPublicQuoteSchema,JOB_QUOTE_OPERATION_SCHEMA}
       if (name.endsWith('pricing-readiness')) return {tenantPricingReadiness}
+      if (name.endsWith('rank1-policy')) return {rank1QuoteCoreEnabled}
       throw new Error(`Unexpected dependency ${name}`)
     }})
-  return runtimeModule.exports as {receptionistReadiness:(trade:string)=>Promise<{ok:boolean;capabilities:{quote:boolean;conversation:boolean};checks:{name:string;ok:boolean}[]}>}
+  return runtimeModule.exports as {receptionistReadiness:(trade:string)=>Promise<{ok:boolean;capabilities:{quote:boolean;conversation:boolean;rank1Required:boolean;rank1Policy:boolean};checks:{name:string;ok:boolean}[]}>}
 }
 
 describe('actual trade readiness uses owned estimator pricing gates',()=>{
@@ -92,6 +94,7 @@ describe('actual trade readiness uses owned estimator pricing gates',()=>{
     const {db,reads}=fixture([book(trade)])
     const result=await runtime(db,trade).receptionistReadiness(trade)
     expect(result.ok).toBe(true);expect(result.capabilities.quote).toBe(true)
+    expect(result.capabilities.rank1Required).toBe(true);expect(result.capabilities.rank1Policy).toBe(true)
     const pricing=reads.find(read=>read.table==='pricing_book')!
     expect(pricing.filters.tenant_id).toBe(tenant);expect(pricing.signal).toBeInstanceOf(AbortSignal)
   })
@@ -155,5 +158,65 @@ describe('actual trade readiness uses owned estimator pricing gates',()=>{
     const result=await runtime(db,'solar').receptionistReadiness('solar')
     expect(result.ok).toBe(false);expect(result.capabilities.quote).toBe(false);expect(result.capabilities.conversation).toBe(true)
     expect(result.checks.filter(check=>!check.ok)).toEqual([{name:'schema:quote_chain',ok:false}])
+  })
+})
+
+describe('system-wide Rank 1 candidate readiness',()=>{
+  it.each([undefined,'','another-tenant','true','all','*'])(
+    'obsolete pilot configuration cannot disable the mandatory policy (%s)',async configured=>{
+      const {db}=fixture([book('electrical')])
+      const result=await runtime(db,'electrical',undefined,{required:true,env:{RANK1_QUOTE_CORE_TENANTS:configured}}).receptionistReadiness('electrical')
+      expect(result.ok).toBe(true)
+      expect(result.capabilities).toMatchObject({quote:true,conversation:true,rank1Required:true,rank1Policy:true})
+      expect(result.checks.filter(check=>!check.ok)).toEqual([])
+    },
+  )
+
+  it('does not expose controlled evidence tenant identity in readiness output',async()=>{
+    const {db}=fixture([book('electrical')])
+    const result=await runtime(db,'electrical',undefined,{required:true,env:{RANK1_QUOTE_CORE_TENANTS:'another-tenant, tenant-1'}}).receptionistReadiness('electrical')
+    expect(result.ok).toBe(true)
+    expect(result.capabilities).toMatchObject({quote:true,rank1Required:true,rank1Policy:true})
+    expect(result.checks).toContainEqual({name:'rank1_policy',ok:true})
+    expect(JSON.stringify(result)).not.toContain(tenant)
+  })
+
+  it('requires a controlled evidence tenant without treating it as a policy allowlist',async()=>{
+    const {db}=fixture([book('electrical')])
+    const result=await runtime(db,'electrical',undefined,{required:true,env:{SMS_READINESS_TENANT_ID:undefined,RANK1_QUOTE_CORE_TENANTS:tenant}}).receptionistReadiness('electrical')
+    expect(result.capabilities).toMatchObject({quote:false,conversation:false,rank1Required:true,rank1Policy:true})
+    expect(result.checks).toContainEqual({name:'controlled_tenant',ok:false})
+    expect(result.checks).toContainEqual({name:'rank1_policy',ok:true})
+  })
+
+  it.each(['plumbing','roofing','painting','solar'])('requires the same policy for %s without a tenant allowlist',async trade=>{
+    const {db}=fixture([book(trade)])
+    const result=await runtime(db,trade,undefined,{env:{RANK1_QUOTE_CORE_TENANTS:tenant}}).receptionistReadiness(trade)
+    expect(result.ok).toBe(true)
+    expect(result.capabilities).toMatchObject({quote:true,rank1Required:true,rank1Policy:true})
+    expect(result.checks).toContainEqual({name:'rank1_policy',ok:true})
+  })
+
+  it.each([{required:false},{scope:null},{scope:'pilot'}])('rejects missing or pilot-only release designation %j',async designation=>{
+    const {db}=fixture([book('electrical')])
+    const result=await runtime(db,'electrical',undefined,designation).receptionistReadiness('electrical')
+    expect(result.ok).toBe(false)
+    expect(result.capabilities).toMatchObject({quote:false,rank1Policy:true})
+    expect(result.checks.filter(check=>!check.ok)).toEqual([{name:'release_manifest',ok:false}])
+  })
+
+  it.each(['pending','suspended','closed',null,undefined])('does not certify an inactive or unknown account (%s)',async status=>{
+    const {db}=fixture([book('electrical')],{status})
+    const result=await runtime(db,'electrical').receptionistReadiness('electrical')
+    expect(result.capabilities).toMatchObject({quote:false,conversation:false,rank1Policy:true})
+    expect(result.checks).toContainEqual({name:'enabled_trade',ok:false})
+  })
+
+  it('still reports selection when the database is unconfigured without reporting quote readiness',async()=>{
+    const {db,reads}=fixture([])
+    const result=await runtime(db,'electrical',undefined,{required:true,env:{RANK1_QUOTE_CORE_TENANTS:tenant,SUPABASE_SERVICE_ROLE_KEY:undefined}}).receptionistReadiness('electrical')
+    expect(result.ok).toBe(false)
+    expect(result.capabilities).toMatchObject({quote:false,conversation:false,rank1Required:true,rank1Policy:true})
+    expect(reads).toEqual([])
   })
 })

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CandidatePrices } from './validate'
 
 const mocks = vi.hoisted(() => {
@@ -72,24 +72,56 @@ vi.mock('@/lib/log/trace', () => ({
   stopwatch: () => ({ elapsed: () => 1 }),
 }))
 
-import { INSPECTION_REASONS } from './inspection-reason'
 import { runEstimation } from './run'
+
+const BOOK = { id: 'book-1', tenant_id: 'tenant-1', trade: 'electrical', gst_registered: true,
+  hourly_rate: 110, default_markup_pct: 25, min_labour_hours: 1, call_out_minimum: 0 }
+function estimate(intake: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+  return runEstimation({ confidence: 'HIGH', address: '1 Synthetic Street, Sydney NSW', ...intake },
+    { ...BOOK, ...overrides }, undefined, null, { pricingBookVersionId: 'version-1' })
+}
+function expectUnpricedReview(result: Awaited<ReturnType<typeof runEstimation>>) {
+  expect(result.quoteCore).toMatchObject({ status: 'review_required', tenantId: 'tenant-1', pricingBookVersionId: 'version-1' })
+  expect(result.groundingHold).toBe(true)
+  expect(result.inspectionCause).toBeUndefined()
+  expect(result.draft).toMatchObject({ good: null, better: null, best: null, needs_inspection: false })
+}
+
+const evAssemblyCandidate: CandidatePrices['assembly'][number] = {
+  sourceId: 'ev-install', sourceName: 'Install EV charger', price: 400, categories: new Set(['ev_charger']),
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.tableData.clear()
   mocks.validateQuoteGrounding.mockReset()
   mocks.validateQuoteGrounding.mockReturnValue({ valid: true, failures: [] })
+  // A mocked successful price check still needs a real category anchor for
+  // the independent EV installation compatibility gate.
+  mocks.buildCandidatePrices.mockReturnValue({ material: [], assembly: [evAssemblyCandidate] })
+})
+
+afterEach(() => {
+  // None of these source/intent gaps authorises model monetary drafting,
+  // even when a provider fixture would return a plausible repaired price.
+  expect(mocks.generateText).not.toHaveBeenCalled()
+  expect(mocks.anthropic).not.toHaveBeenCalled()
+  expect(mocks.systemPrompt).not.toHaveBeenCalled()
+  expect(mocks.makeTools).not.toHaveBeenCalled()
+  expect(mocks.validateQuoteGrounding).not.toHaveBeenCalled()
+  expect(mocks.fetchSimilarPastQuotesContext).not.toHaveBeenCalled()
+  expect(mocks.searchTenantStore).not.toHaveBeenCalled()
 })
 
 describe('runEstimation required-inspection preflight', () => {
   it('returns the canonical inspection draft before any pricing or model path runs', async () => {
-    const result = await runEstimation(
+    const result = await estimate(
       {
         id: 'intake-ev-three-phase',
         tenant_id: 'tenant-1',
         trade: 'electrical',
         job_type: 'ev_charger',
+        scope: { specs: { service_mode: 'install_only' } },
         property: { phase: 'three' },
         risks: [],
         inspection_required: true,
@@ -102,15 +134,16 @@ describe('runEstimation required-inspection preflight', () => {
     )
 
     expect(result).toMatchObject({
-      downgradedToInspection: true,
+      quoteCore: { status: 'inspection_required' },
+      inspectionCause: 'site_conditions',
+      groundingHold: false,
       draft: {
         good: null,
         better: null,
         best: null,
         needs_inspection: true,
         pricing_path: 'inspection',
-        inspection_reason: INSPECTION_REASONS.switchboard,
-        risk_flags: ['intake_inspection_required'],
+        inspection_reason: expect.any(String),
       },
     })
     expect(mocks.from).not.toHaveBeenCalled()
@@ -122,7 +155,7 @@ describe('runEstimation required-inspection preflight', () => {
     expect(mocks.searchTenantStore).not.toHaveBeenCalled()
   })
 
-  it('re-grounds a post-validation tradie pin and downgrades when its added price is ungrounded', async () => {
+  it('refuses an unverified tradie product pin instead of adopting its supplied price or the model draft', async () => {
     const postPinFailure = {
       tier: 'good',
       lineIndex: 1,
@@ -155,13 +188,15 @@ describe('runEstimation required-inspection preflight', () => {
       providerMetadata: {},
     })
 
-    const result = await runEstimation(
+    const result = await estimate(
       {
         id: 'intake-ev-pinned',
         tenant_id: 'tenant-1',
         trade: 'electrical',
         job_type: 'ev_charger',
         scope: {
+          item_count: 1,
+          specs: { service_mode: 'supply_and_install' },
           chosen_product: {
             catalogue_id: 'catalogue-ev-tesla',
             name: 'Tesla Wall Connector',
@@ -176,21 +211,12 @@ describe('runEstimation required-inspection preflight', () => {
       { hourly_rate: 110, default_markup_pct: 25 },
     )
 
-    expect(mocks.validateQuoteGrounding).toHaveBeenCalledTimes(2)
-    expect(result).toMatchObject({
-      downgradedToInspection: true,
-      groundingFailures: [postPinFailure],
-      draft: {
-        good: null,
-        better: null,
-        best: null,
-        needs_inspection: true,
-        pricing_path: 'inspection',
-      },
-    })
+    expectUnpricedReview(result)
+    expect(result.quoteCore?.reason).toMatch(/assembly|job_type/)
+    expect(JSON.stringify(result.draft)).not.toContain('1399')
   })
 
-  it('removes a grounded EV unit from a customer-supplied draft and keeps the installation priced', async () => {
+  it('keeps customer-supplied installation unpriced until a component-specific recipe exists', async () => {
     mocks.buildCandidatePrices.mockReturnValue({
       material: [
         {
@@ -200,7 +226,7 @@ describe('runEstimation required-inspection preflight', () => {
           categories: new Set(['ev_charger']),
         },
       ],
-      assembly: [],
+      assembly: [evAssemblyCandidate],
     })
     mocks.generateText.mockResolvedValue({
       text: JSON.stringify({
@@ -241,28 +267,82 @@ describe('runEstimation required-inspection preflight', () => {
       providerMetadata: {},
     })
 
-    const result = await runEstimation(
+    const result = await estimate(
       {
         id: 'intake-ev-customer-supply',
         tenant_id: 'tenant-1',
         trade: 'electrical',
         job_type: 'ev_charger',
-        scope: { specs: { supplied_by: 'customer' } },
+        scope: { specs: { service_mode: 'install_only', supplied_by: 'customer' } },
         risks: [],
         inspection_required: false,
       },
       { hourly_rate: 100, default_markup_pct: 25 },
     )
 
-    expect(mocks.validateQuoteGrounding).toHaveBeenCalledTimes(2)
-    expect(result.downgradedToInspection).not.toBe(true)
-    expect(result.draft.good).toMatchObject({
-      subtotal_ex_gst: 600,
-      line_items: [
-        expect.objectContaining({ source: 'assembly:ev-install' }),
-        expect.objectContaining({ source: 'labour' }),
-      ],
+    expectUnpricedReview(result)
+    expect(result.quoteCore?.reason).toContain('component-specific recipe')
+    expect(result.quoteCore?.scopeSnapshot?.scope).toMatchObject({ specs: { service_mode: 'install_only', supplied_by: 'customer' } })
+  })
+
+  it('keeps unsupported supply-only unpriced and never turns its stale inspection flag into a $99 site visit', async () => {
+    mocks.buildCandidatePrices.mockReturnValue({
+      material: [{
+        price: 800, sourceName: 'Tesla Wall Connector', sourceId: 'catalogue-ev-tesla',
+        categories: new Set(['ev_charger']),
+      }],
+      assembly: [evAssemblyCandidate],
     })
-    expect(result.draft.good.line_items).toHaveLength(2)
+    mocks.generateText.mockResolvedValue({
+      text: JSON.stringify({
+        good: { line_items: [{
+          description: 'Tesla Wall Connector', source: 'material:catalogue-ev-tesla',
+          quantity: 1, unit: 'each', unit_price_ex_gst: 800, total_ex_gst: 800,
+        }], subtotal_ex_gst: 800 },
+        better: null, best: null, needs_inspection: false,
+      }),
+      providerMetadata: {},
+    })
+
+    const result = await estimate({
+      id: 'intake-ev-supply-only', tenant_id: 'tenant-1', trade: 'electrical',
+      job_type: 'ev_charger', scope: {
+        specs: { service_mode: 'supply_only' },
+        chosen_product: { catalogue_id: 'catalogue-ev-tesla', name: 'Tesla Wall Connector' },
+      },
+      property: { phase: 'three' }, risks: [], inspection_required: true,
+    }, { hourly_rate: 100, default_markup_pct: 0 })
+
+    expectUnpricedReview(result)
+    expect(result.quoteCore?.reason).toContain('component-specific recipe')
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('holds an unresolved or unpriced supply request without substituting inspection', async () => {
+    mocks.buildCandidatePrices.mockReturnValue({ material: [], assembly: [evAssemblyCandidate] })
+    mocks.generateText.mockResolvedValue({
+      text: JSON.stringify({
+        good: null, better: null, best: null, needs_inspection: true,
+        inspection_reason: 'No charger price found.',
+      }),
+      providerMetadata: {},
+    })
+    const result = await estimate({
+      id: 'intake-ev-supply-gap', tenant_id: 'tenant-1', trade: 'electrical',
+      job_type: 'ev_charger', scope: { specs: { service_mode: 'supply_only' } },
+      risks: [], inspection_required: false,
+    }, { hourly_rate: 100, default_markup_pct: 0 })
+
+    expectUnpricedReview(result)
+    expect(result.draft.risk_flags.join(' ')).toContain('[quote-core]')
+    expect(result.quoteCore?.reason).toContain('component-specific recipe')
+  })
+
+  it.each([undefined, 'unknown'])('holds unresolved EV service mode %s even when inspection_required is true', async serviceMode => {
+    const result = await estimate({ tenant_id: 'tenant-1', trade: 'electrical', job_type: 'ev_charger',
+      scope: { specs: { service_mode: serviceMode } }, inspection_required: true })
+    expectUnpricedReview(result)
+    expect(result.quoteCore?.reason).toContain('service mode need confirmation')
+    expect(mocks.from).not.toHaveBeenCalled()
   })
 })

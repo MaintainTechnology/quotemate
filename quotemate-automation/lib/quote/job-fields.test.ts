@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   JOB_FIELDS,
+  answersForJobType,
   allowsPinnedCatalogueProduct,
+  evServiceModeFromAnswers,
   fieldsForJobType,
+  visibleFieldsForJobType,
 } from './job-fields'
 import { IntakeSchema } from '@/lib/intake/schema'
 import { normaliseSystemType } from '@/lib/intake/structure'
@@ -123,10 +126,11 @@ describe('JOB_FIELDS', () => {
         options: ['Tesla', 'BYD', 'another EV', 'not sure'],
       },
       {
-        code: 'charger_supply',
-        label: 'Who supplies the charger unit?',
+        code: 'service_mode',
+        label: 'What does the customer want?',
         type: 'select',
-        options: ['customer already has the charger', 'we supply the charger', 'not sure'],
+        options: ['supply_only', 'install_only', 'supply_and_install'],
+        required: true,
       },
       {
         code: 'room',
@@ -148,24 +152,58 @@ describe('JOB_FIELDS', () => {
     ])
   })
 
-  it('allows an EV unit pin only for the exact tradie-supplied answer', () => {
+  it('allows an EV unit pin only for modes that include supply', () => {
     expect(
       allowsPinnedCatalogueProduct('ev_charger', {
-        charger_supply: 'we supply the charger',
+        service_mode: 'supply_only',
       }),
     ).toBe(true)
     expect(
       allowsPinnedCatalogueProduct('ev_charger', {
-        charger_supply: 'customer already has the charger',
+        service_mode: 'supply_and_install',
       }),
+    ).toBe(true)
+    expect(
+      allowsPinnedCatalogueProduct('ev_charger', { service_mode: 'install_only' }),
     ).toBe(false)
     expect(
-      allowsPinnedCatalogueProduct('ev_charger', { charger_supply: 'not sure' }),
+      allowsPinnedCatalogueProduct('ev_charger', { service_mode: 'unknown' }),
     ).toBe(false)
     expect(
-      allowsPinnedCatalogueProduct('ev_charger', { charger_supply: 'we supply' }),
-    ).toBe(false)
+      allowsPinnedCatalogueProduct('ev_charger', { charger_supply: 'we supply the charger' }),
+    ).toBe(true)
     expect(allowsPinnedCatalogueProduct('downlights', {})).toBe(true)
+  })
+
+  it('maps legacy dashboard answers into canonical modes', () => {
+    expect(evServiceModeFromAnswers({ charger_supply: 'customer already has the charger' }))
+      .toBe('install_only')
+    expect(evServiceModeFromAnswers({ charger_supply: 'we supply the charger' }))
+      .toBe('supply_and_install')
+    expect(evServiceModeFromAnswers({ charger_supply: 'not sure' })).toBeUndefined()
+  })
+
+  it('hides and removes installation-only answers for supply-only jobs', () => {
+    const answers = {
+      service_mode: 'supply_only',
+      vehicle: 'Tesla',
+      room: 'garage',
+      switchboard_distance: '5–10 m',
+      phase: 'single phase',
+    }
+    expect(visibleFieldsForJobType('ev_charger', answers).map((field) => field.code))
+      .toEqual(['vehicle', 'service_mode'])
+    expect(answersForJobType('ev_charger', answers)).toEqual({
+      service_mode: 'supply_only',
+      vehicle: 'Tesla',
+    })
+  })
+
+  it('preserves installation fields for installation modes', () => {
+    const answers = { service_mode: 'supply_and_install', room: 'garage' }
+    expect(visibleFieldsForJobType('ev_charger', answers).map((field) => field.code))
+      .toContain('switchboard_distance')
+    expect(answersForJobType('ev_charger', answers)).toEqual(answers)
   })
 
   it('falls back to a usable generic spec for an unknown job type', () => {

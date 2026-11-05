@@ -2,7 +2,8 @@
 //
 // A line the tradie explicitly adds as a custom/manual line carries
 // source: 'tradie_manual' and is grounded by the human, not the catalogue.
-// validateQuoteGrounding must (a) accept such a line at ANY price, and (b)
+// For a caller that verified an explicit human save, validateQuoteGrounding
+// must (a) accept such a line at any finite nonnegative price, and (b)
 // never treat it as a within-tier or cross-tier duplicate of a catalogue row
 // on a coincidental price match — while a NON-manual catalogue line at an
 // off-catalogue price still fails exactly as before.
@@ -76,7 +77,7 @@ describe('manual line grounding exemption', () => {
       better: null,
       best: null,
     }
-    const r = validateQuoteGrounding(draft, pricingBook, candidates)
+    const r = validateQuoteGrounding(draft, pricingBook, candidates, { allowManualLines: true })
     expect(r.valid).toBe(true)
   })
 
@@ -107,7 +108,7 @@ describe('manual line grounding exemption', () => {
       better: null,
       best: null,
     }
-    const r = validateQuoteGrounding(draft, pricingBook, candidates)
+    const r = validateQuoteGrounding(draft, pricingBook, candidates, { allowManualLines: true })
     expect(r.valid).toBe(true)
   })
 
@@ -142,7 +143,7 @@ describe('manual line grounding exemption', () => {
       },
       best: null,
     }
-    const r = validateQuoteGrounding(draft, pricingBook, candidates)
+    const r = validateQuoteGrounding(draft, pricingBook, candidates, { allowManualLines: true })
     expect(r.valid).toBe(true)
   })
 
@@ -166,5 +167,45 @@ describe('manual line grounding exemption', () => {
     }
     const r = validateQuoteGrounding(draft, pricingBook, candidates)
     expect(r.valid).toBe(false)
+  })
+})
+
+describe('manual source is not model price authority', () => {
+  it.each(['each', 'hr', 'unknown'])('rejects a model-authored manual price for unit %s', (unit) => {
+    const draft = { good: { line_items: [labour, {
+      description: 'EV charger unit', quantity: 1, unit, unit_price_ex_gst: 110, source: 'tradie_manual',
+    }] } }
+    const result = validateQuoteGrounding(draft, pricingBook, candidates)
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.failures.some((failure) => failure.expected.includes('authenticated explicit human save'))).toBe(true)
+  })
+
+  it.each([
+    { unit_price_ex_gst: Number.NaN }, { unit_price_ex_gst: Number.POSITIVE_INFINITY },
+    { unit_price_ex_gst: null }, { unit_price_ex_gst: -1 }, { unit_price_ex_gst: true },
+    { quantity: Number.NaN }, { quantity: -1 },
+    { total_ex_gst: Number.POSITIVE_INFINITY }, { total_ex_gst: 900 },
+  ])('requires valid arithmetic even for an authenticated manual entry: %j', (invalid) => {
+    const draft = { good: { line_items: [labour, {
+      description: 'Custom charger unit', quantity: 1, unit: 'item', unit_price_ex_gst: 500,
+      source: 'tradie_manual', total_ex_gst: 500, ...invalid,
+    }] } }
+    expect(validateQuoteGrounding(draft, pricingBook, candidates, { allowManualLines: true }).valid).toBe(false)
+  })
+
+  it('checks the complete tier subtotal when a human manual price is included', () => {
+    const tier = { line_items: [labour, {
+      description: 'Custom charger unit', quantity: 1, unit: 'item', unit_price_ex_gst: 500,
+      source: 'tradie_manual', total_ex_gst: 500,
+    }], subtotal_ex_gst: 720 }
+    expect(validateQuoteGrounding({ good: tier }, pricingBook, candidates, { allowManualLines: true }).valid).toBe(true)
+    expect(validateQuoteGrounding({ good: { ...tier, subtotal_ex_gst: 500 } }, pricingBook, candidates, { allowManualLines: true }).valid).toBe(false)
+  })
+
+  it('retains a zero-quantity manual line when it carries no charge', () => {
+    const good = { line_items: [labour, { source: 'tradie_manual', description: 'Unused allowance',
+      quantity: 0, unit: 'item', unit_price_ex_gst: 500, total_ex_gst: 0,
+    }], subtotal_ex_gst: 220 }
+    expect(validateQuoteGrounding({ good }, pricingBook, candidates, { allowManualLines: true }).valid).toBe(true)
   })
 })

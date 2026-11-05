@@ -1,5 +1,14 @@
 import type { DraftLineItem, DraftTier, DraftWithTiers } from './merge-recipes'
 import type { CandidatePrices } from './validate'
+import {
+  deriveEvSupplyPresentation,
+  reconcileEvSupplyAssumptions,
+  reconcileEvSupplyExclusions,
+  reconcileEvSupplyScope,
+  type EvSupplyPresentation,
+} from '../quote/ev-supply-presentation'
+import { resolveAuthorizedEvManualChargerLineIndexes } from '../quote/ev-supply-presentation'
+import type { EvServiceMode } from '../quote/ev-service-mode'
 
 /** The exact dashboard answer which means the customer, not the tradie,
  * supplies the charger unit. Keep this aligned with `job-fields.ts`. */
@@ -44,7 +53,7 @@ export type EvChargerSupplyFenceResult<T extends DraftWithTiers = DraftWithTiers
       removed: RemovedEvChargerUnit[]
     }
   | {
-      status: 'inspection_required'
+      status: 'review_required'
       changed: false
       draft: T
       removed: []
@@ -77,15 +86,15 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-function materialSourceId(line: DraftLineItem): string | null {
-  const match = String(line.source ?? '').trim().match(/^material:([^\s]+)$/i)
+function typedSourceId(line: DraftLineItem): string | null {
+  const match = String(line.source ?? '').trim().match(/^(?:material|assembly):([^\s]+)$/i)
   return match ? normalise(match[1]) : null
 }
 
 function lineAnchorIds(line: DraftLineItem): string[] {
   const ids = new Set<string>()
   const catalogueId = normalise(line.catalogue_id)
-  const sourceId = materialSourceId(line)
+  const sourceId = typedSourceId(line)
   if (catalogueId) ids.add(catalogueId)
   if (sourceId) ids.add(sourceId)
   return [...ids]
@@ -109,7 +118,13 @@ function isProtectedInstallationLine(line: DraftLineItem): boolean {
 
 function isInstallationWork(line: DraftLineItem): boolean {
   const source = normalise(line.source)
-  if (!(source === 'labour' || source === 'assembly' || source.startsWith('assembly:'))) return false
+  if (!(
+    source === 'labour' ||
+    source === 'after_hours' ||
+    source === 'risk_buffer' ||
+    source === 'assembly' ||
+    source.startsWith('assembly:')
+  )) return false
   const quantity = positiveFinite(line.quantity)
   return quantity === null || quantity > 0
 }
@@ -198,6 +213,17 @@ export function enforceEvChargerCustomerSupplyFence<T extends DraftWithTiers>(
 
       const anchors = lineAnchorIds(line)
       const evAnchor = anchors.find((id) => evIds.has(id))
+      const source = normalise(line.source)
+      const coherentSource = !source || source === 'material' || /^material:[a-z0-9_-]+$/.test(source)
+      if (evAnchor && (anchors.length > 1 || !coherentSource)) {
+        return {
+          status: 'review_required', changed: false, draft, removed: [],
+          violation: {
+            code: 'unanchored_ev_charger_line', tier: tierName, lineIndex,
+            description: String(line.description ?? ''),
+          },
+        }
+      }
       if (evAnchor) {
         const tierRemovals = removals.get(tierName) ?? new Set<number>()
         tierRemovals.add(lineIndex)
@@ -213,7 +239,7 @@ export function enforceEvChargerCustomerSupplyFence<T extends DraftWithTiers>(
 
       if (looksLikeEvChargerUnit(line)) {
         return {
-          status: 'inspection_required',
+          status: 'review_required',
           changed: false,
           draft,
           removed: [],
@@ -239,7 +265,7 @@ export function enforceEvChargerCustomerSupplyFence<T extends DraftWithTiers>(
 
     if (!survivors.some(isInstallationWork)) {
       return {
-        status: 'inspection_required',
+        status: 'review_required',
         changed: false,
         draft,
         removed: [],
@@ -253,7 +279,7 @@ export function enforceEvChargerCustomerSupplyFence<T extends DraftWithTiers>(
         (line) => positiveFinite(line.quantity) === null || positiveFinite(line.unit_price_ex_gst) === null,
       )
       return {
-        status: 'inspection_required',
+        status: 'review_required',
         changed: false,
         draft,
         removed: [],
@@ -287,48 +313,247 @@ export function enforceEvChargerCustomerSupplyFence<T extends DraftWithTiers>(
 export const CHARGER_SUPPLIED_SEPARATELY_ASSUMPTION =
   'Charger unit supplied separately — model and price confirmed before booking.'
 
-/**
- * R7 (2026-09-02) — TRADIE SUPPLIES, NOTHING STOCKED.
- *
- * The seeded "Install EV charger" assembly explicitly excludes the unit, and
- * almost no tenant stocks chargers yet. That is a gap in the price book, not a
- * hazard on site — the installation is still quotable, and the honest output
- * is a priced install with the unit called out as separate.
- *
- * Stamped deterministically, because a customer reading "supply and install a
- * 7kW EV charger" while no unit is priced is exactly the confusion the
- * 2026-09-01 incident produced. PURE: returns a new draft, never mutates the
- * input, and no-ops unless every condition holds:
- *   - the job is ev_charger
- *   - the customer is NOT supplying (that path has its own fence above)
- *   - no priced tier already carries a charger-unit line
- */
+/** Reconcile every EV tier after grounding and the customer-supply fence.
+ * The historic name is retained for callers; the old assumption-only repair
+ * left a contradictory main scope and treated any EV-looking line as a unit.
+ * This changes presentation only. Catalogue-backed unit prices and installation
+ * amounts remain the grounding validator's responsibility. */
 export function ensureChargerSuppliedSeparatelyAssumption<T extends DraftWithTiers>(
   draft: T,
-  opts: { jobType?: string | null; chargerSupply?: string | null },
+  opts: {
+    jobType?: string | null
+    serviceMode?: EvServiceMode | null
+    chargerSupply?: string | null
+    suppliedBy?: string | null
+    candidates?: CandidatePrices | null
+  },
 ): T {
   if (normalise(opts.jobType) !== 'ev_charger') return draft
-  if (normalise(opts.chargerSupply) === CUSTOMER_SUPPLIES_EV_CHARGER) return draft
   if (inspectionDraft(draft)) return draft
-
-  const hasUnitLine = TIERS.some((tierName) => {
+  const chargerCatalogueRows = [...evChargerCatalogueIds(opts.candidates, null)]
+    .map((id) => ({ id, category: 'ev_charger' }))
+  const suppliedBy = opts.suppliedBy ?? opts.chargerSupply
+  const presentations = new Map<TierName, EvSupplyPresentation>()
+  const next: DraftWithTiers = { ...draft }
+  for (const tierName of TIERS) {
     const tier = draft[tierName]
-    if (!tier || !Array.isArray(tier.line_items)) return false
-    return tier.line_items.some(
-      (line) => !isProtectedInstallationLine(line) && looksLikeEvChargerUnit(line),
-    )
-  })
-  if (hasUnitLine) return draft
-
-  const existing = Array.isArray((draft as Record<string, unknown>).assumptions)
-    ? ((draft as Record<string, unknown>).assumptions as unknown[]).map((a) => String(a ?? ''))
-    : []
-  if (existing.some((a) => /charger unit supplied separately/i.test(a))) return draft
-
+    if (!tier || !Array.isArray(tier.line_items)) continue
+    const presentation = deriveEvSupplyPresentation({
+      jobType: opts.jobType, serviceMode: opts.serviceMode, suppliedBy, tier, chargerCatalogueRows,
+    })!
+    presentations.set(tierName, presentation)
+    next[tierName] = {
+      ...tier,
+      label: `${tierName[0].toUpperCase()}${tierName.slice(1)} — ${presentation.priceLabel}`,
+      description: reconcileEvSupplyScope(tier.description, presentation),
+      ...(tier.scope_of_works !== undefined
+        ? { scope_of_works: reconcileEvSupplyScope(tier.scope_of_works, presentation) } : {}),
+    }
+  }
+  const selected = presentations.get(draft.selected_tier as TierName)
+    ?? presentations.get('better') ?? presentations.get('good') ?? presentations.get('best')
+  if (!selected) return draft
   return {
-    ...draft,
-    assumptions: [...existing, CHARGER_SUPPLIED_SEPARATELY_ASSUMPTION],
-  } as T
+    ...next,
+    scope_of_works: reconcileEvSupplyScope(draft.scope_of_works, selected),
+    scope_short: selected.title,
+    assumptions: reconcileEvSupplyAssumptions(draft.assumptions, selected),
+    exclusions: reconcileEvSupplyExclusions(draft.exclusions, selected),
+  } as unknown as T
+}
+
+/** A real GPO/outlet price is not evidence of an EV installation. Hold an EV
+ * draft that substitutes only non-EV assemblies for the installation assembly.
+ * Additional RCBO/outlet assemblies alongside a grounded EV assembly are kept.
+ * This is a scope check, not permission to replace a line or invent a price. */
+export function findEvInstallationAssemblyMismatches(
+  draft: DraftWithTiers,
+  opts: { jobType?: string | null; candidates: CandidatePrices },
+): import('./validate').GroundingFailure[] {
+  if (normalise(opts.jobType) !== 'ev_charger' || inspectionDraft(draft)) return []
+  const failures: import('./validate').GroundingFailure[] = []
+  for (const tierName of TIERS) {
+    const lines = draft[tierName]?.line_items
+    if (!Array.isArray(lines)) continue
+    const assemblies = lines.flatMap((line, index) => {
+      const source = normalise(line.source)
+      if (!(source === 'assembly' || source.startsWith('assembly:'))) return []
+      const id = source.startsWith('assembly:') ? source.slice('assembly:'.length) : normalise(line.catalogue_id)
+      const rows = opts.candidates.assembly.filter((candidate) => normalise(candidate.sourceId) === id)
+      return [{ line, index, rows }]
+    })
+    const hasValidEvAssembly = assemblies.some(({ line, rows }) => {
+      const quantity = Number(line.quantity)
+      const price = Number(line.unit_price_ex_gst)
+      const valid = line.quantity != null && line.quantity !== '' && Number.isFinite(quantity) && quantity > 0
+        && line.unit_price_ex_gst != null && line.unit_price_ex_gst !== '' && Number.isFinite(price) && price >= 0
+      return valid && rows.some((row) => row.categories.has('ev_charger'))
+    })
+    if (!assemblies.length || hasValidEvAssembly) continue
+    // Missing anchors cannot prove EV compatibility either. A loose name/price
+    // grounding match must not let an unanchored outlet bypass this service
+    // check. Keep it for tradie correction; never guess its category by words.
+    const wrong = assemblies.find(({ rows }) => rows.length > 0) ?? assemblies[0]
+    failures.push({
+      tier: tierName,
+      lineIndex: wrong.index,
+      description: String(wrong.line.description ?? ''),
+      unit: String(wrong.line.unit ?? ''),
+      unit_price_ex_gst: Number(wrong.line.unit_price_ex_gst),
+      expected: 'EV installation assembly required: an outlet, non-EV or unanchored assembly does not establish the requested charger installation scope.',
+    })
+  }
+  return failures
+}
+
+export type EvServiceModeQuoteViolation = {
+  code:
+    | 'missing_service_mode'
+    | 'missing_priced_tier'
+    | 'empty_present_tier'
+    | 'missing_grounded_charger_unit'
+    | 'missing_chosen_product'
+    | 'charger_unit_not_selected'
+    | 'unexpected_charger_unit'
+    | 'ungrounded_charger_unit'
+    | 'missing_grounded_installation'
+    | 'unexpected_installation_work'
+    | 'service_mode_check_failed'
+  tier?: TierName
+  lineIndex?: number
+  description?: string
+}
+
+export type EvServiceModeQuoteConsistency =
+  | { ok: true; mode?: EvServiceMode; failures: [] }
+  | { ok: false; mode?: EvServiceMode; failures: EvServiceModeQuoteViolation[] }
+
+function hasPositivePricedQuantity(line: DraftLineItem): boolean {
+  const quantity = positiveFinite(line.quantity)
+  const price = positiveFinite(line.unit_price_ex_gst)
+  return quantity !== null && quantity > 0 && price !== null && price > 0
+}
+
+function groundedCandidateForLine(
+  line: DraftLineItem,
+  candidates: CandidatePrices['material'] | CandidatePrices['assembly'],
+): boolean {
+  if (!hasPositivePricedQuantity(line)) return false
+  const anchors = lineAnchorIds(line)
+  if (anchors.length !== 1) return false
+  const price = Number(line.unit_price_ex_gst)
+  return candidates.some((candidate) =>
+    normalise(candidate.sourceId) === anchors[0] &&
+    candidate.categories.has('ev_charger') &&
+    Math.abs(candidate.price - price) <= 0.5,
+  )
+}
+
+/**
+ * Binding EV-service invariant used both after estimation and immediately
+ * before customer release. It validates every priced tier. Catalogue anchors
+ * and candidate prices are the authority; description matching only detects
+ * an ungrounded charger claim and never grants it.
+ */
+export function validateEvChargerServiceModeQuote(input: {
+  jobType?: string | null
+  serviceMode?: EvServiceMode | null
+  draft: DraftWithTiers
+  candidates: CandidatePrices
+  riskFlags?: unknown
+  chosenProduct?: { catalogue_id?: unknown } | null
+}): EvServiceModeQuoteConsistency {
+  if (normalise(input.jobType) !== 'ev_charger') {
+    // This validator is deliberately EV-scoped. Non-EV callers should not use
+    // the result as a general quote-readiness decision.
+    return { ok: true, failures: [] }
+  }
+  if (!input.serviceMode) {
+    return { ok: false, failures: [{ code: 'missing_service_mode' }] }
+  }
+
+  const failures: EvServiceModeQuoteViolation[] = []
+  const presentTiers = TIERS.filter((tierName) => input.draft[tierName] != null)
+  const pricedTiers = presentTiers.filter((tierName) => {
+    const tier = input.draft[tierName]
+    return !!tier && Array.isArray(tier.line_items) && tier.line_items.length > 0
+  })
+  for (const tierName of presentTiers) {
+    if (!pricedTiers.includes(tierName)) failures.push({ code: 'empty_present_tier', tier: tierName })
+  }
+  if (pricedTiers.length === 0) {
+    return {
+      ok: false,
+      mode: input.serviceMode,
+      failures: [...failures, { code: 'missing_priced_tier' }],
+    }
+  }
+
+  for (const tierName of pricedTiers) {
+    const tier = input.draft[tierName]!
+    const lines = tier.line_items ?? []
+    const authorisedManual = new Set(resolveAuthorizedEvManualChargerLineIndexes({
+      tierName,
+      tier,
+      riskFlags: input.riskFlags ?? input.draft.risk_flags,
+    }))
+    let groundedUnit = false
+    const groundedUnitAnchors = new Set<string>()
+    let hasAuthorisedManualUnit = false
+    let groundedInstall = false
+    let hasAnyUnit = false
+    let hasInstallationWork = false
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex]
+      const groundedMaterial = groundedCandidateForLine(line, input.candidates.material)
+      const groundedAssembly = groundedCandidateForLine(line, input.candidates.assembly)
+      const manualUnit = authorisedManual.has(lineIndex)
+      const suspiciousUnit = looksLikeEvChargerUnit(line) && !isProtectedInstallationLine(line)
+
+      if (groundedMaterial || manualUnit || suspiciousUnit) hasAnyUnit = true
+      if (groundedMaterial || manualUnit) groundedUnit = true
+      if (groundedMaterial) {
+        for (const anchor of lineAnchorIds(line)) groundedUnitAnchors.add(anchor)
+      }
+      if (manualUnit) hasAuthorisedManualUnit = true
+      if (suspiciousUnit && !groundedMaterial && !manualUnit) {
+        failures.push({
+          code: 'ungrounded_charger_unit', tier: tierName, lineIndex,
+          description: String(line.description ?? ''),
+        })
+      }
+
+      if (isInstallationWork(line)) {
+        hasInstallationWork = true
+      }
+      if (groundedAssembly) groundedInstall = true
+    }
+
+    if (input.serviceMode === 'supply_only') {
+      if (!groundedUnit) failures.push({ code: 'missing_grounded_charger_unit', tier: tierName })
+      if (hasInstallationWork) failures.push({ code: 'unexpected_installation_work', tier: tierName })
+    } else if (input.serviceMode === 'install_only') {
+      if (hasAnyUnit) failures.push({ code: 'unexpected_charger_unit', tier: tierName })
+      if (!groundedInstall) failures.push({ code: 'missing_grounded_installation', tier: tierName })
+    } else {
+      if (!groundedUnit) failures.push({ code: 'missing_grounded_charger_unit', tier: tierName })
+      if (!groundedInstall) failures.push({ code: 'missing_grounded_installation', tier: tierName })
+    }
+
+    if (input.serviceMode !== 'install_only' && !hasAuthorisedManualUnit) {
+      const chosenId = normalise(input.chosenProduct?.catalogue_id)
+      if (!chosenId) {
+        failures.push({ code: 'missing_chosen_product', tier: tierName })
+      } else if (!groundedUnitAnchors.has(chosenId) || [...groundedUnitAnchors].some((id) => id !== chosenId)) {
+        failures.push({ code: 'charger_unit_not_selected', tier: tierName })
+      }
+    }
+  }
+
+  return failures.length > 0
+    ? { ok: false, mode: input.serviceMode, failures }
+    : { ok: true, mode: input.serviceMode, failures: [] }
 }
 
 /**

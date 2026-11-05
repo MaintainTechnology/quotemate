@@ -71,6 +71,7 @@ import { validOwnedQuoteBook } from '@/lib/quote/edit-authority'
 import { genericQuoteReleased } from '@/lib/quote/customer-release'
 import { readQuoteDraftReadiness } from '@/lib/quote/job-quote-operation'
 import { loadChildQuoteMoney, QuoteChainMoneyError } from '@/lib/quote/chain-money'
+import { evChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
 
 // A single Stripe Session create runs on the stripe path — give it headroom
 // over the fast-redirect default so a cold start can't time out mid-mint.
@@ -128,6 +129,9 @@ export function resolvePayRedirect(input: {
    *  caller with resolveBookingOptions — the SAME resolver the booking page
    *  renders from, so this answer and the calendar can never disagree. */
   bookableCount: number
+  /** False for a product-only order such as EV charger supply-only. Payment
+   * confirms fulfilment, so an empty appointment calendar is irrelevant. */
+  requiresBooking?: boolean
   /** quotes.quote_kind (spec post-visit-money-sequence R7). A 'final' or
    *  'balance' child skips BOTH of the gates below, and for opposite reasons
    *  to each other:
@@ -143,7 +147,10 @@ export function resolvePayRedirect(input: {
    *  The 'paid' check is NOT skipped: never re-charge, on any row. */
   quoteKind?: string | null | undefined
 }): PayRedirectDecision {
-  const { tier, paid, scheduledAt, expired, token, appUrl, bookableCount } = input
+  const {
+    tier, paid, scheduledAt, expired, token, appUrl, bookableCount,
+    requiresBooking = true,
+  } = input
   const isChild = input.quoteKind === 'final' || input.quoteKind === 'balance'
 
   // Expiry gate — priced tiers only. Inspection has no price hold, and an
@@ -160,7 +167,7 @@ export function resolvePayRedirect(input: {
   // About to charge — refuse if there is nothing to book afterwards. Checked
   // AFTER 'paid' so an already-paid customer is never bounced: they are not
   // being charged again, and their booking page handles the empty case itself.
-  if (!isChild && !canTakePayment({ bookableCount })) {
+  if (!isChild && requiresBooking && !canTakePayment({ bookableCount })) {
     return { kind: 'no-slots', url: `${appUrl}/q/${token}?slots=0` }
   }
 
@@ -202,7 +209,15 @@ async function mintFreshDepositUrl(
       .eq('tenant_id', quote.tenant_id!)
       .maybeSingle()
     if (intakeError || !intakeRow) return null
-    if (resolveGenericMintTier(tier, typeof intakeRow.trade === 'string' ? intakeRow.trade : null, 'initial').kind !== 'passthrough') return null
+    const serviceMode = intakeRow.job_type === 'ev_charger'
+      ? evChargerServiceModeFromIntake(intakeRow)
+      : undefined
+    if (resolveGenericMintTier(
+      tier,
+      typeof intakeRow.trade === 'string' ? intakeRow.trade : null,
+      'initial',
+      serviceMode,
+    ).kind !== 'passthrough') return null
     const intake = {
       job_type: (intakeRow?.job_type as string) ?? 'other',
       scope: (intakeRow?.scope as { item_count?: number; description?: string } | null) ?? null,
@@ -412,6 +427,25 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   }
 
   const quoteKind = asQuoteKind(quote.quote_kind as string | null)
+  let initialIntakeRoute: { job_type?: unknown; trade?: unknown; scope?: unknown } | null = null
+  if (quoteKind === 'initial' && quote.intake_id) {
+    const { data, error } = await db()
+      .from('intakes')
+      .select('job_type,trade,scope')
+      .eq('id', quote.intake_id)
+      .eq('tenant_id', quote.tenant_id!)
+      .maybeSingle()
+    if (error || !data) {
+      return Response.redirect(new URL(`/q/${token}?pay=unavailable`, req.url), 302)
+    }
+    initialIntakeRoute = data
+  }
+  const initialEvServiceMode = initialIntakeRoute?.job_type === 'ev_charger'
+    ? evChargerServiceModeFromIntake(initialIntakeRoute)
+    : undefined
+  if (initialEvServiceMode === 'supply_only' && tier === 'inspection') {
+    return Response.redirect(new URL(`/q/${token}?pay=unavailable`, req.url), 302)
+  }
 
   // ── Post-site-visit child rows (spec post-visit-money-sequence R7) ──
   // A child charges exactly one literal ('deposit' on a final row, 'balance'
@@ -482,16 +516,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   // intake) FAILS OPEN to today's behaviour: it is not provably elec/plumb.
   // Only a priced tier can be redirected, so 'inspection' skips the lookup.
   if (tier !== 'inspection' && quote.intake_id) {
-    const { data: tradeRow, error: tradeError } = await db()
-      .from('intakes')
-      .select('trade')
-      .eq('id', quote.intake_id)
-      .eq('tenant_id', quote.tenant_id!)
-      .maybeSingle()
-    if (tradeError || !tradeRow || typeof tradeRow.trade !== 'string') {
+    if (!initialIntakeRoute || typeof initialIntakeRoute.trade !== 'string') {
       return Response.redirect(new URL(`/q/${token}?pay=unavailable`, req.url), 302)
     }
-    const gate = resolveGenericMintTier(tier, (tradeRow?.trade as string | null) ?? null, quoteKind)
+    const gate = resolveGenericMintTier(
+      tier,
+      initialIntakeRoute.trade,
+      quoteKind,
+      initialEvServiceMode,
+    )
     if (gate.kind === 'redirect_to_inspection') {
       // Same-app hop, so base it on the REQUEST rather than APP_URL: the two
       // provisioned Twilio webhook hosts both serve this app, and an unset
@@ -517,7 +550,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   // Best-effort: a lookup failure must not block a legitimate payment, so an
   // unknown count is treated as "slots exist" and the customer proceeds.
   let bookableCount = 1
-  if (quote.tenant_id) {
+  if (quote.tenant_id && initialEvServiceMode !== 'supply_only') {
     try {
       const { data: tenantRow } = await db()
         .from('tenants')
@@ -558,6 +591,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     token,
     appUrl: process.env.APP_URL!,
     bookableCount,
+    requiresBooking: initialEvServiceMode !== 'supply_only',
     quoteKind,
   })
 

@@ -38,7 +38,14 @@ import {
   dropUnpricedPhantomEvChargerLines,
   enforceEvChargerCustomerSupplyFence,
   ensureChargerSuppliedSeparatelyAssumption,
+  findEvInstallationAssemblyMismatches,
+  validateEvChargerServiceModeQuote,
+  type EvServiceModeQuoteViolation,
 } from './ev-charger-supply'
+import {
+  isEvInstallationMode,
+  strictEvChargerServiceModeFromIntake,
+} from '@/lib/quote/ev-service-mode'
 import {
   checkSanityBounds,
   checkTierMonotonicity,
@@ -63,6 +70,8 @@ import {
   type PastQuoteTiers,
 } from './price-history'
 import { buildDeterministicTiers, type DeterministicTierInput } from './deterministic-bom'
+import { rank1QuoteCoreEnabled } from './rank1-policy'
+import { buildRank1Estimation, type Rank1QuoteContext, type Rank1QuoteEvidence } from './rank1'
 import { buildAssemblyOrFilter, pickBestAssembly } from './assembly-search'
 
 // Phase 1 — a wider candidate pool than the old `.limit(5)`, which became a
@@ -90,6 +99,8 @@ const supabase = createClient(
 )
 
 export type EstimationResult = {
+  /** Server-produced authority evidence. Model output never supplies this. */
+  quoteCore?: Rank1QuoteEvidence
   /** The draft quote that the route handler should persist + dispatch.
    *  If grounding validation failed, this draft is downgraded to
    *  inspection-required (good/better/best=null, needs_inspection=true). */
@@ -113,6 +124,10 @@ export type EstimationResult = {
    *  the tradie approve or edit. A grounding failure is our validation
    *  problem, never a "the site is too complex" message to the customer. */
   groundingHold?: boolean
+  /** EV scope is unresolved or the priced tiers contradict its binding
+   * service_mode. This is a customer-release hold, never an inspection. */
+  serviceModeHold?: boolean
+  serviceModeFailures?: EvServiceModeQuoteViolation[]
   /** R15b — set when a HARD spec mismatch blocked SOME (not all) priced
    *  tiers in enforce mode. The quote still ships with its spec-correct
    *  tier(s) (so it is NOT an inspection downgrade), but the route handler
@@ -147,6 +162,7 @@ export async function runEstimation(
   pricingBook: any,
   modelId = 'claude-opus-4-8',
   conversationState: RecipeConversationState = null,
+  quoteContext: Rank1QuoteContext | null = null,
 ): Promise<EstimationResult> {
   const cacheLog = pipelineLog('estimate', intake?.id ?? null)
   // Phase 7 — structured tracer. Fires fire-and-forget DB writes to
@@ -159,6 +175,11 @@ export async function runEstimation(
     intake_id: (intake?.id as string | null) ?? null,
   })
   const totalSw = stopwatch()
+  const isEvCharger = intake?.job_type === 'ev_charger'
+  const evServiceMode = isEvCharger
+    ? strictEvChargerServiceModeFromIntake(intake)
+    : undefined
+  const installationPipelineAllowed = !isEvCharger || isEvInstallationMode(evServiceMode)
   trace('estimate', 'ok', {
     substep: 'start',
     message: `runEstimation invoked (model=${modelId})`,
@@ -178,12 +199,22 @@ export async function runEstimation(
     },
   })
 
+  // System-wide: branch before retrieval/model price drafting for EVERY
+  // account and trade, including missing identity. Unsupported recipes and
+  // incomplete setup become unpriced review results, never model fallbacks.
+  if (rank1QuoteCoreEnabled()) {
+    return buildRank1Estimation({
+      intake: intake ?? {}, pricingBook, context: quoteContext,
+      loadInputs: () => loadDeterministicInputs(intake, pricingBook, true),
+    })
+  }
+
   // EV inspection routing is terminal. When the portal's exact three-phase
   // answer (or the structurer) marks this job inspection-required, no
   // downstream recipe, retrieval or model path may turn it back into a priced
   // quote. Keep the early return EV-scoped so this feature does not silently
   // change another job type's established routing contract.
-  if (intake?.job_type === 'ev_charger' && intake?.inspection_required === true) {
+  if (isEvCharger && installationPipelineAllowed && intake?.inspection_required === true) {
     const inspectionSignals = [
       intake?.property?.phase === 'three' ? 'three-phase switchboard work' : null,
       intake?.job_type,
@@ -221,7 +252,10 @@ export async function runEstimation(
   // the existing model path.
   let recipeAuthorityLoaded: Awaited<ReturnType<typeof loadDeterministicInputs>> | null = null
   let recipeAuthorityBuild: ReturnType<typeof buildDeterministicTiers> | null = null
-  try {
+  // EV catalogue gaps are quote-review gaps, not evidence that a paid site
+  // visit is required. Let the normal model + grounding/service-mode guards
+  // retain an incomplete draft for the tradie instead of returning $99 here.
+  if (!isEvCharger) try {
     recipeAuthorityLoaded = await loadDeterministicInputs(intake, pricingBook)
     if (recipeAuthorityLoaded.input) {
       recipeAuthorityBuild = buildDeterministicTiers(recipeAuthorityLoaded.input)
@@ -279,10 +313,8 @@ export async function runEstimation(
     return { draft, downgradedToInspection: true, inspectionCause: 'grounding_failed' }
   }
 
-  // RAG: anchor Opus to similar past quotes. Returns null on cold-start
-  // (no usable matches), all-inspection results, or if RAG_DISABLED=true.
-  // The block goes in the user message — keeps the system message
-  // fully cacheable while still informing this specific draft.
+  // Historical-price retrieval is retired. The compatibility helper returns
+  // null without querying another tenant's quotes or embedding providers.
   let ragContext: string | null = null
   let ragMatchCount = 0
   try {
@@ -292,7 +324,7 @@ export async function runEstimation(
       ragMatchCount = rag.matchCount
       cacheLog.ok('RAG context attached', { match_count: ragMatchCount, chars: rag.context.length })
     } else {
-      cacheLog.ok('RAG context skipped', { reason: 'no usable matches or disabled' })
+      cacheLog.ok('RAG context skipped', { reason: 'historical-price retrieval retired' })
     }
   } catch (e: any) {
     // RAG must never block estimation. Log + carry on.
@@ -438,6 +470,13 @@ export async function runEstimation(
   }
 
   let draft = parseJsonFromText(result.text)
+  // This marker is written only by the authenticated tradie line editor.
+  // Model output must never mint the provenance later used by rendering to
+  // recognise a human-authorised manual charger price.
+  if (Array.isArray(draft?.risk_flags)) {
+    draft.risk_flags = draft.risk_flags.filter((flag: unknown) =>
+      typeof flag !== 'string' || !/^\s*tradie_manual_line:/i.test(flag))
+  }
 
   // Phase 7 — record the LLM-call outcome.
   trace('estimate', 'ok', {
@@ -469,6 +508,21 @@ export async function runEstimation(
   // to validate — accept as-is. The route handler will force tier nulls and
   // the $99 inspection total.
   if (draft?.needs_inspection === true) {
+    if (isEvCharger) {
+      // The structured intake preflight above is the only EV path allowed to
+      // establish a genuine site condition. A model/catalogue failure is an
+      // internal quote gap: keep it out of the $99 inspection product and let
+      // the deterministic service-mode guard below hold it for the tradie.
+      draft = {
+        ...draft,
+        needs_inspection: false,
+        inspection_reason: null,
+        risk_flags: [
+          ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+          '[ev-service-mode] model_requested_inspection — quote held for tradie review; no $99 inspection substituted',
+        ],
+      }
+    } else {
     // R13 — the self-report reason is free-form LLM text shown to the
     // customer; resolve it to the closed enum before it leaves the engine.
     draft.inspection_reason = resolveInspectionReason(draft.inspection_reason)
@@ -488,6 +542,7 @@ export async function runEstimation(
       duration_ms: totalSw.elapsed(),
     })
     return { draft }
+    }
   }
 
   // ── Phase 2 — DETERMINISTIC BOM (flag-gated, default OFF) ──────────
@@ -511,7 +566,7 @@ export async function runEstimation(
   // '1' behave exactly as the old `=== '1'` did; the new capability is an
   // allow-list, so one misbehaving tenant can be isolated on the next inbound
   // without turning the engine off for the other seven.
-  if (deterministicBomEnabled(intake?.tenant_id ?? null)) {
+  if (installationPipelineAllowed && deterministicBomEnabled(intake?.tenant_id ?? null)) {
     try {
       const loaded = recipeAuthorityLoaded ?? await loadDeterministicInputs(intake, pricingBook)
       if (loaded.input) {
@@ -590,7 +645,9 @@ export async function runEstimation(
   // never undercharges, never fabricates; no-ops when already compliant.
   // This mutates `draft` in place, so validation below sees the floor.
   const floorSw = stopwatch()
-  const floored = applyMinLabourFloor(draft, pricingBook)
+  const floored = installationPipelineAllowed
+    ? applyMinLabourFloor(draft, pricingBook)
+    : { adjustedTiers: [] as Array<'good' | 'better' | 'best'> }
   if (floored.adjustedTiers.length > 0) {
     cacheLog.ok('min-labour floor applied (small-job minimum charge — not bounced to inspection)', {
       tiers: floored.adjustedTiers,
@@ -647,7 +704,7 @@ export async function runEstimation(
   //     state (CRITICAL log) so a partial / un-grounded merge never
   //     ships. A revert restores the exact Opus-drafted tier object.
   let mergedDraft: DraftWithTiers = draft
-  try {
+  if (installationPipelineAllowed) try {
     const recipeCtx = await loadRecipeContext(
       (intake?.trade as string | null) ?? null,
       (intake?.tenant_id as string | null) ?? null,
@@ -933,6 +990,23 @@ export async function runEstimation(
     }
   }
 
+  // A catalogue price can ground while its work is the wrong service. Apply
+  // this after optional-line recovery so removing an upsell cannot erase the
+  // EV base-assembly failure. The existing hold path preserves the draft for
+  // correction instead of describing an internal scope error as a site hazard.
+  const evAssemblyFailures = installationPipelineAllowed
+    ? findEvInstallationAssemblyMismatches(draft, {
+        jobType: intake?.job_type,
+        candidates,
+      })
+    : []
+  if (evAssemblyFailures.length > 0) {
+    check = {
+      valid: false,
+      failures: [...(check.valid ? [] : check.failures), ...evAssemblyFailures],
+    }
+  }
+
   if (check.valid) {
     if (strippedUpsells.length > 0) {
       draft.risk_flags = [
@@ -1143,6 +1217,8 @@ export async function runEstimation(
       reason: string
       groundingFailures?: GroundingFailure[]
     } | null = null
+    const evFenceFailures: EvServiceModeQuoteViolation[] = []
+    let evFenceGroundingFailures: GroundingFailure[] = []
 
     // R15b — populated when a partial spec-block removed some (not all)
     // priced tiers. Threaded onto the success return so the route handler
@@ -1404,39 +1480,29 @@ export async function runEstimation(
       )
     }
 
-    // R7 — the tradie supplies the charger but stocks none: the install is
-    // still real work at a real price, so quote it and say plainly that the
-    // unit is separate. Runs BEFORE the customer-supply fence so the two
-    // branches never both touch the same draft.
-    draft = ensureChargerSuppliedSeparatelyAssumption(draft, {
-      jobType: intake?.job_type as string | null | undefined,
-      chargerSupply:
-        (intake?.scope?.specs?.supplied_by as string | undefined) === 'customer'
-          ? CUSTOMER_SUPPLIES_EV_CHARGER
-          : null,
-    })
-
     // EV customer-supply fence — the install assembly explicitly excludes the
     // charger unit. Grounding proves a material price exists, but cannot prove
     // the customer did not already buy that material, so remove only
     // category-anchored EV unit rows and fail closed on anything ambiguous.
     try {
-      const supplyMode = intake?.scope?.specs?.supplied_by
       const fence = enforceEvChargerCustomerSupplyFence({
         jobType: intake?.job_type,
         chargerSupply:
-          supplyMode === 'customer' ? CUSTOMER_SUPPLIES_EV_CHARGER : null,
+          evServiceMode === 'install_only' ? CUSTOMER_SUPPLIES_EV_CHARGER : null,
         draft,
         candidates,
       })
-      if (fence.status === 'inspection_required') {
-        forcedInspection = {
-          reason:
-            `Customer-supplied EV charger safety check failed (${fence.violation.code}). ` +
-            'A site visit is needed before we can confirm an installation-only price.',
-        }
+      if (fence.status === 'review_required') {
+        evFenceFailures.push({
+          code: fence.violation.code === 'unanchored_ev_charger_line'
+            ? 'ungrounded_charger_unit'
+            : 'missing_grounded_installation',
+          tier: fence.violation.tier,
+          lineIndex: fence.violation.lineIndex,
+          description: fence.violation.description,
+        })
         cacheLog.err(
-          'EV customer-supply fence found an ambiguous or incomplete installation; downgrading to inspection',
+          'EV customer-supply fence found an ambiguous or incomplete installation; holding for review',
           fence.violation.code,
           fence.violation,
         )
@@ -1448,12 +1514,7 @@ export async function runEstimation(
           candidates,
         )
         if (!recheck.valid) {
-          forcedInspection = {
-            reason:
-              `Customer-supplied EV charger installation failed the post-removal grounding check. ` +
-              'A site visit is needed before we can quote accurately.',
-            groundingFailures: recheck.failures,
-          }
+          evFenceGroundingFailures = recheck.failures
         } else {
           cacheLog.ok('EV customer-supply fence removed charger unit lines', {
             removed: fence.removed.length,
@@ -1461,13 +1522,9 @@ export async function runEstimation(
         }
       }
     } catch (err: unknown) {
-      forcedInspection = {
-        reason:
-          'Customer-supplied EV charger pricing could not be verified safely. ' +
-          'A site visit is needed before we can quote accurately.',
-      }
+      evFenceFailures.push({ code: 'service_mode_check_failed' })
       cacheLog.err(
-        'EV customer-supply fence errored; downgrading to inspection',
+        'EV customer-supply fence errored; holding for review',
         err instanceof Error ? err.message : String(err),
       )
     }
@@ -1480,6 +1537,25 @@ export async function runEstimation(
     // sessions. This NEVER loosens grounding — it only adds reasons to
     // route to the safe $99 inspection.
     if (forcedInspection) {
+      if (isEvCharger) {
+        const held = {
+          ...draft,
+          needs_inspection: false,
+          inspection_reason: null,
+          risk_flags: [
+            ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+            `[ev-service-mode] ${forcedInspection.reason} Quote held for tradie review; no $99 inspection was substituted.`,
+          ],
+        }
+        return {
+          draft: held,
+          serviceModeHold: true,
+          serviceModeFailures: [{ code: 'service_mode_check_failed' }],
+          ...(forcedInspection.groundingFailures?.length
+            ? { groundingFailures: forcedInspection.groundingFailures, groundingHold: true }
+            : {}),
+        }
+      }
       const downgraded = {
         ...draft,
         good: null,
@@ -1511,6 +1587,61 @@ export async function runEstimation(
       }
     }
 
+    // Reconcile scope, labels and exclusions only after the final unit removal
+    // and grounding checks. A unit in Best cannot make Good promise supply;
+    // missing responsibility stays unresolved instead of defaulting to tradie.
+    draft = ensureChargerSuppliedSeparatelyAssumption(draft, {
+      jobType: intake?.job_type,
+      serviceMode: evServiceMode,
+      suppliedBy: evServiceMode === 'install_only' ? 'customer'
+        : evServiceMode ? 'tradie' : null,
+      candidates,
+    })
+
+    const evConsistency = validateEvChargerServiceModeQuote({
+      jobType: intake?.job_type,
+      serviceMode: evServiceMode,
+      draft,
+      candidates,
+      riskFlags: draft.risk_flags,
+      chosenProduct: intake?.scope?.chosen_product ?? null,
+    })
+    const serviceModeFailures = [
+      ...evFenceFailures,
+      ...(evConsistency.ok ? [] : evConsistency.failures),
+    ]
+    if (isEvCharger && (serviceModeFailures.length > 0 || evFenceGroundingFailures.length > 0)) {
+      const flags = serviceModeFailures.map((failure) =>
+        `[ev-service-mode] ${failure.code}${failure.tier ? ` (${failure.tier})` : ''} — quote held for tradie review`,
+      )
+      const held = {
+        ...draft,
+        needs_inspection: false,
+        inspection_reason: null,
+        risk_flags: [...new Set([
+          ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+          ...flags,
+          ...(evFenceGroundingFailures.length > 0
+            ? [`[grounding] ${evFenceGroundingFailures.length} post-fence line(s) failed grounding — quote held for tradie review`]
+            : []),
+        ])],
+      }
+      trace('estimate', 'warn', {
+        substep: 'ev_service_mode_guard',
+        message: 'EV service-mode invariant failed; priced/incomplete draft held for review',
+        decisions: { route: 'tradie_review', service_mode: evServiceMode ?? 'unknown' },
+        outputs: { failures: serviceModeFailures },
+      })
+      return {
+        draft: held,
+        serviceModeHold: serviceModeFailures.length > 0,
+        ...(serviceModeFailures.length > 0 ? { serviceModeFailures } : {}),
+        ...(evFenceGroundingFailures.length > 0
+          ? { groundingFailures: evFenceGroundingFailures, groundingHold: true }
+          : {}),
+      }
+    }
+
     // R9 — deterministic sanity-bounds backstop. A fully-grounded quote can
     // still be grossly mis-sized (the 6-downlight-17.5h class) — per-line
     // grounding can't see the total. If the quote is outside its
@@ -1518,7 +1649,9 @@ export async function runEstimation(
     // corrected; an out-of-band total signals a misread scope). Opt-in: only
     // job types with a job_type_bounds row are checked; table-missing / no row
     // → no-op, so this is inert where bounds aren't seeded.
-    const sanity = await checkDraftSanityBounds(draft, intake, pricingBook)
+    const sanity = installationPipelineAllowed
+      ? await checkDraftSanityBounds(draft, intake, pricingBook)
+      : { ok: true as const }
     if (!sanity.ok) {
       cacheLog.err('sanity-bounds out of band — routing to inspection (R9)', null, { failures: sanity.failures })
       const downgraded = forceInspectionTiers({ ...draft }) as typeof draft
@@ -1603,8 +1736,20 @@ export async function runEstimation(
   // shouldHoldForReview() hold (review-policy.ts safetyReviewReasons), so the
   // customer is never auto-sent this draft — the tradie approves or edits it.
   // needs_inspection stays FALSE: this quote is priced, just unverified.
+  const failedEvConsistency = validateEvChargerServiceModeQuote({
+    jobType: intake?.job_type,
+    serviceMode: evServiceMode,
+    draft,
+    candidates,
+    riskFlags: draft.risk_flags,
+    chosenProduct: intake?.scope?.chosen_product ?? null,
+  })
+  const failedEvServiceModeFailures = isEvCharger && !failedEvConsistency.ok
+    ? failedEvConsistency.failures
+    : []
   const held = {
     ...draft,
+    ...(isEvCharger ? { needs_inspection: false, inspection_reason: null } : {}),
     // NOTE: pricing_path is deliberately left as the estimator set it.
     // It is CHECK-constrained to deterministic|opus_fallback|inspection
     // (mig 127) and it answers "how was this priced" — a held draft was
@@ -1613,6 +1758,9 @@ export async function runEstimation(
     risk_flags: [
       ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
       `[grounding] ${check.failures.length} line(s) could not be grounded against this tenant's price rows — quote held for your review before it goes to the customer`,
+      ...failedEvServiceModeFailures.map((failure) =>
+        `[ev-service-mode] ${failure.code}${failure.tier ? ` (${failure.tier})` : ''} — quote held for tradie review`,
+      ),
     ],
   }
 
@@ -1627,6 +1775,9 @@ export async function runEstimation(
     draft: held,
     groundingFailures: check.failures,
     groundingHold: true,
+    ...(failedEvServiceModeFailures.length > 0
+      ? { serviceModeHold: true, serviceModeFailures: failedEvServiceModeFailures }
+      : {}),
   }
 }
 
@@ -2459,10 +2610,13 @@ function readChosenProductAnchor(intake: any): ChosenProductAnchor | null {
 async function loadDeterministicInputs(
   intake: any,
   pricingBook: any,
+  rank1 = false,
 ): Promise<
   | {
       input: DeterministicTierInput
       assemblyName: string
+      recipeSourceId: string
+      recipeRowIds: string[]
       /** Phase 4 R9 — raw task rows; filtered per tier by the caller, because
        *  the condition depends on which product landed on that tier. */
       taskRows: { tenant: AssemblyTask[]; shared: AssemblyTask[] }
@@ -2487,6 +2641,24 @@ async function loadDeterministicInputs(
     return { input: null, reason: resolveReason ?? 'unresolved job_type' }
   }
   const ids = [primary.id]
+  if (rank1) {
+    // Recipe price-band questions need their own evaluated exact calculator;
+    // silently omitting these adjustments would underprice a non-base job.
+    const metadata = await supabase.from('shared_assemblies').select('id, price_recipe')
+      .eq('id', primary.id).eq('trade', trade).maybeSingle()
+    if (metadata.error || !metadata.data || metadata.data.id !== primary.id)
+      return { input: null, reason: 'assembly pricing rules unavailable' }
+    if (metadata.data.price_recipe != null &&
+        (!Array.isArray(metadata.data.price_recipe) || metadata.data.price_recipe.length > 0))
+      return { input: null, reason: 'conditional price-band recipe requires tradie review' }
+    const scope = intake?.scope ?? {}
+    if (/\bnew install\b/i.test(primary.name) && scope.is_new_install !== true)
+      return { input: null, reason: 'new-install recipe does not match confirmed installation scope' }
+    if (/\breplace\b/i.test(primary.name) && scope.is_new_install !== false)
+      return { input: null, reason: 'replacement recipe does not match confirmed installation scope' }
+    if (/single.storey/i.test(primary.name) && intake?.property?.levels !== 1)
+      return { input: null, reason: 'single-storey recipe requires confirmed single-storey access' }
+  }
 
   // The tradie's OWN recipe for this job wins; when they haven't authored
   // one, fall back to the shared baseline recipe (shared_assembly_bom) —
@@ -2494,7 +2666,7 @@ async function loadDeterministicInputs(
   // fire for ANY job with a seeded shared recipe, priced from THIS tenant's
   // tier-hinted catalogue (with shared_materials as the universal floor).
   // No tenant recipe AND no shared recipe → not deterministic (Opus path).
-  const { data: ownRecipe } = await supabase
+  const { data: ownRecipe, error: ownRecipeError } = await supabase
     .from('tenant_assembly_bom')
     // Phase 4 R7/R8/R11 (migration 185) — include_when, quantity_per and
     // catalogue_id. Same class as the R1 fix: a Supabase select is a STRING,
@@ -2503,10 +2675,12 @@ async function loadDeterministicInputs(
     // ⚠ ONE string literal, not a concatenation: supabase-js parses the
     // select at the TYPE level, and a computed string collapses the row type
     // to GenericStringError.
-    .select('material_category, quantity, required, description, sort, include_when, quantity_per, catalogue_id')
+    .select('id, material_category, quantity, required, description, sort, include_when, quantity_per, catalogue_id')
     .eq('tenant_id', tenantId)
     .in('assembly_id', ids)
     .order('sort', { ascending: true })
+  if (rank1 && (ownRecipeError || !ownRecipe?.length || ownRecipe.some(row => !row.id)))
+    return { input: null, reason: 'approved tenant recipe is missing or unavailable' }
   let recipe = ownRecipe
   if (!recipe || recipe.length === 0) {
     const { data: sharedRecipe } = await supabase
@@ -2520,10 +2694,40 @@ async function loadDeterministicInputs(
       .order('sort', { ascending: true })
     // catalogue_id is absent on shared rows; the builder reads it as
     // undefined, which is "no pin".
-    recipe = (sharedRecipe ?? []).map((r) => ({ ...r, catalogue_id: null }))
+    recipe = (sharedRecipe ?? []).map((r) => ({ ...r, id: null, catalogue_id: null }))
   }
   if (!recipe || recipe.length === 0) {
     return { input: null, reason: 'no recipe (tenant or shared) for this job' }
+  }
+
+  if (rank1) {
+    const isPositiveDecimal = (value: unknown): boolean =>
+      (typeof value === 'number' ||
+        (typeof value === 'string' && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value.trim()))) &&
+      Number.isFinite(Number(value)) && Number(value) > 0
+    // The legacy scaler ignores malformed ratios and can turn such a row into
+    // the headline. Strict pricing must reject that ambiguity before scaling.
+    if (recipe.some(line => line.quantity_per != null &&
+        (!isPositiveDecimal(line.quantity_per) || !Number.isSafeInteger(Number(line.quantity_per)) || Number(line.quantity_per) > 10_000)))
+      return { input: null, reason: 'approved recipe quantity_per must be a positive whole-item count up to 10000; fractional ratios need exact scaling rules' }
+
+    const approvedRecipe = recipe as BomLine[]
+    // Ask the existing pure scaler which non-ratio row it treats as headline.
+    // This preserves its sort and sundry rules without introducing a second
+    // selector. These probes are not pricing inputs and never mutate the recipe.
+    const oneItem = scaleBomToItemCount(approvedRecipe, 1)
+    const twoItems = scaleBomToItemCount(approvedRecipe, 2)
+    const headline = approvedRecipe.find((line, index) =>
+      line.quantity_per == null && Number(oneItem[index].quantity) !== Number(twoItems[index].quantity))
+    const baselineCount = Number(headline?.quantity)
+    if (!headline || !isPositiveDecimal(headline.quantity) ||
+        !Number.isSafeInteger(baselineCount) || baselineCount > 10_000)
+      return { input: null, reason: 'approved recipe headline quantity is missing or invalid' }
+    // Materials can scale, but the approved assembly labour is still a fixed
+    // per-job value. Until labour scaling has explicit approved metadata, only
+    // the recipe's original headline count can use that labour price.
+    if (Number(intake?.scope?.item_count) !== baselineCount)
+      return { input: null, reason: 'requested item count differs from the approved recipe labour baseline; quantity scaling requires tradie review' }
   }
 
   // v7 Phase 0: single source of truth per table —
@@ -2533,22 +2737,25 @@ async function loadDeterministicInputs(
   // but those columns never existed on that table — see migration 015 and
   // 028. The select was a latent error; only the early-return on the
   // disabled flag was actually doing work.)
-  const { data: offerings } = await supabase
+  const { data: offerings, error: offeringsError } = await supabase
     .from('tenant_service_offerings')
     .select('assembly_id, enabled')
     .eq('tenant_id', tenantId)
     .in('assembly_id', ids)
   const primaryOffering =
     (offerings ?? []).find((o: any) => o.assembly_id === primary.id) ?? null
+  if (rank1 && (offeringsError || primaryOffering?.enabled !== true))
+    return { input: null, reason: 'service must be explicitly enabled by this tenant' }
   if (primaryOffering && primaryOffering.enabled === false) {
     return { input: null, reason: 'service disabled in Services tab' }
   }
 
-  const { data: assemblyOverrides } = await supabase
+  const { data: assemblyOverrides, error: overridesError } = await supabase
     .from('tenant_assembly_overrides')
     .select('assembly_id, labour_hours_override, markup_pct_override')
     .eq('tenant_id', tenantId)
     .in('assembly_id', ids)
+  if (rank1 && overridesError) return { input: null, reason: 'tenant labour/mark-up policy unavailable' }
   const primaryOverride =
     (assemblyOverrides ?? []).find((o: any) => o.assembly_id === primary.id) ?? null
 
@@ -2562,6 +2769,8 @@ async function loadDeterministicInputs(
         }
       : null,
   )
+  if (rank1 && (eff.labourHours.dropped || eff.markupPct.dropped))
+    return { input: null, reason: 'tenant labour/mark-up override is invalid' }
   // Phase 5b — an out-of-range override was DROPPED. Log it: a drop that
   // nobody reports is still a silent one, and the whole point is that the bad
   // row gets found and fixed rather than quietly ignored on every future quote.
@@ -2623,8 +2832,13 @@ async function loadDeterministicInputs(
     .from('tenant_tier_ladder')
     .select('category, tier, catalogue_id')
     .eq('tenant_id', tenantId)
-  const [{ data: catRows }, { data: sharedRows }, { data: ladderRows }] =
-    await Promise.all([cq, mq, lq])
+  const [catalogueResult, sharedResult, ladderResult] =
+    await Promise.all([cq, rank1 ? Promise.resolve({ data: [], error: null }) : mq, lq])
+  if (rank1 && (catalogueResult.error || ladderResult.error))
+    return { input: null, reason: 'tenant catalogue or product ladder unavailable' }
+  const catRows = catalogueResult.data
+  const sharedRows = sharedResult.data
+  const ladderRows = ladderResult.data
 
   const input: DeterministicTierInput = {
     // Phase 2 R4 — same scaling as the hint path. Applied here rather than
@@ -2682,7 +2896,8 @@ async function loadDeterministicInputs(
     // Deliberately silent: see above. Empty list = today's behaviour.
   }
 
-  return { input, assemblyName: primary.name, taskRows }
+  return { input, assemblyName: primary.name, recipeSourceId: primary.id,
+    recipeRowIds: (ownRecipe ?? []).map(row => row.id).filter((id): id is string => typeof id === 'string'), taskRows }
 }
 
 /**

@@ -2,6 +2,11 @@ import { ASSUMPTION_RULES, type JobType } from './assumptions'
 import type { ConversationState } from './extract-slots'
 import type { ConversationTurn } from './dialog'
 import { categoryForJobType } from './product-options'
+import {
+  isEvInstallationMode,
+  normaliseEvServiceMode,
+  type EvServiceMode,
+} from '@/lib/quote/ev-service-mode'
 
 export type QuoteReadinessService = {
   name: string
@@ -46,12 +51,18 @@ export type QuoteReadinessInput = {
 // EV finish is gated by nothing at all, so "required" would be required for one
 // tenant and optional for the rest.
 //
-// This mirror is the floor, not the authority: when the tenant HAS enabled the
-// service, its DB questions win (they may have been tailored). Keep this list
-// in step with sql/migrations/196_ev_charger_clarifying_questions.sql.
+// These five topics are a mandatory floor even when an enabled tenant row
+// still has the legacy three-question script. Additional tenant questions
+// remain required. Keep in step with migration 196.
+export const EV_SERVICE_MODE_QUESTION =
+  'Do you need the charger supplied only, installation only for a charger you already have, or both supply and installation?'
+
+export const EV_INSTALL_ONLY_CHARGER_QUESTION =
+  'What make and model is the charger you already have?'
+
 export const EV_CHARGER_FALLBACK_QUESTIONS: readonly string[] = [
   'Which electric vehicle is the charger for - Tesla, BYD, or another make?',
-  'Do you already have the charger unit, or should we supply it?',
+  EV_SERVICE_MODE_QUESTION,
   'Whereabouts is the charger going - garage, carport, or an external wall?',
   'Roughly how far is the charger spot from the switchboard?',
   'Is the property single phase or three phase, and any idea of spare switchboard capacity?',
@@ -489,6 +500,48 @@ function missingServiceQuestion(
   input: QuoteReadinessInput,
   service: QuoteReadinessService | null,
 ): MissingQuoteFact | null {
+  if (jobType(input) === 'ev_charger') {
+    const history = input.history ?? []
+    const mode = resolvedEvServiceMode(input.conversationState)
+    if (!mode) {
+      return fact(
+        'service_mode',
+        EV_SERVICE_MODE_QUESTION,
+        'EV service mode must be supply only, installation only, or supply and installation',
+      )
+    }
+    // Every mode needs vehicle compatibility. Supply-only stops here because
+    // its concrete charger comes from the priced product picker.
+    if (!evTopicAnswered(history, 0)) {
+      return fact('service_question:0', EV_CHARGER_FALLBACK_QUESTIONS[0],
+        `required EV vehicle compatibility for ${mode}`)
+    }
+
+    // Installation-only never opens the product picker, so retain the one
+    // customer-owned product fact that the old intake gathered: charger make
+    // and model. This is dynamic and never asked on a tradie-supply mode.
+    if (
+      mode === 'install_only' &&
+      !hasSpec(input, 'charger_model') &&
+      !evInstallOnlyChargerModelAnswered(history)
+    ) {
+      return fact(
+        'ev_charger_model',
+        EV_INSTALL_ONLY_CHARGER_QUESTION,
+        'the customer-owned charger make and model is required for installation compatibility',
+      )
+    }
+
+    // Location, switchboard distance and phase/capacity belong only to
+    // installation work. Supply-only skips all of them (and the photo below).
+    const requiredTopics = isEvInstallationMode(mode) ? [2, 3, 4] : []
+    for (const index of requiredTopics) {
+      if (!evTopicAnswered(history, index)) {
+        return fact(`service_question:${index}`, EV_CHARGER_FALLBACK_QUESTIONS[index],
+          `required EV topic ${index + 1} for ${mode}`)
+      }
+    }
+  }
   const questions = (service?.clarifying_questions ?? []).filter((q): q is string => hasValue(q))
   if (!service || questions.length === 0) return null
   // EV questions all repeat the generic word "charger". Counting a single
@@ -500,9 +553,19 @@ function missingServiceQuestion(
     String(service.category ?? '').trim().toLowerCase() === 'ev_charger' ? 0.4 : 0
   for (let i = 0; i < questions.length; i++) {
     const question = questions[i]
+    const evMode = jobType(input) === 'ev_charger'
+      ? resolvedEvServiceMode(input.conversationState) : undefined
+    // A tenant may still have a legacy installation-oriented question list.
+    // It must not pull a supply-only customer back into the site workflow.
+    if (evMode === 'supply_only' && evQuestionTopics(question).some((topic) => topic >= 2)) continue
+    // The mandatory topic gate above already checked these, using customer
+    // evidence. Do not re-ask a differently worded legacy copy of that topic.
+    if (jobType(input) === 'ev_charger' && isStandardEvQuestion(question)) continue
     // Siblings let Path A attribute an ask to ONE question rather than to every
     // question that shares a word with it.
-    if (!questionWasAnswered(input.history ?? [], question, proactiveTopicCoverage, questions)) {
+    const siblingQuestions = jobType(input) === 'ev_charger'
+      ? [...questions, ...EV_CHARGER_FALLBACK_QUESTIONS] : questions
+    if (!questionWasAnswered(input.history ?? [], question, proactiveTopicCoverage, siblingQuestions)) {
       // The code identifies WHICH question is outstanding (spec
       // ev-charger-location-photo R4). It used to be the bare string
       // 'service_question' for every question, and the route's progress check
@@ -520,6 +583,109 @@ function missingServiceQuestion(
     }
   }
   return null
+}
+
+const LEGACY_EV_QUESTIONS = [
+  'Is the charger on-site, and which model is it?',
+  'Is the charger unit already on-site, and if so what model is it?',
+  'Roughly how far is the parking spot from the switchboard?',
+  'Single or three-phase supply, and any idea of spare switchboard capacity?',
+]
+
+export function resolvedEvServiceMode(
+  state: ConversationState | null | undefined,
+): EvServiceMode | undefined {
+  // Live SMS state is strict: owning the unit still does not prove the
+  // customer is asking us to install it. Safe legacy inference belongs only
+  // at persisted intake/render compatibility boundaries after intake.
+  return normaliseEvServiceMode(state?.slots?.service_mode)
+}
+
+function isStandardEvQuestion(question: string): boolean {
+  const normalized = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return [...EV_CHARGER_FALLBACK_QUESTIONS, ...LEGACY_EV_QUESTIONS]
+    .some((standard) => normalized(standard) === normalized(question))
+}
+
+/** Recognise the topic of an ask, excluding generic shared words like charger. */
+function evQuestionTopics(question: string): number[] {
+  const topics: number[] = []
+  if (/\b(vehicle|make|car\b|tesla|byd)\b/i.test(question)) topics.push(0)
+  if (/\b(supply|supplied|already have|on[- ]site|model|unit)\b/i.test(question) &&
+      !/\bphase\b/i.test(question)) topics.push(1)
+  if (/\b(whereabouts|where.*(?:going|install)|garage|carport|external wall|location)\b/i.test(question)) topics.push(2)
+  if (/\b(how far|distance|metres?|meters?)\b/i.test(question)) topics.push(3)
+  if (/\b(phase|capacity|spare.*(?:board|circuit))\b/i.test(question)) topics.push(4)
+  return topics
+}
+
+function evTopicAnswered(history: ConversationTurn[], topic: number): boolean {
+  let pending: number[] = []
+  let pendingQuestion = ''
+  let phaseAnswered = false
+  let capacityAnswered = false
+  for (const turn of history) {
+    if (turn.direction === 'outbound') {
+      pendingQuestion = turn.body
+      pending = turn.body.includes('?') && !/\bsounds? right\b/i.test(turn.body)
+        ? evQuestionTopics(turn.body) : []
+      continue
+    }
+    const body = turn.body.trim()
+    const contextual = pending.includes(topic)
+    const unknown = /\b(?:not sure|don'?t know|unsure|no idea|you decide)\b/i.test(body)
+    if (topic === 4) {
+      if (/\b(?:single|three|[13])[- ]?phase\b|[13]\s*[φϕ]/i.test(body)) phaseAnswered = true
+      if (/\b(?:spare|capacity|room on|space.*board|board.*space)\b/i.test(body)) capacityAnswered = true
+      if (contextual && phaseAnswered && /\b(?:spare|capacity)\b/i.test(pendingQuestion) &&
+          /^(?:yes|yep|yeah|no|nope|nah)[\s.!]*$/i.test(body)) capacityAnswered = true
+      // Unknown is an answer worth preserving for the inspection decision.
+      if (contextual && unknown) { phaseAnswered = true; capacityAnswered = true }
+      if (phaseAnswered && capacityAnswered) return true
+      continue
+    }
+    if (isBareAffirmation(body) || /^(?:sounds? right|sounds? good)[.!\s]*$/i.test(body)) continue
+    if (contextual && unknown) return true
+    if (topic === 0 && /\b(?:tesla|byd|hyundai|kia|nissan|bmw|audi|polestar|volvo|mercedes|mg|ford|vehicle|electric car)\b/i.test(body) &&
+        !/\b(?:wall connector|charger|charging unit)\b/i.test(body)) return true
+    if (topic === 1 && /\b(?:can you supply|(?:you|we|tradie|electrician|business) (?:to )?supply|(?:already |i |we )?have (?:a |the |my )?(?:charger|unit)|charger.*(?:here|on[- ]site)|unit.*here|(?:yes|got).*(?:wall connector|charger))\b/i.test(body)) return true
+    if (topic === 2 && /\b(?:garage|carport|external wall|outside wall|driveway|basement|car park|carpark)\b/i.test(body)) return true
+    if (topic === 3 && /\b\d+(?:\.\d+)?\s*(?:m\b|metres?\b|meters?\b)/i.test(body)) return true
+    if (contextual && !body.includes('?') && !isBareAffirmation(body)) {
+      // Accept a substantive answer to a single-topic question (e.g. "Ioniq
+      // 5" or "under cover"). A recap or a multi-topic answer cannot fill all.
+      if (pending.length === 1) return true
+    }
+  }
+  return false
+}
+
+const EXPLICIT_EV_CHARGER_MODEL_RE =
+  /\b(?:tesla\s+wall\s+connector|wallbox\s+[a-z0-9][\w-]*(?:\s+[a-z0-9][\w-]*){0,2}|zappi(?:\s+v?\d+)?|wattpilot|terra\s+ac|charger\s+(?:model|called|is)\s+[a-z0-9][\w-]*)\b/i
+const NO_CUSTOMER_CHARGER_RE =
+  /\b(?:don'?t|do not|haven'?t|have not)\s+(?:already\s+)?(?:have|got)\b|\bno\s+charger\b|\bnot\s+on[- ]?site\b/i
+
+/** Customer-owned charger detail for install-only compatibility. */
+function evInstallOnlyChargerModelAnswered(history: ConversationTurn[]): boolean {
+  for (const turn of history) {
+    if (turn.direction === 'inbound' && EXPLICIT_EV_CHARGER_MODEL_RE.test(turn.body)) return true
+  }
+
+  for (let i = 0; i < history.length; i++) {
+    const turn = history[i]
+    if (
+      turn.direction !== 'outbound' ||
+      !/(?:make\s+and\s+model|which\s+model|what\s+(?:make|model))/i.test(turn.body)
+    ) continue
+    const answer = history.slice(i + 1).find((candidate) => candidate.direction === 'inbound')?.body.trim() ?? ''
+    if (
+      answer &&
+      !isBareAffirmation(answer) &&
+      !/\b(?:not sure|unsure|don'?t know|no idea)\b/i.test(answer) &&
+      !NO_CUSTOMER_CHARGER_RE.test(answer)
+    ) return true
+  }
+  return false
 }
 
 /** The EV floor service, used when the tenant has not enabled the catalogue
@@ -705,6 +871,7 @@ export function evaluateQuoteReadiness(input: QuoteReadinessInput): QuoteReadine
   // it permanently (R9).
   if (
     jobType(input) === 'ev_charger' &&
+    isEvInstallationMode(resolvedEvServiceMode(input.conversationState)) &&
     !serviceMissing &&
     !input.hasPhoto &&
     !photoDeclined(input.history ?? [])

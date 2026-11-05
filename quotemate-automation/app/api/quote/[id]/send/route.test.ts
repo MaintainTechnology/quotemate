@@ -64,6 +64,7 @@ import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { ensureQuotePdf, downloadQuotePdf } from '@/lib/quote/pdf'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import { sendEmail } from '@/lib/email/resend'
+import { buildSaveAsQuoteRequest, buildTierObjects, splitAddress } from '@/lib/roofing/save-as-quote-helpers'
 
 const resolveMock = vi.mocked(resolveTenantRequest)
 const dispatchMock = vi.mocked(dispatchQuoteWithPdf)
@@ -90,11 +91,14 @@ const baseQuote = {
   tenant_id: 'tenant-1',
   intake_id: 'intake-1',
   status: 'draft',
+  // These transport regressions replay already authorised historical quotes.
+  // New initial drafts without core proof are tested explicitly below.
+  customer_released_at: '2026-09-01T00:00:00Z',
   share_token: 'tok_abc12345xyz',
   good: { label: 'Good', subtotal_ex_gst: 28000, line_items: [] },
   better: null,
   best: null,
-  selected_tier: null,
+  selected_tier: 'good',
   total_inc_gst: 30800,
   scope_of_works: null,
   assumptions: null,
@@ -135,6 +139,56 @@ function seedHappyPath(overrides?: { quote?: Record<string, unknown>; intake?: R
   h.seed('quote_followup_events', { data: null, error: null })
 }
 
+function seedSupplyOnlyEvPath(depositPct: number | null) {
+  const unit = {
+    description: 'EV charger unit', source: 'material:unit-1', quantity: 1,
+    unit: 'each', unit_price_ex_gst: 800, total_ex_gst: 800,
+  }
+  h.seed('quotes',
+    { data: {
+      ...baseQuote,
+      status: 'awaiting_tradie_approval',
+      quote_kind: 'initial',
+      good: { label: 'EV charger supply only', subtotal_ex_gst: 800, line_items: [unit] },
+      total_inc_gst: 800,
+      scope_of_works: 'EV charger supply only. Installation and all electrical work are excluded.',
+      risk_flags: [],
+      grounding_result: null,
+      stripe_links: { good: 'https://stripe.example/supply-deposit' },
+      deposit_pct: depositPct,
+      pricing_book_version_id: 'ev-version',
+    }, error: null },
+    { data: null, error: null },
+  )
+  h.seed('intakes', { data: {
+    ...baseIntake,
+    job_type: 'ev_charger', trade: 'electrical',
+    scope: {
+      specs: { service_mode: 'supply_only', supplied_by: 'tradie' },
+      chosen_product: { catalogue_id: 'unit-1', name: 'EV charger unit' },
+    },
+  }, error: null })
+  h.seed('pricing_book', {
+    data: { quote_display: null, gst_registered: false, quote_tier_mode: 'single' }, error: null,
+  })
+  h.seed('quote_pricing_versions', { data: {
+    id: 'ev-version', tenant_id: 'tenant-1', trade: 'electrical', pricing_book_id: 'book-1',
+    content_hash: 'a'.repeat(64), snapshot: {
+      id: 'book-1', tenant_id: 'tenant-1', trade: 'electrical', gst_registered: false,
+      quote_tier_mode: 'single', default_markup_pct: 0, hourly_rate: 100,
+      apprentice_rate: 60, call_out_minimum: 100,
+    },
+  }, error: null })
+  h.seed('shared_materials', { data: [{
+    id: 'unit-1', trade: 'electrical', category: 'ev_charger', name: 'EV charger unit',
+    default_unit_price_ex_gst: 800,
+  }], error: null })
+  h.seed('shared_assemblies', { data: [], error: null })
+  h.seed('tenant_material_catalogue', { data: [], error: null })
+  h.seed('tenant_custom_assemblies', { data: [], error: null })
+  h.seed('quote_followup_events', { data: null, error: null })
+}
+
 beforeEach(() => {
   vi.stubEnv('PUBLIC_WEB_ORIGIN', 'https://www.quotemax.com.au')
   h.tables.clear();h.releases.clear();h.rpc.mockClear();vi.stubEnv('PUBLIC_WEB_ORIGIN','https://www.quotemax.com.au')
@@ -154,6 +208,52 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs())
 
 describe('POST /api/quote/[id]/send', () => {
+  it.each([{ name: 'approve', handler: approveQuote }, { name: 'send', handler: POST }])
+    ('$name permits an initial roofing promotion with linked server pricing evidence', async ({ handler }) => {
+      const authority = { source: 'tenant_pricing_book', tenant_id: 'tenant-1', pricing_book_id: 'roof-book', revision: 'a'.repeat(64) }
+      const roofPrice = { area_m2: 100, effective_rate_per_m2: 100, loadings_applied: [],
+        routing: { decision: 'tradie_review', reason: 'Owner review' },
+        tiers: (['good', 'better', 'best'] as const).map((tier, index) => ({ tier, label: tier,
+          ex_gst: (index + 1) * 1000, inc_gst: (index + 1) * 1100, scope: `${tier} measured roof work` })) }
+      const source = { id: 'roof-source', tenant_id: 'tenant-1', quote_id: 'quote-1', quote_share_token: baseQuote.share_token,
+        address: '1 Test Street, Penrith', postcode: '2750', state: 'NSW', included_indices: [1],
+        quote: { pricing_authority: authority, structures: [{ role: 'primary', label: 'Main roof', buildingId: 'roof-1',
+          inputs: { material: 'colorbond_corrugated', pitch: 'standard', intent: 'full_reroof', building_year_built: null },
+          metrics: { footprint_m2: 100, sloped_area_m2: 100, storeys: 1, form: 'gable', hips: 0, valleys: 0 }, price: roofPrice }],
+          combined: { area_m2: 100, tiers: roofPrice.tiers }, routing: roofPrice.routing, inspection_structures: [] } }
+      const trusted = buildSaveAsQuoteRequest(source as never)!
+      const built = buildTierObjects(trusted.price)
+      const { street, suburb } = splitAddress(source.address)
+      seedHappyPath({ quote: { status: 'awaiting_tradie_approval', customer_released_at: null, quote_kind: 'initial',
+        ...built, selected_tier: 'better', total_inc_gst: built.better.total_inc_gst,
+        scope_of_works: trusted.price.tiers[1].scope }, intake: { ...baseIntake,
+        address: street, suburb, job_type: 'full_reroof', inspection_required: false,
+        property: { levels: 1 }, scope: { ...trusted.inputs, ...trusted.metrics,
+          polygon_geojson: trusted.metrics.polygon_geojson ?? null, pricing_authority: authority, state: 'NSW', postcode: '2750' } } })
+      // Early preflight and final persisted release both recheck the link.
+      h.seed('roofing_measurements', { data: source, error: null }, { data: source, error: null })
+      dispatchMock.mockResolvedValue({ ok: true, channel: 'sms', sid: 'SM-roof-owned' } as never)
+      const response = await handler(req({ channel: 'sms' }), params)
+      expect(response.status).toBe(200)
+      expect(dispatchMock).toHaveBeenCalledOnce()
+      expect(h.rpc).toHaveBeenCalledWith('approve_generic_quote_release', expect.objectContaining({ p_quote_id: 'quote-1' }))
+    })
+
+  it.each(['tenant-1', 'tenant-2'])('requires core proof before first release for every account: %s', async tenantId => {
+    resolveMock.mockResolvedValue({ identity, tenant: { ...tenant, id: tenantId } })
+    for (const handler of [POST, approveQuote]) {
+      seedHappyPath({ quote: { status: 'awaiting_tradie_approval', quote_kind: 'initial',
+        tenant_id: tenantId, customer_released_at: null }, intake: { ...baseIntake, tenant_id: tenantId } })
+      const response = await handler(req({ channel: 'sms' }), params)
+      expect(response.status).toBe(409)
+      expect(await response.json()).toMatchObject({ error: 'quote_core_review_required' })
+    }
+    expect(h.rpc).not.toHaveBeenCalled()
+    expect(dispatchMock).not.toHaveBeenCalled()
+    expect(sendEmailMock).not.toHaveBeenCalled()
+    expect(ensurePdfMock).not.toHaveBeenCalled()
+  })
+
   it.each(['quote_draft_processing', 'quote_draft_unconfirmed'] as const)('blocks approval and send while readiness reports %s before provider work', async code => {
     vi.mocked(readQuoteDraftReadiness).mockResolvedValue({ ready: false, code })
     for (const handler of [POST, approveQuote]) {
@@ -169,7 +269,7 @@ describe('POST /api/quote/[id]/send', () => {
     expect(advanceMock).not.toHaveBeenCalled()
   })
 
-  it('approve and send recover one saved initial intent before and after a lost response', async () => {
+  it('approve and send recover one previously authorised intent before and after a lost response', async () => {
     seedHappyPath({quote:{status:'awaiting_tradie_approval'}})
     dispatchMock.mockResolvedValue({ok:false,outboxId:'out-1',smsAttempt:{code:'AMBIGUOUS',reason:'network'}} as never)
     const approved=await approveQuote(req({}),params)
@@ -193,7 +293,7 @@ describe('POST /api/quote/[id]/send', () => {
   })
   it.each([undefined,'0'.repeat(64)])('refuses first release without the exact displayed revision (%s)',async expected_revision=>{
     for(const handler of [POST,approveQuote]) {
-      seedHappyPath({quote:{status:'awaiting_tradie_approval'}})
+      seedHappyPath({quote:{status:'awaiting_tradie_approval', customer_released_at: null}})
       const response=await handler(req({channel:'sms',expected_revision}),params)
       expect(response.status).toBe(409)
       expect(await response.json()).toMatchObject({error:'quote_review_required',review_url:'/dashboard/quote/tok_abc12345xyz'})
@@ -259,6 +359,31 @@ describe('POST /api/quote/[id]/send', () => {
     expect(arg.from).toBe('+61400000000')
     expect(arg.text).toContain('/q/tok_abc12345xyz')
     expect(advanceMock).toHaveBeenCalledWith(expect.anything(), 'quote-1', 'sent')
+  })
+
+  it('does not let supply-only EV quotes use the electrical $99 shortcut to bypass deposit validation', async () => {
+    for (const handler of [POST, approveQuote]) {
+      seedSupplyOnlyEvPath(null)
+      const res = await handler(req({ channel: 'sms' }), params)
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ error: 'quote_pricing_review_required' })
+    }
+    expect(dispatchMock).not.toHaveBeenCalled()
+    expect(h.rpc).not.toHaveBeenCalled()
+  })
+
+  it('replays valid historical supply-only EV quotes through both routes without an inspection link or $99 ask', async () => {
+    dispatchMock.mockResolvedValue({ ok: true, channel: 'sms', sid: 'SM-EV' } as never)
+    for (const handler of [POST, approveQuote]) {
+      seedSupplyOnlyEvPath(30)
+      h.releases.clear()
+      const res = await handler(req({ channel: 'sms' }), params)
+      expect(res.status).toBe(200)
+      const sent = dispatchMock.mock.calls.at(-1)?.[0]
+      expect(sent?.text).toContain('EV charger supply only')
+      expect(sent?.text).not.toContain('/inspection')
+      expect(sent?.text).not.toContain('$99')
+    }
   })
 
   it('saves approval with pending delivery on dispatch failure without claiming sent', async () => {

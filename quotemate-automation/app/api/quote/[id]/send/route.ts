@@ -6,7 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
-import { genericQuoteSendKey, persistGenericQuoteRelease, quoteReleaseReviewMatches, quoteCustomerReleaseRevision } from '@/lib/quote/customer-release'
+import { EvQuoteCustomerReleaseError, genericQuoteSendKey, persistGenericQuoteRelease, quoteReleaseReviewMatches, quoteCustomerReleaseRevision } from '@/lib/quote/customer-release'
 import { publicWebOrigin } from '@/lib/sms/public-origin'
 import {
   downloadQuotePdf,
@@ -35,6 +35,9 @@ import { assertExpectedQuoteRecipient, QuoteDeliveryRecipientError, resolveOwned
 import { loadQuoteReportPricing } from '@/lib/quote/report-pricing'
 import { QuotePricingVersionError } from '@/lib/quote/pricing-version'
 import { storedDepositPercent } from '@/lib/quote/chain-money'
+import { strictEvChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
+import { QuoteCoreCustomerReleaseError } from '@/lib/quote/quote-core-release'
+import { assertQuoteReleaseAuthority } from '@/lib/quote/release-authority'
 import { sendEmail } from '@/lib/email/resend'
 import {
   buildQuoteEmail,
@@ -120,7 +123,7 @@ export async function POST(
   const { data: quote, error: qErr } = await supabase
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct, quote_kind, parent_quote_id, paid_at, customer_released_at, sent_at, pricing_book_version_id, report_doc, report_style',
+      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, risk_flags, grounding_result, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct, quote_kind, parent_quote_id, paid_at, customer_released_at, sent_at, pricing_book_version_id, report_doc, report_style',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -149,14 +152,21 @@ export async function POST(
   // ─── Load intake + pricing book + customer contact ──
   const { data: intake, error: intakeError } = await supabase
     .from('intakes')
-    .select('id, tenant_id, caller, suburb, job_type, scope, call_id, customer_id, trade')
+    .select('id, tenant_id, caller, suburb, job_type, scope, call_id, customer_id, trade, property, confidence, inspection_required, address')
     .eq('id', quote.intake_id as string)
     .eq('tenant_id', tenant.id)
     .maybeSingle()
   if (intakeError || !intake || intake.id !== quote.intake_id || intake.tenant_id !== tenant.id)
     return Response.json({ ok: false, error: 'quote_contact_unavailable' }, { status: 503 })
+  try { await assertQuoteReleaseAuthority(supabase, quote, tenant.id, intake) }
+  catch (error) {
+    if (error instanceof QuoteCoreCustomerReleaseError)
+      return Response.json({ ok: false, error: error.code, message: error.message }, { status: error.status })
+    throw error
+  }
   const rawTrade = typeof intake.trade === 'string' ? intake.trade.trim() : ''
   if (!rawTrade) return Response.json({ ok: false, error: 'quote_pricing_review_required' }, { status: 409 })
+  const serviceMode = strictEvChargerServiceModeFromIntake(intake)
   const { data: currentBook } = await supabase
     .from('pricing_book')
     .select('quote_display, quote_tier_mode')
@@ -264,7 +274,7 @@ export async function POST(
   try {
     if (!(quote.needs_inspection === true && quoteKind === 'initial'))
       pricing = await loadQuoteReportPricing(supabase, quote, intake)
-    if (pricing && !isSiteVisitFirstRow({ trade: rawTrade, quoteKind }) &&
+    if (pricing && !isSiteVisitFirstRow({ trade: rawTrade, quoteKind, serviceMode }) &&
         storedDepositPercent(quote.deposit_pct) === null) throw new QuotePricingVersionError('quote_pricing_review_required')
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof QuotePricingVersionError ? error.code : 'pricing_unavailable' },
@@ -318,7 +328,7 @@ export async function POST(
     // $99 site visit, so the message needs that link even on a quote drafted
     // before the model changed (whose stripe_links hold G/B/B only).
     // /r/<token>/inspection mints a fresh Session per click, so it is always live.
-    if (isSiteVisitFirstRow({ trade: rawTrade, quoteKind })) {
+    if (isSiteVisitFirstRow({ trade: rawTrade, quoteKind, serviceMode })) {
       payLinks.inspection = `${appUrl}/r/${shareToken}/inspection`
     }
     // A FINAL quote sells its deposit and nothing else (spec R9). The link is
@@ -360,6 +370,7 @@ export async function POST(
       tierMode,
       trade: rawTrade,
       quoteKind,
+      serviceMode,
       businessName: (tenant as { business_name?: string | null }).business_name ?? null,
     })
     const fromNumber = tenant.twilio_sms_number ?? undefined
@@ -368,12 +379,15 @@ export async function POST(
     let release
     try {
       release = await persistGenericQuoteRelease(supabase, {
-        quote,tenantId:tenant.id,ownerId:resolved.identity.userId,holdUntil:refreshedHoldUntil,signMediaUrl:signQuotePdfUrl,
+        quote,intake,pricingBook:pricingBook as Record<string, unknown> | null,
+        tenantId:tenant.id,ownerId:resolved.identity.userId,holdUntil:refreshedHoldUntil,signMediaUrl:signQuotePdfUrl,
         outbound:{ to:normaliseAuMobile(recipient) ?? recipient,text:smsBody,from:fromNumber,
           ...(conversationId ? { conversationId } : {}),
           tenantId:tenant.id,deliveryKey,...(quotePdfPath ? {mediaKey:quotePdfPath} : {}) },
       })
     } catch (error) {
+      if (error instanceof EvQuoteCustomerReleaseError)
+        return Response.json({ok:false,error:error.code,message:error.message,failures:error.failures},{status:error.status})
       return Response.json({ok:false,error:'approval_unavailable',message:String(error)},{status:409})
     }
     const dispatch = await dispatchQuoteWithPdf({
@@ -438,8 +452,10 @@ export async function POST(
   })
 
   try {
-    await persistGenericQuoteRelease(supabase,{quote,tenantId:tenant.id,ownerId:resolved.identity.userId,holdUntil:refreshedHoldUntil})
+    await persistGenericQuoteRelease(supabase,{quote,intake,pricingBook:pricingBook as Record<string, unknown> | null,tenantId:tenant.id,ownerId:resolved.identity.userId,holdUntil:refreshedHoldUntil})
   } catch (error) {
+    if (error instanceof EvQuoteCustomerReleaseError)
+      return Response.json({ok:false,error:error.code,message:error.message,failures:error.failures},{status:error.status})
     return Response.json({ok:false,error:'approval_unavailable',message:String(error)},{status:409})
   }
   const result = await sendEmail({

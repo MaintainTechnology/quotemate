@@ -29,6 +29,7 @@ import { resolveNextTier } from '@/lib/quote/booking'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
 import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
+import { evChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
 
 export const maxDuration = 300
 
@@ -77,6 +78,21 @@ export async function POST(
   }
   if (!quote) {
     return Response.json({ ok: false, error: 'Quote not found' }, { status: 404 })
+  }
+  if (quote.intake_id) {
+    const { data: intakeRow } = await supabase
+      .from('intakes')
+      .select('job_type,scope')
+      .eq('id', quote.intake_id as string)
+      .eq('tenant_id', quote.tenant_id as string)
+      .maybeSingle()
+    if (intakeRow?.job_type === 'ev_charger' &&
+        evChargerServiceModeFromIntake(intakeRow) === 'supply_only') {
+      return Response.json(
+        { ok: false, error: 'This charger order has no site visit to book.' },
+        { status: 409 },
+      )
+    }
   }
   // A post-site-visit child ('final'/'balance') has no visit to book — the
   // site visit is what created it (spec post-visit-money-sequence R11).

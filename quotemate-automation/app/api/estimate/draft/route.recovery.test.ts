@@ -1,4 +1,5 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest'
+import { readFileSync } from 'node:fs'
 const h=vi.hoisted(()=>{
   type Row=Record<string,unknown>
   const state={quote:{} as Row,intake:{} as Row,conversation:{} as Row,legacy:false,readError:false}
@@ -103,4 +104,23 @@ it.each(['approved','paid','cancelled'])('repairs a missing saved quote ID witho
   expect(h.state.conversation).toMatchObject({quote_id:quoteId,quote_stage:stage,status:'done'})
   expect(h.writes.filter((write)=>write.table==='sms_conversations')).toEqual([{table:'sms_conversations',row:{quote_id:quoteId}}])
   expect(h.send).not.toHaveBeenCalled()
+})
+
+describe('EV draft customer-release policy wiring', () => {
+  const source = readFileSync(new URL('./route.ts', import.meta.url), 'utf8')
+
+  it('always holds EV drafts for explicit tradie approval', () => {
+    expect(source).toMatch(/const reviewDecision = intake\.job_type === 'ev_charger'[\s\S]*hold: true as const/)
+    expect(source).toContain("'ev_tradie_approval_required'")
+  })
+
+  it('does not generate installation previews or samples for supply-only drafts', () => {
+    expect(source).toMatch(/if \(strictEvServiceMode !== 'supply_only'\) after\(async \(\) => \{/)
+    expect(source.indexOf("if (strictEvServiceMode !== 'supply_only')")).toBeLessThan(
+      source.indexOf('generatePreviewImage(quote!.id as string)'),
+    )
+    expect(source.indexOf("if (strictEvServiceMode !== 'supply_only')")).toBeLessThan(
+      source.indexOf('generateSampleImages(quote!.id as string)'),
+    )
+  })
 })

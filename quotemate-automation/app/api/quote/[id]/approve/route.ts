@@ -6,7 +6,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
-import { genericQuoteSendKey, persistGenericQuoteRelease, quoteReleaseReviewMatches, quoteCustomerReleaseRevision } from '@/lib/quote/customer-release'
+import { EvQuoteCustomerReleaseError, genericQuoteSendKey, persistGenericQuoteRelease, quoteReleaseReviewMatches, quoteCustomerReleaseRevision } from '@/lib/quote/customer-release'
 import { publicWebOrigin } from '@/lib/sms/public-origin'
 import { ensureQuotePdf, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
@@ -30,6 +30,9 @@ import { QuotePricingVersionError } from '@/lib/quote/pricing-version'
 import { storedDepositPercent } from '@/lib/quote/chain-money'
 import { readQuoteDraftReadiness } from '@/lib/quote/job-quote-operation'
 import { resolveQuoteOriginConversation } from '@/lib/sms/quote-origin-conversation'
+import { strictEvChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
+import { QuoteCoreCustomerReleaseError } from '@/lib/quote/quote-core-release'
+import { assertQuoteReleaseAuthority } from '@/lib/quote/release-authority'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,7 +71,7 @@ export async function POST(
   const { data: quote, error: qErr } = await supabase
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct, quote_kind, parent_quote_id, customer_released_at, sent_at, paid_at, pricing_book_version_id, report_doc, report_style',
+      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, risk_flags, grounding_result, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct, quote_kind, parent_quote_id, customer_released_at, sent_at, paid_at, pricing_book_version_id, report_doc, report_style',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -106,14 +109,21 @@ export async function POST(
   //      (display mode for the SMS template) ──
   const { data: intake, error: intakeError } = await supabase
     .from('intakes')
-    .select('id, tenant_id, caller, suburb, job_type, scope, call_id, customer_id, trade')
+    .select('id, tenant_id, caller, suburb, job_type, scope, call_id, customer_id, trade, property, confidence, inspection_required, address')
     .eq('id', quote.intake_id as string)
     .eq('tenant_id', tenant.id)
     .maybeSingle()
   if (intakeError || !intake || intake.id !== quote.intake_id || intake.tenant_id !== tenant.id)
     return Response.json({ ok: false, error: 'quote_contact_unavailable' }, { status: 503 })
+  try { await assertQuoteReleaseAuthority(supabase, quote, tenant.id, intake) }
+  catch (error) {
+    if (error instanceof QuoteCoreCustomerReleaseError)
+      return Response.json({ ok: false, error: error.code, message: error.message }, { status: error.status })
+    throw error
+  }
   const approveIntakeTrade = typeof intake.trade === 'string' ? intake.trade.trim() : ''
   if (!approveIntakeTrade) return Response.json({ ok: false, error: 'quote_pricing_review_required' }, { status: 409 })
+  const approveServiceMode = strictEvChargerServiceModeFromIntake(intake)
   // Today's book supplies presentation only. Priced messages use saved tax
   // evidence, even after this mutable book changes or disappears.
   const { data: currentBook } = await supabase
@@ -148,7 +158,7 @@ export async function POST(
   try {
     if (!(quote.needs_inspection === true && approveQuoteKind === 'initial'))
       pricing = await loadQuoteReportPricing(supabase, quote, intake)
-    if (pricing && !isSiteVisitFirstRow({ trade: approveIntakeTrade, quoteKind: approveQuoteKind }) &&
+    if (pricing && !isSiteVisitFirstRow({ trade: approveIntakeTrade, quoteKind: approveQuoteKind, serviceMode: approveServiceMode }) &&
         storedDepositPercent(quote.deposit_pct) === null) throw new QuotePricingVersionError('quote_pricing_review_required')
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof QuotePricingVersionError ? error.code : 'pricing_unavailable' },
@@ -192,7 +202,7 @@ export async function POST(
   // $99 site visit, so the approved-send message needs that link even on a
   // quote drafted before the model changed (stripe_links hold G/B/B only).
   // /r/<token>/inspection mints a fresh Session per click, so it is always live.
-  if (isSiteVisitFirstRow({ trade: approveIntakeTrade, quoteKind: approveQuoteKind })) {
+  if (isSiteVisitFirstRow({ trade: approveIntakeTrade, quoteKind: approveQuoteKind, serviceMode: approveServiceMode })) {
     payLinks.inspection = `${appUrl}/r/${quote.share_token as string}/inspection`
   }
   // Only inspection-only messages can reach here without a proven deposit.
@@ -249,6 +259,7 @@ export async function POST(
     tierMode,
     trade: approveIntakeTrade,
     quoteKind: approveQuoteKind,
+    serviceMode: approveServiceMode,
     businessName: (tenant as { business_name?: string | null }).business_name ?? null,
   })
   const fromNumber = tenant.twilio_sms_number ?? undefined
@@ -259,7 +270,8 @@ export async function POST(
   let release
   try {
     release = await persistGenericQuoteRelease(supabase, {
-      quote, tenantId: tenant.id, ownerId: resolved.identity.userId, holdUntil: refreshedHoldUntil, signMediaUrl:signQuotePdfUrl,
+      quote, intake, pricingBook: pricingBook as Record<string, unknown> | null,
+      tenantId: tenant.id, ownerId: resolved.identity.userId, holdUntil: refreshedHoldUntil, signMediaUrl:signQuotePdfUrl,
       outbound: { to: callerNumber, from: fromNumber, text: body, tenantId: tenant.id,
         ...(conversationId ? { conversationId } : {}),
         deliveryKey: genericQuoteSendKey(quote.id as string),
@@ -267,6 +279,8 @@ export async function POST(
       },
     })
   } catch (error) {
+    if (error instanceof EvQuoteCustomerReleaseError)
+      return Response.json({ok:false,error:error.code,message:error.message,failures:error.failures},{status:error.status})
     return Response.json({ok:false,error:'approval_unavailable',message:String(error)},{status:409})
   }
   const dispatch = await dispatchQuoteWithPdf({

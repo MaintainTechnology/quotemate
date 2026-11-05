@@ -1,4 +1,5 @@
 {
+  "schema_version": 2,
   "_README": [
     "R15 hold-out eval set for scripts/eval-quotes.mjs.",
     "Each entry is an (intake -> tradie-verified expected Good/Better/Best) pair.",
@@ -6,13 +7,13 @@
     "FLAG-NOT-FABRICATE: every pair below is a STARTER PLACEHOLDER. The expected",
     "price bands, BOM line sets, and labour hours are NOT tradie-verified and were",
     "NOT taken from any authoritative AU source. They exist only to exercise the",
-    "harness shape (rubric validation + scorecard skeleton). needs_grading=true on",
+    "harness validation only. needs_grading=true on",
     "every pair until a real tradie grades it against real AU buy prices + a real",
     "BOM. The harness REFUSES to count a needs_grading pair toward an accuracy",
     "score (it is a structure check only). Do NOT treat these numbers as ground",
-    "truth and do NOT let them gate a deploy.",
+    "truth. The production gate must fail until real graded evidence exists.",
     "",
-    "Target: >=30 graded pairs (target 100) sourced from the 157 real intakes +",
+    "Production gate: >=100 graded holdouts, with documented source records from",
     "tenants' past quotes, sampled across the top-5 job types (downlights,",
     "hot_water, power_points, ceiling_fans, blocked_drain). See the spec R15/R16."
   ],
@@ -34,7 +35,7 @@
         "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
-        "route": "auto_send"
+        "route": "awaiting_tradie_approval"
       }
     },
     {
@@ -53,7 +54,7 @@
         "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
-        "route": "auto_send"
+        "route": "awaiting_tradie_approval"
       }
     },
     {
@@ -72,7 +73,7 @@
         "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
-        "route": "auto_send"
+        "route": "awaiting_tradie_approval"
       }
     },
     {
@@ -91,7 +92,7 @@
         "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
-        "route": "auto_send"
+        "route": "awaiting_tradie_approval"
       }
     },
     {
@@ -110,7 +111,7 @@
         "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
         "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
-        "route": "inspection"
+        "route": "inspection_required"
       }
     }
   ]

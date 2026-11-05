@@ -177,12 +177,15 @@ describe('tenantFromRequest', () => {
   // can assert the id lookup misses and the owner_email lookup hits. It has NO
   // update()/from-write path, so any attempt to overwrite the link would throw —
   // proving the fallback is read-only.
-  function fakeByColumn(rowByColumn: Record<string, Record<string, unknown> | null>) {
+  function fakeByColumn(
+    rowByColumn: Record<string, Record<string, unknown> | null>,
+    supaUser: { id: string; email: string | null } = { id: 'supa-uuid', email: null },
+  ) {
     const calls: { column: string; value: unknown }[] = []
     return {
       calls,
       client: {
-        auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'supa-uuid', email: null } }, error: null })) },
+        auth: { getUser: vi.fn(async () => ({ data: { user: supaUser }, error: null })) },
         from() {
           return {
             select() {
@@ -213,6 +216,42 @@ describe('tenantFromRequest', () => {
       { column: 'owner_email', value: 'tradie@example.com' }, // lower-cased
     ])
     expect(resolveEmail).toHaveBeenCalledOnce()
+  })
+
+  it('trusts the verified address the resolver finds over the token\'s own email claim', async () => {
+    // A claim carries whatever address the session template renders, verified
+    // or not; the resolver asks Clerk for a verified one.
+    const fake = fakeByColumn({ clerk_user_id: null, owner_email: { id: 'tenant-of-someone-else' } })
+    const resolveEmail = vi.fn(async () => null) // Clerk has no verified address for this user
+    const res = await tenantFromRequest(reqWith(`Bearer ${CLERK_DEV_TOKEN}`), {
+      supabase: fake.client,
+      verifyClerk: vi.fn(async () => ({ sub: 'user_abc', email: 'owner@example.com' })),
+      resolveEmail,
+    })
+    expect(res?.tenant).toBeNull()
+    expect(fake.calls).toEqual([{ column: 'clerk_user_id', value: 'user_abc' }])
+    expect(resolveEmail).toHaveBeenCalledOnce()
+  })
+
+  it('never falls back to owner_email for a Supabase caller', async () => {
+    // /api/auth/signup creates a pre-confirmed Supabase user for any address,
+    // so a Supabase email proves nothing about who owns it: owner_user_id is
+    // that path's only key. Without this, signing up with a tenant owner's
+    // email would sign the caller in as that tenant.
+    const fake = fakeByColumn(
+      { owner_user_id: null, owner_email: { id: 'tenant-of-someone-else' } },
+      { id: 'supa-new', email: 'Owner@Example.com' },
+    )
+    const resolveEmail = vi.fn(async () => 'owner@example.com')
+    const res = await tenantFromRequest(reqWith(`Bearer ${SUPA_TOKEN}`), {
+      supabase: fake.client,
+      verifyClerk: vi.fn(async () => null),
+      resolveEmail,
+    })
+    expect(res?.identity).toMatchObject({ provider: 'supabase', userId: 'supa-new' })
+    expect(res?.tenant).toBeNull()
+    expect(fake.calls).toEqual([{ column: 'owner_user_id', value: 'supa-new' }])
+    expect(resolveEmail).not.toHaveBeenCalled()
   })
 
   it('skips the email fallback entirely when the id lookup hits (no wasted Clerk call)', async () => {

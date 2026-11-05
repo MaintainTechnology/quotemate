@@ -131,6 +131,11 @@ describe('immutable quote pricing snapshots — actual migration and RPC', () =>
     }
     const run = vi.fn(async () => ({ draft: { total: 125.5 } }))
     const original = await versionedEstimationCheckpoint(client, { tenantId: A, trade: 'electrical', book: await book(), checkpoint, run })
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      id: original.pricingVersion?.id,
+      tenant_id: A,
+      snapshot: expect.objectContaining({ hourly_rate: 125.5, gst_registered: false }),
+    }))
     await db.query('update pricing_book set hourly_rate=200,gst_registered=true where id=$1', [BOOK])
     const resumed = await versionedEstimationCheckpoint(client, { tenantId: A, trade: 'electrical', book: await book(), checkpoint, run })
     expect(resumed.pricingVersion?.id).toBe(original.pricingVersion?.id)

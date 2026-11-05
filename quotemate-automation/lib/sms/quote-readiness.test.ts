@@ -156,6 +156,7 @@ describe('evaluateQuoteReadiness', () => {
       first_name: 'Jon',
       suburb: 'Chandler',
       job_type: 'ev_charger',
+      service_mode: 'install_only',
       room: 'garage',
     })
 
@@ -167,10 +168,12 @@ describe('evaluateQuoteReadiness', () => {
       history: [{ direction: 'inbound', body: 'Install an EV charger in my garage' }],
     })
     expect(blocked.ready).toBe(false)
-    expect(blocked.reply).toMatch(/charger on-site/i)
+    expect(blocked.reply).toMatch(/which electric vehicle/i)
 
     const answeredHistory = [
       { direction: 'inbound' as const, body: 'Install an EV charger in my garage' },
+      { direction: 'outbound' as const, body: 'Which vehicle is it for?' },
+      { direction: 'inbound' as const, body: 'Tesla Model Y' },
       { direction: 'outbound' as const, body: 'Is the charger on-site, and which model is it?' },
       { direction: 'inbound' as const, body: 'Yes, a Tesla Wall Connector is here' },
       { direction: 'outbound' as const, body: 'Roughly how far is the parking spot from the switchboard?' },

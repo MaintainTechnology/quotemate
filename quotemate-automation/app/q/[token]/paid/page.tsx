@@ -29,6 +29,7 @@ import { BrandMark } from '@/app/_components/BrandMark'
 import { paidPageTarget, resolveNextTier } from '@/lib/quote/booking'
 import { confirmPaidFromSession } from '@/lib/quote/paid-confirm'
 import { getStripe } from '@/lib/stripe/client'
+import { evChargerServiceModeFromIntake } from '@/lib/quote/ev-service-mode'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,6 +111,20 @@ export default async function PaidPage(props: {
   }
 
   const quoteKind = (quote.quote_kind as string | null) ?? null
+  if (quoteKind !== 'final' && quoteKind !== 'balance' && quote.intake_id) {
+    const { data: intakeRow } = await supabase
+      .from('intakes')
+      .select('job_type,scope')
+      .eq('id', quote.intake_id as string)
+      .eq('tenant_id', quote.tenant_id as string)
+      .maybeSingle()
+    if (intakeRow?.job_type === 'ev_charger' &&
+        evChargerServiceModeFromIntake(intakeRow) === 'supply_only') {
+      // A charger sale has no appointment. The quote page owns the paid-order
+      // confirmation and fulfilment wording; never send this customer to /book.
+      redirect(`/q/${token}${paidAt ? '?paid=order' : ''}`)
+    }
+  }
   const tier = resolveNextTier(
     paidTier ?? sp.tier ?? null,
     quote.selected_tier as string | null,

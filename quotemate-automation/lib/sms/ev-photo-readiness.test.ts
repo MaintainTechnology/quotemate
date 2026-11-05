@@ -33,6 +33,14 @@ function base(over: Partial<QuoteReadinessInput> = {}): QuoteReadinessInput {
     jobTypeGuess: 'ev_charger',
     knownFirstName: 'Jon',
     knownSuburb: 'Chandler',
+    // This file exercises the installation/photo path. Service-mode
+    // resolution has its own regression suite; make the install intent
+    // explicit so these tests do not rely on legacy supplier inference.
+    conversationState: normaliseState({
+      slots: { job_type: 'ev_charger', service_mode: 'supply_and_install' },
+      sources: {},
+      last_extracted_at: null,
+    }),
     services: [EV_SERVICE],
     history: [],
     ...over,
@@ -57,6 +65,18 @@ function answeredThrough(n: number): ConversationTurn[] {
   return history
 }
 
+const INSTALLATION_TOPIC_INDICES = [0, 2, 3, 4] as const
+
+/** Installation questions after the separately persisted service mode. */
+function answeredInstallationThrough(n: number): ConversationTurn[] {
+  const history: ConversationTurn[] = []
+  for (const index of INSTALLATION_TOPIC_INDICES.slice(0, n)) {
+    history.push(turn('outbound', EV_CHARGER_FALLBACK_QUESTIONS[index]))
+    history.push(turn('inbound', ANSWERS[index]))
+  }
+  return history
+}
+
 describe('R4 — the outstanding question is identifiable, so progress is visible', () => {
   it('names WHICH question is missing, not a shared code', () => {
     const r = evaluateQuoteReadiness(base())
@@ -69,13 +89,14 @@ describe('R4 — the outstanding question is identifiable, so progress is visibl
     // turn, so the route's set comparison saw no progress and marched a
     // cooperative customer to the clarify cap and a $99 inspection.
     const seen: string[] = []
-    for (let n = 0; n < 5; n++) {
-      const r = evaluateQuoteReadiness(base({ history: answeredThrough(n) }))
+    for (let n = 0; n < INSTALLATION_TOPIC_INDICES.length; n++) {
+      const r = evaluateQuoteReadiness(base({ history: answeredInstallationThrough(n) }))
       const code = r.missing.find((m) => m.code.startsWith('service_question'))?.code
-      expect(code, `question ${n} outstanding`).toBe(`service_question:${n}`)
+      expect(code, `installation topic ${n} outstanding`)
+        .toBe(`service_question:${INSTALLATION_TOPIC_INDICES[n]}`)
       seen.push(code!)
     }
-    expect(new Set(seen).size).toBe(5)
+    expect(new Set(seen).size).toBe(INSTALLATION_TOPIC_INDICES.length)
   })
 })
 
@@ -175,7 +196,7 @@ describe('R9 — a customer who cannot send a photo still gets a quote', () => {
 })
 
 describe('R4/M1 — asking one question must not answer its neighbours, and a rephrase must not deadlock', () => {
-  it('asking question 1 leaves questions 2-5 outstanding', () => {
+  it('asking the vehicle question leaves the installation topics outstanding', () => {
     // All five questions contain the word "charger". A single-shared-word rule
     // marked 2, 3 and 4 answered the moment the customer replied to 1; a
     // coverage THRESHOLD instead deadlocked on rephrased asks. Best-match
@@ -185,14 +206,15 @@ describe('R4/M1 — asking one question must not answer its neighbours, and a re
       turn('inbound', 'l have a Tesla'),
     ]
     const r = evaluateQuoteReadiness(base({ history }))
-    expect(r.missing.map((m) => m.code)).toContain('service_question:1')
+    expect(r.missing.map((m) => m.code)).toContain('service_question:2')
   })
 
-  it('walks the five in order, one per turn', () => {
-    for (let n = 0; n < 5; n++) {
-      const r = evaluateQuoteReadiness(base({ history: answeredThrough(n) }))
+  it('walks the four post-mode installation topics in order, one per turn', () => {
+    for (let n = 0; n < INSTALLATION_TOPIC_INDICES.length; n++) {
+      const r = evaluateQuoteReadiness(base({ history: answeredInstallationThrough(n) }))
       const code = r.missing.find((m) => m.code.startsWith('service_question'))?.code
-      expect(code, `after ${n} answers`).toBe(`service_question:${n}`)
+      expect(code, `after ${n} installation answers`)
+        .toBe(`service_question:${INSTALLATION_TOPIC_INDICES[n]}`)
     }
   })
 
@@ -300,14 +322,69 @@ describe('R10 — EV is gated on every tenant, not just the one that enabled it'
     expect(r.missing.map((m) => m.code)).toContain('ev_photo')
   })
 
-  it('prefers the tenant-enabled row when there is one', () => {
+  it('keeps additional tenant questions after the mandatory five EV topics', () => {
     const tailored: QuoteReadinessService = {
       name: 'Install EV charger',
       category: 'ev_charger',
       always_inspection: false,
       clarifying_questions: ['Which level of the building is the carpark on?'],
     }
-    const r = evaluateQuoteReadiness(base({ services: [tailored] }))
+    const initial = evaluateQuoteReadiness(base({ services: [tailored] }))
+    expect(initial.reply).toBe(EV_CHARGER_FALLBACK_QUESTIONS[0])
+    const r = evaluateQuoteReadiness(base({ services: [tailored], history: answeredThrough(5) }))
     expect(r.reply).toBe('Which level of the building is the carpark on?')
+  })
+})
+
+describe('EST-0018 legacy service regression', () => {
+  const legacy = { ...EV_SERVICE, clarifying_questions: [
+    'Is the charger on-site, and which model is it?',
+    'Roughly how far is the parking spot from the switchboard?',
+    'Single or three-phase supply, and any idea of spare switchboard capacity?',
+  ] }
+  const incident = [
+    turn('inbound', 'Can I get an EV charger'),
+    turn('outbound', 'Is the charger unit already on-site, and if so what model is it?'),
+    turn('inbound', 'Can you supply?'),
+    turn('outbound', 'Roughly how far is the parking spot from the switchboard?'),
+    turn('inbound', '6m'),
+    turn('outbound', 'Is the property on single-phase or three-phase supply, and any idea of spare capacity?'),
+    turn('inbound', 'Three-phase,l'), turn('inbound', 'Yes spare capacity'),
+    turn('outbound', "We'll supply a 7kW three-phase charger. Sound right?"),
+    turn('inbound', 'Sounds right'),
+  ]
+
+  it('requires the missing vehicle and actual location even when the legacy questions are answered', () => {
+    const r = evaluateQuoteReadiness(base({ services: [legacy], history: incident, hasPhoto: true }))
+    expect(r.ready).toBe(false)
+    expect(r.reply).toBe(EV_CHARGER_FALLBACK_QUESTIONS[0])
+    const withVehicle = [...incident, turn('outbound', EV_CHARGER_FALLBACK_QUESTIONS[0]), turn('inbound', 'BYD Atto 3')]
+    expect(evaluateQuoteReadiness(base({ services: [legacy], history: withVehicle })).reply)
+      .toBe(EV_CHARGER_FALLBACK_QUESTIONS[2])
+    const withLocation = [...withVehicle, turn('outbound', EV_CHARGER_FALLBACK_QUESTIONS[2]), turn('inbound', 'Garage')]
+    expect(evaluateQuoteReadiness(base({ services: [legacy], history: withLocation })).missing.map((m) => m.code))
+      .toEqual(['ev_photo'])
+    expect(evaluateQuoteReadiness(base({ services: [legacy], history: withLocation, hasPhoto: true })).ready).toBe(true)
+  })
+
+  it('does not treat a phase-only answer as switchboard capacity evidence', () => {
+    const history = [...answeredThrough(4), turn('outbound', EV_CHARGER_FALLBACK_QUESTIONS[4]), turn('inbound', 'Three phase')]
+    expect(evaluateQuoteReadiness(base({ history })).reply).toBe(EV_CHARGER_FALLBACK_QUESTIONS[4])
+  })
+
+  it.each(['Yes', 'No'])('accepts %s as the answer to the separate capacity question', (capacity) => {
+    const history = [...answeredThrough(4), turn('outbound', 'Is the property single-phase or three-phase?'),
+      turn('inbound', 'Single phase'), turn('outbound', 'Is there spare capacity in the switchboard?'), turn('inbound', capacity)]
+    expect(evaluateQuoteReadiness(base({ history, hasPhoto: true })).ready).toBe(true)
+  })
+
+  it('retains a custom compound question that shares a standard topic', () => {
+    const compound = 'Which vehicle is this for, and will the cable route need trenching?'
+    const service = { ...EV_SERVICE, clarifying_questions: [...EV_CHARGER_FALLBACK_QUESTIONS, compound] }
+    const r = evaluateQuoteReadiness(base({ services: [service], history: answeredThrough(5), hasPhoto: true }))
+    expect(r.ready).toBe(false)
+    expect(r.reply).toBe(compound)
+    const complete = [...answeredThrough(5), turn('outbound', compound), turn('inbound', 'Tesla, and yes the route needs trenching')]
+    expect(evaluateQuoteReadiness(base({ services: [service], history: complete, hasPhoto: true })).ready).toBe(true)
   })
 })

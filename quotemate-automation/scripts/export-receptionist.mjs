@@ -6,6 +6,9 @@
 //   node scripts/export-receptionist.mjs            # all five
 //   node scripts/export-receptionist.mjs roofing    # just one
 //   node scripts/export-receptionist.mjs --dry      # report, copy nothing
+//   node scripts/export-receptionist.mjs roofing-takeoff --out-root=<new dir>
+//                                                   # the plan takeoff service
+//                                                   # (sms: false; never in "all five")
 //
 // What it does, per trade:
 //   1. Copies app/api/sms/inbound/route.ts, app/api/intake/structure/route.ts
@@ -32,10 +35,13 @@ import { execFileSync } from 'node:child_process'
 import { collectPlatformContractFiles } from './receptionist-platform-contract.mjs'
 import { receptionistSourceHash } from './receptionist-release-fingerprint.mjs'
 import { REQUIRED_RECEPTIONIST_MIGRATIONS, RECEPTIONIST_SCHEMA_FILES } from './receptionist-schema-contract.mjs'
+import { collectRank1SourceEvidence } from './eval-rank1-evidence.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SRC_ROOT = resolve(HERE, '..')
 const OUT_ROOT = resolve(process.argv.find((a) => a.startsWith('--out-root='))?.slice('--out-root='.length) ?? 'C:/Users/dalig/Desktop/MaintainTech/MaintainOrg/QuoteMax/Receptionists')
+// Rank 1 is the system policy, not an opt-in pilot. --rank1 remains a harmless
+// compatibility argument for older runbooks; all five exports always require it.
 
 const SRC_PKG = JSON.parse(readFileSync(join(SRC_ROOT, 'package.json'), 'utf8'))
 
@@ -59,13 +65,13 @@ const TRADES = {
     handlers: [],
     dialog: 'electrical',
     port: 3101,
-    blurb: 'Electrical SMS AI receptionist — general dialog intake → Opus estimation → G/B/B quote.',
+    blurb: 'Electrical SMS AI receptionist — structured intake → tenant-authoritative calculation or review hold → tradie approval.',
   },
   plumbing: {
     handlers: [],
     dialog: 'plumbing',
     port: 3102,
-    blurb: 'Plumbing SMS AI receptionist — general dialog intake → Opus estimation → G/B/B quote.',
+    blurb: 'Plumbing SMS AI receptionist — structured intake → tradie review; unsupported pricing never falls back to model-generated amounts.',
   },
   roofing: {
     handlers: ['roofing'],
@@ -85,6 +91,15 @@ const TRADES = {
     port: 3105,
     blurb: 'Solar SMS AI receptionist — address, phase and panel preferences → deterministic saved draft → installer review and release.',
   },
+  // Not an SMS receptionist. `sms: false` exports only the monorepo closure and
+  // the generic service files; the service repo owns its main.ts, modules,
+  // health, Dockerfile and release process.
+  'roofing-takeoff': {
+    sms: false,
+    service: 'qm-roofing-takeoff',
+    port: 3106,
+    blurb: 'Roofing plan takeoff service — builders’ plans → checked roofing takeoff → Roof Wizard pack or priced quote.',
+  },
 }
 
 // Trades whose engine code must be force-included even when the trimmed
@@ -96,6 +111,14 @@ const FORCE_INCLUDE = {
   plumbing: ['lib/estimate/plumbing-prompt.ts'],
   roofing: [],
   painting: [],
+  // P1: tenant auth, the service-role client and cron auth. P2: the durable
+  // queue and the takeoff library (TKO-08), and the stage handler (TKO-09).
+  // Later phases add their entry points here as the service first needs them.
+  'roofing-takeoff': [
+    'lib/tenant/from-request.ts', 'lib/supabase/admin.ts', 'lib/agents/cron.ts',
+    'lib/sms/durable-work.ts', 'lib/roofing/plan-takeoff/index.ts',
+    'services/roofing-takeoff/process.route.ts',
+  ],
 }
 
 // ── web surface ──────────────────────────────────────────────────────────
@@ -109,9 +132,10 @@ const RECEPTIONIST_ENDPOINTS = [
   { method: 'POST', path: '/api/sms/inbound', auth: 'Twilio signature', desc: 'Production webhook — the tenant’s Twilio number points here. Form-encoded, signature-validated.' },
   { method: 'POST', path: '/api/receptionist/simulate', auth: 'x-sim-key', desc: 'Test harness: same pipeline from JSON. The sandbox drives this. Needs SMS_SIMULATE_ENABLED=1.' },
   { method: 'POST', path: '/api/intake/structure', auth: 'Bearer CRON_SECRET', desc: 'Intake engine — free text + photos into a structured, validated intake.' },
-  { method: 'POST', path: '/api/estimate/draft', auth: 'Bearer CRON_SECRET', desc: 'Estimation engine — grounded G/B/B quote, validated line-by-line against the pricing book.' },
+  { method: 'POST', path: '/api/estimate/draft', auth: 'Bearer CRON_SECRET', desc: 'Draft engine — authoritative deterministic pricing where supported; otherwise an unpriced review hold. Never auto-sends a customer quote.' },
   { method: 'GET', path: '/api/health', auth: 'none', desc: 'Liveness. Railway’s healthcheck target.' },
-  { method: 'GET', path: '/api/health/deep', auth: 'none', desc: 'Readiness — 503 plus missing variable names when configuration is incomplete.' },
+  { method: 'GET', path: '/api/health/deep', auth: 'none', desc: 'Configuration presence only. A successful response does not establish quote capability.' },
+  { method: 'GET', path: '/api/health/ready', auth: 'x-sim-key', desc: 'Authenticated readiness — configuration, schema, artifact and controlled workflow evidence; 503 when gates are incomplete.' },
 ]
 
 const RECEPTIONIST_AUTH = [
@@ -127,21 +151,24 @@ const RECEPTIONIST_KEYS = [
 ]
 
 const moduleMermaid = (pipelineLabel) => `flowchart LR
-  IN["POST /api/sms/inbound\\nTwilio webhook"] --> TURN{receptionist turn}
+  IN["POST /api/sms/inbound\\nTwilio webhook"] --> JOB["durable receipt + job"]
+  JOB --> TURN{receptionist turn}
   TURN -->|default| LLM["Sonnet dialog\\npicks a tool"]
   TURN -->|"any failure"| SM["deterministic\\nstate machine"]
   LLM --> GUARD["grounding guard\\nno invented figures"]
   SM --> GUARD
   GUARD --> PIPE[["${pipelineLabel}"]]
   PIPE --> DB[("Supabase\\nconversations - quotes")]
-  PIPE --> SMS["reply SMS\\nvia Twilio"]
+  PIPE --> SMS["durable conversational reply\\nvia Twilio"]
   SIM["POST /api/receptionist/simulate\\nsandbox - Front Desk"] --> TURN
   subgraph Engines["internal engines (Bearer CRON_SECRET)"]
     I2["/api/intake/structure"] --> E2["/api/estimate/draft"]
-    E2 --> VAL["grounding validator\\nline items vs pricing book"]
-    VAL --> Q["quote + Stripe deposit links"]
+    E2 --> VAL["deterministic source checks\\nunsupported pricing held unpriced"]
+    VAL --> Q["saved draft awaiting review"]
   end
-  PIPE -.handoff.-> I2`
+  PIPE -.handoff.-> I2
+  Q --> OWNER["authenticated tradie approval"]
+  OWNER --> RELEASE["immutable customer release\\nquote + PDF + permitted payment"]`
 
 const WEB_CONTENT = {
   electrical: {
@@ -149,18 +176,18 @@ const WEB_CONTENT = {
     tagline: 'Texts in, a grounded electrical quote out — priced from the tradie’s own book, never guessed.',
     intro: [
       'This service answers a tradie’s SMS number like front-desk staff. A Claude-driven dialog gathers the job in plain language — what needs doing, where, access, photos — then hands a structured intake to the estimation engine.',
-      'The estimator drafts a Good/Better/Best quote using tool calls only: every line item price is looked up in the tenant’s pricing book and shared assembly library, then checked by a grounding validator. Anything the database cannot substantiate downgrades the quote to a paid site inspection instead of guessing.',
-      'The customer gets a quote link and Stripe deposit options by SMS, and the tradie is notified — usually inside a minute of the last question being answered.',
+      'Quote Core calculates exact-cent prices from this account’s approved recipe, catalogue and versioned pricing book. Missing prices or unsupported work produce an unpriced review hold, not an invented quote or an inspection charge.',
+      'The tradie reviews and explicitly releases the saved quote before the customer receives a priced quote link. The AI handles intake and conversation, not pricing authority.',
     ],
     capabilities: [
       { title: 'Natural SMS dialog', body: 'Greets, asks only what is missing, handles refusals and topic changes — Sonnet-driven with a deterministic fallback every turn.' },
       { title: 'Structured intake', body: 'Free text and photos become a validated intake: job type, scope, address, access, risks.' },
-      { title: 'Grounded pricing', body: 'The model can only select priced rows via tools. A validator re-derives every line; failures route to inspection.' },
-      { title: 'Good/Better/Best quotes', body: 'Three tiers with scope, assumptions and GST handling, delivered as a live link and PDF.' },
-      { title: 'Stripe deposits', body: 'Deposit links minted per tier — pay-first booking straight from the quote page.' },
+      { title: 'Deterministic pricing', body: 'Approved source rows, exact-cent arithmetic and a frozen pricing version. Missing authority goes to review.' },
+      { title: 'Reviewable quote drafts', body: 'Supported recipes produce scope, line items, GST and calculation traces for tradie review.' },
+      { title: 'Approved customer release', body: 'The owner must approve the saved quote; existing site-visit and payment policy is enforced separately.' },
       { title: 'Photo requests', body: 'Asks for photos when the job needs eyes on it, with a tokenised upload link.' },
     ],
-    flowTitle: 'From first text to priced quote',
+    flowTitle: 'From first text to approved quote',
     flow: `sequenceDiagram
   participant C as Customer
   participant T as Twilio
@@ -168,72 +195,72 @@ const WEB_CONTENT = {
   participant I as Intake engine
   participant E as Estimator
   participant DB as Pricing book
+  participant O as Tradie
   C->>T: "Need 4 downlights put in the kitchen"
   T->>R: POST /api/sms/inbound
   R->>C: asks address, access, timing
   C->>R: answers over a few texts
   R->>I: structured handoff
   I->>E: validated intake + photos
-  E->>DB: price lookups (tool calls only)
-  DB-->>E: grounded line items
-  E->>E: grounding validator
-  E-->>C: G/B/B quote link + deposit options
-  E-->>R: tradie notified`,
-    pipelineLabel: 'estimation engine\\nRAG + tool-calling',
-    sandboxNote: 'A normal electrical turn answers in seconds; the final quote turn runs the full estimation engine and can take about a minute.',
+  E->>DB: load owned recipe and frozen prices
+  DB-->>E: authoritative sources or missing data
+  E->>E: deterministic calculation or unpriced hold
+  E-->>O: saved draft for review
+  O->>E: explicit approval after resolving holds
+  E-->>C: released quote link`,
+    pipelineLabel: 'Quote Core\\nexact cents or review hold',
+    sandboxNote: 'The sandbox exercises the real intake flow. A saved draft still requires tradie approval; missing pricing stays unpriced.',
   },
   plumbing: {
     name: 'Plumbing Receptionist', tint: '#6EC1FF',
-    tagline: 'A leaking hot water system at 7am becomes a priced, bookable quote before the van leaves the driveway.',
+    tagline: 'Plumbing enquiries become structured, reviewable requests — without guessed prices.',
     intro: [
       'This service answers a plumber’s SMS number like front-desk staff. A Claude-driven dialog gathers the job — fixture, fault, urgency, address, photos — then hands a structured intake to the estimation engine.',
-      'Quotes are drafted with tool calls only: every price is looked up in the tenant’s pricing book and assembly library, then re-checked by a grounding validator. Unquotable jobs route to a paid site inspection rather than a guess.',
-      'The customer gets a Good/Better/Best quote link with Stripe deposit options by SMS; the plumber gets notified with the full scope.',
+      'The receptionist offers a form or gathers details by SMS. Generic plumbing requests currently need tradie review: they do not fall back to model-generated prices when an approved deterministic recipe is unavailable.',
+      'The plumber receives the request and must explicitly approve any new customer quote. A missing recipe or price does not itself create an inspection charge.',
     ],
     capabilities: [
       { title: 'Natural SMS dialog', body: 'Understands "no hot water since last night" and asks the two questions that matter — system type and access.' },
       { title: 'Structured intake', body: 'Free text and photos become a validated intake with job type, urgency and property detail.' },
-      { title: 'Grounded pricing', body: 'Tool-calling only; a validator re-derives every line item against the pricing book.' },
-      { title: 'Good/Better/Best quotes', body: 'Repair vs replace vs upgrade tiers, scoped and GST-correct.' },
-      { title: 'Stripe deposits', body: 'Deposit links per tier, pay-first booking from the quote page.' },
-      { title: 'Inspection fallback', body: 'Gas, capacity and compliance edge cases route to a $99 site visit instead of a wrong number.' },
+      { title: 'No invented prices', body: 'Unsupported generic pricing stays unpriced until an approved calculation or reviewed quote is available.' },
+      { title: 'Form or SMS intake', body: 'Collects job details through a tenant-owned form link or a guided conversation.' },
+      { title: 'Explicit approval', body: 'The customer receives no new priced quote until the tradie reviews and releases it.' },
+      { title: 'Useful review handoff', body: 'Missing pricing and scope are escalated without turning internal setup failures into customer charges.' },
     ],
-    flowTitle: 'From first text to priced quote',
+    flowTitle: 'From first text to a reviewable request',
     flow: `sequenceDiagram
   participant C as Customer
   participant T as Twilio
   participant R as Receptionist dialog
   participant I as Intake engine
   participant E as Estimator
-  participant DB as Pricing book
+  participant O as Plumber
   C->>T: "Hot water system is leaking"
   T->>R: POST /api/sms/inbound
   R->>C: asks system type, address, access
   C->>R: answers + photo of the unit
   R->>I: structured handoff
   I->>E: validated intake
-  E->>DB: price lookups (tool calls only)
-  DB-->>E: grounded line items
-  E->>E: grounding validator
-  E-->>C: G/B/B quote link + deposit options
-  E-->>R: plumber notified`,
-    pipelineLabel: 'estimation engine\\nRAG + tool-calling',
-    sandboxNote: 'A normal plumbing turn answers in seconds; the final quote turn runs the full estimation engine and can take about a minute.',
+  E->>E: unsupported generic pricing held unpriced
+  E-->>O: scope and review request
+  R-->>C: request saved for tradie review`,
+    pipelineLabel: 'structured intake\\nunpriced review when unsupported',
+    sandboxNote: 'Plumbing can gather details and offer the form. Generic quotes remain unpriced for review until approved trade-specific pricing is available.',
   },
   roofing: {
     name: 'Roofing Receptionist', tint: '#FF7A59',
-    tagline: 'Address in, measured roof out — satellite measurement, deterministic pricing, a quote link by SMS.',
+    tagline: 'Address in, measured roof draft out — deterministic pricing with tradie-controlled release.',
     intro: [
-      'This service quotes roofs without a site visit. The dialog collects the address, verifies it on the map, then gathers intent (re-roof, repair, gutters), material and pitch.',
+      'This service gathers roof work remotely. The dialog collects the address, verifies it on the map, then gathers intent (re-roof, repair, gutters), material and pitch. Measurement suitability still needs review.',
       'The measurement engine (Geoscape primary, with satellite fallbacks) measures every structure on the parcel. Pricing is fully deterministic — the language model never emits a price, an area or a structure count; a grounding guard discards any turn that states a figure no tool produced.',
-      'The customer receives their roof photo, picks which building to quote, and gets a priced SMS with a live quote page and PDF. The tradie has a parallel dashboard surface with the same measurement.',
+      'The customer can select the building without receiving an unreleased price. The tradie reviews the source-linked measurement and quote before a priced customer link is released.',
     ],
     capabilities: [
       { title: 'Address verification', body: 'Geocodes and confirms the exact parcel with the customer before anything is measured.' },
       { title: 'Satellite measurement', body: 'Geoscape-first roof measurement of every structure — areas, facets, edges — no ladder.' },
       { title: 'Deterministic pricing', body: 'Rate-card maths from measured area, material and pitch. The model never invents a number.' },
       { title: 'Structure selection', body: 'Sends the roof photo and asks which building(s) to quote — house, shed, garage.' },
-      { title: 'Quote + PDF by SMS', body: 'Priced tiers on a live /q/roof page with a PDF, deposit links included.' },
+      { title: 'Approved quote + PDF', body: 'Priced tiers and customer documents become available only after explicit tradie release.' },
       { title: 'LLM front, machine back', body: 'Sonnet handles the conversation; any failure falls back to a pure state machine for that turn.' },
     ],
     flowTitle: 'From address to measured, priced roof',
@@ -243,6 +270,7 @@ const WEB_CONTENT = {
   participant R as Receptionist dialog
   participant M as Measurement engine
   participant P as Deterministic pricer
+  participant O as Tradie
   C->>T: "Quote to re-roof 12 Example St Brisbane"
   T->>R: POST /api/sms/inbound
   R->>C: confirms the address on the map
@@ -252,7 +280,9 @@ const WEB_CONTENT = {
   R->>C: roof photo — "which building?"
   C->>R: "the house"
   R->>P: area x material x pitch
-  P-->>C: priced SMS + /q/roof link + PDF
+  P-->>O: source-linked saved draft
+  O->>P: explicit review and release
+  P-->>C: released quote link + PDF
   Note over R,P: the model never emits a price or an area`,
     pipelineLabel: 'measure + price\\nGeoscape - rate card',
     sandboxNote: 'The measure step is real satellite measurement — that turn takes minutes, not seconds. Earlier turns answer quickly.',
@@ -294,7 +324,7 @@ const WEB_CONTENT = {
   },
   solar: {
     name: 'Solar Receptionist', tint: '#7BE495',
-    tagline: 'A receptionist in front of a deterministic solar engine — sizing, rebate and payback with no guesswork.',
+    tagline: 'A receptionist in front of a deterministic solar engine — source-based estimates for installer review.',
     intro: [
       'This service pairs the SMS dialog with QuoteMax’s deterministic solar engine. The conversation collects the address and energy goals; the engine does everything numeric.',
       'Roof facts feed system sizing capped by roof and export limits, annual production is cross-checked against CEC references, and pricing applies the STC rebate by postcode zone. Savings and payback come out as Good/Better/Best systems.',
@@ -411,10 +441,30 @@ function redirectEngineCalls(src) {
 // of brittle edit that breaks silently on the next monorepo change. Swapping a
 // module specifier is verifiable by grep.
 function scopeDialogToService(src) {
-  return src.replace(
-    "import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'",
-    "import { decideNextTurn, scopeTenantTrades, type ConversationTurn } from '@/lib/sms/service-dialog'",
-  )
+  const dialogImport = "import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'"
+  const memoryAnchor = '  // ─────── Customer memory lookup ───────'
+  const tenantAnchor = 'const tenant = await tenantByDestinationSms(supabase, toNumber)'
+  const activeAnchor = 'if (!isTransactableTenantStatus(tenant.status)) {'
+  for (const anchor of [dialogImport, memoryAnchor, tenantAnchor, activeAnchor]) {
+    if (src.split(anchor).length !== 2) {
+      throw new Error(`scopeDialogToService: required unique ingress anchor moved: ${anchor}`)
+    }
+  }
+  if (!(src.indexOf(tenantAnchor) < src.indexOf(activeAnchor) && src.indexOf(activeAnchor) < src.indexOf(memoryAnchor))) {
+    throw new Error('scopeDialogToService: tenant/status gate must precede customer memory')
+  }
+  return src.replace(dialogImport,
+    "import { decideNextTurn, scopeTenantTrades, serviceTradeEnabled, SERVICE_TRADE, type ConversationTurn } from '@/lib/sms/service-dialog'",
+  ).replace(memoryAnchor, `  // A deployed service is not permission to use that service on every tenant.
+  // Null destinations retain signup-only handling below, never customer quoting.
+  if (tenant && !serviceTradeEnabled(tenant.trades)) {
+    console.warn('[sms/inbound] tenant service disabled; dropping inbound', {
+      tenantId: tenant.id, serviceTrade: SERVICE_TRADE,
+    })
+    return ackTwiml()
+  }
+
+${memoryAnchor}`)
 }
 
 // The slot extractor is a SECOND Sonnet call given the same tenant trade list.
@@ -531,6 +581,10 @@ import { decideNextTurn as generalDialog, type ConversationTurn } from './dialog
 ${fallback ? "import { decideScopedFallback } from './scoped-fallback'" : ''}
 export type { ConversationTurn }
 export const SERVICE_TRADE = ${JSON.stringify(trade)} as const
+/** Account permissions come only from the explicit enabled-trades list. */
+export function serviceTradeEnabled(tenantTrades: unknown): boolean {
+  return Array.isArray(tenantTrades) && tenantTrades.includes(SERVICE_TRADE)
+}
 export function scopeTenantTrades<T extends string>(tenantTrades: readonly T[] | undefined): readonly T[] | undefined {
   return ${fallback ? 'tenantTrades' : `[SERVICE_TRADE] as unknown as readonly T[]`}
 }
@@ -1892,7 +1946,8 @@ Run the release contract and controlled behaviour tests before promotion.
 
 function buildTrade(trade, opts) {
   const cfg = TRADES[trade]
-  const outDir = join(OUT_ROOT, `qm-${trade}-receptionist`)
+  const sms = cfg.sms !== false
+  const outDir = join(OUT_ROOT, cfg.service ?? `qm-${trade}-receptionist`)
   // Existing service customisations are inputs for a reviewed overlay, never
   // disposable generated output. Export candidates to a new directory.
   if (!opts.dry && existsSync(join(outDir, 'src'))) {
@@ -1923,7 +1978,7 @@ function buildTrade(trade, opts) {
 
   // 1. Trim the three routes.
   const generated = []
-  for (const r of ROUTES) {
+  for (const r of sms ? ROUTES : []) {
     let src = readFileSync(join(SRC_ROOT, r.from), 'utf8')
     if (r.trim) {
       for (const [name, flag, key] of [
@@ -1955,7 +2010,8 @@ function buildTrade(trade, opts) {
   }
 
   // 2. Closure over the trimmed routes + forced trade engines.
-  const forced = [...(FORCE_INCLUDE[trade] ?? []), 'lib/sms/durable-work.ts', 'lib/sms/work-delivery-context.ts', 'lib/sms/public-origin.ts', 'lib/sms/scoped-fallback.ts', 'lib/sms/pricing-readiness.ts', 'lib/quote/public-schema.ts']
+  const smsForced = ['lib/sms/durable-work.ts', 'lib/sms/work-delivery-context.ts', 'lib/sms/public-origin.ts', 'lib/sms/scoped-fallback.ts', 'lib/sms/pricing-readiness.ts', 'lib/quote/public-schema.ts']
+  const forced = [...(FORCE_INCLUDE[trade] ?? []), ...(sms ? smsForced : [])]
     .map((p) => join(SRC_ROOT, p))
     .filter((p) => existsSync(p))
   const { files, bare, missing } = collectClosure(
@@ -2030,35 +2086,41 @@ function buildTrade(trade, opts) {
   }
   for (const g of generated) write(g.out, g.text)
 
-  // Trade isolation: the per-service dialog wrapper the route now imports.
-  write('src/lib/sms/service-dialog.ts', serviceDialogModule(trade))
+  // A non-SMS service (sms: false) owns its main.ts, modules, health and
+  // runtime; it gets the closure plus the Express → Web request shim only.
+  if (sms) {
+    // Trade isolation: the per-service dialog wrapper the route now imports.
+    write('src/lib/sms/service-dialog.ts', serviceDialogModule(trade))
 
-  write('src/runtime/after.ts', tpl.after())
-  write('src/runtime/readiness.ts', readFileSync(join(HERE, 'receptionist-runtime/readiness.ts.template'), 'utf8'))
-  write('src/runtime/workers.ts', readFileSync(join(HERE, 'receptionist-runtime/workers.ts.template'), 'utf8'))
-  write('src/runtime/scheduler.ts', readFileSync(join(HERE, 'receptionist-runtime/scheduler.ts.template'), 'utf8'))
-  write('src/runtime/web-request.ts', tpl.webRequest())
-  write('src/main.ts', tpl.main(trade, cfg))
-  write('src/app.module.ts', tpl.appModule())
-  write('src/receptionist/receptionist.module.ts', tpl.receptionistModule())
-  write('src/receptionist/receptionist.controller.ts', tpl.receptionistController(trade))
-  write('src/receptionist/dto/simulate-turn.dto.ts', tpl.simulateDto(trade))
-  write('src/intake/intake.module.ts', tpl.intakeModule())
-  write('src/intake/intake.controller.ts', tpl.intakeController())
-  write('src/estimate/estimate.module.ts', tpl.estimateModule())
-  write('src/estimate/estimate.controller.ts', tpl.estimateController())
-  // Web surface — shared page/auth/sandbox code copied verbatim from
-  // scripts/web-surface/ (edit THERE); only content.ts is per-trade.
-  for (const f of WEB_FILES) {
-    write(`src/web/${f}`, readFileSync(join(HERE, 'web-surface', f), 'utf8'))
+    write('src/runtime/after.ts', tpl.after())
+    write('src/runtime/readiness.ts', readFileSync(join(HERE, 'receptionist-runtime/readiness.ts.template'), 'utf8'))
+    write('src/runtime/workers.ts', readFileSync(join(HERE, 'receptionist-runtime/workers.ts.template'), 'utf8'))
+    write('src/runtime/scheduler.ts', readFileSync(join(HERE, 'receptionist-runtime/scheduler.ts.template'), 'utf8'))
   }
-  write('src/web/content.ts', webContentTs(trade))
+  write('src/runtime/web-request.ts', tpl.webRequest())
+  if (sms) {
+    write('src/main.ts', tpl.main(trade, cfg))
+    write('src/app.module.ts', tpl.appModule())
+    write('src/receptionist/receptionist.module.ts', tpl.receptionistModule())
+    write('src/receptionist/receptionist.controller.ts', tpl.receptionistController(trade))
+    write('src/receptionist/dto/simulate-turn.dto.ts', tpl.simulateDto(trade))
+    write('src/intake/intake.module.ts', tpl.intakeModule())
+    write('src/intake/intake.controller.ts', tpl.intakeController())
+    write('src/estimate/estimate.module.ts', tpl.estimateModule())
+    write('src/estimate/estimate.controller.ts', tpl.estimateController())
+    // Web surface — shared page/auth/sandbox code copied verbatim from
+    // scripts/web-surface/ (edit THERE); only content.ts is per-trade.
+    for (const f of WEB_FILES) {
+      write(`src/web/${f}`, readFileSync(join(HERE, 'web-surface', f), 'utf8'))
+    }
+    write('src/web/content.ts', webContentTs(trade))
+  }
   // Scan AFTER the scaffolding above is on disk — main.ts and the
   // controllers read PORT, RAILWAY_PUBLIC_DOMAIN, SIM_API_KEY and friends,
   // which a scan of the copied lib alone would miss.
   const usedEnv = envVarsUsed(join(outDir, 'src'))
   write('src/config/required-env.ts', tpl.requiredEnv(REQUIRED_ENV.filter((v) => usedEnv.includes(v))))
-  write('src/health/health.controller.ts', tpl.healthController(trade))
+  if (sms) write('src/health/health.controller.ts', tpl.healthController(trade))
 
   const runtimeDeps = {
     '@nestjs/common': '^11.1.6',
@@ -2087,12 +2149,12 @@ function buildTrade(trade, opts) {
   }
 
   write('package.json', JSON.stringify({
-    name: `qm-${trade}-receptionist`,
+    name: cfg.service ?? `qm-${trade}-receptionist`,
     version: '0.1.0',
     private: true,
     description: cfg.blurb,
     scripts: {
-      build: 'node scripts/receptionist-build.mjs',
+      build: sms ? 'node scripts/receptionist-build.mjs' : 'nest build && tsc-alias -p tsconfig.json',
       start: 'node dist/main.js',
       'start:dev': 'nest start --watch',
       typecheck: 'tsc --noEmit',
@@ -2111,12 +2173,17 @@ function buildTrade(trade, opts) {
   }, null, 2) + '\n')
 
   write('tsconfig.json', tpl.tsconfig())
-  for (const file of ['receptionist-build.mjs', 'receptionist-release-fingerprint.mjs']) {
-    write(`scripts/${file}`, readFileSync(join(HERE, file), 'utf8'))
+  // The sealed build, its Dockerfile and the release manifest below are the SMS
+  // fleet's release evidence: they hash every generated file under src/, which
+  // a service with hand-written src/ files can't satisfy.
+  if (sms) {
+    for (const file of ['receptionist-build.mjs', 'receptionist-release-fingerprint.mjs']) {
+      write(`scripts/${file}`, readFileSync(join(HERE, file), 'utf8'))
+    }
   }
   write('nest-cli.json', tpl.nestCli())
   write('.gitignore', tpl.gitignore())
-  write('Dockerfile', tpl.dockerfile(trade))
+  if (sms) write('Dockerfile', tpl.dockerfile(trade))
   write('.dockerignore', tpl.dockerignore())
   write('railway.json', tpl.railwayJson())
   write('.nvmrc', '22\n')
@@ -2125,6 +2192,11 @@ function buildTrade(trade, opts) {
   const body = envBody(trade, cfg, usedEnv)
   write('.env.example', body)
   const envCreated = writeIfAbsent('.env', body)
+  if (!sms) {
+    stats.envVars = usedEnv.length
+    stats.envCreated = envCreated
+    return stats
+  }
   write('README.md', readme(trade, cfg, stats))
   write('ISOLATION.md', isolationDoc(trade, cfg, libFiles))
 
@@ -2146,8 +2218,10 @@ function buildTrade(trade, opts) {
   const originCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: SRC_ROOT, encoding: 'utf8' }).trim()
   const manifest = {
     contractVersion: 2, trade, originCommit,
+    rank1Required: true, rank1Scope: 'all_accounts',
     requiredMigrations: REQUIRED_RECEPTIONIST_MIGRATIONS,
     platformContractHashes: Object.fromEntries([
+      ...Object.keys(collectRank1SourceEvidence(SRC_ROOT).sourceFiles),
       ...collectPlatformContractFiles(collectClosure, SRC_ROOT),
       ...RECEPTIONIST_SCHEMA_FILES,'app/api/health/sms-contract/route.ts',
       ...libFiles.map((f) => relative(SRC_ROOT,f).split(sep).join('/')),
@@ -2175,7 +2249,7 @@ function buildTrade(trade, opts) {
 const args = process.argv.slice(2)
 const dry = args.includes('--dry')
 const wanted = args.filter((a) => !a.startsWith('--'))
-const list = wanted.length ? wanted : Object.keys(TRADES)
+const list = wanted.length ? wanted : Object.keys(TRADES).filter((t) => TRADES[t].sms !== false)
 
 for (const trade of list) {
   if (!TRADES[trade]) { console.error(`unknown trade: ${trade}`); process.exitCode = 1; continue }

@@ -21,6 +21,8 @@ import { handleSavedJobCorrection, type PendingJobCorrection } from '@/lib/sms/j
 import { handleSolarSmsTurn, type SolarSmsState } from '@/lib/sms/solar-receptionist'
 import { publicWebOrigin, publicWebUrl } from '@/lib/sms/public-origin'
 import { persistHumanHandoff } from '@/lib/sms/human-handoff'
+import { plumbingFormOfferEnabled } from '@/lib/sms/form-offer'
+import { handlePlumbingFormOffer } from '@/lib/sms/plumbing-form-offer'
 import { randomBytes } from 'node:crypto'
 import {
   validateTwilioSignature,
@@ -28,7 +30,7 @@ import {
 } from '@/lib/sms/twilio-validator'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
-import { toRoofingRequest, seedRoofingSlots, isAffirmative, rejectsReadBack, extractStreetAddress, nextRoofingStep } from '@/lib/sms/roofing-intake'
+import { toRoofingRequest, seedRoofingSlots, isAffirmative, rejectsReadBack, extractStreetAddress, nextRoofingStep, isStopRequest } from '@/lib/sms/roofing-intake'
 import { screenConfirmAddress, verifyAuAddress, gateUnverifiedProfileAddress, lastOutboundAskedAddress, consumeAddressRejection } from '@/lib/sms/verify-address'
 import {
   advanceRoofing,
@@ -116,11 +118,16 @@ import {
 import { stripLinkPromise } from '@/lib/sms/dialog-grounding'
 import {
   evaluateQuoteReadiness,
+  EV_SERVICE_MODE_QUESTION,
   clarifyingEnforcementEnabled,
   clarifyingTurnCap,
   decideClarifyGate,
   photoDeclined,
 } from '@/lib/sms/quote-readiness'
+import {
+  isEvInstallationMode,
+  normaliseEvServiceMode,
+} from '@/lib/quote/ev-service-mode'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 import { buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
 
@@ -275,6 +282,13 @@ const EASY_5_JOB_TYPES = new Set([
 // charger is going, but it must NOT join EASY_5_JOB_TYPES itself — that set
 // also drives assumption rules and quoting behaviour, and EV has its own.
 const PHOTO_ELIGIBLE_JOB_TYPES = new Set([...EASY_5_JOB_TYPES, 'ev_charger'])
+
+// Questions that belong to an EV installation, never a supply-only sale.
+// Used as a deterministic backstop after the dialog model: the persisted
+// service mode is scope authority even if a model turn drifts toward the old
+// combined supply-and-install script.
+const EV_INSTALLATION_DETAIL_QUESTION_RE =
+  /\b(?:where(?:abouts)?\s+(?:is|will|does)|parking spot|garage|carport|external wall|switchboard|cable run|how far|distance|single[- ]?phase|three[- ]?phase|spare capacity|photo|picture|image|site visit)\b/i
 
 // Best-effort first-name guess from a customer's SMS turn. Used only
 // for the photo-request SMS greeting — Opus does the authoritative
@@ -1788,8 +1802,8 @@ export async function POST(req: Request) {
   // Look up which registered tradie owns the destination number the
   // customer texted. New conversations get this tenant_id stamped so
   // downstream (estimator, etc.) can scope by tenant.
-  // Fail-soft: no tenant match → null → existing pipeline uses the
-  // legacy single pricing_book (back-compat for pre-v6 conversations).
+  // Unmatched destinations can reach the registration flow, but must never
+  // enter customer quoting with a legacy/unowned price book.
   const { tenantByDestinationSms, isProvisionedAgentNumber, isTransactableTenantStatus } =
     await import('@/lib/tenant/lookup')
 
@@ -1846,7 +1860,7 @@ export async function POST(req: Request) {
     // null tenant_id (→ logo-less PDF) is traceable. Fail-soft below.
     console.warn('[sms/inbound] step 2a — no tenant match for destination', {
       toNumber,
-      note: 'falling back to legacy single-pricing-book pipeline (quote PDF will have no logo)',
+      note: 'customer quoting blocked unless this destination resolves to an active tenant',
     })
   }
 
@@ -1856,7 +1870,9 @@ export async function POST(req: Request) {
   // returning customers don't get re-asked their name/suburb, and to
   // link the conversation back to a customer for cross-channel history.
   // Fail-soft: returns null on DB error, all downstream code handles null.
-  const customerRaw: CustomerProfile | null = await findOrCreateCustomer(fromNumber, 'sms', tenant?.id ?? null)
+  const customerRaw: CustomerProfile | null = tenant
+    ? await findOrCreateCustomer(fromNumber, 'sms', tenant.id)
+    : null
   // US-004 (audit 2026-07-23): the customers row is globally unique by phone
   // and shared by every tenant this number ever texts. When it belongs to a
   // DIFFERENT tenant, withhold the remembered profile at the single point
@@ -1943,6 +1959,10 @@ export async function POST(req: Request) {
       messageSid,
     })
     if (tradieBranch) return tradieBranch
+    // The durable receipt already exists. A failed worker attempt stays in
+    // recovery with this reason; it cannot create an unowned customer quote.
+    // Registration above remains available on the shared signup number.
+    throw new Error('sms_tenant_unresolved: customer quoting requires an active destination tenant')
   }
 
   console.log('[sms/inbound] step 3 — completion-aware conversation lookup', { fromNumber })
@@ -2881,7 +2901,7 @@ export async function POST(req: Request) {
           if (pending && pending.status === 'pending') {
             const choiceAllowed = productChoiceAllowedForSupply(
               pending.category,
-              initialConversationState.slots.supplied_by as string | undefined,
+              initialConversationState.slots.service_mode as string | undefined,
             )
             if (!choiceAllowed) {
               const { error: clearChoiceError } = await supabase
@@ -3107,7 +3127,7 @@ export async function POST(req: Request) {
         WP9_ENABLED &&
         !productChoiceAllowedForSupply(
           conversationState.slots.job_type as string | undefined,
-          conversationState.slots.supplied_by as string | undefined,
+          conversationState.slots.service_mode as string | undefined,
         )
       ) {
         const { error: clearEvChoiceError } = await supabase
@@ -3124,6 +3144,25 @@ export async function POST(req: Request) {
             conversationId,
           })
         }
+      }
+
+      // Plumbing keeps its form-first opener after slot extraction. Persist
+      // the selected branch/token and delivery intent in the durable turn so
+      // retries never mint another form or fall through after an uncertain SMS.
+      if (tenant?.id && plumbingFormOfferEnabled(tenant.trades,
+        deriveTradeFromJobType(String(conversationState.slots.job_type ?? '')))) {
+        const form = await handlePlumbingFormOffer({ db: supabase, tenantId: tenant.id, conversationId,
+          customerPhone: fromNumber, fromNumber: toNumber, state: conversationState,
+          firstName: conversationState.slots.first_name || customer?.first_name || guessFirstName(turns),
+          inbound: lastInboundBody, agentHasReplied: turns.some(turn => turn.direction === 'outbound'),
+          initialTurnCount,
+          suppressed: inflightContinuation || quoteAlreadyDrafted || !!priorIntakeId || followupPinActive ||
+            isActiveRoofingFlow(((conversation as Record<string, unknown>).roofing_state ?? null) as RoofingConversationState | null) ||
+            isActivePaintingFlow(((conversation as Record<string, unknown>).painting_state ?? null) as PaintingConversationState | null) ||
+            isStopRequest(lastInboundBody) || isGlobalOptOut(lastInboundBody),
+        })
+        conversationState = form.state
+        if (form.handled) return
       }
 
       console.log('[sms/inbound:after] step 6 — calling Sonnet dialog agent', {
@@ -3568,6 +3607,7 @@ export async function POST(req: Request) {
       const slotFirstName = (conversationState.slots.first_name as string | undefined) ?? undefined
       const slotSuburb = (conversationState.slots.suburb as string | undefined) ?? undefined
       const slotJobType = (conversationState.slots.job_type as string | undefined) ?? undefined
+      const slotEvServiceMode = normaliseEvServiceMode(conversationState.slots.service_mode)
 
       const haveNameSignal = !!slotFirstName || !!customer?.first_name
       const haveSuburbSignal = !!slotSuburb || !!customer?.suburb
@@ -3639,6 +3679,26 @@ export async function POST(req: Request) {
         !agentAlreadyAskedSuburb &&
         !currentReplyAsksForSuburb          // BUG D fix part 1
 
+      // Scope authority for EV work. A supply enquiry must not be allowed to
+      // drift into location/distance/phase questions (or an inspection offer)
+      // until the customer explicitly chooses one of the three service modes.
+      // Name/suburb retain their existing precedence; wrong-trade closeouts do
+      // not get revived by this guard.
+      const resolvedDialogJobType = slotJobType ?? decision.job_type_guess
+      const shouldForceEvServiceMode =
+        resolvedDialogJobType === 'ev_charger' &&
+        !slotEvServiceMode &&
+        decision.action !== 'end_conversation'
+      const shouldSuppressSupplyOnlyInstallFlow =
+        resolvedDialogJobType === 'ev_charger' &&
+        slotEvServiceMode === 'supply_only' &&
+        decision.action !== 'end_conversation' &&
+        (
+          decision.action === 'escalate_inspection' ||
+          decision.request_photo_link === true ||
+          EV_INSTALLATION_DETAIL_QUESTION_RE.test(decision.reply_to_send)
+        )
+
       if (shouldForceName) {
         console.warn('[sms/inbound:after] RULE 5 GUARD — Sonnet skipped name question; overriding', {
           conversationId,
@@ -3667,6 +3727,38 @@ export async function POST(req: Request) {
           reply_to_send: nameForAck
             ? `Cheers ${nameForAck} - and what suburb's the job in?`
             : "Cheers - and what suburb's the job in?",
+        }
+      } else if (shouldSuppressSupplyOnlyInstallFlow) {
+        console.warn('[sms/inbound:after] EV SUPPLY-ONLY GUARD — installation flow suppressed', {
+          conversationId,
+          originalAction: decision.action,
+          originalReplyPreview: decision.reply_to_send.slice(0, 100),
+        })
+        decision = {
+          ...decision,
+          action: 'finish',
+          job_type_guess: 'ev_charger',
+          ready_for_intake: true,
+          request_photo_link: false,
+          offer_product_choice: true,
+          reason_for_escalation: null,
+          reply_to_send: 'Thanks - I have this as charger supply only and will keep installation work out of the quote.',
+        }
+      } else if (shouldForceEvServiceMode) {
+        console.warn('[sms/inbound:after] EV SERVICE MODE GUARD — explicit mode required; overriding', {
+          conversationId,
+          originalAction: decision.action,
+          originalReplyPreview: decision.reply_to_send.slice(0, 100),
+        })
+        decision = {
+          ...decision,
+          action: 'ask',
+          job_type_guess: 'ev_charger',
+          ready_for_intake: false,
+          request_photo_link: false,
+          offer_product_choice: false,
+          reason_for_escalation: null,
+          reply_to_send: EV_SERVICE_MODE_QUESTION,
         }
       }
 
@@ -3707,6 +3799,7 @@ export async function POST(req: Request) {
             JSON.stringify(conversationState.slots ?? {}),
             JSON.stringify(buildTenantFacts(tenant ?? null)),
             ...(slotJob ? [safeRulesAsText(slotJob)] : []),
+            ...(slotJob === 'ev_charger' ? [EV_SERVICE_MODE_QUESTION] : []),
             ...(customAssemblies ?? []).map((s) => s.name ?? ''),
             // Spec ev-charger-location-photo R11 — the MUST-ASK question TEXT,
             // not just the service name. These questions are tool-produced (a
@@ -3847,6 +3940,7 @@ export async function POST(req: Request) {
       // price-critical facts for this job. If a required fact is missing, turn
       // the finish into one more SMS question before any photo, product-choice,
       // or intake/estimate side effect can fire.
+      const resolvedPhotoJobType = String(conversationState.slots?.job_type ?? decision.job_type_guess ?? '')
       if (!hasExistingIntake && decision.action === 'finish') {
         // Spec ev-charger-location-photo R6 — does this conversation already
         // hold a customer photo? Either channel counts: an inbound MMS
@@ -3860,11 +3954,10 @@ export async function POST(req: Request) {
         // turn where the sticky slot said ev_charger but the model guessed
         // something else evaluated the EV gate with hasPhoto=false, re-asking a
         // customer who had already sent their photo.
-        const evJobType =
-          String(conversationState.slots?.job_type ?? decision.job_type_guess ?? '') ===
-          'ev_charger'
+        const evJobType = resolvedPhotoJobType === 'ev_charger'
+        const evInstallationRequested = isEvInstallationMode(slotEvServiceMode)
         let hasPhoto = false
-        if (evJobType) {
+        if (evJobType && evInstallationRequested) {
           // Scoped to THIS job, not the whole thread. One sms_conversations row
           // is reused across jobs, so an unscoped read let a photo sent for a
           // previous downlights job silently satisfy the EV requirement for a
@@ -3908,7 +4001,8 @@ export async function POST(req: Request) {
         // Hoisted for step 8b: once the requirement is met (a photo, or a
         // decline) the photo-request SMS must be suppressed, or the
         // finish-fallback texts an upload link to someone who just satisfied it.
-        evPhotoRequirementSatisfied = evJobType && (hasPhoto || photoDeclined(turns))
+        evPhotoRequirementSatisfied = evJobType &&
+          (!evInstallationRequested || hasPhoto || photoDeclined(turns))
         const readiness = evaluateQuoteReadiness({
           action: decision.action,
           jobTypeGuess: decision.job_type_guess,
@@ -3964,16 +4058,53 @@ export async function POST(req: Request) {
             // Kill switch ON (SMS_ENFORCE_CLARIFYING_QUESTIONS disabled):
             // leave the model's finish untouched.
           } else if (gate.mode === 'escalate') {
-            // Cap reached — stop re-asking; route to the $99 inspection
-            // rather than trap the customer in a MUST-ASK loop.
-            decision = {
-              ...decision,
-              action: 'escalate_inspection',
-              ready_for_intake: false,
-              request_photo_link: false,
-              offer_product_choice: false,
-              reply_to_send:
-                "No worries - to quote this one accurately we'll need a quick on-site look. Want me to book a $99 inspection? It's credited toward the job if you go ahead.",
+            // A paid inspection can resolve unknown INSTALLATION conditions,
+            // but it cannot resolve a supply-only compatibility/product gap.
+            // The generic clarify cap used to ignore that distinction: after
+            // several unanswered vehicle questions it converted a confirmed
+            // supply-only order into a $99 site visit. Keep unresolved mode in
+            // the explicit three-way ask, and move a capped supply-only request
+            // to durable human review while the customer thread stays open.
+            // Both branches deliberately suppress the product/photo gates below.
+            const evCannotUseInspectionFallback =
+              resolvedPhotoJobType === 'ev_charger' &&
+              (!slotEvServiceMode || slotEvServiceMode === 'supply_only')
+            if (evCannotUseInspectionFallback) {
+              if (slotEvServiceMode === 'supply_only' && tenant?.id) {
+                await persistHumanHandoff({
+                  supabase,
+                  tenantId: tenant.id,
+                  customerPhone: fromNumber,
+                  conversationId,
+                  requestKey: `ev-supply-compatibility:${conversationId}`,
+                  trade: 'electrical',
+                  reason:
+                    'Supply-only EV charger request reached the clarification cap without enough vehicle compatibility detail; review product options without booking an inspection',
+                })
+              }
+              decision = {
+                ...decision,
+                action: 'ask',
+                ready_for_intake: false,
+                request_photo_link: false,
+                offer_product_choice: false,
+                reason_for_escalation: null,
+                reply_to_send: slotEvServiceMode === 'supply_only'
+                  ? "No worries - I'll have the tradie review the right charger options for your supply-only request and follow up."
+                  : EV_SERVICE_MODE_QUESTION,
+              }
+            } else {
+              // Cap reached — stop re-asking; route installation work to the
+              // $99 inspection rather than trap the customer in a MUST-ASK loop.
+              decision = {
+                ...decision,
+                action: 'escalate_inspection',
+                ready_for_intake: false,
+                request_photo_link: false,
+                offer_product_choice: false,
+                reply_to_send:
+                  "No worries - to quote this one accurately we'll need a quick on-site look. Want me to book a $99 inspection? It's credited toward the job if you go ahead.",
+              }
             }
           } else {
             // gate.mode === 'ask' — block finish, ask one more question.
@@ -4040,6 +4171,13 @@ export async function POST(req: Request) {
       const askedForLink = customerAskedForPhotoLink(
         turns.filter((t) => t.direction === 'inbound').at(-1)?.body ?? '',
       )
+      // Enforce the same five EV topics for an early model-authored photo
+      // request as for finish. An old DB script cannot send the photo ask early.
+      const evPhotoTextReady = resolvedPhotoJobType !== 'ev_charger' || evaluateQuoteReadiness({
+        action: 'finish', jobTypeGuess: decision.job_type_guess, conversationState,
+        knownFirstName: customer?.first_name ?? null, knownSuburb: customer?.suburb ?? null,
+        history: turns, services: customAssemblies, hasPhoto: true,
+      }).ready
       const photoTrigger = computeShouldSendPhotoRequest({
         photoRequestToken,
         photoRequestAlreadySent,
@@ -4054,12 +4192,14 @@ export async function POST(req: Request) {
         // send the link" the model has no job to guess from and returns
         // 'unknown', which would fail this gate and suppress the re-send. Same
         // fallback the EV readiness gate already uses ~180 lines above.
-        jobTypeIsEasy5: PHOTO_ELIGIBLE_JOB_TYPES.has(
-          String(conversationState.slots?.job_type ?? decision.job_type_guess ?? ''),
-        ),
+        jobTypeIsEasy5:
+          PHOTO_ELIGIBLE_JOB_TYPES.has(resolvedPhotoJobType) &&
+          evPhotoTextReady &&
+          (resolvedPhotoJobType !== 'ev_charger' || isEvInstallationMode(slotEvServiceMode)),
         // R9 — never re-ask once the customer has sent one or told us they
         // cannot. Only EV sets this; every other job keeps the old behaviour.
-        photoRequirementSatisfied: evPhotoRequirementSatisfied,
+        photoRequirementSatisfied: evPhotoRequirementSatisfied ||
+          (resolvedPhotoJobType === 'ev_charger' && photoDeclined(turns)),
       })
       const shouldSendPhotoRequest = photoTrigger.fire
       // Never ship a reply that promises a link when no link is going out.
@@ -4126,7 +4266,7 @@ export async function POST(req: Request) {
           // Keep the chosen random variant stable across process recovery.
           // The outbox's logical key must always carry the first saved body.
           const photoBody = await smsWorkCheckpoint('photo_request_message', async () =>
-            buildPhotoRequestSms({ firstName, uploadUrl, source: 'sms', jobType: decision.job_type_guess }))
+            buildPhotoRequestSms({ firstName, uploadUrl, source: 'sms', jobType: resolvedPhotoJobType }))
           const photoWork = currentSmsWork()
           const photoDispatch = await dispatchQuoteMessage({
             to: fromNumber,
@@ -4207,7 +4347,7 @@ export async function POST(req: Request) {
             (conversationState.slots.job_type as string | undefined) ?? decision.job_type_guess
           const choiceAllowed = productChoiceAllowedForSupply(
             productJobType,
-            conversationState.slots.supplied_by as string | undefined,
+            conversationState.slots.service_mode as string | undefined,
           )
           const category = categoryForJobType(productJobType)
           if (!choiceAllowed) {

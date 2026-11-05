@@ -29,6 +29,7 @@
 
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
+import { deterministicSampling } from '@/lib/llm/sampling'
 import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
 import { SMS_RECEPTIONIST_MODEL } from './model'
@@ -319,7 +320,19 @@ export function assertGroundedReply(
   const all = [...authoritative, ...conversational].join('\n')
   const allNums = numberTokens(all)
   const addrHay = norm(all)
-  const asking = text.includes('?')
+  // A recap ending "Sound right?" does not turn its preceding claims into
+  // questions. Exempt small numbers only inside an actual information ask.
+  const isQuestionAt = (index: number): boolean => {
+    const prefix = text.slice(0, index)
+    const boundary = [...prefix.matchAll(/[!?;]|\.(?!\d)/g)].at(-1)
+    const start = boundary ? boundary.index! + boundary[0].length : 0
+    const sentence = text.slice(start).split(/[!?;]|\.(?!\d)/, 1)[0]
+    const ending = text.slice(start + sentence.length, start + sentence.length + 1)
+    if (ending !== '?') return false
+    if (/\b(?:we|i)\s*(?:will|'ll|are going to)\b|\b(?:we'll|i'll)\b/i.test(sentence)) return false
+    return /(?:^|[,:]|\s[-–—]\s)\s*(?:(?:quick one|roughly|and)\s*[,:-]?\s*)?(?:is|are|do|does|did|have|has|can|could|would|will|what|which|how|where)\b/i.test(sentence) ||
+      /^\s*\d+(?:\s*(?:or|-)\s*\d+)\s*$/i.test(sentence)
+  }
 
   /** Grounded per CATEGORY, not by bare value. An area is grounded only by a
    *  previously stated area, a count only by a previously stated count — so
@@ -335,7 +348,7 @@ export function assertGroundedReply(
       const tok = digitsOnly(m[1] ?? '')
       if (allowed.has(tok)) continue
       // "is it 1 building or are there sheds too?" is a question, not a claim.
-      if (asking && Number(tok) < FREE_QUESTION_NUMBER) continue
+      if (Number(tok) < FREE_QUESTION_NUMBER && isQuestionAt(m.index!)) continue
       return `${label}: ${m[0].trim()}`
     }
     return null
@@ -351,18 +364,30 @@ export function assertGroundedReply(
    *  vocabulary ("1 or 2?", "how many coats?"). An assertion gets none:
    *  "that'll be 75 mate" has no cue word a pattern could catch. */
   const everyNumber = (): string | null => {
-    for (const m of text.match(NUMBER) ?? []) {
-      const tok = digitsOnly(m)
+    for (const m of text.matchAll(new RegExp(NUMBER.source, 'g'))) {
+      const tok = digitsOnly(m[0])
       if (allNums.has(tok)) continue
-      if (asking && Number(m.replace(/,/g, '')) < FREE_QUESTION_NUMBER) continue
-      return `ungrounded figure: ${m}`
+      if (Number(m[0].replace(/,/g, '')) < FREE_QUESTION_NUMBER && isQuestionAt(m.index!)) continue
+      return `ungrounded figure: ${m[0]}`
+    }
+    return null
+  }
+  const chargerPhase = (): string | null => {
+    const pattern = /\b(single|three|1|3)[-\s]phase\s+(?:(?:EV|wall|home)\s+)?charg(?:er|ing unit)\b/gi
+    const canonical = (phase: string) => /^(?:three|3)$/i.test(phase) ? 'three' : 'single'
+    const allowed = new Set([...all.matchAll(pattern)].map((match) => canonical(match[1])))
+    for (const match of text.matchAll(pattern)) {
+      if (allowed.has(canonical(match[1])) || isQuestionAt(match.index!)) continue
+      return `ungrounded charger phase: ${match[0]}`
     }
     return null
   }
 
   const bad =
+    chargerPhase() ??
     byCategory(AREA, 'ungrounded area') ??
     byCategory(COUNT, 'ungrounded count') ??
+    byCategory(/\b(\d+(?:\.\d+)?)\s*kW\b/gi, 'ungrounded charger power') ??
     everyNumber() ??
     byText(ADDRESS, addrHay, 'ungrounded address') ??
     byText(LINK, norm(authoritative.join('\n')), 'ungrounded link')
@@ -659,6 +684,7 @@ function sonnetDecider(schema: z.ZodTypeAny): LlmDecider {
       () =>
         generateObject({
           model: anthropic(SMS_RECEPTIONIST_MODEL),
+          ...deterministicSampling(SMS_RECEPTIONIST_MODEL),
           maxOutputTokens: LLM_RECEPTIONIST_MAX_TOKENS,
           schema,
           // A provider that HANGS rather than throwing is the failure mode

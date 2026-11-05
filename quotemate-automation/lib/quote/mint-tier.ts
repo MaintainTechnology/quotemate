@@ -84,8 +84,11 @@ export function isSiteVisitFirstRow(input: {
   trade: string | null | undefined
   /** quotes.quote_kind. Omitted → 'initial' (every legacy caller). */
   quoteKind?: string | null | undefined
+  /** Canonical EV service mode. Supply-only sales have no site to inspect. */
+  serviceMode?: string | null | undefined
 }): boolean {
   if (asQuoteKind(input.quoteKind) !== 'initial') return false
+  if (input.serviceMode === 'supply_only') return false
   return isSiteVisitFirstTrade(input.trade)
 }
 
@@ -130,6 +133,8 @@ export function resolveGenericMintTier(
   /** quotes.quote_kind. Defaults to 'initial' so every existing two-argument
    *  caller — and the 17 cases in mint-tier.test.ts — behave exactly as before. */
   quoteKind?: string | null | undefined,
+  /** Canonical EV service mode. Omitted keeps every legacy caller unchanged. */
+  serviceMode?: string | null | undefined,
 ): GenericMintTier {
   const kind = asQuoteKind(quoteKind)
 
@@ -138,6 +143,12 @@ export function resolveGenericMintTier(
   // and above all 'inspection') mints nothing.
   if (kind !== 'initial') {
     return tier === CHILD_TIER_FOR_KIND[kind] ? { kind: 'passthrough' } : { kind: 'refuse' }
+  }
+
+  // A supply-only charger order is paid like a priced product sale. It must
+  // never redirect to (or directly mint) an electrical site inspection.
+  if (serviceMode === 'supply_only') {
+    return tier === 'inspection' ? { kind: 'refuse' } : { kind: 'passthrough' }
   }
 
   if (!isSiteVisitFirstTrade(trade)) return { kind: 'passthrough' }
@@ -181,9 +192,15 @@ export function resolveBookUnpaidAction(input: {
   nextTier: string
   /** quotes.quote_kind. Omitted → 'initial' (every legacy caller). */
   quoteKind?: string | null | undefined
+  /** Canonical EV service mode. */
+  serviceMode?: string | null | undefined
 }): BookUnpaidAction {
   if (asQuoteKind(input.quoteKind) !== 'initial') return { kind: 'not_bookable' }
-  if (isSiteVisitFirstRow({ trade: input.trade, quoteKind: input.quoteKind })) {
+  if (isSiteVisitFirstRow({
+    trade: input.trade,
+    quoteKind: input.quoteKind,
+    serviceMode: input.serviceMode,
+  })) {
     return { kind: 'pay', tier: 'inspection' }
   }
   if (!input.needsInspection && input.holdExpired) return { kind: 'expired' }

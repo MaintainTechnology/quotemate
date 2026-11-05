@@ -16,9 +16,18 @@ import { AddressAutocomplete } from '@/app/dashboard/roofing/_components/Address
 import { IntakeSchema, deriveTradeFromJobType } from '@/lib/intake/schema'
 import { formatJobType } from '@/lib/historical-quotes/job-types'
 import {
+  answersForJobType,
   allowsPinnedCatalogueProduct,
+  evServiceModeFromAnswers,
   fieldsForJobType,
+  visibleFieldsForJobType,
 } from '@/lib/quote/job-fields'
+import {
+  evServiceModeLabel,
+  isEvInstallationMode,
+  isEvSupplyMode,
+  type EvServiceMode,
+} from '@/lib/quote/ev-service-mode'
 
 const INPUT =
   'w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none'
@@ -109,6 +118,13 @@ export function explainFailure(
       return `Quoting is not enabled on your plan${json.reason ? ` (${json.reason})` : ''}.`
     case 'invalid_body':
       return 'Some answers were rejected. Check the fields and try again.'
+    case 'ev_service_mode_required':
+      return 'Choose whether the customer wants supply only, installation only, or both.'
+    case 'ev_charger_product_required':
+    case 'ev_charger_product_invalid':
+      return json.reason || 'Choose an active EV charger with a positive catalogue price.'
+    case 'ev_charger_product_check_failed':
+      return json.reason || 'The EV charger catalogue could not be checked. Try again.'
     case 'intake_insert_failed':
       return 'The job was priced but could not be saved. Try again — nothing was charged.'
     case 'draft_failed':
@@ -146,8 +162,8 @@ export function productNameAfterAnswerChange(
 ): string {
   if (
     jobType === 'ev_charger' &&
-    fieldCode === 'charger_supply' &&
-    !allowsPinnedCatalogueProduct(jobType, { charger_supply: nextValue })
+    (fieldCode === 'service_mode' || fieldCode === 'charger_supply') &&
+    !allowsPinnedCatalogueProduct(jobType, { [fieldCode]: nextValue })
   ) {
     return ''
   }
@@ -189,6 +205,11 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   const [token, setToken] = useState<string | null>(null)
 
   const spec = useMemo(() => fieldsForJobType(jobType), [jobType])
+  const serviceMode = evServiceModeFromAnswers(answers)
+  const visibleFields = useMemo(
+    () => visibleFieldsForJobType(jobType, answers),
+    [jobType, answers],
+  )
 
   // Changing job type discards the previous job's answers — the field codes
   // differ per job, so carrying them over would smuggle a stale answer into
@@ -239,11 +260,18 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   }, [])
 
   function updateAnswer(fieldCode: string, nextValue: string) {
-    setAnswers((current) => ({ ...current, [fieldCode]: nextValue }))
-    if (jobType === 'ev_charger' && fieldCode === 'charger_supply') {
+    setAnswers((current) => answersForJobType(jobType, { ...current, [fieldCode]: nextValue }))
+    if (
+      jobType === 'ev_charger' &&
+      (fieldCode === 'service_mode' || fieldCode === 'charger_supply')
+    ) {
       setProductName((current) =>
         productNameAfterAnswerChange(jobType, fieldCode, nextValue, current),
       )
+      if (nextValue === 'supply_only') {
+        setPhotoPaths([])
+        setPhotoUrls([])
+      }
     }
   }
 
@@ -275,17 +303,25 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   // a single product as a "we use X" confirmation, and gating at two hid the
   // picker entirely for every tenant holding one product per category.
   const productSelectionAllowed = allowsPinnedCatalogueProduct(jobType, answers)
+  const productRequired = jobType === 'ev_charger' && isEvSupplyMode(serviceMode)
   const products = useMemo(() => {
     if (!productSelectionAllowed || !spec.catalogueCategory) return []
     return catalogue
-      .filter((c) => c.category === spec.catalogueCategory && c.active !== false)
+      .filter((c) => {
+        if (c.category !== spec.catalogueCategory || c.active === false) return false
+        if (jobType !== 'ev_charger') return true
+        const price = typeof c.unit_price_ex_gst === 'string'
+          ? Number(c.unit_price_ex_gst)
+          : c.unit_price_ex_gst
+        return c.active === true && price != null && Number.isFinite(price) && price > 0
+      })
       .sort((a, b) => {
         const pa = typeof a.unit_price_ex_gst === 'string' ? parseFloat(a.unit_price_ex_gst) : a.unit_price_ex_gst
         const pb = typeof b.unit_price_ex_gst === 'string' ? parseFloat(b.unit_price_ex_gst) : b.unit_price_ex_gst
         return (Number.isFinite(pa as number) ? (pa as number) : Infinity) -
           (Number.isFinite(pb as number) ? (pb as number) : Infinity)
       })
-  }, [catalogue, productSelectionAllowed, spec.catalogueCategory])
+  }, [catalogue, jobType, productSelectionAllowed, spec.catalogueCategory])
 
   const chosenProduct = useMemo(
     () => products.find((p) => p.name === productName) ?? null,
@@ -304,6 +340,14 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
     setError(null)
     if (!address.trim() || !suburb.trim()) {
       setError('Address and suburb are required — the estimator prices by location.')
+      return
+    }
+    if (jobType === 'ev_charger' && !serviceMode) {
+      setError('Choose whether this is supply only, installation only, or supply and installation.')
+      return
+    }
+    if (productRequired && !chosenProduct) {
+      setError('Choose an active EV charger with a price from your catalogue before drafting this supply quote.')
       return
     }
     // The count drives every line-item quantity. Left blank it collapses to 1
@@ -341,7 +385,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
           job_type: jobType,
           address: address.trim(),
           suburb: suburb.trim(),
-          answers,
+          answers: answersForJobType(jobType, answers),
           notes: notes.trim(),
           customer_name: customerName.trim(),
           customer_mobile: customerMobile.trim(),
@@ -353,8 +397,8 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
           // Spec ev-charger-location-photo R3 — already uploaded, so these are
           // storage paths, not files. Sent only when some landed, so a failed
           // or skipped upload leaves the body exactly as it was before.
-          ...(photoPaths.length ? { photo_paths: photoPaths } : {}),
-          ...(photoUrls.length ? { photo_urls: photoUrls } : {}),
+          ...(isEvInstallationMode(serviceMode) && photoPaths.length ? { photo_paths: photoPaths } : {}),
+          ...(isEvInstallationMode(serviceMode) && photoUrls.length ? { photo_urls: photoUrls } : {}),
         }),
       })
       // .catch(() => ({})) because a platform timeout or gateway error returns
@@ -437,7 +481,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
               )}
             </div>
 
-            {spec.fields.map((f) => (
+            {visibleFields.map((f) => (
               <div key={f.code}>
                 <label htmlFor={`f-${f.code}`} className={LABEL}>
                   {f.label}
@@ -447,12 +491,15 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                     id={`f-${f.code}`}
                     value={answers[f.code] ?? ''}
                     onChange={(e) => updateAnswer(f.code, e.target.value)}
+                    required={f.required}
                     className={`${INPUT} mt-2`}
                   >
-                    <option value="">Not specified</option>
+                    <option value="">{f.required ? 'Choose an option' : 'Not specified'}</option>
                     {(f.options ?? []).map((o) => (
                       <option key={o} value={o}>
-                        {o}
+                        {f.code === 'service_mode'
+                          ? evServiceModeLabel(o as EvServiceMode)
+                          : o}
                       </option>
                     ))}
                   </select>
@@ -472,15 +519,18 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
             {productSelectionAllowed && products.length >= 1 && (
               <div>
                 <label htmlFor="product" className={LABEL}>
-                  Product from your catalogue (optional)
+                  Product from your catalogue ({productRequired ? 'required' : 'optional'})
                 </label>
                 <select
                   id="product"
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
+                  required={productRequired}
                   className={`${INPUT} mt-2`}
                 >
-                  <option value="">Let the estimator choose</option>
+                  <option value="">
+                    {productRequired ? 'Choose a priced EV charger' : 'Let the estimator choose'}
+                  </option>
                   {products.map((p) => {
                     const price = priceLabel(p.unit_price_ex_gst)
                     return (
@@ -520,6 +570,13 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
                   </div>
                 )}
               </div>
+            )}
+
+            {productRequired && products.length === 0 && (
+              <p className="border-l-2 border-l-accent pl-3 text-sm leading-relaxed text-text-sec">
+                Add and activate an EV charger with a positive catalogue price before drafting a
+                supply quote.
+              </p>
             )}
 
             <div className="grid gap-6 sm:grid-cols-2">
@@ -575,7 +632,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
             {/* Spec ev-charger-location-photo R1 — EV charger only, and
                 optional here (it is REQUIRED over SMS, where the receptionist
                 cannot see the site any other way). */}
-            {jobType === 'ev_charger' ? (
+            {jobType === 'ev_charger' && isEvInstallationMode(serviceMode) ? (
               <div>
                 <span className={LABEL}>Photo of the spot (optional)</span>
                 <label

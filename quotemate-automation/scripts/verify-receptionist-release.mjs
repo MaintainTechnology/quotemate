@@ -10,6 +10,7 @@ import { verifyPlatformContractHashes } from './receptionist-platform-contract.m
 import { receptionistSourceHash } from './receptionist-release-fingerprint.mjs'
 import { verifyBuildAttestation } from './receptionist-build.mjs'
 import { REQUIRED_RECEPTIONIST_MIGRATIONS, verifyReceptionistSchemaHashes } from './receptionist-schema-contract.mjs'
+import { verifyRank1Evidence } from './receptionist-rank1-gate.mjs'
 
 const directory = resolve(process.argv[2] ?? '.')
 const read = (file) => readFileSync(join(directory,file),'utf8')
@@ -19,6 +20,8 @@ assert.equal(manifest.approvalRequired,true,'Release requires human approval')
 assert.deepEqual(manifest.requiredMigrations,REQUIRED_RECEPTIONIST_MIGRATIONS)
 const platform = resolve(fileURLToPath(new URL('..',import.meta.url)))
 if (manifest.trade !== 'front-desk') {
+  assert.equal(manifest.rank1Required, true, 'Trade releases must enforce Rank 1')
+  assert.equal(manifest.rank1Scope, 'all_accounts', 'Trade releases must cover all accounts; pilot candidates are superseded')
   verifyPlatformContractHashes(manifest.platformContractHashes, platform)
   verifyReceptionistSchemaHashes(manifest.platformContractHashes,platform)
 }
@@ -95,5 +98,12 @@ if (manifest.trade === 'front-desk') {
   }
   assert.match(read('src/receptionist/receptionist.controller.ts'),/mediaContentTypes/,'MIME metadata is discarded')
   assert.doesNotMatch(read('src/lib/sms/service-dialog.ts'),/HOLDING_REPLY|general dialog is disabled/,'Terminal holding fallback survived export')
+}
+if (manifest.rank1Required === true) {
+  const option = (name) => process.argv.find(value => value.startsWith(`--${name}=`))?.slice(name.length + 3)
+  const report = await verifyRank1Evidence(manifest, {
+    fixturePath: option('rank1-fixture'), actualsPath: option('rank1-actuals'), platformRoot: platform,
+  })
+  console.log(`PASS Rank 1 graded core evaluation: ${report.artifact_sha256}`)
 }
 console.log(`PASS release contract ${manifest.trade}: ${manifest.sourceHash}; build, lock, hashes, required schema, worker and origin checks`)

@@ -9,7 +9,8 @@
 // Provider selection (in order):
 //   1. opts.provider — explicit override (tests pass MockPropertyProvider)
 //   2. Google Solar footprint lookup when GOOGLE_MAPS_API_KEY is set
-//   3. the deterministic mock (local dev / no key) so the flow still runs
+// Missing live configuration returns setup-required. Tests may explicitly
+// inject the deterministic mock; production never silently uses its facts.
 //
 // After the base lookup, the facts are ENRICHED with per-address building
 // data from Geoscape (storeys, eave height, use) and PropRadar (beds/baths/
@@ -78,6 +79,10 @@ export async function estimatePainting(
   inputs: PaintUserInputs,
   opts: EstimateOpts = {},
 ): Promise<EstimateResult> {
+  if (!opts.provider && !process.env.GOOGLE_MAPS_API_KEY) {
+    return { ok: false, code: 'measurement_provider_required',
+      detail: 'Property measurement is not configured. Arrange a verified measurement before quoting.' }
+  }
   const provider = pickProvider(opts)
 
   let lookup

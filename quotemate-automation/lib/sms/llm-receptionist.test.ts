@@ -121,6 +121,25 @@ describe('llmReceptionistEnabled (S1 — default ON, with a kill switch)', () =>
 // ── S4 · the grounding validator ────────────────────────────────────
 
 describe('assertGroundedReply (S4 — the model never emits money)', () => {
+  it('rejects invented EV power even when the recap ends with a confirmation question', () => {
+    const customer = ['Can you supply?', '6m', 'Three-phase,l', 'Yes spare capacity']
+    expect(assertGroundedReply("Beauty Bob - we'll supply a 7kW three-phase charger, 6m run from the board. Sound right?", [], customer).ok).toBe(false)
+    expect(assertGroundedReply('We will supply a 7kW charger. Is the garage open?', [], customer).ok).toBe(false)
+    expect(assertGroundedReply('Your charger is 7kW, correct?', ['7 metres from the switchboard']).ok).toBe(false)
+  })
+
+  it('still permits real specification questions and customer-grounded power', () => {
+    expect(assertGroundedReply('Is your charger rated at 7kW?', []).ok).toBe(true)
+    expect(assertGroundedReply('Is it 1 building or 2?', []).ok).toBe(true)
+    expect(assertGroundedReply('Your existing charger is 7kW. Sound right?', [], ['My existing charger is 7kW']).ok).toBe(true)
+  })
+
+  it('does not treat property phase as the charger specification', () => {
+    expect(assertGroundedReply("We'll supply a three-phase EV charger. Sound right?", [], ['The property has three-phase supply']).ok).toBe(false)
+    expect(assertGroundedReply('Is your unit a three-phase charger?', [], ['The property has three-phase supply']).ok).toBe(true)
+    expect(assertGroundedReply('Your existing unit is a three-phase charger.', [], ['I have a three-phase charger']).ok).toBe(true)
+  })
+
   it('AC5 rejects a dollar figure no tool returned', () => {
     const r = assertGroundedReply('Your re-roof comes to $11,682 inc GST.', [])
     expect(r.ok).toBe(false)
