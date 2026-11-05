@@ -1,6 +1,7 @@
 /** Reproducible local/CI website build with inert provider credentials.
- * Environment files remain untouched. Public font downloads may still occur;
- * this is a build, not a provider or authenticated workflow test.
+ * Environment files remain untouched. Fonts are committed (app/fonts), so the
+ * build downloads none; this is a build, not a provider or authenticated
+ * workflow test.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
