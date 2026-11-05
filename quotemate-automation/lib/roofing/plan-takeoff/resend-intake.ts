@@ -55,14 +55,19 @@ const ENTITIES: Array<[RegExp, string]> = [[/&nbsp;/g, ' '], [/&lt;/g, '<'], [/&
  *  decoded once (`&amp;` last). A tag stops at the next angle bracket, so a
  *  run of unclosed ones can't be rescanned. A single pass that took only
  *  whole tags could leave one rebuilt from the pieces round another
- *  (`<<b>script>`), so the same pass takes every stray bracket too: no raw
- *  one survives, in linear time. A bracket the sender wrote as `&lt;` is
- *  text, decoded after. */
+ *  (`<<b>script>`), so the pass takes every stray bracket too: no raw one
+ *  survives it. A bracket the sender wrote as `&lt;` is text, decoded after. */
 export function htmlToText(html: string): string {
   let text = html.slice(0, 500_000)
     .replace(/<br\b[^<>]*>/gi, '\n')
     .replace(BLOCK, '\n')
-    .replace(/<[^<>]*>|[<>]/g, '')
+  // Repeated until nothing changes, the form a scanner can check. As the first
+  // pass leaves no bracket, the second changes nothing: two passes, linear.
+  let previous: string
+  do {
+    previous = text
+    text = text.replace(/<[^<>]*>|[<>]/g, '')
+  } while (text !== previous)
   for (const [pattern, value] of ENTITIES) text = text.replace(pattern, value)
   return text.replace(/&amp;/g, '&')
     .split('\n').map((line) => line.trim()).join('\n')
