@@ -19,7 +19,9 @@ concurrency:
 
 jobs:
   website-contract:
-    runs-on: ubuntu-latest
+    # 24.04, not ubuntu-latest: Playwright 1.60 can't install Chromium on
+    # 26.04, and the browser recovery test needs one.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
       run:

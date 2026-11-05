@@ -25,7 +25,9 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # 24.04, not ubuntu-latest: Playwright 1.60 can't install Chromium on
+    # 26.04, and the browser recovery test needs one.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         # There is no package.json at the repo root — the app is this subdir.
