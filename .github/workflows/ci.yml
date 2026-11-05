@@ -9,11 +9,13 @@
 # a module the same commit forgot to include. A local pre-push hook cannot see
 # that, because the developer's working tree still has both files.
 #
-# Nothing here blocks a push or requires an approval.
+# Nothing here blocks a push or requires an approval. It also runs on pull
+# requests, so a change that arrives by PR is checked before its merge deploys.
 
 name: ci
 
 on:
+  pull_request:
   push:
     branches: [main]
 
