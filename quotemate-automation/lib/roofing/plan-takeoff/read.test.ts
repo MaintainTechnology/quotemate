@@ -121,6 +121,17 @@ describe('readPlans', () => {
     ])
   })
 
+  it("repairs an empty reply without sending it back, as the API refuses an empty text block", async () => {
+    // A model that thinks by default can spend its whole output limit thinking
+    // and reply with no text, as claude-sonnet-5-5 did on Grange (TKO-15).
+    const generate = replies(['', 'length'], [reading(), 'stop'])
+    const result = await read(generate)
+    expect(result.ok).toBe(true)
+    const [repair] = generate.mock.calls[1] as [{ messages: Array<{ role: string; content: unknown }> }]
+    expect(repair.messages.some((m) => m.role === 'assistant')).toBe(false)
+    expect(JSON.stringify(repair.messages.at(-1))).toContain('cut off at the output limit')
+  })
+
   it('tells the model when its reply was cut off at the output limit', async () => {
     const generate = replies(['{"scale": {', 'length'], [reading(), 'stop'])
     await read(generate)
@@ -151,6 +162,15 @@ describe('the prompt', () => {
 
   it("keeps people's names out of every field it writes (TKO-28)", () => {
     expect(READER_SYSTEM).toMatch(/never copy a person's name/i)
+  })
+
+  it('asks for what the gates measure, the way the references measure it (DEC-039, DEC-040)', () => {
+    expect(READER_SYSTEM).toContain('plan_dims_mm is [along the eave, down the slope]')
+    expect(READER_SYSTEM).toMatch(/fall names the compass direction/i)
+    expect(READER_SYSTEM).toMatch(/length along the roof/i)
+    expect(READER_SYSTEM).toMatch(/against a wall is an apron/i)
+    expect(READER_SYSTEM).toMatch(/measure the slope drawn on an elevation or section/i)
+    expect(READER_SYSTEM).toMatch(/an extension is its own structure/i)
   })
 
   it("can't be broken out of by a scope note", () => {
