@@ -1,8 +1,9 @@
 // TKO-13's done-when on the fixtures: Grange's hand-measured reference takeoff
 // (DEC-012) is ready, with the brief's own verdict of C1 to C8 passing and C9
-// warning about stages; Whittaker's reading is needs_review with C8. Grange's
-// area schedule is read off its A0000 title sheet, so these skip where the
-// PDFs (client documents, kept out of git) or the saved reading are not on disk.
+// warning about stages; Whittaker's reading is needs_review with C8, and so is
+// its hand-measured reference (TKO-00d). Grange's area schedule is read off its
+// A0000 title sheet, so those skip where the PDFs (client documents, kept out
+// of git) or the saved reading are not on disk.
 
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -40,5 +41,23 @@ describe.skipIf(!existsSync(WHITTAKER_READING))('Whittaker checks', () => {
     expect(checks.results.find((r) => r.id === 'C8')).toMatchObject({
       result: 'warning', detail: expect.stringMatching(/A104.*marked PRELIMINARY 21\.04\.26/),
     })
+  })
+})
+
+// The reference is in git, so this always runs. A correct reading of Whittaker
+// still needs review: its one written dimension is drawn as outlines, so the
+// scale rests on the title block and C1 fails, as Service Spec §12 expects.
+describe("Whittaker's reference checks", () => {
+  it('need review on C1 alone, with the deck excluded and C8 warning', () => {
+    const reference = RoofPlanTakeoffSchema.parse(JSON.parse(readFileSync('eval/roof-takeoff/whittaker/takeoff.json', 'utf8')))
+    const checks = runChecks(reference, { scopeNote: scopeNote('whittaker'), schedule: [] })
+    expect(checks.status).toBe('needs_review')
+    expect(checks.results.map((r) => `${r.id} ${r.result}`)).toEqual([
+      'C1 fail', 'C2 pass', 'C3 skipped', 'C4 pass', 'C5 pass', 'C6 pass', 'C7 pass', 'C8 warning', 'C9 pass', 'C10 skipped',
+    ])
+    expect(checks.results[0].detail).toBe('No written dimension could be measured to confirm the stated 1:50 @ A1 (an A1 sheet printed at 50% size).')
+    expect(checks.results[1].detail).toBe("Each plane's dimensions agree with its area within 3% (11 compared).")
+    expect(checks.results[5].detail).toBe('Excluded from the totals: Insulated roof over the new deck.')
+    expect(checks.results[7].detail).toMatch(/A104.*marked PRELIMINARY 21\.04\.26/)
   })
 })
