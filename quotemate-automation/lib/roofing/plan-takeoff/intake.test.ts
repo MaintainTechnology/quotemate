@@ -261,7 +261,10 @@ describe('takeTagRequest', () => {
 
   it('writes nothing while the tenant has started its runs for the hour, and says when it can', async () => {
     const started = new Date(NOW.getTime() - 600_000).toISOString()
-    const fake = fakeDb({ runs: [{ id: 'busy', tenant_id: TENANT, status: 'ready', updated_at: started, usage: { starts: [started] } }] })
+    const fake = fakeDb({
+      runs: [{ id: 'busy', tenant_id: TENANT, status: 'ready', updated_at: started, usage: { starts: [started] } }],
+      starts: [{ tenant_id: TENANT, run_id: 'busy', started_at: started }],
+    })
     await expect(take(fake, {}, { ...LIMITS, runsPerHour: 1 })).resolves.toEqual({ ok: false, error: 'rate_limited', retry_at: '2026-11-04T01:50:00.000Z' })
     expect(fake.tables.roof_takeoff_runs.map((r) => r.id)).toEqual(['busy'])
     expect(fake.objects).toEqual({})
