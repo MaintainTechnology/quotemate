@@ -145,10 +145,10 @@ export type PackTakeoff = {
 const ID = /^[A-Za-z]{1,3}\d{1,3}(?:-[A-Za-z]{1,3}\d{1,3})?$/
 const plain = (ids: string[]) => ids.every((id) => ID.test(id)) && new Set(ids.map((id) => id.toUpperCase())).size === ids.length
 
-/** The takeoff and its checks as a pack may carry them: no drawing text, and
- *  every free-text value filtered. The takeoff given is left as it was. */
-export function packTakeoff(takeoff: Takeoff, checks: Checks | null, request: Partial<PackRequest> = {}): PackTakeoff {
-  // Pass one: the names every text the reading and the request hold give away.
+/** Pass one of the filter: the names every text the reading, its checks and
+ *  the request hold give away, the drawing text the copy drops included. The
+ *  pack and an eval fixture (TKO-00c) take them out of every value they keep. */
+export function namesIn(takeoff: Takeoff, checks: Checks | null, request: Partial<PackRequest> = {}): Set<string> {
   const names = new Set<string>()
   const scan = (text: string | null | undefined) => { if (text) redact(text, new Set(), names) }
   for (const sheet of takeoff.sheets) [sheet.file, sheet.title, sheet.status_text, sheet.number].forEach(scan)
@@ -164,6 +164,13 @@ export function packTakeoff(takeoff: Takeoff, checks: Checks | null, request: Pa
   for (const r of checks?.results ?? []) [r.detail, r.evidence?.file].forEach(scan)
   for (const line of checks?.schedule ?? []) [line.label, line.file].forEach(scan)
   ;[request.job_name, request.scope_note].forEach(scan)
+  return names
+}
+
+/** The takeoff and its checks as a pack may carry them: no drawing text, and
+ *  every free-text value filtered. The takeoff given is left as it was. */
+export function packTakeoff(takeoff: Takeoff, checks: Checks | null, request: Partial<PackRequest> = {}): PackTakeoff {
+  const names = namesIn(takeoff, checks, request)
 
   // Pass two: the values the pack keeps, each without them.
   const clean = (text: string) => redact(text, names)

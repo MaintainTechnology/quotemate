@@ -9,13 +9,15 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateText } from 'ai'
 import { areaSchedule, runChecks, type Checks, type ScheduleLine } from './checks'
 import { classifyFile, pageText, type Sheet, type SheetReader } from './classify'
+import { namesIn, redact, redactLabel } from './pack/privacy'
 import { READER_SYSTEM } from './prompt'
 import { DEFAULT_TAKEOFF_MODEL, readPlans, type ModelUsage } from './read'
 import { refineReading } from './refine'
+import { EVAL_FOLDER, RETENTION_MONTHS } from './runs'
 import { RoofPlanTakeoffSchema, type RoofPlanTakeoff } from './schema'
 import { scoreTakeoff, type Score } from './score'
 
-export const EVAL_FOLDER = 'eval'
+export { EVAL_FOLDER }
 /** What marks the takeoff's rows in eval_runs, beside the quote evals. */
 export const EVAL_CATALOGUE = 'roof-takeoff'
 const GATES = ['structures', 'area', 'pitch', 'edges'] as const
@@ -190,4 +192,112 @@ export async function runEval(db: SupabaseClient, bucket: string, options: EvalM
   const model = options.model ?? (process.env.TAKEOFF_MODEL?.trim() || DEFAULT_TAKEOFF_MODEL)
   const id = options.record === false ? null : await recordEval(db, results, { model, promptVersion: promptVersion(options.system), startedAt })
   return { id, results }
+}
+
+// ── The corpus (TKO-00c, DEC-036) ───────────────────────────────────────────
+
+export type PromoteOutcome =
+  | { ok: true; name: string; files: number }
+  | { ok: false; error: 'invalid_name' | 'not_found' | 'not_corrected' | 'exists' }
+
+/** A fixture's folder name: lower-case letters, digits and hyphens. */
+const FIXTURE_NAME = /^[a-z0-9][a-z0-9-]{1,39}$/
+const encode = (value: unknown) => new TextEncoder().encode(`${JSON.stringify(value, null, 2)}\n`)
+
+/** A correction as an eval reference: no drawing text (no evidence, sheet
+ *  titles or status text), plan files under their plain names, and every name
+ *  or contact detail the run's text gives away taken out, as a pack's are
+ *  (DEC-037). The scorer reads only sizes, pitches and edges. */
+function fixtureTakeoff(takeoff: RoofPlanTakeoff, plain: Map<string, string>, names: ReadonlySet<string>): RoofPlanTakeoff {
+  const clean = (text: string) => redact(text, names)
+  const maybe = (text: string | null) => (text == null ? null : clean(text))
+  return RoofPlanTakeoffSchema.parse({
+    ...takeoff,
+    sheets: takeoff.sheets.map((s) => ({
+      ...s, file: plain.get(s.file) ?? 'plans.pdf', number: maybe(s.number), title: null, revision: maybe(s.revision), status_text: null,
+    })),
+    structures: takeoff.structures.map((s) => ({
+      ...s,
+      label: redactLabel(s.label, s.id, names),
+      planes: s.planes.map((p) => ({ ...p, fall: maybe(p.fall), profile: maybe(p.profile), finish_tag: maybe(p.finish_tag), evidence: [] })),
+      exclusions: s.exclusions.map((x) => ({ ...x, label: clean(x.label), reason: clean(x.reason) })),
+    })),
+    scope: { includes: takeoff.scope.includes.map(clean), excludes: takeoff.scope.excludes.map(clean), questions: takeoff.scope.questions.map(clean) },
+  })
+}
+
+/** Promotes a live run a tradie corrected into the eval's corpus (TKO-00c,
+ *  DEC-036), as `eval/<name>/` in the plans bucket, where the nightly eval
+ *  reads it:
+ *  - its plan PDFs, as plans-1.pdf and so on, since their names can carry the site;
+ *  - its request, without the site address or the job's name, and its scope
+ *    note filtered;
+ *  - its correction as the reference, through `fixtureTakeoff`.
+ *  The fixture is kept as long as the run is (D-06): request.json says when it
+ *  expires, and the retention sweep deletes it then. Nothing is overwritten,
+ *  and a copy that fails part way leaves nothing behind. */
+export async function promoteRun(db: SupabaseClient, bucket: string, input: { tenantId: string; runId: string; name: string; now?: Date }): Promise<PromoteOutcome> {
+  if (!FIXTURE_NAME.test(input.name)) return { ok: false, error: 'invalid_name' }
+  const found = await db.from('roof_takeoff_runs')
+    .select('id, job_name, job_ref, scope_note, latest_extraction_id')
+    .eq('id', input.runId).eq('tenant_id', input.tenantId)
+    .maybeSingle()
+  if (found.error) throw new Error(`run lookup failed: ${found.error.message}`)
+  const run = found.data as { job_name: string | null; job_ref: string | null; scope_note: string | null; latest_extraction_id: string | null } | null
+  if (!run) return { ok: false, error: 'not_found' }
+  const reading = run.latest_extraction_id
+    ? await db.from('plan_extractions').select('corrected_items').eq('id', run.latest_extraction_id).eq('tenant_id', input.tenantId).maybeSingle()
+    : { data: null, error: null }
+  if (reading.error) throw new Error(`reading lookup failed: ${reading.error.message}`)
+  const corrected = (reading.data as { corrected_items: unknown } | null)?.corrected_items
+  if (!corrected) return { ok: false, error: 'not_corrected' }
+
+  const store = db.storage.from(bucket)
+  const folder = `${EVAL_FOLDER}/${input.name}`
+  const existing = await store.list(folder)
+  if (existing.error) throw new Error(`fixture list failed: ${existing.error.message}`)
+  if (existing.data.length) return { ok: false, error: 'exists' }
+
+  const uploads = await db.from('plan_uploads')
+    .select('filename, pdf_path, created_at')
+    .eq('takeoff_run_id', input.runId).eq('tenant_id', input.tenantId)
+    .order('created_at', { ascending: true })
+  if (uploads.error) throw new Error(`upload lookup failed: ${uploads.error.message}`)
+  const files = uploads.data as Array<{ filename: string; pdf_path: string }>
+  // ponytail: two uploads of one name share its plain name in the reference; a run's names are its own.
+  const plain = new Map(files.map((f, i) => [f.filename, `plans-${i + 1}.pdf`]))
+
+  const correction = RoofPlanTakeoffSchema.parse(corrected)
+  const names = namesIn(correction, null, { job_name: run.job_name, scope_note: run.scope_note })
+  const now = input.now ?? new Date()
+  const expires = new Date(now)
+  expires.setUTCMonth(expires.getUTCMonth() + RETENTION_MONTHS)
+  const request = {
+    job_name: null,
+    job_ref: run.job_ref,
+    site_address: null,
+    scope_note: run.scope_note == null ? null : redact(run.scope_note, names),
+    promoted: { run_id: input.runId, at: now.toISOString(), expires_at: expires.toISOString() },
+  }
+
+  const written: string[] = []
+  const put = async (path: string, body: Uint8Array, contentType: string) => {
+    const { error } = await store.upload(path, body, { contentType, upsert: false })
+    if (error) throw new Error(`fixture upload failed for ${path}: ${error.message}`)
+    written.push(path)
+  }
+  try {
+    for (const [i, file] of files.entries()) {
+      const got = await store.download(file.pdf_path)
+      if (got.error || !got.data) throw new Error(`plan download failed for upload ${i + 1}: ${got.error?.message ?? 'no data'}`)
+      await put(`${folder}/plans-${i + 1}.pdf`, new Uint8Array(await got.data.arrayBuffer()), 'application/pdf')
+    }
+    // The reference last: the eval takes a folder as a fixture once it has one.
+    await put(`${folder}/request.json`, encode(request), 'application/json')
+    await put(`${folder}/takeoff.json`, encode(fixtureTakeoff(correction, plain, names)), 'application/json')
+  } catch (error) {
+    if (written.length) await store.remove(written)
+    throw error
+  }
+  return { ok: true, name: input.name, files: files.length }
 }
