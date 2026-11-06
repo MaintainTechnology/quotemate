@@ -28,21 +28,61 @@ export type TitleBlock = Pick<Sheet, 'number' | 'title' | 'revision' | 'status_t
 
 /** A run of text as printed, in points from the page's top-left; y is the baseline. */
 export type TextRun = { x: number; x2: number; y: number; size: number; text: string }
-/** A page's horizontal text runs, and how many characters of text it has in all. */
-export type PageText = { width: number; height: number; chars: number; runs: TextRun[] }
+/** A quarter turn, clockwise, in degrees. */
+export type Turn = 0 | 90 | 180 | 270
+/** A page's horizontal text runs, and how many characters of text it has in
+ *  all. `turn` is the `readingTurn` the page was read at, absent when it reads
+ *  as shown. */
+export type PageText = { width: number; height: number; chars: number; runs: TextRun[]; turn?: Turn }
 
 // A page with less text than this has no usable text layer (as at intake).
 export const MIN_PAGE_TEXT = 10
 
 type PdfDocument = Awaited<ReturnType<typeof import('unpdf').getDocumentProxy>>
+type PdfPage = Awaited<ReturnType<PdfDocument['getPage']>>
+type TextItems = Awaited<ReturnType<PdfPage['getTextContent']>>['items']
 
-/** Reads a page's text as printed, page rotation applied, and joins it into
- *  runs: the items on one baseline with no more than a word gap between them. */
+/** The quarter turn that has most of a page's text reading left to right: 0
+ *  for nearly every drawing. A copy that lost its `/Rotate`, as TAG's copies
+ *  of Whittaker's sheets did (5 November), shows its sheet on its side, the
+ *  text running down or up the page; turned, it reads as the original. Only
+ *  a page with more than half its text running one other way is turned:
+ *  dimension strings run up a plan's side, but at least 85% of every fixture
+ *  page's text reads across. */
+export function readingTurn(page: PdfPage, items: TextItems): Turn {
+  const shown = page.getViewport({ scale: 1 })
+  // Characters running right, down, left and up the page as shown, which
+  // turns of 0, 270, 180 and 90 read across.
+  const by = [0, 0, 0, 0]
+  for (const item of items) {
+    if (!('str' in item)) continue
+    const chars = item.str.trim().length
+    if (!chars) continue
+    const [a, b, , , e, f] = item.transform
+    const [x, y] = shown.convertToViewportPoint(e, f)
+    const [xa, ya] = shown.convertToViewportPoint(e + a, f + b)
+    const [dx, dy] = [xa - x, ya - y]
+    by[Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 2) : dy > 0 ? 1 : 3] += chars
+  }
+  const most = by.indexOf(Math.max(...by))
+  return most && by[most] > (by[0] + by[1] + by[2] + by[3]) / 2 ? ([0, 270, 180, 90] as const)[most] : 0
+}
+
+/** The page as it reads: as shown, then given its `readingTurn`. The text and
+ *  the lines of a page are both placed in this frame, so they stay together. */
+export function readingViewport(page: PdfPage, items: TextItems) {
+  const turn = readingTurn(page, items)
+  return { turn, viewport: page.getViewport({ scale: 1, rotation: (page.rotate + turn) % 360 }) }
+}
+
+/** Reads a page's text as it reads (page rotation applied, then its
+ *  `readingTurn`), and joins it into runs: the items on one baseline with no
+ *  more than a word gap between them. */
 export async function pageText(pdf: PdfDocument, pageNumber: number): Promise<PageText> {
   const page = await pdf.getPage(pageNumber)
   try {
-    const viewport = page.getViewport({ scale: 1 })
     const { items } = await page.getTextContent()
+    const { turn, viewport } = readingViewport(page, items)
     const placed: TextRun[] = []
     let chars = 0
     for (const item of items) {
@@ -55,7 +95,7 @@ export async function pageText(pdf: PdfDocument, pageNumber: number): Promise<Pa
       if (xa - x <= 0 || Math.abs(ya - y) > 0.2 * (xa - x)) continue
       placed.push({ x, x2: x + item.width, y, size: Math.hypot(c, d), text: item.str })
     }
-    return { width: viewport.width, height: viewport.height, chars, runs: joinRuns(placed) }
+    return { width: viewport.width, height: viewport.height, chars, runs: joinRuns(placed), ...(turn ? { turn } : {}) }
   } finally {
     page.cleanup()
   }
@@ -235,28 +275,44 @@ export function needed(sheet: Pick<Sheet, 'kind' | 'title'>, page: PageText | nu
   return !/DEMOLITION/i.test(sheet.title ?? '') && (!page || page.runs.some((r) => /\bROOF/i.test(r.text)))
 }
 
-/** One PDF of the given pages, in order, with each page's size as printed.
- *  `parsed` keeps each source file's parse between calls. */
+/** One PDF of the given pages, in order, each turned to read as `pageText`
+ *  reads it, with each page's size as printed. `parsed` keeps each source
+ *  file's parse between calls. */
 export async function cutPages(
   pages: Array<Pick<Sheet, 'file' | 'page'>>,
   files: Map<string, Uint8Array>,
   parsed = new Map<string, PDFDocument>(),
 ): Promise<{ pdf: Uint8Array; sizes: [number, number][] }> {
   const pdfLib = await import('pdf-lib')
+  const { getDocumentProxy } = await import('unpdf')
   const out = await pdfLib.PDFDocument.create()
   const sizes: [number, number][] = []
-  for (const { file, page } of pages) {
-    let source = parsed.get(file)
-    if (!source) {
+  const shown = new Map<string, PdfDocument>() // pdf.js's parse, for each page's reading turn
+  try {
+    for (const { file, page } of pages) {
       const bytes = files.get(file)
       if (!bytes) throw new Error(`takeoff page source missing: ${file}`)
-      source = await pdfLib.PDFDocument.load(bytes)
-      parsed.set(file, source)
+      let source = parsed.get(file)
+      if (!source) {
+        source = await pdfLib.PDFDocument.load(bytes)
+        parsed.set(file, source)
+      }
+      let doc = shown.get(file)
+      if (!doc) {
+        doc = await getDocumentProxy(bytes.slice()) // a copy: pdf.js may take over its buffer
+        shown.set(file, doc)
+      }
+      const read = await doc.getPage(page)
+      const turn = readingTurn(read, (await read.getTextContent()).items)
+      read.cleanup()
+      const [copy] = await out.copyPages(source, [page - 1])
+      if (turn) copy.setRotation(pdfLib.degrees((copy.getRotation().angle + turn) % 360))
+      out.addPage(copy)
+      const { width, height } = copy.getSize()
+      sizes.push(copy.getRotation().angle % 180 === 0 ? [width, height] : [height, width])
     }
-    const [copy] = await out.copyPages(source, [page - 1])
-    out.addPage(copy)
-    const { width, height } = copy.getSize()
-    sizes.push(copy.getRotation().angle % 180 === 0 ? [width, height] : [height, width])
+  } finally {
+    for (const doc of shown.values()) await doc.destroy()
   }
   return { pdf: await out.save(), sizes }
 }
@@ -275,6 +331,7 @@ export async function classifyFile(file: string, bytes: Uint8Array, readSheet: S
   const pdf = await getDocumentProxy(bytes.slice())
   const sheets: Sheet[] = []
   const raster = new Set<Sheet>()
+  const turned = new Set<Sheet>()
   try {
     for (let n = 1; n <= pdf.numPages; n++) {
       const text = await pageText(pdf, n)
@@ -286,7 +343,9 @@ export async function classifyFile(file: string, bytes: Uint8Array, readSheet: S
       }
       const block = readTitleBlock(text)
       const kind = kindOf(block.title)
-      sheets.push({ file, page: n, ...block, kind, used: needed({ kind, title: block.title }, text) })
+      const sheet: Sheet = { file, page: n, ...block, kind, used: needed({ kind, title: block.title }, text) }
+      if (text.turn) turned.add(sheet)
+      sheets.push(sheet)
     }
   } finally {
     await pdf.destroy()
@@ -297,7 +356,8 @@ export async function classifyFile(file: string, bytes: Uint8Array, readSheet: S
   const files = new Map([[file, bytes]])
   const parsed = new Map<string, PDFDocument>()
   for (const sheet of forModel) {
-    const pagePdf = sheets.length > 1 ? (await cutPages([sheet], files, parsed)).pdf : bytes
+    // A one-page file goes as it is, unless it needs turning to read.
+    const pagePdf = sheets.length > 1 || turned.has(sheet) ? (await cutPages([sheet], files, parsed)).pdf : bytes
     const { usage: spent, ...read } = await readSheet(pagePdf)
     usage.inputTokens += spent?.inputTokens ?? 0
     usage.outputTokens += spent?.outputTokens ?? 0
