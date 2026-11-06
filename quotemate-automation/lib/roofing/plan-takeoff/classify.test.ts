@@ -3,11 +3,12 @@
 // a big sheet number beside the amendment, a two-line title, an unlabelled
 // stamp. classify.fixtures.test.ts runs it on the real plan sets.
 
-import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { degrees, PDFDocument, StandardFonts } from 'pdf-lib'
 import { generateObject } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
+import { pageSegments } from './calibrate'
 import {
-  classifyFile, isPreliminary, kindOf, needed, readSheetWithModel, readTitleBlock, sheetNumber,
+  classifyFile, cutPages, isPreliminary, kindOf, needed, pageText, readSheetWithModel, readTitleBlock, sheetNumber,
   type PageText, type TextRun,
 } from './classify'
 
@@ -159,6 +160,98 @@ describe('classifyFile', () => {
       { file: 'plans.pdf', page: 3, number: 'A401', title: 'DOOR SCHEDULE', revision: 'C', status_text: null, kind: 'other', used: false },
     ])
   })
+})
+
+/** A landscape sheet as an architect's PDF can hold one: an 842 x 595 sheet
+ *  drawn on a portrait page that `/Rotate` turns, its text set to read across
+ *  the turned page. TAG's copy of the same file lost the `/Rotate` (Whittaker,
+ *  5 November), so the sheet shows on its side, its text running down or up
+ *  the page. `at` maps a point on the sheet as read (X across, Y down from
+ *  the top) to the page as stored. */
+async function sideways(rotate: 90 | 270) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const p = doc.addPage([595, 842])
+  const at = (X: number, Y: number) => (rotate === 270 ? { x: 595 - Y, y: 842 - X } : { x: Y, y: X })
+  const text = (s: string, X: number, Y: number, size: number) =>
+    p.drawText(s, { ...at(X, Y), size, font, rotate: degrees(rotate === 270 ? -90 : 90) })
+  text('DRAWING TITLE', 600, 500, 6); text('ROOF PLAN', 600, 514, 12)
+  text('DRAWING NO.', 720, 500, 6); text('A104', 720, 514, 12)
+  text('REVISION', 600, 540, 6); text('P3', 600, 554, 12)
+  p.drawLine({ start: at(100, 100), end: at(300, 100), thickness: 0.5 })
+  p.drawLine({ start: at(300, 100), end: at(300, 250), thickness: 0.5 })
+  p.setRotation(degrees(rotate))
+  const original = await doc.save()
+  const copy = await PDFDocument.load(original)
+  copy.getPage(0).setRotation(degrees(0))
+  return { original, stripped: await copy.save() }
+}
+
+async function onPage<T>(bytes: Uint8Array, read: (pdf: Awaited<ReturnType<typeof import('unpdf').getDocumentProxy>>) => Promise<T>) {
+  const { getDocumentProxy } = await import('unpdf')
+  const pdf = await getDocumentProxy(bytes.slice())
+  try {
+    return await read(pdf)
+  } finally {
+    await pdf.destroy()
+  }
+}
+
+describe.each([270, 90] as const)('a sheet whose /Rotate %i was lost', (rotate) => {
+  it('reads as the original: the same text, at the same places, on a page the same size', async () => {
+    const { original, stripped } = await sideways(rotate)
+    const want = await onPage(original, (pdf) => pageText(pdf, 1))
+    expect([want.width, want.height]).toEqual([842, 595])
+    expect(readTitleBlock(want)).toEqual({ number: 'A104', title: 'ROOF PLAN', revision: 'P3', status_text: null })
+    const got = await onPage(stripped, (pdf) => pageText(pdf, 1))
+    expect({ ...got, turn: undefined }).toEqual({ ...want, turn: undefined })
+    expect(got.turn).toBe(rotate)
+  })
+
+  it('has its lines where the original has them', async () => {
+    const { original, stripped } = await sideways(rotate)
+    const want = await onPage(original, (pdf) => pageSegments(pdf, 1))
+    expect(want).toHaveLength(2)
+    expect(await onPage(stripped, (pdf) => pageSegments(pdf, 1))).toEqual(want)
+  })
+
+  it('is classified as the original, and the model is given it the right way up', async () => {
+    const { original, stripped } = await sideways(rotate)
+    const turns: number[] = []
+    const readSheet = vi.fn(async (pagePdf: Uint8Array) => {
+      turns.push((await PDFDocument.load(pagePdf)).getPage(0).getRotation().angle)
+      return { number: 'A104', title: 'ROOF PLAN', revision: 'P3', status_text: 'PRELIMINARY', kind: 'roof_plan' as const }
+    })
+    const want = await classifyFile('plan.pdf', original, readSheet)
+    expect(want.sheets[0]).toMatchObject({ number: 'A104', kind: 'roof_plan', used: true, status_text: 'PRELIMINARY' })
+    expect(await classifyFile('plan.pdf', stripped, readSheet)).toEqual(want)
+    expect(turns).toEqual([rotate, rotate])
+  })
+
+  it('is cut for the reader the right way up, at the size it prints', async () => {
+    const { original, stripped } = await sideways(rotate)
+    for (const bytes of [original, stripped]) {
+      const { pdf, sizes } = await cutPages([{ file: 'plan.pdf', page: 1 }], new Map([['plan.pdf', bytes]]))
+      expect((await PDFDocument.load(pdf)).getPage(0).getRotation().angle).toBe(rotate)
+      expect(sizes).toEqual([[842, 595]])
+    }
+  })
+})
+
+it('keeps a page as it is when less than half its text runs sideways, as dimension strings do', async () => {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const p = doc.addPage([842, 595])
+  const text = (s: string, x: number, fromTop: number, size: number, rotate = 0) =>
+    p.drawText(s, { x, y: 595 - fromTop, size, font, rotate: degrees(rotate) })
+  text('DRAWING TITLE', 600, 500, 6); text('ROOF PLAN', 600, 514, 12)
+  text('DRAWING NO.', 720, 500, 6); text('A104', 720, 514, 12)
+  text('REVISION', 600, 540, 6); text('P3', 600, 554, 12)
+  // 40 of the page's 87 characters run up the page.
+  for (const [i, d] of ['5310', '2400', '3600', '1200', '9000', '4500', '2700', '1800', '6300', '3300'].entries()) text(d, 60 + i * 40, 300, 8, 90)
+  const read = await onPage(await doc.save(), (pdf) => pageText(pdf, 1))
+  expect([read.width, read.height, read.turn ?? 0]).toEqual([842, 595, 0])
+  expect(readTitleBlock(read).number).toBe('A104')
 })
 
 describe('readSheetWithModel', () => {
