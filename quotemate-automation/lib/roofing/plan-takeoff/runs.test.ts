@@ -147,24 +147,45 @@ describe('startRun', () => {
     expect(fake.tables.roof_takeoff_runs[0].status).toBe('draft')
   })
 
-  it('counts the last hour of starts across the tenant and says when a slot frees up', async () => {
-    const started = (id: string, tenantId: string, starts: string[]) =>
-      run({ id, tenant_id: tenantId, status: 'ready', usage: { starts }, updated_at: starts[starts.length - 1] })
-    const runs = [
-      run(),
-      // 08:00 is more than an hour before 10:00; 09:10 and 09:40 count.
-      started('run-2', TENANT, ['2026-11-01T08:00:00.000Z', '2026-11-01T09:10:00.000Z']),
-      started('run-3', TENANT, ['2026-11-01T09:40:00.000Z']),
-      started('run-4', OTHER_TENANT, ['2026-11-01T09:50:00.000Z']),
+  it('counts the last hour of starts across the tenant, from the ledger, and says when a slot frees up', async () => {
+    const starts = [
+      // 08:00 is more than an hour before 10:00; 09:10 and 09:40 count, the
+      // second though its run has since been deleted (TKO-28).
+      { tenant_id: TENANT, run_id: 'run-2', started_at: '2026-11-01T08:00:00.000Z' },
+      { tenant_id: TENANT, run_id: 'run-2', started_at: '2026-11-01T09:10:00.000Z' },
+      { tenant_id: TENANT, run_id: 'deleted-run', started_at: '2026-11-01T09:40:00.000Z' },
+      { tenant_id: OTHER_TENANT, run_id: 'run-4', started_at: '2026-11-01T09:50:00.000Z' },
     ]
-    const limited = fakeDb({ runs: structuredClone(runs), uploads: [file], objects: uploaded })
+    const limited = fakeDb({ runs: [run()], uploads: [file], objects: uploaded, starts: structuredClone(starts) })
     await expect(start(limited, { runsPerHour: 2 })).resolves.toEqual({
       ok: false, error: 'rate_limited', retry_at: '2026-11-01T10:10:00.000Z',
     })
     expect(limited.rpc).not.toHaveBeenCalled()
 
-    const allowed = fakeDb({ runs: structuredClone(runs), uploads: [file], objects: uploaded })
+    const allowed = fakeDb({ runs: [run()], uploads: [file], objects: uploaded, starts: structuredClone(starts) })
     await expect(start(allowed, { runsPerHour: 3 })).resolves.toMatchObject({ ok: true })
+  })
+
+  it('writes each start to the ledger, which outlives the run (TKO-28)', async () => {
+    const fake = fakeDb({ runs: [run()], uploads: [file], objects: uploaded })
+    await expect(start(fake)).resolves.toMatchObject({ ok: true })
+    expect(fake.tables.roof_takeoff_starts).toEqual([expect.objectContaining({ tenant_id: TENANT, run_id: RUN, started_at: NOW.toISOString() })])
+
+    // Deleting the run leaves its start counted: a new run can't start past the limit.
+    await deleteRun(fake.db, 'plan-pdfs', { tenantId: TENANT, runId: RUN })
+    expect(fake.tables.roof_takeoff_starts).toHaveLength(1)
+    fake.tables.roof_takeoff_runs.push(run())
+    fake.objects[runFilePath(TENANT, RUN, 'upload-1')] = 1000
+    fake.tables.plan_uploads.push(file)
+    await expect(start(fake, { runsPerHour: 1 })).resolves.toMatchObject({ ok: false, error: 'rate_limited' })
+  })
+
+  it('puts the run back when the ledger refuses the start, and enqueues nothing', async () => {
+    const fake = fakeDb({ runs: [run()], uploads: [file], objects: uploaded })
+    fake.fail.ledger = true
+    await expect(start(fake)).rejects.toThrow('ledger refused')
+    expect(fake.tables.roof_takeoff_runs[0]).toMatchObject({ status: 'draft', stage: null })
+    expect(fake.rpc).not.toHaveBeenCalled()
   })
 
   it('reports conflict_status when another start wins the race', async () => {

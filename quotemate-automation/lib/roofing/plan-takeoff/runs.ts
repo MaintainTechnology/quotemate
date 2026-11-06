@@ -185,17 +185,29 @@ export async function startRun(db: SupabaseClient, bucket: string, input: {
   if (queued.error) throw failure('run start', queued.error)
   if (!queued.data?.length) return { ok: false, error: 'conflict_status' } // another start won
 
-  try {
-    await enqueueStage(run, stage, starts.length, db)
-  } catch (error) {
-    // Put the run back so the caller can try again. The stamp stays, so the
-    // retry gets a new work key even if this enqueue did reach the queue.
+  // Put the run back so the caller can try again. The stamp stays, so the
+  // retry gets a new work key even if an enqueue did reach the queue.
+  const putBack = async () => {
     const undo = await db.from('roof_takeoff_runs')
       .update({ status: run.status, stage: run.stage, status_note: run.status_note, updated_at: now.toISOString() })
       .eq('id', run.id).eq('tenant_id', run.tenant_id).eq('status', 'queued')
     // ponytail: if the undo fails too, the run stays queued with no job and has
     // to be deleted. Add a sweeper for queued runs without jobs if it happens.
     if (undo.error) console.error('[takeoff] run left queued without a job', { runId: run.id, error: undo.error.message })
+  }
+
+  // The start, in the ledger the hourly limit counts (TKO-28): a row that
+  // outlives its run, so deleting runs can't make room for more.
+  const ledger = await db.from('roof_takeoff_starts').insert({ tenant_id: run.tenant_id, run_id: run.id, started_at: now.toISOString() })
+  if (ledger.error) {
+    await putBack()
+    throw failure('start ledger', ledger.error)
+  }
+
+  try {
+    await enqueueStage(run, stage, starts.length, db)
+  } catch (error) {
+    await putBack()
     throw error
   }
   return { ok: true, run_id: run.id, status: 'queued', stage }
@@ -232,16 +244,15 @@ export async function startAllowed(
   return { ok: false, retry_at: new Date(recent[recent.length - runsPerHour] + HOUR_MS).toISOString() }
 }
 
-/** The tenant's start times since `since`, oldest first. A start stamps
- *  updated_at, so every run started since then was also updated since then. */
+/** The tenant's start times since `since`, oldest first, from the start
+ *  ledger (migration 226), which keeps a start when its run is deleted. */
 async function startsSince(db: SupabaseClient, tenantId: string, since: number): Promise<number[]> {
-  const runs = await db.from('roof_takeoff_runs')
-    .select('usage')
-    .eq('tenant_id', tenantId).gte('updated_at', new Date(since).toISOString())
-  if (runs.error) throw failure('start count', runs.error)
-  return (runs.data as Array<Pick<RunRow, 'usage'>>)
-    .flatMap((row) => row.usage?.starts ?? [])
-    .map((at) => Date.parse(at))
+  const starts = await db.from('roof_takeoff_starts')
+    .select('started_at')
+    .eq('tenant_id', tenantId).gte('started_at', new Date(since).toISOString())
+  if (starts.error) throw failure('start count', starts.error)
+  return (starts.data as Array<{ started_at: string }>)
+    .map((row) => Date.parse(row.started_at))
     .filter((at) => at >= since)
     .sort((a, b) => a - b)
 }

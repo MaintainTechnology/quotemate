@@ -20,10 +20,13 @@ export function fakeDb(seed: {
   measurements?: Row[]
   pricingBooks?: Row[]
   tenants?: Row[]
+  /** The start ledger (TKO-28): one row a start, kept when its run goes. */
+  starts?: Row[]
   objects?: Record<string, number | Uint8Array>
 } = {}) {
   const tables: Record<string, Row[]> = {
     roof_takeoff_runs: seed.runs ?? [],
+    roof_takeoff_starts: seed.starts ?? [],
     plan_uploads: seed.uploads ?? [],
     plan_extractions: seed.extractions ?? [],
     pipeline_traces: [],
@@ -33,7 +36,7 @@ export function fakeDb(seed: {
     tenant_licences: [],
   }
   const objects = seed.objects ?? {}
-  const fail = { uploadRows: false, signing: false, enqueue: false, readings: false, removal: false, upload: false }
+  const fail = { uploadRows: false, signing: false, enqueue: false, readings: false, removal: false, upload: false, ledger: false }
   const hooks: { onList?: () => void; onUpload?: (path: string) => void } = {}
   const signed: Array<{ bucket: string; path: string; options: unknown }> = []
   const rpc = vi.fn(async (_name: string, params: Row) =>
@@ -76,6 +79,7 @@ export function fakeDb(seed: {
       const op = this.op
       if (op.kind === 'insert') {
         if (this.table === 'plan_uploads' && fail.uploadRows) return { data: null, error: { message: 'insert refused' } }
+        if (this.table === 'roof_takeoff_starts' && fail.ledger) return { data: null, error: { message: 'ledger refused' } }
         // roofing_measurements gets its id from the database, and its
         // (tenant_id, source_request_key) is unique (migration 201).
         const measurement = this.table === 'roofing_measurements'
