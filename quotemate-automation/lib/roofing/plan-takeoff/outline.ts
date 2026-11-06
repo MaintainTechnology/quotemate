@@ -6,6 +6,7 @@
 
 import type { Segment } from './calibrate'
 import type { PageText, TextRun } from './classify'
+import { compassFall } from './pack/geometry'
 import type { RoofPlanTakeoff } from './schema'
 
 /** A rectangle in printed points: left, top, right, bottom. */
@@ -138,9 +139,15 @@ function outlinesFor(plane: Plane, sheets: MeasuredSheet[]): { tag: string; shee
   return null
 }
 
-/** The plane at a box's size, with the outline as evidence. */
+/** The plane at a box's size, with the outline as evidence. Its size runs
+ *  along its eave, then down its slope (DEC-040): a plane falling east or west
+ *  has its eave up the sheet. ponytail: the sheet is taken as north up, so a
+ *  plan drawn otherwise orients its measured skillions wrongly; reading the
+ *  north point is the upgrade. */
 function sized(plane: Plane, id: string, box: Box, found: { tag: string; sheet: MeasuredSheet }): Plane {
-  const [width, length] = [box[2] - box[0], box[3] - box[1]].map((pt) => round(pt * found.sheet.factor))
+  const [across, up] = [box[2] - box[0], box[3] - box[1]].map((pt) => round(pt * found.sheet.factor))
+  const fall = compassFall(plane.fall)
+  const [width, length] = fall && Math.abs(fall[0]) > Math.abs(fall[1]) ? [up, across] : [across, up]
   const area = round((width * length) / 1e6, 2)
   return {
     ...plane,
@@ -154,11 +161,71 @@ function sized(plane: Plane, id: string, box: Box, found: { tag: string; sheet: 
       {
         file: found.sheet.file,
         page: found.sheet.page,
-        text: `${found.tag}: drawn outline ${width} × ${length} mm at the sheet's scale`,
+        text: `${found.tag}: drawn outline ${across} × ${up} mm at the sheet's scale`,
         bbox: box.map((v) => round(v, 1)) as Box,
       },
     ],
   }
+}
+
+type Found = NonNullable<ReturnType<typeof outlinesFor>>
+type Edge = Structure['edges'][number]
+
+/** A gap between bays this narrow is a wall between them, such as Grange's
+ *  190 mm block wall between its carport bays. */
+const WALL_MM = 400
+
+/** A skillion bay's edge types, its lengths left for skillionEdges to work out
+ *  from its size: an eave, a high side, and its two sides down its run, each a
+ *  barge, or an apron where it meets another bay across a wall (DEC-040). Its
+ *  run follows its fall as `sized` takes it, so bays falling towards each
+ *  other face with their eaves, and no side is a wall's. */
+function bayEdges(box: Box, bays: Box[], plane: Plane, factor: number): Edge[] {
+  const fall = compassFall(plane.fall)
+  const runAcross = !!fall && Math.abs(fall[0]) > Math.abs(fall[1])
+  const near = (gap: number) => gap >= -TOLERANCE_PT && gap <= WALL_MM / factor
+  const overlap = (a1: number, a2: number, b1: number, b2: number) => Math.min(a2, b2) - Math.max(a1, b1) > TOLERANCE_PT
+  const walled = (side: 0 | 1 | 2 | 3) => bays.some((o) => o !== box && (
+    side === 0 ? near(box[0] - o[2]) && overlap(box[1], box[3], o[1], o[3])
+      : side === 2 ? near(o[0] - box[2]) && overlap(box[1], box[3], o[1], o[3])
+        : side === 1 ? near(box[1] - o[3]) && overlap(box[0], box[2], o[0], o[2])
+          : near(o[1] - box[3]) && overlap(box[0], box[2], o[0], o[2])))
+  const edge = (type: Edge['type']): Edge => ({ type, length_m: null, source: 'derived', confidence: 'medium' })
+  const sides = (runAcross ? [1, 3] : [0, 2]) as Array<0 | 1 | 2 | 3>
+  return [edge('eave'), edge('high_side'), ...sides.map((side) => edge(walled(side) ? 'apron' : 'barge'))]
+}
+
+/** The outlines each one-plane roof is measured from (DEC-040).
+ *  - A roof with no area takes its tag's roofs, shared among the roofs that
+ *    cite the tag: each takes the next, and the last takes the rest. So a
+ *    carport read as one roof splits by its outlines, and one read as two bays
+ *    takes one each, where each would otherwise split again.
+ *  - A roof read with an area keeps it, unless it alone cites a tag that sits
+ *    in outlines apart: then the reading has one roof where the drawing shows
+ *    several, and the drawing measures. A tag is a finish code several roofs
+ *    can share, as Grange's two houses do, so roofs that each have an area
+ *    keep theirs. */
+function loneShares(takeoff: Takeoff, sheets: MeasuredSheet[]): Map<Plane, { found: Found; groups: Box[][] }> {
+  const key = (f: Found) => `${f.sheet.file}#${f.sheet.page}#${f.tag.replace(/\s+/g, '').toUpperCase()}`
+  const count = (keys: string[]) => keys.reduce((n, k) => n.set(k, (n.get(k) ?? 0) + 1), new Map<string, number>())
+  const cited = takeoff.structures.flatMap(({ planes }) => {
+    const found = planes.length === 1 ? outlinesFor(planes[0], sheets) : null
+    return found ? [{ plane: planes[0], found, key: key(found) }] : []
+  })
+  const citers = count(cited.map((c) => c.key))
+  const measured = cited.filter(({ plane, found, key: k }) => plane.plan_area_m2 === null || (citers.get(k) === 1 && roofs(found.boxes).length > 1))
+  const left = count(measured.map((c) => c.key))
+  const taken = new Map<string, number>()
+  const shares = new Map<Plane, { found: Found; groups: Box[][] }>()
+  for (const { plane, found, key: k } of measured) {
+    const groups = roofs(found.boxes)
+    const [from, remaining] = [taken.get(k) ?? 0, left.get(k) ?? 1]
+    const share = remaining > 1 ? groups.slice(from, from + 1) : groups.slice(from)
+    taken.set(k, from + share.length)
+    left.set(k, remaining - 1)
+    shares.set(plane, { found, groups: share })
+  }
+  return shares
 }
 
 /** Fills each plane that has no area from the drawn outlines its roof tag
@@ -166,27 +233,31 @@ function sized(plane: Plane, id: string, box: Box, found: { tag: string; sheet: 
  *  separate roofs, so a one-plane structure splits into one per roof. */
 export function measureOutlines(takeoff: Takeoff, sheets: MeasuredSheet[]): { takeoff: Takeoff; measured: number } {
   let measured = 0
+  const shares = loneShares(takeoff, sheets)
   const structures = takeoff.structures.flatMap((structure): Structure[] => {
     const lone = structure.planes.length === 1
     const planes: Plane[] = []
     let split: Structure[] = []
     for (const plane of structure.planes) {
-      const found = plane.plan_area_m2 === null ? outlinesFor(plane, sheets) : null
-      if (!found) {
+      const found = lone ? shares.get(plane)?.found ?? null : plane.plan_area_m2 === null ? outlinesFor(plane, sheets) : null
+      const groups = lone ? shares.get(plane)?.groups ?? [] : found ? roofs(found.boxes) : []
+      if (!found || !groups.length) {
         planes.push(plane)
         continue
       }
-      const groups = roofs(found.boxes)
-      measured += found.boxes.length
+      measured += groups.flat().length
       // ponytail: only a structure of one plane splits into several roofs; a
       // plane among others takes its outlines as more planes of the same roof.
       if (lone && groups.length > 1) {
+        // Bays of one outline each are skillions, so each gets its own edge
+        // types, an apron where it meets another across a wall; any other
+        // split keeps the reading's edges and exclusions on its first roof.
+        const bays = groups.every((group) => group.length === 1) ? groups.map(([box]) => box) : null
         split = groups.map((group, i) => ({
           ...structure,
           id: `${structure.id}-${i + 1}`,
           label: `${structure.label}, ${i + 1} of ${groups.length}`,
-          // The reading's edges and exclusions stay with the first roof.
-          edges: i === 0 ? structure.edges : [],
+          edges: bays ? bayEdges(bays[i], bays, plane, found.sheet.factor) : i === 0 ? structure.edges : [],
           exclusions: i === 0 ? structure.exclusions : [],
           planes: group.map((box, j) => sized(plane, `${structure.id}-${i + 1}-P${j + 1}`, box, found)),
         }))

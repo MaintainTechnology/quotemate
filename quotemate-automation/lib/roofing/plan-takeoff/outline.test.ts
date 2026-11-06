@@ -70,6 +70,72 @@ describe('measureOutlines', () => {
     })
   })
 
+  it('makes the sides two split bays share across a wall aprons, as at Grange\'s carport (DEC-040)', () => {
+    const types = (gapPt: number, fall: string | null = null) => {
+      const t = carport()
+      t.structures[0].planes[0].fall = fall
+      const pair = [...rect(100, 100, 160, 210), ...rect(160 + gapPt, 100, 220 + gapPt, 210)]
+      const tags = [tag('RF:03', 115, 154), tag('RF:03', 175 + gapPt, 154)]
+      return measureOutlines(t, [sheet(pair, tags)]).takeoff.structures.map((s) => s.edges.map((e) => `${e.type} ${e.length_m}`))
+    }
+    // 4 points is 200 mm: the bays' facing sides run down the slope, so they are aprons.
+    expect(types(4)).toEqual([
+      ['eave null', 'high_side null', 'barge null', 'apron null'],
+      ['eave null', 'high_side null', 'apron null', 'barge null'],
+    ])
+    // 2000 mm apart is no wall, and bays falling east face each other with their eave and high side.
+    expect(types(40)[0]).toEqual(['eave null', 'high_side null', 'barge null', 'barge null'])
+    expect(types(4, 'east, to the lane')[0]).toEqual(['eave null', 'high_side null', 'barge null', 'barge null'])
+  })
+
+  it('splits a roof read whole, with its own area, when its tag sits in outlines apart: the drawing shows two (DEC-040)', () => {
+    const whole = carport()
+    whole.structures[0].planes[0].plan_area_m2 = 36.4 // claude-sonnet-5-5's reading of Grange's carport
+    const { takeoff, measured } = measureOutlines(whole, [sheet([...bays, ...frames, ...legend], runs)])
+    expect(measured).toBe(2)
+    expect(takeoff.structures.map((s) => [s.id, s.planes.map((p) => p.plan_area_m2)])).toEqual([['S3-1', [16.5]], ['S3-2', [16.5]]])
+  })
+
+  it('leaves the areas of roofs that share a finish tag, as Grange\'s two houses do', () => {
+    const houses = carport()
+    const second = structuredClone(houses.structures[0])
+    Object.assign(second, { id: 'S4', label: 'House 2' })
+    second.planes[0].id = 'S4-P1'
+    houses.structures[0].label = 'House 1'
+    houses.structures.push(second)
+    for (const s of houses.structures) s.planes[0].plan_area_m2 = 97.25
+    const { takeoff, measured } = measureOutlines(houses, [sheet([...bays, ...frames], runs)])
+    expect(measured).toBe(0)
+    expect(takeoff.structures.map((s) => s.planes[0].plan_area_m2)).toEqual([97.25, 97.25])
+  })
+
+  it("shares a tag's outlines among the roofs that cite it, one each, when the bays are read as two roofs", () => {
+    const two = carport()
+    const east = structuredClone(two.structures[0])
+    Object.assign(east, { id: 'S4', label: 'Carport, east bay' })
+    east.planes[0].id = 'S4-P1'
+    two.structures[0].label = 'Carport, west bay'
+    two.structures.push(east)
+    const { takeoff, measured } = measureOutlines(two, [sheet([...bays, ...frames, ...legend], runs)])
+    expect(measured).toBe(2)
+    expect(takeoff.structures.map((s) => [s.id, s.label, s.planes.map((p) => [p.id, p.plan_dims_mm])])).toEqual([
+      ['S3', 'Carport, west bay', [['S3-P1', [3000, 5500]]]],
+      ['S4', 'Carport, east bay', [['S4-P1', [3000, 5500]]]],
+    ])
+    expect(takeoff.structures.map((s) => s.planes[0].evidence.at(-1)?.bbox)).toEqual([[100, 100, 160, 210], [164, 100, 224, 210]])
+  })
+
+  it('sizes an outline along its eave, then down its slope, taking the sheet as north up (DEC-040)', () => {
+    const falling = (fall: string | null) => {
+      const t = carport()
+      t.structures[0].planes[0].fall = fall
+      return measureOutlines(t, [sheet([...bays, ...frames], runs)]).takeoff.structures.map((s) => s.planes[0].plan_dims_mm)
+    }
+    expect(falling('south, to the parking')).toEqual([[3000, 5500], [3000, 5500]]) // the eave across the sheet
+    expect(falling('east, to the lane')).toEqual([[5500, 3000], [5500, 3000]]) // the eave up the sheet
+    expect(falling(null)).toEqual([[3000, 5500], [3000, 5500]])
+  })
+
   it('keeps outlines that touch as planes of one roof, as a gable shows on plan', () => {
     const halves = [...rect(100, 100, 160, 210), ...rect(160, 100, 220, 210)]
     const { takeoff } = measureOutlines(carport(), [sheet(halves, [tag('RF:03', 115, 154), tag('RF:03', 175, 154)])])
@@ -81,9 +147,10 @@ describe('measureOutlines', () => {
     const lonely = measureOutlines(carport(), [sheet(bays, [tag('RF:03', 700, 700)])])
     expect([lonely.measured, lonely.takeoff.structures[0].planes[0].plan_area_m2]).toEqual([0, null])
 
+    // An area the reading gives stands where its tag sits in one outline.
     const sized = carport()
     sized.structures[0].planes[0].plan_area_m2 = 20
-    expect(measureOutlines(sized, [sheet([...bays, ...frames], runs)]).measured).toBe(0)
+    expect(measureOutlines(sized, [sheet([...rect(100, 100, 160, 210), ...frames.slice(0, 4)], [runs[0]])]).measured).toBe(0)
 
     const prose = carport([{ file: 'A.pdf', page: 1, text: 'RF:03 LYSAGHT TRIMDEK', bbox: null }])
     expect(measureOutlines(prose, [sheet([...bays, ...frames], runs)]).measured).toBe(0)

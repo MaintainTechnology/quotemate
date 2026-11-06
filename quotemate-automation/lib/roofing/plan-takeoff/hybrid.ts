@@ -112,9 +112,15 @@ export async function measureAndMerge(db: SupabaseClient, input: {
   // The named roofs first, so a typo costs no Geoscape call.
   const unknown = input.existing.filter((id) => !takeoff.structures.some((s) => s.id === id))
   if (unknown.length) return { ok: false, error: 'unknown_structures', ids: unknown }
-  const { postcode, state } = postcodeAndState(run)
-  if (!postcode || !state) return { ok: false, error: 'aerial_unavailable', detail: 'The site address has no state and postcode to look up.' }
-  const measured = await withinLimit(() => input.measure({ address: run.site_address, postcode, state }), input.timeoutMs ?? 60_000)
+  const site = postcodeAndState(run)
+  // A builder's request can name a suburb without its state or postcode, as
+  // TAG's for Whittaker did. Geoscape looks an address up within its state,
+  // and the postcode only gates a tenant's coverage, which a takeoff doesn't,
+  // so the tenant's own state stands in. ponytail: right for a tenant working
+  // in one state; one working across a border needs the state on the run.
+  const state = site.state ?? (await tenantState(db, input.tenantId))
+  if (!state) return { ok: false, error: 'aerial_unavailable', detail: 'The site address has no state to look up, and the tenant has none on file.' }
+  const measured = await withinLimit(() => input.measure({ address: run.site_address, postcode: site.postcode ?? '', state }), input.timeoutMs ?? 60_000)
   if (!measured.ok) return { ok: false, error: 'aerial_unavailable', detail: measured.detail }
   const merged = mergeAerial(takeoff, input.existing, measured.buildings)
   if (!merged.ok && merged.error === 'aerial_unmatched') {
@@ -123,6 +129,13 @@ export async function measureAndMerge(db: SupabaseClient, input: {
   }
   if (!merged.ok) return merged
   return correctTakeoff(db, { tenantId: input.tenantId, runId: input.runId, takeoff: merged.takeoff, now: input.now })
+}
+
+/** The tenant's own state, or null when it has none on file. */
+async function tenantState(db: SupabaseClient, tenantId: string) {
+  const { data, error } = await db.from('tenants').select('state').eq('id', tenantId).maybeSingle()
+  if (error) throw new Error(`tenant state lookup failed: ${error.message}`)
+  return postcodeAndState({ site_address: '', postcode: null, state: (data?.state as string | null | undefined) ?? null }).state
 }
 
 /** The measurement, or why there is none: a failure, a throw, or the limit. */
