@@ -103,13 +103,14 @@ export async function exportRun(db: SupabaseClient, bucket: string, input: {
   const takeoff = RoofPlanTakeoffSchema.parse(stored)
   const now = input.now ?? new Date()
 
-  const pack = packTakeoff(takeoff, run.checks)
+  // The request's scope note and job name are filtered with the reading's names.
+  const pack = packTakeoff(takeoff, run.checks, { job_name: run.job_name, scope_note: run.scope_note })
   const geometry = packGeometry(pack.structures)
   const { dxf, layers } = toDxf(geometry, pack.structures)
   const csv = toCsv(pack.structures, geometry)
   const html = briefHtml({
     branding: await loadTenantBranding(db, input.tenantId, 'roofing'),
-    run: { job_ref: run.job_ref, job_name: run.job_name, site_address: run.site_address, scope_note: run.scope_note, builder_business: run.builder?.business ?? null },
+    run: { job_ref: run.job_ref, job_name: pack.request.job_name, site_address: run.site_address, scope_note: pack.request.scope_note, builder_business: run.builder?.business ?? null },
     pack,
     geometry,
     date: now,
@@ -152,17 +153,28 @@ export async function exportRun(db: SupabaseClient, bucket: string, input: {
   // Not named `exports`: compiled to CommonJS, as the service runs it, that
   // name would shadow the module's own and break every export.
   const packs = `${runFolder(run.tenant_id, run.id)}/exports`
-  const path = `${packs}/${now.toISOString().replace(/[:.]/g, '-')}/pack.zip`
+  const stamp = now.toISOString().replace(/[:.]/g, '-')
+  const path = `${packs}/${stamp}/pack.zip`
   const put = await db.storage.from(bucket).upload(path, zip, { contentType: 'application/zip', upsert: false })
   if (put.error) throw failure('pack upload', put.error)
   const recorded = await db.from('roof_takeoff_runs')
     .update({ export_manifest: manifest, last_exported_at: now.toISOString(), updated_at: now.toISOString() })
     .eq('id', run.id).eq('tenant_id', run.tenant_id)
+    .select('id')
   if (recorded.error) throw failure('export record', recorded.error)
+  if (!recorded.data?.length) {
+    // The run was deleted while its pack was stored: nothing would ever sweep
+    // the pack, as the sweep starts from runs, so it goes now.
+    const removed = await db.storage.from(bucket).remove([path])
+    if (removed.error) console.warn(JSON.stringify({ level: 'warn', event: 'takeoff_pack_orphaned', run_id: run.id, cause: removed.error.message.slice(0, 200) }))
+    return { ok: false, error: 'not_found' }
+  }
 
-  // The run keeps its newest pack only. An older one left by a failed clean-up
-  // goes with the run when it is deleted, or with the next export.
-  const older = (await filesUnder(db, bucket, packs)).filter((p) => p !== path)
+  // The run keeps its newest pack. Only packs older than this one go, so an
+  // export that finishes after a newer one leaves that one; an older pack left
+  // by a failed clean-up goes with the next export, or with the run.
+  const stampOf = (file: string) => file.slice(packs.length + 1).split('/')[0]
+  const older = (await filesUnder(db, bucket, packs)).filter((p) => p !== path && stampOf(p) < stamp)
   if (older.length) {
     const removed = await db.storage.from(bucket).remove(older)
     if (removed.error) console.warn(JSON.stringify({ level: 'warn', event: 'takeoff_pack_cleanup_failed', run_id: run.id, cause: removed.error.message.slice(0, 200) }))

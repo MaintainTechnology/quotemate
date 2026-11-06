@@ -101,12 +101,22 @@ describe('toCsv', () => {
     const [s1] = of('total', 'S1')
     expect([at(s1, 'plan_area_m2'), at(s1, 'roof_area_m2')]).toEqual(['97.25', '97.62'])
     const [s2] = of('total', 'S2')
-    expect(at(s2, 'note')).toMatch(/1 plane has no area/)
+    expect([at(s2, 'plan_area_m2'), at(s2, 'roof_area_m2')]).toEqual(['', ''])
+    expect(at(s2, 'note')).toMatch(/1 plane has no area on plan/)
+    // A total with an unknown in it is left empty, and the note gives the known part.
     const [job] = of('total', 'all')
-    expect([at(job, 'plan_area_m2'), at(job, 'roof_area_m2')]).toEqual(['97.25', '97.62'])
+    expect([at(job, 'plan_area_m2'), at(job, 'roof_area_m2')]).toEqual(['', ''])
+    expect(at(job, 'note')).toBe('1 plane has no area on plan; the rest total 97.25 m²; 1 plane has no roof area; the rest total 97.62 m²')
     const totals = Object.fromEntries(of('edge_total').map((r) => [at(r, 'type'), [at(r, 'length_m'), at(r, 'note')]]))
-    expect(totals.eave).toEqual(['10.13', '1 edge has no length'])
+    expect(totals.eave).toEqual(['', '1 edge has no length; the rest total 10.13 m'])
     expect(totals.barge).toEqual(['9.6', ''])
+  })
+
+  it('leaves a roof area total empty when a plane has an area but no pitch', () => {
+    const unpitched: PackStructure = { ...house, planes: [{ ...house.planes[0], pitch_deg: null, sloped_area_m2: null }] }
+    const [total] = rows(toCsv([unpitched], packGeometry([unpitched]))).slice(1).filter((r) => at(r, 'record') === 'total' && at(r, 'structure_id') === 'S1')
+    expect([at(total, 'plan_area_m2'), at(total, 'roof_area_m2')]).toEqual(['97.25', ''])
+    expect(at(total, 'note')).toBe('1 plane has no roof area')
   })
 
   it('quotes a cell a spreadsheet would run as a formula, and one with commas or quotes', () => {

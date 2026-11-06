@@ -33,17 +33,22 @@ function cell(value: string | number | null | undefined): string {
 const line = (row: Row) => CSV_COLUMNS.map((column) => cell(row[column])).join(',')
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** The planes' areas summed, and how many planes have none. */
+/** A total of values the drawings may not give: the sum when every one is
+ *  known; else no total, and a note with how many are missing and what the
+ *  rest add up to, so a spreadsheet never takes a part for the whole. */
+function total(values: Array<number | null>, places: number, missing: (n: number) => string, unit: string) {
+  const known = values.filter((v): v is number => v !== null)
+  const sum = round(known.reduce((a, b) => a + b, 0), places)
+  if (known.length === values.length) return { value: values.length ? sum : null, note: '' }
+  return { value: null, note: known.length ? `${missing(values.length - known.length)}; the rest total ${sum} ${unit}` : missing(values.length) }
+}
+
+/** The planes' areas on plan and down the slope, totalled. */
 function areas(structures: PackStructure[]) {
   const planes = structures.flatMap((s) => s.planes)
-  const sum = (pick: (p: (typeof planes)[number]) => number | null) =>
-    round(planes.reduce((total, p) => total + (pick(p) ?? 0), 0), 2)
-  const missing = planes.filter((p) => p.plan_area_m2 === null).length
-  return {
-    plan_area_m2: sum((p) => p.plan_area_m2),
-    roof_area_m2: sum((p) => p.sloped_area_m2),
-    note: missing ? `${plural(missing, 'plane has', 'planes have')} no area` : '',
-  }
+  const plan = total(planes.map((p) => p.plan_area_m2), 2, (n) => `${plural(n, 'plane has', 'planes have')} no area on plan`, 'm²')
+  const roof = total(planes.map((p) => p.sloped_area_m2), 2, (n) => `${plural(n, 'plane has', 'planes have')} no roof area`, 'm²')
+  return { plan_area_m2: plan.value, roof_area_m2: roof.value, note: [plan.note, roof.note].filter(Boolean).join('; ') }
 }
 
 /** The pack's CSV. `geometry` says which planes and edges the DXF draws. */
@@ -92,14 +97,8 @@ export function toCsv(structures: PackStructure[], geometry: PackGeometry): stri
   for (const type of EDGE_TYPES) {
     const ofType = edges.filter((e) => e.type === type)
     if (!ofType.length) continue
-    const missing = ofType.filter((e) => e.length_m === null).length
-    lines.push(line({
-      record: 'edge_total',
-      structure_id: 'all',
-      type,
-      length_m: round(ofType.reduce((sum, e) => sum + (e.length_m ?? 0), 0), 3),
-      note: missing ? `${plural(missing, 'edge has', 'edges have')} no length` : '',
-    }))
+    const length = total(ofType.map((e) => e.length_m), 3, (n) => `${plural(n, 'edge has', 'edges have')} no length`, 'm')
+    lines.push(line({ record: 'edge_total', structure_id: 'all', type, length_m: length.value, note: length.note }))
   }
   return `﻿${lines.join('\r\n')}\r\n`
 }

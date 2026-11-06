@@ -20,15 +20,31 @@ describe('redact', () => {
     ['Call 0412 345 678 before arriving', '0412 345 678'],
     ['Office on (07) 3812 0000', '3812 0000'],
     ['Mobile +61 412 345 678', '412 345 678'],
+    ['Mobile 0412.345.678', '345.678'],
+    ['Call 61 412 345 678', '412 345 678'],
+    ['Owner: Zoë Citizen', 'Zoë'],
+    ['Owner: Zoë Citizen', 'Citizen'],
+    ['Mr Müller will be home', 'Müller'],
+    ['Client: José Nguyễn', 'Nguyễn'],
   ])('takes the name or contact out of %j', (text, gone) => {
     const out = redact(text)
     expect(out).not.toContain(gone)
     expect(out).toMatch(/removed/)
   })
 
+  it('takes a whole accented name, not just its first letters', () => {
+    expect(redact('Owner: Zoë Citizen')).toBe('Owner: [name removed]')
+    expect(redact('Mr Müller will be home')).toBe('[name removed] will be home')
+    expect(redact('OWNER: SINÉAD O’BRIEN')).toBe('OWNER: [name removed]')
+    expect(redact('Owner: Jane Citizen asked to leave it')).toBe('Owner: [name removed] asked to leave it')
+  })
+
   it.each([
     'House 1',
     'Proposed residence, roof plan',
+    'Owner: the builder confirms the colour',
+    'Extension of Main Roof',
+    'Dimensions 6125 4000 3000 2400',
     'Existing Residence',
     'New dwelling roof RF:01',
     'Lysaght Custom Orb 0.42 BMT',
@@ -135,6 +151,55 @@ describe('packTakeoff', () => {
     expect(pack.structures[0]).toMatchObject({ id: 'S1', label: 'Roof S1', role: 'primary', source: 'plans' })
     expect(pack.structures[0].exclusions[0].area_m2).toBe(12)
     expect(pack.scale).toMatchObject({ stated: '1:100', sheet_size: 'A1', calibration: { method: 'title_block' } })
+  })
+
+  it('finds an accented name anywhere once a pattern found it once', () => {
+    const accented = packTakeoff({
+      ...hostile,
+      structures: [{ ...hostile.structures[0], planes: [{ ...hostile.structures[0].planes[0], evidence: [{ file: 'a.pdf', page: 1, text: 'OWNER: Sinéad O’Brien', bbox: null }] }] }],
+      scope: { includes: [], excludes: [], questions: ['Ask Sinéad about access'] },
+    }, null)
+    expect(JSON.stringify(accented)).not.toMatch(/Sin|éad|Brien/)
+  })
+
+  it('keeps a field to its own line, so the words below it stay', () => {
+    const lined = packTakeoff({
+      ...hostile,
+      sheets: [],
+      structures: [{
+        ...hostile.structures[0],
+        label: 'Main Roof',
+        planes: [{ ...hostile.structures[0].planes[0], fall: 'south', profile: 'Custom Orb', evidence: [{ file: 'a.pdf', page: 1, text: 'Client: Jane Citizen\nProject: New Roof\nExtension of Main Roof', bbox: null }] }],
+        exclusions: [],
+      }],
+      scope: { includes: ['Project roof sheeting'], excludes: [], questions: ['Ask Jane about the gutters'] },
+    }, null)
+    expect(lined.structures[0].label).toBe('Main Roof')
+    expect(lined.scope.includes).toEqual(['Project roof sheeting'])
+    expect(lined.scope.questions[0]).not.toContain('Jane')
+  })
+
+  it('renames ids that aren’t the reader’s own S1 and S1-P1, as they are free text too', () => {
+    const named = packTakeoff({
+      ...hostile,
+      structures: [
+        { ...hostile.structures[0], id: 'Smith-house', planes: [{ ...hostile.structures[0].planes[0], id: 'Smith-house-P1' }] },
+        { ...hostile.structures[0], id: 'S2', planes: [{ ...hostile.structures[0].planes[0], id: 'S2-P1' }] },
+      ],
+    }, null)
+    expect(named.structures.map((s) => s.id)).toEqual(['S1', 'S2'])
+    expect(named.structures.map((s) => s.planes[0].id)).toEqual(['S1-P1', 'S2-P1'])
+    expect(JSON.stringify(named)).not.toContain('Smith')
+    const canonical = packTakeoff(hostile, null)
+    expect(canonical.structures[0].id).toBe('S1')
+  })
+
+  it('filters the request’s scope note and job name with the same names', () => {
+    const pack = packTakeoff(hostile, null, { job_name: 'Smith Residence re-roof', scope_note: 'Mrs Nguyen wants the deck left out. Call Jane Citizen.' })
+    expect(pack.request.job_name).not.toContain('Smith')
+    expect(pack.request.scope_note).not.toMatch(/Nguyen|Citizen/)
+    expect(pack.request.scope_note).toContain('wants the deck left out')
+    expect(packTakeoff(hostile, null).request).toEqual({ job_name: null, scope_note: null })
   })
 
   it('leaves the takeoff it was given as it was', () => {

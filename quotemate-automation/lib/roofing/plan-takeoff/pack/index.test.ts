@@ -121,6 +121,30 @@ describe('exportRun', () => {
     expect(Object.keys(fake.objects)).toEqual([second.path])
   })
 
+  it('leaves the newer pack when an older export finishes after it', async () => {
+    const fake = setup()
+    const newer = await exportRun(fake.db, 'plan-pdfs', { tenantId: TENANT, runId: RUN, render, now: NOW })
+    const older = await exportRun(fake.db, 'plan-pdfs', { tenantId: TENANT, runId: RUN, render, now: new Date('2026-11-06T03:04:00.000Z') })
+    if (!newer.ok || !older.ok) throw new Error('export refused')
+    expect(Object.keys(fake.objects)).toContain(newer.path)
+  })
+
+  it('leaves no pack behind for a run deleted while its pack was stored', async () => {
+    const fake = setup()
+    fake.hooks.onUpload = () => { fake.tables.roof_takeoff_runs.splice(0) }
+    await expect(exportRun(fake.db, 'plan-pdfs', { tenantId: TENANT, runId: RUN, render, now: NOW })).resolves.toEqual({ ok: false, error: 'not_found' })
+    expect(fake.objects).toEqual({})
+  })
+
+  it('filters the request’s scope note and job name in the brief', async () => {
+    const fake = setup({ scope_note: 'Mrs Nguyen wants the deck left out', job_name: 'Smith Residence re-roof' })
+    const out = await exportRun(fake.db, 'plan-pdfs', { tenantId: TENANT, runId: RUN, render, now: NOW })
+    if (!out.ok) throw new Error('export refused')
+    const html = render.mock.calls.at(-1)![0]
+    expect(html).not.toMatch(/Nguyen|Smith/)
+    expect(html).toContain('wants the deck left out')
+  })
+
   it('takes a saved run, and one under review only once its checks are accepted', async () => {
     await expect(exportRun(setup({ status: 'saved' }).db, 'plan-pdfs', { tenantId: TENANT, runId: RUN, render, now: NOW })).resolves.toMatchObject({ ok: true })
     const review = setup({ status: 'needs_review', checks: { ...checks, status: 'needs_review' } })

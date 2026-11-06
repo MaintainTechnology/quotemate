@@ -34,7 +34,7 @@ export function fakeDb(seed: {
   }
   const objects = seed.objects ?? {}
   const fail = { uploadRows: false, signing: false, enqueue: false, readings: false, removal: false, upload: false }
-  const hooks: { onList?: () => void } = {}
+  const hooks: { onList?: () => void; onUpload?: (path: string) => void } = {}
   const signed: Array<{ bucket: string; path: string; options: unknown }> = []
   const rpc = vi.fn(async (_name: string, params: Row) =>
     fail.enqueue ? { data: null, error: { message: 'queue down' } } : { data: { id: 'job-1', work_key: params.p_key }, error: null })
@@ -141,6 +141,7 @@ export function fakeDb(seed: {
         if (fail.upload) return { data: null, error: { message: 'upload refused' } }
         if (objects[path] !== undefined) return { data: null, error: { message: 'The resource already exists' } }
         objects[path] = new Uint8Array(body)
+        hooks.onUpload?.(path)
         return { data: { path }, error: null }
       },
       remove: async (paths: string[]) => {
