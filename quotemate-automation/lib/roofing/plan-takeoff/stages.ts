@@ -219,9 +219,9 @@ async function latestReading({ db, run }: StageContext): Promise<Reading> {
   return latest
 }
 
-/** Checks the reading's scale against the drawings (TKO-12) and scales the
- *  roofs they don't dimension from their drawn outlines (TKO-29), through
- *  refineReading, which the eval runs too. */
+/** Checks the reading's scale against the drawings (TKO-12), scales the roofs
+ *  they don't dimension from their drawn outlines (TKO-29) and works out each
+ *  skillion's edges (TKO-15), through refineReading, which the eval runs too. */
 async function calibrate(ctx: StageContext) {
   const reading = await latestReading(ctx)
   const { data: run, error } = await ctx.db.from('roof_takeoff_runs')
@@ -243,7 +243,7 @@ async function calibrate(ctx: StageContext) {
     if (updateError) throw new Error(`takeoff calibration save failed: ${updateError.message}`)
   }
   const { method, factor, delta_pct } = refined.takeoff.scale.calibration
-  return { method, factor, delta_pct, sheets: refined.sheets, measured: refined.measured }
+  return { method, factor, delta_pct, sheets: refined.sheets, measured: refined.measured, derived: refined.derived }
 }
 
 /** The first area schedule in the run's plan sets, such as Grange's on its

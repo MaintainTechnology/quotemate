@@ -138,7 +138,9 @@ export async function readPlans(input: {
     const problems = [...cutOff, ...result.problems]
     const repair = await smsWorkCheckpoint('read:repair', () => ask([
       ...messages,
-      { role: 'assistant', content: draft.text },
+      // An empty reply, such as a thinking model's that spent its whole output
+      // limit thinking, can't go back as a turn: the API refuses an empty text block.
+      ...(draft.text.trim() ? [{ role: 'assistant' as const, content: draft.text }] : []),
       { role: 'user', content: `That reply can't be used:\n- ${problems.join('\n- ')}\nReply with the corrected JSON only.` },
     ]))
     result = check(repair)

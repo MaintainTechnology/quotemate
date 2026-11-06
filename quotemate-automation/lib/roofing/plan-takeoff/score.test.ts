@@ -1,12 +1,14 @@
-// The eval's scorer (TKO-15) on Grange's hand-measured takeoff, against
-// readings that each differ from it in one way.
+// The eval's scorer (TKO-15) on the hand-measured takeoffs, against readings
+// that each differ from them in one way.
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { RoofPlanTakeoffSchema, type RoofPlanTakeoff } from './schema'
 import { scoreTakeoff, type Score } from './score'
 
-const GRANGE = RoofPlanTakeoffSchema.parse(JSON.parse(readFileSync('eval/roof-takeoff/grange/takeoff.json', 'utf8')))
+const reference = (fixture: string) =>
+  RoofPlanTakeoffSchema.parse(JSON.parse(readFileSync(`eval/roof-takeoff/${fixture}/takeoff.json`, 'utf8')))
+const GRANGE = reference('grange')
 const variant = (change: (t: RoofPlanTakeoff) => void) => {
   const t = structuredClone(GRANGE)
   change(t)
@@ -68,5 +70,22 @@ describe('scoreTakeoff', () => {
     const ridge = variant((t) => { t.structures[0].edges.push({ type: 'ridge', length_m: 5, source: 'measured', confidence: 'high' }) })
     expect(scoreTakeoff(GRANGE, ridge).edges.detail).toBe('ridge 5 m against 0 m.')
     expect(scoreTakeoff(GRANGE, variant((t) => { eave(t).length_m = null })).edges.detail).toBe('eave has an unknown length.')
+  })
+})
+
+describe("scoreTakeoff on Whittaker's reference (TKO-00d)", () => {
+  it('passes it against itself, over its three pitches', () => {
+    const whittaker = reference('whittaker')
+    const score = scoreTakeoff(whittaker, whittaker)
+    expect(score.pass).toBe(true)
+    expect(score.area.detail).toBe('122.08 m² against 122.08 m² (0.0%).')
+    expect(score.pitch.detail).toBe('25°, 4.9°, 4.8° read, 25°, 4.9°, 4.8° expected.')
+  })
+
+  it("fails its valley read on plan: at the main roof's 25° that is 5% short, so lengths are along the roof (DEC-039)", () => {
+    const whittaker = reference('whittaker')
+    const onPlan = structuredClone(whittaker)
+    onPlan.structures[0].edges.find((e) => e.type === 'valley')!.length_m = 3.178 // 2247 mm each way on plan
+    expect(scoreTakeoff(whittaker, onPlan).edges).toEqual({ pass: false, detail: 'valley 3.18 m against 3.35 m.' })
   })
 })
