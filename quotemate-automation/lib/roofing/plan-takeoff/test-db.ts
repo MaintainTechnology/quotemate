@@ -121,13 +121,20 @@ export function fakeDb(seed: {
         if (fail.signing) return { data: null, error: { message: 'signing refused' } }
         return { data: { signedUrl: `https://storage.test/upload/sign/${bucket}/${path}?token=t`, token: 't', path }, error: null }
       },
+      // One level, as Supabase lists: a file with its id and size, and each
+      // folder below once, with no id or metadata.
       list: async (folder: string) => {
         hooks.onList?.()
         const prefix = `${folder}/`
-        const data = Object.entries(objects)
-          .filter(([key]) => key.startsWith(prefix))
-          .map(([key, body]) => ({ name: key.slice(prefix.length), metadata: { size: typeof body === 'number' ? body : body.length } }))
-        return { data, error: null }
+        const files: Array<{ name: string; id: string; metadata: { size: number } }> = []
+        const folders = new Set<string>()
+        for (const [key, body] of Object.entries(objects)) {
+          if (!key.startsWith(prefix)) continue
+          const rest = key.slice(prefix.length)
+          if (rest.includes('/')) folders.add(rest.slice(0, rest.indexOf('/')))
+          else files.push({ name: rest, id: key, metadata: { size: typeof body === 'number' ? body : body.length } })
+        }
+        return { data: [...files, ...[...folders].map((name) => ({ name, id: null, metadata: null }))], error: null }
       },
       // No upsert, as the service's uploads use: an object once there stays.
       upload: async (path: string, body: Uint8Array) => {

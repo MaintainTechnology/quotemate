@@ -322,6 +322,16 @@ describe('deleteRun', () => {
     expect(fake.tables.plan_extractions).toEqual([])
   })
 
+  it("removes the run's exported packs too, each in its own folder (TKO-18)", async () => {
+    const fake = setup()
+    const pack = `roofing/${TENANT}/${RUN}/exports/2026-11-06T03-04-05-000Z/pack.zip`
+    const older = `roofing/${TENANT}/${RUN}/exports/2026-11-05T01-00-00-000Z/pack.zip`
+    fake.objects[pack] = 2048
+    fake.objects[older] = 1024
+    await expect(remove(fake)).resolves.toEqual({ ok: true, files: 4 })
+    expect(Object.keys(fake.objects)).toEqual([KEPT])
+  })
+
   it('keeps the run when storage refuses, so the delete can be tried again', async () => {
     const fake = setup()
     fake.fail.removal = true

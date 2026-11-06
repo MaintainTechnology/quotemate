@@ -410,6 +410,23 @@ export async function correctTakeoff(db: SupabaseClient, input: {
   return { ok: true, run_id: run.id, status: checks.status, checks }
 }
 
+/** Every file in a run's folder and the folders under it. Storage lists one
+ *  level at a time, a folder as an entry with no id or metadata; the run's
+ *  folders are at most two deep (exports/<timestamp>/pack.zip), so the walk
+ *  stops at four. */
+export async function filesUnder(db: SupabaseClient, bucket: string, folder: string, depth = 0): Promise<string[]> {
+  const listed = await db.storage.from(bucket).list(folder, { limit: 1000 })
+  if (listed.error) throw failure('storage list', listed.error)
+  const paths: string[] = []
+  for (const entry of listed.data) {
+    const path = `${folder}/${entry.name}`
+    const isFolder = entry.id === null && !entry.metadata
+    if (!isFolder) paths.push(path)
+    else if (depth < 4) paths.push(...(await filesUnder(db, bucket, path, depth + 1)))
+  }
+  return paths
+}
+
 /** Deletes a run's files, then the run; its upload and reading rows cascade.
  *  Any status will do: a stage still running finds the run gone and stops.
  *  Given `updatedBefore`, as the sweep gives it, a run with activity since
@@ -423,12 +440,8 @@ export async function deleteRun(db: SupabaseClient, bucket: string, input: { ten
   if (found.error) throw failure('run lookup', found.error)
   if (!found.data) return { ok: false as const, error: 'not_found' as const }
 
-  // ponytail: one folder level, which is every file P2 writes. P3's exports/
-  // folder needs listing too when it lands.
-  const folder = runFolder(input.tenantId, input.runId)
-  const listed = await db.storage.from(bucket).list(folder, { limit: 1000 })
-  if (listed.error) throw failure('storage list', listed.error)
-  const paths = listed.data.map((object) => `${folder}/${object.name}`)
+  // The plans at the top, and each exported pack two folders down (TKO-18).
+  const paths = await filesUnder(db, bucket, runFolder(input.tenantId, input.runId))
   if (paths.length) {
     const removed = await db.storage.from(bucket).remove(paths)
     if (removed.error) throw failure('storage delete', removed.error)
