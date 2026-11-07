@@ -172,8 +172,9 @@ export type IntakeMessage = {
 }
 
 /** Why a message made no run. `email_unavailable` is the Resend route's:
- *  Resend wouldn't give the email or its files (DEC-031). */
-export type IntakeRefusal = 'not_a_tag_request' | 'no_plans' | 'too_many_files' | 'too_large' | 'email_unavailable'
+ *  Resend wouldn't give the email or its files (DEC-031). `run_deleted` is a
+ *  message delivered again after the operator deleted its run (DEC-046). */
+export type IntakeRefusal = 'not_a_tag_request' | 'no_plans' | 'too_many_files' | 'too_large' | 'email_unavailable' | 'run_deleted'
 
 export type IntakeOutcome =
   | { ok: true; created: boolean; run_id: string; status: string; stage: TakeoffStage | null }
@@ -188,6 +189,32 @@ const isPdf = (file: { filename: string; content_type?: string | null }) =>
   /\.pdf$/i.test(file.filename) || file.content_type?.split(';')[0].trim().toLowerCase() === 'application/pdf'
 
 const refuse = (error: IntakeRefusal, detail: string): IntakeOutcome => ({ ok: false, error, detail })
+const NOT_A_REQUEST = 'The message holds no TAG quote request: it names no job reference and site.'
+const DELETED = 'The operator deleted the run this message made, so it makes none again.'
+const existing = (run: RunState): IntakeOutcome => ({ ok: true, created: false, run_id: run.id, status: run.status, stage: run.stage })
+
+/** What a message is answered before its files are needed, or null when they
+ *  are: not a TAG request, the run the message already made, a run the
+ *  operator deleted, or the tenant's full hour. Resend's route asks it before
+ *  downloading any PDF, so such mail downloads nothing (DEC-046). A draft an
+ *  earlier delivery left needs its files, which finish it. */
+export async function admitTagRequest(db: SupabaseClient, input: {
+  tenantId: string
+  message: Omit<IntakeMessage, 'attachments'>
+  runsPerHour: number
+  now?: Date
+}): Promise<IntakeOutcome | null> {
+  const { tenantId, message } = input
+  if (!parseTagRequest(message)) return refuse('not_a_tag_request', NOT_A_REQUEST)
+  if (message.message_id) {
+    const runId = intakeRunId(tenantId, message.message_id)
+    const run = await runOf(db, tenantId, runId)
+    if (run) return run.status === 'draft' ? null : existing(run)
+    if (await startedBefore(db, tenantId, runId)) return refuse('run_deleted', DELETED)
+  }
+  const limit = await startAllowed(db, tenantId, input.runsPerHour, input.now)
+  return limit.ok ? null : { ok: false, error: 'rate_limited', retry_at: limit.retry_at }
+}
 
 /** Turns a TAG request into a started `tag_email` run for the tenant: its PDF
  *  attachments uploaded to the paths createRun built, then the run started. A
@@ -200,7 +227,7 @@ export async function takeTagRequest(db: SupabaseClient, bucket: string, input: 
 }): Promise<IntakeOutcome> {
   const { tenantId, message, limits } = input
   const request = parseTagRequest(message)
-  if (!request) return refuse('not_a_tag_request', 'The message holds no TAG quote request: it names no job reference and site.')
+  if (!request) return refuse('not_a_tag_request', NOT_A_REQUEST)
   const plans = message.attachments.filter(isPdf)
   if (!plans.length) return refuse('no_plans', 'The message has no PDF attached, and links in a message are never opened.')
   if (plans.length > limits.maxFiles) {
@@ -213,19 +240,19 @@ export async function takeTagRequest(db: SupabaseClient, bucket: string, input: 
   }
   const finishing = { tenantId, plans, runsPerHour: limits.runsPerHour, now: input.now }
 
-  // ponytail: a run the operator deleted, delivered again with the same
-  // Message-ID, is made afresh under its old work keys and sits queued with no
-  // job. Delete it again, or clear its sms_work_jobs rows, if that happens.
   const runId = message.message_id ? intakeRunId(tenantId, message.message_id) : undefined
   if (runId) {
     const run = await runOf(db, tenantId, runId)
-    if (run && run.status !== 'draft') return { ok: true, created: false, run_id: run.id, status: run.status, stage: run.stage }
+    if (run && run.status !== 'draft') return existing(run)
     // An earlier delivery began it and stopped, or is still going: finish it.
     const finished = run ? await finish(db, bucket, { ...finishing, runId, created: false }) : null
     if (finished) return finished
     // A draft with no upload rows stopped between createRun's two inserts.
     // Nothing could finish or start it, so it goes and the run is made afresh.
     if (run) await deleteRun(db, bucket, { tenantId, runId })
+    // A run the operator deleted stays deleted. Made afresh, it would sit
+    // queued under its old work keys with no job (DEC-046).
+    else if (await startedBefore(db, tenantId, runId)) return refuse('run_deleted', DELETED)
   }
 
   // Counted before anything is written, so a message the hour can't take
@@ -267,6 +294,14 @@ async function runOf(db: SupabaseClient, tenantId: string, runId: string): Promi
     .maybeSingle()
   if (found.error) throw new Error(`takeoff intake lookup failed: ${found.error.message}`)
   return found.data as RunState | null
+}
+
+/** Whether the run was ever started. The start ledger (migration 226) keeps a
+ *  start when its run is deleted, so it remembers a run the operator deleted. */
+async function startedBefore(db: SupabaseClient, tenantId: string, runId: string): Promise<boolean> {
+  const found = await db.from('roof_takeoff_starts').select('id').eq('tenant_id', tenantId).eq('run_id', runId).limit(1)
+  if (found.error) throw new Error(`takeoff intake start lookup failed: ${found.error.message}`)
+  return Boolean(found.data?.length)
 }
 
 /** An upload another delivery of the same message already made. */

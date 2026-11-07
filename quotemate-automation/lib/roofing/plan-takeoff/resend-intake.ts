@@ -8,7 +8,7 @@
 // the signature is checked with node:crypto, so neither needs a dependency.
 
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import type { IntakeMessage } from './intake'
+import type { IntakeMessage, IntakeOutcome } from './intake'
 
 const API = 'https://api.resend.com'
 /** Svix, which signs Resend's webhooks, allows five minutes either way. */
@@ -19,6 +19,11 @@ const MIN_KEY_BYTES = 16
 /** The most one message's PDFs may come to, as the email route's body limit
  *  holds them: the files are held in memory until they are uploaded. */
 export const MAX_MESSAGE_BYTES = 40 * 1_048_576
+/** How long a delivery's fetches from Resend, the email and its files, may
+ *  take in all, besides each request's own limit (DEC-046). 40 MB in three
+ *  minutes asks for under 0.25 MB a second, so a delivery past it is Resend's
+ *  trouble, answered as its 5xx are, and the webhook comes again. */
+export const DELIVERY_MS = 180_000
 
 /** Whether a webhook carries Resend's signature over its raw body: an
  *  HMAC-SHA256 of `id.timestamp.body`, keyed with the base64 after `whsec_`,
@@ -90,7 +95,9 @@ type ReceivedEmail = {
 }
 
 export type ResendFetched =
-  | { ok: true; message: IntakeMessage }
+  /** With `outcome`, admit's answer for the message: its PDFs were never
+   *  downloaded, so `message` has none. */
+  | { ok: true; message: IntakeMessage; outcome?: IntakeOutcome }
   | { ok: false; error: 'too_many_files' | 'too_large' | 'email_unavailable'; detail: string }
   // One member each, so a caller that leaves these alone narrows them away.
   | { ok: false; error: 'not_for_intake'; detail: string }
@@ -152,6 +159,11 @@ type FetchInput = {
   maxFileBytes: number
   fetch?: Fetch
   timeoutMs?: number
+  /** All of a delivery's fetches together; DELIVERY_MS when absent. */
+  deliveryMs?: number
+  /** Asked once the email's text is read and its PDFs' details pass, before
+   *  any is downloaded: an answer for the message ends the fetch there. */
+  admit?: (message: Omit<IntakeMessage, 'attachments'>) => Promise<IntakeOutcome | null>
 }
 
 /** The received email as the intake takes it: its subject, its text (from its
@@ -164,22 +176,28 @@ type FetchInput = {
  *  No redirect is followed, and downloads go only to Resend's own https
  *  hosts, without the key. What Resend would answer again is a refusal,
  *  `email_unavailable`; its own trouble, or a key it refuses, throws, so the
- *  webhook is delivered again. */
+ *  webhook is delivered again, as does a delivery whose fetches take longer
+ *  than DELIVERY_MS in all. Given `admit`, the request is answered before any
+ *  PDF is downloaded (DEC-046). */
 export async function fetchResendMessage(emailId: string, input: FetchInput): Promise<ResendFetched> {
+  const deliveryMs = input.deliveryMs ?? DELIVERY_MS
+  const delivery = AbortSignal.timeout(deliveryMs)
   try {
-    return await fetchMessage(emailId, input)
+    return await fetchMessage(emailId, input, delivery)
   } catch (error) {
+    if (delivery.aborted) throw new Error(`Resend took longer than ${deliveryMs / 1000} s for the email and its files`)
     if (!(error instanceof Unavailable)) throw error
     return { ok: false, error: 'email_unavailable', detail: `Resend couldn't give the email or its files: ${error.message}.` }
   }
 }
 
-async function fetchMessage(emailId: string, input: FetchInput): Promise<ResendFetched> {
+async function fetchMessage(emailId: string, input: FetchInput, delivery: AbortSignal): Promise<ResendFetched> {
   const fetchImpl = input.fetch ?? fetch
   const timeout = input.timeoutMs ?? 30_000
   const get = async (url: string, what: string, key?: string) => {
     const headers = key ? { authorization: `Bearer ${key}` } : undefined
-    const res = await fetchImpl(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(timeout) })
+    const signal = AbortSignal.any([AbortSignal.timeout(timeout), delivery])
+    const res = await fetchImpl(url, { headers, redirect: 'manual', signal })
     if (res.ok) return res
     await res.body?.cancel()
     if (key && (res.status === 401 || res.status === 403)) {
@@ -224,6 +242,13 @@ async function fetchMessage(emailId: string, input: FetchInput): Promise<ResendF
   if (large.length) return tooLarge(large)
   if (pdfs.reduce((sum, file) => sum + (file.size ?? 0), 0) > MAX_MESSAGE_BYTES) return tooMuch
 
+  const text = email.text?.trim() ? email.text : htmlToText(email.html ?? '')
+  const read = { message_id: `resend:${emailId}`, subject: email.subject ?? '', text }
+  // The request is read before any PDF is downloaded, so mail that isn't one,
+  // the run it already made, or the hour's limit downloads nothing (DEC-046).
+  const outcome = pdfs.length && input.admit ? await input.admit(read) : null
+  if (outcome) return { ok: true, message: { ...read, attachments: [] }, outcome }
+
   const attachments: IntakeMessage['attachments'] = []
   let used = 0
   for (const pdf of pdfs) {
@@ -240,8 +265,7 @@ async function fetchMessage(emailId: string, input: FetchInput): Promise<ResendF
     attachments.push({ filename: pdf.filename ?? `${pdf.id}.pdf`, content_type: pdf.content_type ?? 'application/pdf', content })
   }
 
-  const text = email.text?.trim() ? email.text : htmlToText(email.html ?? '')
-  return { ok: true, message: { message_id: `resend:${emailId}`, subject: email.subject ?? '', text, attachments } }
+  return { ok: true, message: { ...read, attachments } }
 }
 
 /** A response's body, or null past `max` bytes: a length it declares is
