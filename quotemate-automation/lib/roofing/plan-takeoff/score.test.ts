@@ -44,6 +44,23 @@ describe('scoreTakeoff', () => {
     expect(scoreTakeoff(GRANGE, scaled(1.031)).area.pass).toBe(false)
   })
 
+  it('scores each roof when the counts match, so offsetting errors fail', () => {
+    // House 1 10% under and House 2 10% over leave the job's total exact.
+    const offset = variant((t) => {
+      t.structures[0].planes[0].plan_area_m2 = 87.53
+      t.structures[1].planes[0].plan_area_m2 = 106.97
+    })
+    const score = scoreTakeoff(GRANGE, offset)
+    expect(failing(score)).toEqual(['area'])
+    expect(score.area.detail).toBe(
+      '230.55 m² against 230.55 m² (0.0%). By roof: House 2 106.97 m² against 97.25 m² (10.0%); House 1 87.53 m² against 97.25 m² (10.0%).',
+    )
+  })
+
+  it('pairs roofs by size, not by the order they were read in', () => {
+    expect(scoreTakeoff(GRANGE, variant((t) => { t.structures.reverse() })).pass).toBe(true)
+  })
+
   it('fails the area when a plane has none, as the live reading of the carport does', () => {
     const score = scoreTakeoff(GRANGE, variant((t) => { t.structures[2].planes[0].plan_area_m2 = null }))
     expect(failing(score)).toEqual(['area'])
