@@ -67,11 +67,46 @@ describe.skipIf(!W_FILES.every((f) => existsSync(`${WHITTAKER}/${f}`)) || !exist
     const [house, section] = takeoff.structures
     expect(house.planes.map((p) => [p.pitch_deg, p.pitch_source])).toEqual(house.planes.map(() => [25, 'elevation']))
     expect(section.planes[0]).toMatchObject({ pitch_deg: 5, pitch_source: 'elevation' })
-    expect(house.planes[0].evidence.at(-1)).toMatchObject({ file: 'elevations.pdf', page: 1, text: expect.stringMatching(/^Pitch 25°/) })
+    expect(house.planes[0].evidence).toContainEqual({ file: 'elevations.pdf', page: 1, text: expect.stringMatching(/^Pitch 25°/), bbox: null })
 
-    // Against the hand-measured reference (TKO-00d): the pitches now hold. The
-    // area waits on TKO-30's second half, measuring the hip roof in plan.
+    // Against the hand-measured reference (TKO-00d): the pitches now hold.
     const score = scoreTakeoff(read('eval/roof-takeoff/whittaker/takeoff.json'), takeoff)
     expect([score.structures.pass, score.pitch.pass]).toEqual([true, true])
+  }, 60_000)
+
+  // TKO-30's second half: A104 dimensions nothing, but draws the hipped
+  // house's hips, valley and ridges, so they measure it (DEC-045).
+  it("measures the hipped house's six faces and its lines from A104's drawn hips and ridges, as the reference does", async () => {
+    const reading = read(W_READING)
+    const files = new Map(W_FILES.map((f) => [f, new Uint8Array(readFileSync(`${WHITTAKER}/${f}`))]))
+    const { takeoff, hipped } = await refineReading(reading, { sheets: reading.sheets, files })
+    const reference = read('eval/roof-takeoff/whittaker/takeoff.json')
+    expect(hipped).toBe(6)
+
+    // Each face within 1% of the reference's hip faces, smallest to largest.
+    const [house, section] = takeoff.structures
+    const [hipFaces] = reference.structures.map((s) => s.planes.filter((p) => p.pitch_deg === 25))
+    const bySize = (planes: typeof hipFaces) => planes.map((p) => [p.fall, p.plan_area_m2 ?? 0] as const).sort((a, b) => a[1] - b[1])
+    const [mine, theirs] = [bySize(house.planes), bySize(hipFaces)]
+    expect(mine.map(([fall]) => fall)).toEqual(theirs.map(([fall]) => fall))
+    expect(mine.every(([, area], i) => within(area, theirs[i][1], 1))).toBe(true)
+    expect(house.planes.every((p) => p.confidence === 'medium' && p.polygon_mm && p.sloped_area_m2)).toBe(true)
+    expect(house.planes[0].evidence.at(-1)).toMatchObject({ file: 'floor-plan.pdf', page: 1, text: expect.stringMatching(/^Hip roof: drawn hips and ridges, face 1 of 6/) })
+
+    // Its lines within 0.5% of the reference's, along the roof at 25° (DEC-039).
+    // The reference lists the hip roof's 15 lines first, then the lower roofs'.
+    const lengths = (edges: typeof house.edges, type: string) => edges.filter((e) => e.type === type).map((e) => e.length_m ?? 0).sort((a, b) => a - b)
+    const hipRoofLines = reference.structures[0].edges.slice(0, 15)
+    for (const [type, count] of [['hip', 6], ['valley', 1], ['ridge', 2], ['eave', 6]] as const) {
+      const [got, want] = [lengths(house.edges, type), lengths(hipRoofLines, type)]
+      expect(got).toHaveLength(count)
+      expect(got.every((l, i) => within(l, want[i], 0.5))).toBe(true)
+    }
+
+    // The new section stays as read. The job's area waits on the lower roofs
+    // and the new section, which the reading neither lists nor places.
+    expect(section.planes.map((p) => [p.id, p.plan_area_m2])).toEqual([['S2-P1', null]])
+    const score = scoreTakeoff(reference, takeoff)
+    expect([score.structures.pass, score.pitch.pass, score.area.pass]).toEqual([true, true, false])
   }, 60_000)
 })

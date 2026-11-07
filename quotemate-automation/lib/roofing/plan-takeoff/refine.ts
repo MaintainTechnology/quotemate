@@ -2,13 +2,15 @@
 // TKO-30): each chosen plan sheet's scale is checked against its own drawings,
 // the best supported scale goes into the reading, the roofs the drawings don't
 // dimension are scaled from their outlines, the planes they give no pitch take
-// one from an elevation's roof lines, and each skillion's edges are worked out
-// from its size. The stage and the eval share it, so the eval scores a reading
-// as the pipeline finishes it.
+// one from an elevation's roof lines, a hip roof is measured from its drawn
+// hips and ridges, and each skillion's edges are worked out from its size.
+// The stage and the eval share it, so the eval scores a reading as the
+// pipeline finishes it.
 
 import { calibrateSheet, chooseScale, pageSegments, type SheetScale } from './calibrate'
 import { MIN_PAGE_TEXT, pageText, statedScale, type Sheet } from './classify'
 import { skillionEdges } from './edges'
+import { measureHipRoofs } from './hips'
 import { measureOutlines, type MeasuredSheet } from './outline'
 import { elevationPitches, pitchFromElevations, type ElevationPitch } from './pitch'
 import { RoofPlanTakeoffSchema, type RoofPlanTakeoff } from './schema'
@@ -61,15 +63,18 @@ export async function refineReading(reading: RoofPlanTakeoff, input: { sheets: S
   }
   const scale = chooseScale(scales)
   const outlined = measureOutlines(scale ? { ...reading, scale } : reading, measurable)
-  // A pitch before the edges, which run down a skillion along its pitch.
+  // A pitch before the edges, which run down a skillion, and along a hip
+  // roof's hips and valleys, at its pitch.
   const pitched = pitches ? pitchFromElevations(outlined.takeoff, pitches.found, pitches.sheet) : { takeoff: outlined.takeoff, pitched: 0 }
-  const { takeoff, derived } = skillionEdges(pitched.takeoff)
+  const hips = measureHipRoofs(pitched.takeoff, measurable)
+  const { takeoff, derived } = skillionEdges(hips.takeoff)
   return {
     takeoff: RoofPlanTakeoffSchema.parse(takeoff),
-    changed: scale !== null || outlined.measured > 0 || pitched.pitched > 0 || derived > 0,
+    changed: scale !== null || outlined.measured > 0 || pitched.pitched > 0 || hips.hipped > 0 || derived > 0,
     sheets: scales.length,
     measured: outlined.measured,
     pitched: pitched.pitched,
+    hipped: hips.hipped,
     derived,
   }
 }
