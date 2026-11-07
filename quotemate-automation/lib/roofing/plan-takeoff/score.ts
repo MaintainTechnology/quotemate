@@ -1,7 +1,8 @@
 // Scores a takeoff against its hand-measured reference (TKO-15) on the four
-// P2 gates, over the whole job: a reading can split or merge roofs (Grange's
-// carport is two bays, or one), so structures aren't paired one to one. Pure,
-// so the eval script and the tests share it.
+// P2 gates. A reading can split or merge roofs (Grange's carport is two bays,
+// or one), so roofs pair only when the counts match, and then for area alone;
+// the other gates score the whole job. Pure, so the eval script and the tests
+// share it.
 
 import type { RoofPlanTakeoff } from './schema'
 
@@ -23,13 +24,26 @@ function structures(expected: Takeoff, actual: Takeoff): Gate {
   return { pass: a === e, detail: `${a} roofs read, ${e} expected.` }
 }
 
-/** Plan area: the job's total within 3%. An unknown area fails it. */
+/** Plan area: the job's total within 3%, and, when the roof counts match, each
+ *  roof within 3% of the one it pairs with, so one roof's shortfall can't hide
+ *  another's excess. Roofs pair by size, largest with largest. A reading that
+ *  splits or merges roofs is held to its total, as the structures gate already
+ *  fails it. An unknown area fails it. */
 function area(expected: Takeoff, actual: Takeoff): Gate {
-  const total = (t: Takeoff) => round(planesOf(t).reduce((sum, p) => sum + (p.plan_area_m2 ?? 0), 0))
+  const sum = (planes: Takeoff['structures'][number]['planes']) => round(planes.reduce((s, p) => s + (p.plan_area_m2 ?? 0), 0))
   const unknown = planesOf(actual).filter((p) => p.plan_area_m2 === null).length
   if (unknown) return { pass: false, detail: `${unknown} plane${unknown === 1 ? ' has' : 's have'} no area, so the total is incomplete.` }
-  const [e, a] = [total(expected), total(actual)]
-  return { pass: off(a, e) <= GATES.areaPct, detail: `${a} m² against ${e} m² (${off(a, e).toFixed(1)}%).` }
+  const [e, a] = [sum(planesOf(expected)), sum(planesOf(actual))]
+  const job = `${a} m² against ${e} m² (${off(a, e).toFixed(1)}%).`
+  // ponytail: pairs by size order, the natural pairing while roofs differ in size; pair by position if two references ever hold same-size roofs read differently
+  const roofs = (t: Takeoff) => t.structures.filter((s) => s.planes.length)
+    .map((s) => ({ label: s.label, m2: sum(s.planes) }))
+    .sort((x, y) => y.m2 - x.m2)
+  const [want, got] = [roofs(expected), roofs(actual)]
+  const misses = want.length !== got.length ? [] : got.flatMap((roof, i) => off(roof.m2, want[i].m2) <= GATES.areaPct
+    ? []
+    : [`${roof.label} ${roof.m2} m² against ${want[i].m2} m² (${off(roof.m2, want[i].m2).toFixed(1)}%)`])
+  return { pass: off(a, e) <= GATES.areaPct && !misses.length, detail: misses.length ? `${job} By roof: ${misses.join('; ')}.` : job }
 }
 
 /** Pitch: every pitch in the reference has one within 2° in the reading, and

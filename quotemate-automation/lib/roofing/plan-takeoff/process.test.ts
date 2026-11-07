@@ -153,7 +153,7 @@ describe('processStage', () => {
       ...(stage === 'extract' && { model: 'claude-opus-4-8', input_tokens: 1000, output_tokens: 200 }),
     })))
     expect(traces.every((t) => typeof t.duration_ms === 'number')).toBe(true)
-  })
+  }, 20_000) // Six stages over real PDFs: the room `pnpm test` gives every test, so a bare vitest run on a loaded machine holds too.
 
   it('does nothing for a job the run has moved past, a replaced job, or a deleted run', async () => {
     const fake = setup('classify', { status: 'extracting' })

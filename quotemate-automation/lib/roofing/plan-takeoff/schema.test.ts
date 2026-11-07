@@ -28,9 +28,12 @@ describe('RoofPlanTakeoffSchema bounds', () => {
 describe('takeoffTooLarge', () => {
   it('passes a real reading and refuses a hostile body without walking all of it', () => {
     expect(takeoffTooLarge(GRANGE)).toBe(false)
+    // Built before the clock starts, so the budget times the check alone, not a loaded machine building them.
+    const roofs = { structures: Array.from({ length: 300_000 }, () => ({})) }
+    const questions = { scope: { questions: ['x'.repeat(300_000)] } }
     const started = performance.now()
-    expect(takeoffTooLarge({ structures: Array.from({ length: 300_000 }, () => ({})) })).toBe(true)
-    expect(takeoffTooLarge({ scope: { questions: ['x'.repeat(300_000)] } })).toBe(true)
+    expect(takeoffTooLarge(roofs)).toBe(true)
+    expect(takeoffTooLarge(questions)).toBe(true)
     expect(performance.now() - started).toBeLessThan(200)
   })
 })
