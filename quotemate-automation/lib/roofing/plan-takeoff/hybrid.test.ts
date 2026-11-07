@@ -135,6 +135,8 @@ describe('measureAndMerge', () => {
     expect(outcome.ok && outcome.checks.results.map((r) => r.id)).toContain('C10')
     const saved = fake.tables.plan_extractions[0].corrected_items as RoofPlanTakeoff
     expect(saved.structures.map((s) => s.source)).toEqual(['hybrid', 'plans'])
+    // The run's geometry now comes from the plans and aerial data both (App Flow F6).
+    expect(fake.tables.roof_takeoff_runs[0].geometry_source).toBe('hybrid')
   })
 
   it("looks up a site named without its state or postcode in the tenant's own state, as TAG named Whittaker", async () => {
