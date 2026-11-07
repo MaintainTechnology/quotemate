@@ -61,7 +61,7 @@ const checks: Checks = {
 const pack = packTakeoff(takeoff, checks)
 const html = briefHtml({
   branding: { businessName: 'Peppers Roofing & Co', contactLine: '07 0000 0000' },
-  run: { job_ref: 'J14997', job_name: 'Grange Rd dual occupancy', site_address: '59 Grange Rd, Eastern Heights QLD 4305', scope_note: 'Roofing - Steel (Supply & Fit). Exclude the deck roof.', builder_business: 'Example Constructions Pty Ltd' },
+  run: { job_ref: 'J10001', job_name: 'Sample St dual occupancy', site_address: '12 Sample St, Exampleton QLD 4305', scope_note: 'Roofing - Steel (Supply & Fit). Exclude the deck roof.', builder_business: 'Example Constructions Pty Ltd' },
   pack,
   geometry: packGeometry(pack.structures),
   date: new Date('2026-11-06T02:00:00Z'),
@@ -71,8 +71,8 @@ const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
 describe('briefHtml', () => {
   it('heads the brief with the job, the site and the builder from the request', () => {
     expect(text).toContain('Roof brief')
-    expect(text).toContain('J14997')
-    expect(text).toContain('59 Grange Rd, Eastern Heights QLD 4305')
+    expect(text).toContain('J10001')
+    expect(text).toContain('12 Sample St, Exampleton QLD 4305')
     expect(text).toContain('Example Constructions Pty Ltd')
     expect(text).toContain('6 November 2026')
     expect(text).toContain('Roofing - Steel (Supply &amp; Fit). Exclude the deck roof.')

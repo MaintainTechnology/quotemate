@@ -25,8 +25,8 @@ describe('paths and work keys', () => {
 describe('createRun', () => {
   const request: NewRun = {
     tenantId: TENANT,
-    site_address: '59 Grange Rd, Eastern Heights QLD 4305',
-    job_ref: 'J14997',
+    site_address: '12 Sample St, Exampleton QLD 4305',
+    job_ref: 'J10001',
     files: [
       { filename: 'Architectural.pdf', size_bytes: 17_294_476, doc_type: 'plan_set' },
       { filename: 'Engineering.pdf', size_bytes: 2_435_777, doc_type: 'engineering' },
@@ -38,7 +38,7 @@ describe('createRun', () => {
     const created = await createRun(fake.db, 'plan-pdfs', request)
 
     expect(fake.tables.roof_takeoff_runs).toEqual([expect.objectContaining({
-      id: created.run_id, tenant_id: TENANT, source: 'dashboard', site_address: request.site_address, job_ref: 'J14997', job_name: null, builder: null,
+      id: created.run_id, tenant_id: TENANT, source: 'dashboard', site_address: request.site_address, job_ref: 'J10001', job_name: null, builder: null,
     })])
     const uploads = fake.tables.plan_uploads
     expect(uploads.map((row) => [row.filename, row.trade, row.doc_type, row.takeoff_run_id, row.tenant_id])).toEqual([

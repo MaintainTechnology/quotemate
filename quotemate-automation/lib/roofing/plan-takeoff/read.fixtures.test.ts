@@ -12,7 +12,7 @@ import type { Sheet } from './classify'
 import { readPlans } from './read'
 import { RoofPlanTakeoffSchema } from './schema'
 
-const FIXTURES = { grange: 'J14997-59-Grange-Rd', whittaker: 'J14945-5-Whittaker-St' }
+const FIXTURES = { grange: 'grange', whittaker: 'whittaker' }
 const LIVE = process.env.TAKEOFF_LIVE_MODEL === '1'
 
 for (const [fixture, folder] of Object.entries(FIXTURES)) {

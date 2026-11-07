@@ -16,7 +16,7 @@
   },
   "sheets": [
     {
-      "file": "Elevations 5 Whitaker street .pdf",
+      "file": "elevations.pdf",
       "page": 1,
       "number": "A302",
       "title": "PROPOSED ELEVATIONS",
@@ -26,7 +26,7 @@
       "used": true
     },
     {
-      "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+      "file": "floor-plan.pdf",
       "page": 1,
       "number": "A104",
       "title": "PROPOSED GROUND & ROOF PLANS",
@@ -36,7 +36,7 @@
       "used": true
     },
     {
-      "file": "Sections - 5 Whittaker street.pdf",
+      "file": "sections.pdf",
       "page": 1,
       "number": "A303",
       "title": "PROPOSED SECTIONS",
@@ -46,7 +46,7 @@
       "used": true
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 1,
       "number": null,
       "title": null,
@@ -56,7 +56,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 2,
       "number": null,
       "title": null,
@@ -66,7 +66,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 3,
       "number": "S001",
       "title": "DRAWING REGISTER AND GENERAL NOTES",
@@ -76,7 +76,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 4,
       "number": "S101",
       "title": "FOOTING AND SLAB PLAN",
@@ -86,7 +86,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 5,
       "number": "S111",
       "title": "BORED PIER DETAILS",
@@ -96,7 +96,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 6,
       "number": "S112",
       "title": "BLOCKWORK RETAINING WALL DETAILS",
@@ -106,7 +106,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 7,
       "number": "S113",
       "title": "CONCRETE SLEEPER RETAINING WALL DETAILS",
@@ -116,7 +116,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 8,
       "number": "S114",
       "title": "TYPICAL PIER FOUNDING TO ADJACENT STRUCTURES DETAILS",
@@ -126,7 +126,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 9,
       "number": "S201",
       "title": "FLOOR AND DECK FRAMING PLAN",
@@ -136,7 +136,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 10,
       "number": "S202",
       "title": "ROOF FRAMING PLAN",
@@ -146,7 +146,7 @@
       "used": true
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 11,
       "number": "S211",
       "title": "FRAMING DETAILS - SHEET 1",
@@ -156,7 +156,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 12,
       "number": "S212",
       "title": "FRAMING DETAILS - SHEET 2",
@@ -166,7 +166,7 @@
       "used": false
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 13,
       "number": "S213",
       "title": "SECTION THROUGH NEW FLOOR - SECTION 1",
@@ -176,7 +176,7 @@
       "used": true
     },
     {
-      "file": "final Morgans Engineering plans - 5 Whittaker street .pdf",
+      "file": "engineering.pdf",
       "page": 14,
       "number": "S214",
       "title": "SECTION THROUGH NEW DECK - SECTION 2",
@@ -220,13 +220,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302: the main roof drawn at 25° in all four elevations",
               "bbox": null
@@ -264,13 +264,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302: the main roof drawn at 25° in all four elevations",
               "bbox": null
@@ -312,13 +312,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302: the main roof drawn at 25° in all four elevations",
               "bbox": null
@@ -360,13 +360,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302: the main roof drawn at 25° in all four elevations",
               "bbox": null
@@ -404,13 +404,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302: the main roof drawn at 25° in all four elevations",
               "bbox": null
@@ -444,13 +444,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302: the main roof drawn at 25° in all four elevations",
               "bbox": null
@@ -496,13 +496,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302 east elevation: the kitchen and sleepout roof drawn at 4.9°",
               "bbox": null
@@ -536,13 +536,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302 east elevation: the kitchen and sleepout roof drawn at 4.9°",
               "bbox": null
@@ -576,13 +576,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302 north elevation: the entry skillions drawn at 4.8°",
               "bbox": null
@@ -620,13 +620,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302 north elevation: the entry skillions drawn at 4.8°",
               "bbox": null
@@ -853,13 +853,13 @@
           "confidence": "medium",
           "evidence": [
             {
-              "file": "Floor plan - 5 Whittaker street north Ipswich .pdf",
+              "file": "floor-plan.pdf",
               "page": 1,
               "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
               "bbox": null
             },
             {
-              "file": "Elevations 5 Whitaker street .pdf",
+              "file": "elevations.pdf",
               "page": 1,
               "text": "A302 south elevation: the laundry roof drawn at 4.8°",
               "bbox": null

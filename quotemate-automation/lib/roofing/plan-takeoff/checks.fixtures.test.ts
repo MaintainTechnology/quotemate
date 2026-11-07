@@ -11,8 +11,8 @@ import { areaSchedule, runChecks } from './checks'
 import { pageText } from './classify'
 import { RoofPlanTakeoffSchema } from './schema'
 
-const GRANGE_PLANS = 'docs/tag-roofing-requests/J14997-59-Grange-Rd/Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf'
-const WHITTAKER_READING = 'docs/tag-roofing-requests/J14945-5-Whittaker-St/reading.json'
+const GRANGE_PLANS = 'docs/tag-roofing-requests/grange/architectural.pdf'
+const WHITTAKER_READING = 'docs/tag-roofing-requests/whittaker/reading.json'
 const scopeNote = (fixture: string) => JSON.parse(readFileSync(`eval/roof-takeoff/${fixture}/request.json`, 'utf8')).scope_note as string
 
 describe.skipIf(!existsSync(GRANGE_PLANS))('Grange checks', () => {

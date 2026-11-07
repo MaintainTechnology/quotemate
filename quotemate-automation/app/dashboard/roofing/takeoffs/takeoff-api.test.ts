@@ -15,11 +15,11 @@ describe('takeoffApi', () => {
   it('calls the service as the tradie, with a JSON body', async () => {
     const fetch = answer(201, { run_id: 'run-1' })
     vi.stubGlobal('fetch', fetch)
-    expect(await takeoffApi('/api/takeoff/runs', { method: 'POST', body: { site_address: '59 Grange Rd' } })).toEqual({ run_id: 'run-1' })
+    expect(await takeoffApi('/api/takeoff/runs', { method: 'POST', body: { site_address: '12 Sample St' } })).toEqual({ run_id: 'run-1' })
     expect(fetch).toHaveBeenCalledWith('/api/takeoff/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer tradie-token' },
-      body: '{"site_address":"59 Grange Rd"}',
+      body: '{"site_address":"12 Sample St"}',
     })
   })
 
