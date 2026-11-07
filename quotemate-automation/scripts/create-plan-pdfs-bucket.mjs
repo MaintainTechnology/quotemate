@@ -27,7 +27,8 @@ const supabase = createClient(
 const SPEC = {
   public: false,
   fileSizeLimit: 50 * 1024 * 1024,
-  allowedMimeTypes: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'],
+  // application/zip: the takeoff's Roof Wizard packs (migration 225, TKO-18).
+  allowedMimeTypes: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'application/zip'],
 }
 
 const { data: existing } = await supabase.storage.getBucket('plan-pdfs')

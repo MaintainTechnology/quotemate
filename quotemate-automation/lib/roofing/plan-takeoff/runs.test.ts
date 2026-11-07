@@ -25,8 +25,8 @@ describe('paths and work keys', () => {
 describe('createRun', () => {
   const request: NewRun = {
     tenantId: TENANT,
-    site_address: '59 Grange Rd, Eastern Heights QLD 4305',
-    job_ref: 'J14997',
+    site_address: '12 Sample St, Exampleton QLD 4305',
+    job_ref: 'J10001',
     files: [
       { filename: 'Architectural.pdf', size_bytes: 17_294_476, doc_type: 'plan_set' },
       { filename: 'Engineering.pdf', size_bytes: 2_435_777, doc_type: 'engineering' },
@@ -38,7 +38,7 @@ describe('createRun', () => {
     const created = await createRun(fake.db, 'plan-pdfs', request)
 
     expect(fake.tables.roof_takeoff_runs).toEqual([expect.objectContaining({
-      id: created.run_id, tenant_id: TENANT, source: 'dashboard', site_address: request.site_address, job_ref: 'J14997', job_name: null, builder: null,
+      id: created.run_id, tenant_id: TENANT, source: 'dashboard', site_address: request.site_address, job_ref: 'J10001', job_name: null, builder: null,
     })])
     const uploads = fake.tables.plan_uploads
     expect(uploads.map((row) => [row.filename, row.trade, row.doc_type, row.takeoff_run_id, row.tenant_id])).toEqual([
@@ -147,24 +147,45 @@ describe('startRun', () => {
     expect(fake.tables.roof_takeoff_runs[0].status).toBe('draft')
   })
 
-  it('counts the last hour of starts across the tenant and says when a slot frees up', async () => {
-    const started = (id: string, tenantId: string, starts: string[]) =>
-      run({ id, tenant_id: tenantId, status: 'ready', usage: { starts }, updated_at: starts[starts.length - 1] })
-    const runs = [
-      run(),
-      // 08:00 is more than an hour before 10:00; 09:10 and 09:40 count.
-      started('run-2', TENANT, ['2026-11-01T08:00:00.000Z', '2026-11-01T09:10:00.000Z']),
-      started('run-3', TENANT, ['2026-11-01T09:40:00.000Z']),
-      started('run-4', OTHER_TENANT, ['2026-11-01T09:50:00.000Z']),
+  it('counts the last hour of starts across the tenant, from the ledger, and says when a slot frees up', async () => {
+    const starts = [
+      // 08:00 is more than an hour before 10:00; 09:10 and 09:40 count, the
+      // second though its run has since been deleted (TKO-28).
+      { tenant_id: TENANT, run_id: 'run-2', started_at: '2026-11-01T08:00:00.000Z' },
+      { tenant_id: TENANT, run_id: 'run-2', started_at: '2026-11-01T09:10:00.000Z' },
+      { tenant_id: TENANT, run_id: 'deleted-run', started_at: '2026-11-01T09:40:00.000Z' },
+      { tenant_id: OTHER_TENANT, run_id: 'run-4', started_at: '2026-11-01T09:50:00.000Z' },
     ]
-    const limited = fakeDb({ runs: structuredClone(runs), uploads: [file], objects: uploaded })
+    const limited = fakeDb({ runs: [run()], uploads: [file], objects: uploaded, starts: structuredClone(starts) })
     await expect(start(limited, { runsPerHour: 2 })).resolves.toEqual({
       ok: false, error: 'rate_limited', retry_at: '2026-11-01T10:10:00.000Z',
     })
     expect(limited.rpc).not.toHaveBeenCalled()
 
-    const allowed = fakeDb({ runs: structuredClone(runs), uploads: [file], objects: uploaded })
+    const allowed = fakeDb({ runs: [run()], uploads: [file], objects: uploaded, starts: structuredClone(starts) })
     await expect(start(allowed, { runsPerHour: 3 })).resolves.toMatchObject({ ok: true })
+  })
+
+  it('writes each start to the ledger, which outlives the run (TKO-28)', async () => {
+    const fake = fakeDb({ runs: [run()], uploads: [file], objects: uploaded })
+    await expect(start(fake)).resolves.toMatchObject({ ok: true })
+    expect(fake.tables.roof_takeoff_starts).toEqual([expect.objectContaining({ tenant_id: TENANT, run_id: RUN, started_at: NOW.toISOString() })])
+
+    // Deleting the run leaves its start counted: a new run can't start past the limit.
+    await deleteRun(fake.db, 'plan-pdfs', { tenantId: TENANT, runId: RUN })
+    expect(fake.tables.roof_takeoff_starts).toHaveLength(1)
+    fake.tables.roof_takeoff_runs.push(run())
+    fake.objects[runFilePath(TENANT, RUN, 'upload-1')] = 1000
+    fake.tables.plan_uploads.push(file)
+    await expect(start(fake, { runsPerHour: 1 })).resolves.toMatchObject({ ok: false, error: 'rate_limited' })
+  })
+
+  it('puts the run back when the ledger refuses the start, and enqueues nothing', async () => {
+    const fake = fakeDb({ runs: [run()], uploads: [file], objects: uploaded })
+    fake.fail.ledger = true
+    await expect(start(fake)).rejects.toThrow('ledger refused')
+    expect(fake.tables.roof_takeoff_runs[0]).toMatchObject({ status: 'draft', stage: null })
+    expect(fake.rpc).not.toHaveBeenCalled()
   })
 
   it('reports conflict_status when another start wins the race', async () => {
@@ -322,6 +343,16 @@ describe('deleteRun', () => {
     expect(fake.tables.plan_extractions).toEqual([])
   })
 
+  it("removes the run's exported packs too, each in its own folder (TKO-18)", async () => {
+    const fake = setup()
+    const pack = `roofing/${TENANT}/${RUN}/exports/2026-11-06T03-04-05-000Z/pack.zip`
+    const older = `roofing/${TENANT}/${RUN}/exports/2026-11-05T01-00-00-000Z/pack.zip`
+    fake.objects[pack] = 2048
+    fake.objects[older] = 1024
+    await expect(remove(fake)).resolves.toEqual({ ok: true, files: 4 })
+    expect(Object.keys(fake.objects)).toEqual([KEPT])
+  })
+
   it('keeps the run when storage refuses, so the delete can be tried again', async () => {
     const fake = setup()
     fake.fail.removal = true
@@ -373,16 +404,30 @@ describe('sweepExpiredRuns (D-06)', () => {
 
   it('deletes each run more than 12 months past its last activity, in any status, with its files, uploads and readings', async () => {
     const fake = setup()
-    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW })).resolves.toEqual({ runs: 2, files: 2, failed: [] })
+    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW })).resolves.toEqual({ runs: 2, files: 2, failed: [], fixtures: 0 })
     expect(runIds(fake)).toEqual(['twelve-months', 'recent'])
     expect(Object.keys(fake.objects)).toEqual([RECENT_FILE])
     expect(fake.tables.plan_uploads.map((r) => r.id)).toEqual(['u-recent'])
     expect(fake.tables.plan_extractions).toEqual([])
   })
 
+  it('removes an eval fixture promoted from a live job 12 months on, and keeps the rest (TKO-00c)', async () => {
+    const fake = setup()
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    Object.assign(fake.objects, {
+      'eval/old/request.json': json({ job_ref: 'J1', promoted: { run_id: 'r0', at: '2026-11-01T00:00:00.000Z', expires_at: '2027-11-01T00:00:00.000Z' } }),
+      'eval/old/takeoff.json': 5,
+      'eval/old/plans-1.pdf': 10,
+      'eval/new/request.json': json({ job_ref: 'J2', promoted: { run_id: 'r9', at: '2027-06-01T00:00:00.000Z', expires_at: '2028-06-01T00:00:00.000Z' } }),
+      'eval/grange/request.json': json({ job_ref: 'J10001' }), // a P0 fixture: never promoted, never expires
+    })
+    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW })).resolves.toMatchObject({ runs: 2, fixtures: 1 })
+    expect(Object.keys(fake.objects).filter((key) => key.startsWith('eval/')).sort()).toEqual(['eval/grange/request.json', 'eval/new/request.json'])
+  })
+
   it('takes the oldest first, and no more than the limit a sweep', async () => {
     const fake = setup()
-    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW, limit: 1 })).resolves.toEqual({ runs: 1, files: 1, failed: [] })
+    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW, limit: 1 })).resolves.toEqual({ runs: 1, files: 1, failed: [], fixtures: 0 })
     expect(runIds(fake)).toEqual(['old-failed', 'twelve-months', 'recent'])
   })
 
@@ -393,7 +438,7 @@ describe('sweepExpiredRuns (D-06)', () => {
       const run = fake.tables.roof_takeoff_runs.find((r) => r.id === 'old-failed')
       if (run) run.updated_at = NOW.toISOString()
     }
-    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW })).resolves.toEqual({ runs: 1, files: 1, failed: [] })
+    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW })).resolves.toEqual({ runs: 1, files: 1, failed: [], fixtures: 0 })
     expect(runIds(fake)).toEqual(['old-failed', 'twelve-months', 'recent'])
   })
 
@@ -401,7 +446,7 @@ describe('sweepExpiredRuns (D-06)', () => {
     const fake = setup()
     let lists = 0
     fake.hooks.onList = () => { fake.fail.removal = lists++ === 0 }
-    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW })).resolves.toEqual({ runs: 1, files: 1, failed: ['old-saved'] })
+    await expect(sweepExpiredRuns(fake.db, 'plan-pdfs', { now: NOW })).resolves.toEqual({ runs: 1, files: 1, failed: ['old-saved'], fixtures: 0 })
     expect(runIds(fake)).toEqual(['old-saved', 'twelve-months', 'recent'])
   })
 })

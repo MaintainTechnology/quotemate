@@ -1,11 +1,13 @@
-// The calibrate stage's work without the database (TKO-12, TKO-29): each
-// chosen plan sheet's scale is checked against its own drawings, the best
-// supported scale goes into the reading, and the roofs the drawings don't
-// dimension are scaled from their outlines. The stage and the eval share it,
-// so the eval scores a reading as the pipeline finishes it.
+// The calibrate stage's work without the database (TKO-12, TKO-29, TKO-15):
+// each chosen plan sheet's scale is checked against its own drawings, the best
+// supported scale goes into the reading, the roofs the drawings don't dimension
+// are scaled from their outlines, and each skillion's edges are worked out from
+// its size. The stage and the eval share it, so the eval scores a reading as
+// the pipeline finishes it.
 
 import { calibrateSheet, chooseScale, pageSegments, type SheetScale } from './calibrate'
 import { MIN_PAGE_TEXT, pageText, statedScale, type Sheet } from './classify'
+import { skillionEdges } from './edges'
 import { measureOutlines, type MeasuredSheet } from './outline'
 import { RoofPlanTakeoffSchema, type RoofPlanTakeoff } from './schema'
 
@@ -42,11 +44,13 @@ export async function refineReading(reading: RoofPlanTakeoff, input: { sheets: S
     }
   }
   const scale = chooseScale(scales)
-  const { takeoff, measured } = measureOutlines(scale ? { ...reading, scale } : reading, measurable)
+  const outlined = measureOutlines(scale ? { ...reading, scale } : reading, measurable)
+  const { takeoff, derived } = skillionEdges(outlined.takeoff)
   return {
     takeoff: RoofPlanTakeoffSchema.parse(takeoff),
-    changed: scale !== null || measured > 0,
+    changed: scale !== null || outlined.measured > 0 || derived > 0,
     sheets: scales.length,
-    measured,
+    measured: outlined.measured,
+    derived,
   }
 }

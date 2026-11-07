@@ -20,10 +20,13 @@ export function fakeDb(seed: {
   measurements?: Row[]
   pricingBooks?: Row[]
   tenants?: Row[]
+  /** The start ledger (TKO-28): one row a start, kept when its run goes. */
+  starts?: Row[]
   objects?: Record<string, number | Uint8Array>
 } = {}) {
   const tables: Record<string, Row[]> = {
     roof_takeoff_runs: seed.runs ?? [],
+    roof_takeoff_starts: seed.starts ?? [],
     plan_uploads: seed.uploads ?? [],
     plan_extractions: seed.extractions ?? [],
     pipeline_traces: [],
@@ -31,10 +34,12 @@ export function fakeDb(seed: {
     pricing_book: seed.pricingBooks ?? [],
     tenants: seed.tenants ?? [],
     tenant_licences: [],
+    eval_runs: [],
+    eval_run_items: [],
   }
   const objects = seed.objects ?? {}
-  const fail = { uploadRows: false, signing: false, enqueue: false, readings: false, removal: false, upload: false }
-  const hooks: { onList?: () => void } = {}
+  const fail = { uploadRows: false, signing: false, enqueue: false, readings: false, removal: false, upload: false, ledger: false }
+  const hooks: { onList?: () => void; onUpload?: (path: string) => void } = {}
   const signed: Array<{ bucket: string; path: string; options: unknown }> = []
   const rpc = vi.fn(async (_name: string, params: Row) =>
     fail.enqueue ? { data: null, error: { message: 'queue down' } } : { data: { id: 'job-1', work_key: params.p_key }, error: null })
@@ -76,6 +81,7 @@ export function fakeDb(seed: {
       const op = this.op
       if (op.kind === 'insert') {
         if (this.table === 'plan_uploads' && fail.uploadRows) return { data: null, error: { message: 'insert refused' } }
+        if (this.table === 'roof_takeoff_starts' && fail.ledger) return { data: null, error: { message: 'ledger refused' } }
         // roofing_measurements gets its id from the database, and its
         // (tenant_id, source_request_key) is unique (migration 201).
         const measurement = this.table === 'roofing_measurements'
@@ -121,19 +127,27 @@ export function fakeDb(seed: {
         if (fail.signing) return { data: null, error: { message: 'signing refused' } }
         return { data: { signedUrl: `https://storage.test/upload/sign/${bucket}/${path}?token=t`, token: 't', path }, error: null }
       },
+      // One level, as Supabase lists: a file with its id and size, and each
+      // folder below once, with no id or metadata.
       list: async (folder: string) => {
         hooks.onList?.()
         const prefix = `${folder}/`
-        const data = Object.entries(objects)
-          .filter(([key]) => key.startsWith(prefix))
-          .map(([key, body]) => ({ name: key.slice(prefix.length), metadata: { size: typeof body === 'number' ? body : body.length } }))
-        return { data, error: null }
+        const files: Array<{ name: string; id: string; metadata: { size: number } }> = []
+        const folders = new Set<string>()
+        for (const [key, body] of Object.entries(objects)) {
+          if (!key.startsWith(prefix)) continue
+          const rest = key.slice(prefix.length)
+          if (rest.includes('/')) folders.add(rest.slice(0, rest.indexOf('/')))
+          else files.push({ name: rest, id: key, metadata: { size: typeof body === 'number' ? body : body.length } })
+        }
+        return { data: [...files, ...[...folders].map((name) => ({ name, id: null, metadata: null }))], error: null }
       },
       // No upsert, as the service's uploads use: an object once there stays.
       upload: async (path: string, body: Uint8Array) => {
         if (fail.upload) return { data: null, error: { message: 'upload refused' } }
         if (objects[path] !== undefined) return { data: null, error: { message: 'The resource already exists' } }
         objects[path] = new Uint8Array(body)
+        hooks.onUpload?.(path)
         return { data: { path }, error: null }
       },
       remove: async (paths: string[]) => {

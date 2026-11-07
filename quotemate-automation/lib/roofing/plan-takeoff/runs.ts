@@ -185,17 +185,29 @@ export async function startRun(db: SupabaseClient, bucket: string, input: {
   if (queued.error) throw failure('run start', queued.error)
   if (!queued.data?.length) return { ok: false, error: 'conflict_status' } // another start won
 
-  try {
-    await enqueueStage(run, stage, starts.length, db)
-  } catch (error) {
-    // Put the run back so the caller can try again. The stamp stays, so the
-    // retry gets a new work key even if this enqueue did reach the queue.
+  // Put the run back so the caller can try again. The stamp stays, so the
+  // retry gets a new work key even if an enqueue did reach the queue.
+  const putBack = async () => {
     const undo = await db.from('roof_takeoff_runs')
       .update({ status: run.status, stage: run.stage, status_note: run.status_note, updated_at: now.toISOString() })
       .eq('id', run.id).eq('tenant_id', run.tenant_id).eq('status', 'queued')
     // ponytail: if the undo fails too, the run stays queued with no job and has
     // to be deleted. Add a sweeper for queued runs without jobs if it happens.
     if (undo.error) console.error('[takeoff] run left queued without a job', { runId: run.id, error: undo.error.message })
+  }
+
+  // The start, in the ledger the hourly limit counts (TKO-28): a row that
+  // outlives its run, so deleting runs can't make room for more.
+  const ledger = await db.from('roof_takeoff_starts').insert({ tenant_id: run.tenant_id, run_id: run.id, started_at: now.toISOString() })
+  if (ledger.error) {
+    await putBack()
+    throw failure('start ledger', ledger.error)
+  }
+
+  try {
+    await enqueueStage(run, stage, starts.length, db)
+  } catch (error) {
+    await putBack()
     throw error
   }
   return { ok: true, run_id: run.id, status: 'queued', stage }
@@ -232,16 +244,15 @@ export async function startAllowed(
   return { ok: false, retry_at: new Date(recent[recent.length - runsPerHour] + HOUR_MS).toISOString() }
 }
 
-/** The tenant's start times since `since`, oldest first. A start stamps
- *  updated_at, so every run started since then was also updated since then. */
+/** The tenant's start times since `since`, oldest first, from the start
+ *  ledger (migration 226), which keeps a start when its run is deleted. */
 async function startsSince(db: SupabaseClient, tenantId: string, since: number): Promise<number[]> {
-  const runs = await db.from('roof_takeoff_runs')
-    .select('usage')
-    .eq('tenant_id', tenantId).gte('updated_at', new Date(since).toISOString())
-  if (runs.error) throw failure('start count', runs.error)
-  return (runs.data as Array<Pick<RunRow, 'usage'>>)
-    .flatMap((row) => row.usage?.starts ?? [])
-    .map((at) => Date.parse(at))
+  const starts = await db.from('roof_takeoff_starts')
+    .select('started_at')
+    .eq('tenant_id', tenantId).gte('started_at', new Date(since).toISOString())
+  if (starts.error) throw failure('start count', starts.error)
+  return (starts.data as Array<{ started_at: string }>)
+    .map((row) => Date.parse(row.started_at))
     .filter((at) => at >= since)
     .sort((a, b) => a - b)
 }
@@ -410,6 +421,23 @@ export async function correctTakeoff(db: SupabaseClient, input: {
   return { ok: true, run_id: run.id, status: checks.status, checks }
 }
 
+/** Every file in a run's folder and the folders under it. Storage lists one
+ *  level at a time, a folder as an entry with no id or metadata; the run's
+ *  folders are at most two deep (exports/<timestamp>/pack.zip), so the walk
+ *  stops at four. */
+export async function filesUnder(db: SupabaseClient, bucket: string, folder: string, depth = 0): Promise<string[]> {
+  const listed = await db.storage.from(bucket).list(folder, { limit: 1000 })
+  if (listed.error) throw failure('storage list', listed.error)
+  const paths: string[] = []
+  for (const entry of listed.data) {
+    const path = `${folder}/${entry.name}`
+    const isFolder = entry.id === null && !entry.metadata
+    if (!isFolder) paths.push(path)
+    else if (depth < 4) paths.push(...(await filesUnder(db, bucket, path, depth + 1)))
+  }
+  return paths
+}
+
 /** Deletes a run's files, then the run; its upload and reading rows cascade.
  *  Any status will do: a stage still running finds the run gone and stops.
  *  Given `updatedBefore`, as the sweep gives it, a run with activity since
@@ -423,12 +451,8 @@ export async function deleteRun(db: SupabaseClient, bucket: string, input: { ten
   if (found.error) throw failure('run lookup', found.error)
   if (!found.data) return { ok: false as const, error: 'not_found' as const }
 
-  // ponytail: one folder level, which is every file P2 writes. P3's exports/
-  // folder needs listing too when it lands.
-  const folder = runFolder(input.tenantId, input.runId)
-  const listed = await db.storage.from(bucket).list(folder, { limit: 1000 })
-  if (listed.error) throw failure('storage list', listed.error)
-  const paths = listed.data.map((object) => `${folder}/${object.name}`)
+  // The plans at the top, and each exported pack two folders down (TKO-18).
+  const paths = await filesUnder(db, bucket, runFolder(input.tenantId, input.runId))
   if (paths.length) {
     const removed = await db.storage.from(bucket).remove(paths)
     if (removed.error) throw failure('storage delete', removed.error)
@@ -472,5 +496,44 @@ export async function sweepExpiredRuns(db: SupabaseClient, bucket: string, input
       console.warn(JSON.stringify({ level: 'warn', event: 'takeoff_retention_failed', run_id: run.id, cause: String(error).slice(0, 200) }))
     }
   }
-  return { runs, files, failed }
+  let fixtures = 0
+  try {
+    fixtures = await sweepExpiredFixtures(db, bucket, input.now ?? new Date())
+  } catch (error) {
+    console.warn(JSON.stringify({ level: 'warn', event: 'takeoff_fixture_retention_failed', cause: String(error).slice(0, 200) }))
+  }
+  return { runs, files, failed, fixtures }
+}
+
+/** The folder of the eval's fixtures in the plans bucket (TKO-15, TKO-00c). */
+export const EVAL_FOLDER = 'eval'
+
+/** Deletes each eval fixture promoted from a live job (TKO-00c) whose time is
+ *  up. Its plans are a client's, kept as long as the run's (D-06), so its
+ *  request.json says when it expires. A fixture never promoted, such as Grange
+ *  or Whittaker, has no expiry and stays. Returns how many it deleted. */
+export async function sweepExpiredFixtures(db: SupabaseClient, bucket: string, now: Date): Promise<number> {
+  const store = db.storage.from(bucket)
+  const listed = await store.list(EVAL_FOLDER, { limit: 1000 })
+  if (listed.error) throw failure('fixture list', listed.error)
+  let deleted = 0
+  for (const entry of listed.data.filter((e) => e.id === null && !e.metadata)) {
+    const folder = `${EVAL_FOLDER}/${entry.name}`
+    const request = await store.download(`${folder}/request.json`)
+    if (request.error || !request.data) continue
+    let expires: unknown
+    try {
+      expires = JSON.parse(await request.data.text())?.promoted?.expires_at
+    } catch {
+      continue // not JSON: no expiry to read, so it stays
+    }
+    if (typeof expires !== 'string' || !(new Date(expires) < now)) continue
+    const paths = await filesUnder(db, bucket, folder)
+    if (paths.length) {
+      const removed = await store.remove(paths)
+      if (removed.error) throw failure('fixture delete', removed.error)
+    }
+    deleted++
+  }
+  return deleted
 }
