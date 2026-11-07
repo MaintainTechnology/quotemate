@@ -377,12 +377,15 @@ type CorrectRow = {
 
 /** Saves a whole corrected takeoff on the run's reading, then re-runs checks
  *  C1 to C9 on it, which set the run's status again. The reading's own
- *  takeoff stays as the model left it. */
+ *  takeoff stays as the model left it. The aerial merge passes
+ *  `geometrySource: 'hybrid'` (App Flow F6); a tradie's correction leaves the
+ *  run's source as it was. */
 export async function correctTakeoff(db: SupabaseClient, input: {
   tenantId: string
   runId: string
   takeoff: unknown
   now?: Date
+  geometrySource?: 'hybrid'
 }): Promise<CorrectOutcome> {
   // The run first, so only a body for the tenant's own correctable run is
   // parsed, and only once it is small enough to be a reading (TKO-28).
@@ -413,7 +416,7 @@ export async function correctTakeoff(db: SupabaseClient, input: {
     .eq('id', run.latest_extraction_id).eq('tenant_id', run.tenant_id)
   if (saved.error) throw failure('correction save', saved.error)
   const updated = await db.from('roof_takeoff_runs')
-    .update({ checks, status: checks.status, updated_at: now.toISOString() })
+    .update({ checks, status: checks.status, updated_at: now.toISOString(), ...(input.geometrySource && { geometry_source: input.geometrySource }) })
     .eq('id', run.id).eq('tenant_id', run.tenant_id).in('status', CORRECTABLE)
     .select('id')
   if (updated.error) throw failure('run update', updated.error)

@@ -269,6 +269,8 @@ describe('correctTakeoff', () => {
     await expect(correct(fake, GRANGE)).resolves.toMatchObject({ ok: true, run_id: RUN, status: 'ready', checks: { status: 'ready' } })
     const [saved] = fake.tables.roof_takeoff_runs
     expect(saved).toMatchObject({ status: 'ready', updated_at: NOW.toISOString(), checks: { ran_at: NOW.toISOString(), schedule: SCHEDULE } })
+    // A tradie's correction leaves the run's geometry source as it was; only the aerial merge sets one.
+    expect(saved.geometry_source).toBeUndefined()
     // C3 set the takeoff against the schedule the check stage found; no plan was opened.
     expect((saved.checks as Checks).results.find((r) => r.id === 'C3')).toMatchObject({ result: 'pass', detail: expect.stringContaining('233 m²') })
     expect(fake.tables.plan_extractions[0]).toMatchObject({ items: MISREAD, corrected_items: GRANGE })
