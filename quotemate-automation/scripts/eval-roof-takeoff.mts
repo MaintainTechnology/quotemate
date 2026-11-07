@@ -21,7 +21,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { brokenPrompt, evalFixture, loadFixtures, promptVersion, recordEval, swapReader, type Effort, type EvalFixture, type FixtureResult } from '@/lib/roofing/plan-takeoff/eval'
 import { DEFAULT_TAKEOFF_MODEL } from '@/lib/roofing/plan-takeoff/read'
-import { planSheets, refineReading } from '@/lib/roofing/plan-takeoff/refine'
+import { elevationSheets, planSheets, refineReading } from '@/lib/roofing/plan-takeoff/refine'
 import { RoofPlanTakeoffSchema } from '@/lib/roofing/plan-takeoff/schema'
 import { scoreTakeoff, type Score } from '@/lib/roofing/plan-takeoff/score'
 import { getServiceClient } from '@/lib/supabase/admin'
@@ -59,11 +59,13 @@ async function saved(): Promise<boolean> {
       continue
     }
     const reading = RoofPlanTakeoffSchema.parse(json(path))
-    const files = new Map([...pdfs(fixture.plans)].filter(([file]) => planSheets(reading.sheets).some((s) => s.file === file)))
+    // The files the calibrate stage downloads: the plans, and the elevations it pitches from (TKO-30).
+    const wanted = [...planSheets(reading.sheets), ...elevationSheets(reading.sheets)]
+    const files = new Map([...pdfs(fixture.plans)].filter(([file]) => wanted.some((s) => s.file === file)))
     const refined = await refineReading(reading, { sheets: reading.sheets, files })
     const score = scoreTakeoff(reference(fixture.name), refined.takeoff)
     pass &&= score.pass
-    show(fixture.name, score, `saved reading; scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines, ${refined.derived} skillions' edges worked out`)
+    show(fixture.name, score, `saved reading; scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines, ${refined.pitched} pitched from an elevation, ${refined.derived} skillions' edges worked out`)
   }
   return pass
 }
