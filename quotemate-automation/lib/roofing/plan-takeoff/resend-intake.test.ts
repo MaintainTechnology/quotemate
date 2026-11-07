@@ -134,6 +134,33 @@ describe('fetchResendMessage', () => {
     expect(urls[0]).toContain('html_format=cid')
   })
 
+  it('asks admit once the text is read, and downloads nothing when it answers for the message (DEC-046)', async () => {
+    const fetch = fakeFetch()
+    const held = { ok: false as const, error: 'rate_limited' as const, retry_at: '2026-11-07T08:00:00.000Z' }
+    const admit = vi.fn(async () => held)
+    await expect(fetchResendMessage(EMAIL, { ...LIMITS, fetch, admit })).resolves.toEqual({
+      ok: true,
+      message: { message_id: `resend:${EMAIL}`, subject: email().subject, text: email().text, attachments: [] },
+      outcome: held,
+    })
+    expect(admit).toHaveBeenCalledWith({ message_id: `resend:${EMAIL}`, subject: email().subject, text: email().text })
+    expect(fetch).toHaveBeenCalledTimes(1) // the email alone: no attachment's link, no download
+  })
+
+  it('downloads as before when admit leaves the message to its files', async () => {
+    const fetched = await fetchResendMessage(EMAIL, { ...LIMITS, fetch: fakeFetch(), admit: async () => null })
+    expect(fetched.ok && fetched.message.attachments.map((file) => file.content)).toEqual([PDF_A, PDF_E])
+    expect(fetched.ok && fetched.outcome).toBeUndefined()
+  })
+
+  it('holds a delivery to its overall limit, and fails past it, so the webhook comes again (DEC-046)', async () => {
+    const stalls = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+    }))
+    await expect(fetchResendMessage(EMAIL, { ...LIMITS, fetch: stalls, deliveryMs: 20 }))
+      .rejects.toThrow('Resend took longer than 0.02 s for the email and its files')
+  })
+
   it("sends the key to Resend's API only, never to the download host", async () => {
     const fetch = fakeFetch()
     await fetchResendMessage(EMAIL, { ...LIMITS, fetch })
