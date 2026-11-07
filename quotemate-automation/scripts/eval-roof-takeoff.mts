@@ -65,7 +65,7 @@ async function saved(): Promise<boolean> {
     const refined = await refineReading(reading, { sheets: reading.sheets, files })
     const score = scoreTakeoff(reference(fixture.name), refined.takeoff)
     pass &&= score.pass
-    show(fixture.name, score, `saved reading; scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines, ${refined.pitched} pitched from an elevation, ${refined.derived} skillions' edges worked out`)
+    show(fixture.name, score, `saved reading; scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines, ${refined.pitched} pitched from an elevation, ${refined.hipped} measured from a hip roof's lines, ${refined.derived} skillions' edges worked out`)
   }
   return pass
 }
