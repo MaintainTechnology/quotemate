@@ -14,7 +14,7 @@ import { currentSmsWork, smsWorkCheckpoint } from '@/lib/sms/durable-work'
 import { footprintLine, SCHEDULE_PCT, type ScheduleLine } from './checks'
 import { cutPages, type Sheet } from './classify'
 import { READER_SYSTEM, readerRequest } from './prompt'
-import { PlaneSchema, RoofPlanTakeoffSchema, StructureSchema, type RoofPlanTakeoff } from './schema'
+import { PITCH_SOURCES, PlaneSchema, RoofPlanTakeoffSchema, StructureSchema, type RoofPlanTakeoff } from './schema'
 
 export const DEFAULT_TAKEOFF_MODEL = 'claude-opus-4-8'
 // ponytail: one model call reads the whole run, inside the queue's 240-second
@@ -28,8 +28,19 @@ export type ReadOutcome =
   | { ok: true; takeoff: RoofPlanTakeoff; model: string; usage: ModelUsage }
   | { ok: false; note: string; model: string; usage: ModelUsage }
 
+/** A pitch source written as a phrase, such as "note RF:01 and elevation
+ *  5.0°", is the first of the reader's sources it names, as the repair always
+ *  made it: 4 of 7 live Grange readings spent a repair call on that alone
+ *  (TKO-15). A phrase naming none, or aerial data, still goes back. */
+const READ_SOURCES = PITCH_SOURCES.filter((s) => s !== 'aerial')
+const sourceWord = (value: unknown) =>
+  typeof value === 'string' && !(PITCH_SOURCES as readonly string[]).includes(value)
+    ? READ_SOURCES.find((s) => value.toLowerCase().includes(s)) ?? value
+    : value
+
 /** What the model writes: the takeoff without what the reader fills in. */
 const ModelPlane = PlaneSchema.omit({ sloped_area_m2: true, evidence: true }).extend({
+  pitch_source: z.preprocess(sourceWord, PlaneSchema.shape.pitch_source),
   evidence: z.array(z.object({ page: z.number().int().positive(), text: z.string().nullable() })).min(1),
 })
 const ModelTakeoff = z.object({
