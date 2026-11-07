@@ -36,7 +36,10 @@ export type FixtureResult = {
   usage: ModelUsage
 }
 /** The reader's and the classifier's model calls, swapped by the script and the tests. */
-export type EvalModels = { generate?: typeof generateText; readSheet?: SheetReader }
+/** The models a fixture's run calls: the reader's, the sheets', and the one
+ *  assigning a sheet's numbered roof areas (DEC-047), which a swapped reader
+ *  doesn't change. */
+export type EvalModels = { generate?: typeof generateText; readSheet?: SheetReader; assign?: typeof generateText }
 
 /** The prompt's version, as eval_runs records it: the first 12 hex of its SHA-256. */
 export const promptVersion = (system: string = READER_SYSTEM) => createHash('sha256').update(system).digest('hex').slice(0, 12)
@@ -117,7 +120,8 @@ export async function evalFixture(fixture: EvalFixture, models: EvalModels = {})
     spend(read.usage, read.usage.calls)
     if (!read.ok) return failed(read.note)
 
-    const refined = await refineReading(read.takeoff, { sheets, files: copies(fixture.files) })
+    const refined = await refineReading(read.takeoff, { sheets, files: copies(fixture.files), scopeNote: request.scope_note, assign: models.assign ?? generateText })
+    if (refined.usage) spend(refined.usage, refined.usage.calls)
     const checks = runChecks(refined.takeoff, { scopeNote: request.scope_note, schedule: await scheduleOf(fixture.files) })
     return { fixture: fixture.name, reference, score: scoreTakeoff(reference, refined.takeoff), status: checks.status, reading: refined.takeoff, note: null, usage }
   } catch (error) {

@@ -6,6 +6,7 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { generateText } from 'ai'
 import { areaSchedule, runChecks, type ScheduleLine } from './checks'
 import { CLASSIFY_MODEL, classifyFile, MIN_PAGE_TEXT, pageText, type Sheet } from './classify'
 import { inflatesPastLimit } from './pdf-guard'
@@ -225,9 +226,11 @@ async function latestReading({ db, run }: StageContext): Promise<Reading> {
  *  from its drawn hips and ridges (TKO-30), and works out
  *  each skillion's edges (TKO-15), through refineReading, which the eval runs too. */
 async function calibrate(ctx: StageContext) {
+  assertBudget(ctx) // a sheet's numbered roof areas can take a model call (DEC-047)
+  const started = Date.now()
   const reading = await latestReading(ctx)
   const { data: run, error } = await ctx.db.from('roof_takeoff_runs')
-    .select('sheet_index')
+    .select('sheet_index, scope_note')
     .eq('id', ctx.run.id).eq('tenant_id', ctx.run.tenant_id)
     .maybeSingle()
   if (error || !run) throw new Error(`takeoff run read failed: ${error?.message ?? 'no run'}`)
@@ -237,7 +240,8 @@ async function calibrate(ctx: StageContext) {
   for (const upload of (await uploadsOf(ctx)).filter((u) => wanted.some((s) => s.file === u.filename))) {
     files.set(upload.filename, await download(ctx, upload))
   }
-  const refined = await refineReading(reading.items, { sheets, files })
+  const refined = await refineReading(reading.items, { sheets, files, scopeNote: (run.scope_note as string | null) ?? null, assign: generateText })
+  if (refined.usage) await updateRun(ctx, { usage: withUsage(ctx.run, 'calibrate', { ...refined.usage, seconds: (Date.now() - started) / 1000 }) })
   if (refined.changed) {
     const { error: updateError } = await ctx.db.from('plan_extractions')
       .update({ items: refined.takeoff })
@@ -245,7 +249,7 @@ async function calibrate(ctx: StageContext) {
     if (updateError) throw new Error(`takeoff calibration save failed: ${updateError.message}`)
   }
   const { method, factor, delta_pct } = refined.takeoff.scale.calibration
-  return { method, factor, delta_pct, sheets: refined.sheets, measured: refined.measured, pitched: refined.pitched, hipped: refined.hipped, derived: refined.derived }
+  return { method, factor, delta_pct, sheets: refined.sheets, measured: refined.measured, pitched: refined.pitched, hipped: refined.hipped, regioned: refined.regioned, derived: refined.derived }
 }
 
 /** The first area schedule in the run's plan sets, such as Grange's on its

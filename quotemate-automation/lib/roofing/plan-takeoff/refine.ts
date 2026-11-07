@@ -7,12 +7,14 @@
 // The stage and the eval share it, so the eval scores a reading as the
 // pipeline finishes it.
 
+import type { generateText } from 'ai'
 import { calibrateSheet, chooseScale, pageSegments, type SheetScale } from './calibrate'
-import { MIN_PAGE_TEXT, pageText, statedScale, type Sheet } from './classify'
+import { MIN_PAGE_TEXT, pageText, readingViewport, statedScale, type Sheet } from './classify'
 import { skillionEdges } from './edges'
 import { measureHipRoofs } from './hips'
-import { measureOutlines, type MeasuredSheet } from './outline'
-import { elevationPitches, pitchFromElevations, type ElevationPitch } from './pitch'
+import { measureOutlines } from './outline'
+import { elevationPitches, familyPitches, pitchFromElevations, type ElevationPitch } from './pitch'
+import { measureRegions, type PlanSheet } from './regions'
 import { RoofPlanTakeoffSchema, type RoofPlanTakeoff } from './schema'
 
 /** The chosen sheets that are plans, which calibration and measuring use. */
@@ -22,8 +24,15 @@ export const planSheets = (sheets: Sheet[]) =>
 /** The chosen sheets that are elevations, whose roof lines give pitches (TKO-30). */
 export const elevationSheets = (sheets: Sheet[]) => sheets.filter((s) => s.used && s.kind === 'elevation')
 
-/** `files` holds each plan file's bytes by filename; pdf.js may take them over. */
-export async function refineReading(reading: RoofPlanTakeoff, input: { sheets: Sheet[]; files: Map<string, Uint8Array> }) {
+/** `files` holds each plan file's bytes by filename; pdf.js may take them over.
+ *  Given `assign`, roofs still unsized after the hip roof take the rib areas
+ *  the model assigns on a numbered copy of their sheet (DEC-047). */
+export async function refineReading(reading: RoofPlanTakeoff, input: {
+  sheets: Sheet[]
+  files: Map<string, Uint8Array>
+  scopeNote?: string | null
+  assign?: typeof generateText
+}) {
   const plans = planSheets(input.sheets)
   const elevations = elevationSheets(input.sheets)
   // A sheet that states no scale falls back on the scale the model read.
@@ -32,13 +41,15 @@ export async function refineReading(reading: RoofPlanTakeoff, input: { sheets: S
 
   const { getDocumentProxy } = await import('unpdf')
   const scales: SheetScale[] = []
-  const measurable: MeasuredSheet[] = []
+  const measurable: PlanSheet[] = []
   // The elevation whose roof lines are best supported, of those chosen.
   let pitches: { found: ElevationPitch[]; support: number; sheet: { file: string; page: number } } | null = null
   for (const [file, bytes] of input.files) {
     const mine = plans.filter((s) => s.file === file)
     const drawn = elevations.filter((s) => s.file === file)
     if (!mine.length && !drawn.length) continue
+    // A copy for numbering the sheet's roof areas, as pdf.js may take the bytes over.
+    const original = input.assign && mine.length ? bytes.slice() : new Uint8Array()
     const pdf = await getDocumentProxy(bytes)
     try {
       for (const sheet of mine) {
@@ -48,7 +59,9 @@ export async function refineReading(reading: RoofPlanTakeoff, input: { sheets: S
         const scale = calibrateSheet({ page: text, segments, stated: statedScale(text) ?? readScale })
         scales.push(scale)
         const { factor } = scale.calibration
-        if (factor) measurable.push({ file, page: sheet.page, text, segments, factor })
+        const page = input.assign ? await pdf.getPage(sheet.page) : null
+        const transform = page ? readingViewport(page, (await page.getTextContent()).items).viewport.transform : []
+        if (factor) measurable.push({ file, page: sheet.page, text, segments, factor, transform, bytes: original })
       }
       // An elevation needs no text, only its strokes: Whittaker's lettering is
       // drawn as outlines, and a scan has no strokes to find.
@@ -67,14 +80,23 @@ export async function refineReading(reading: RoofPlanTakeoff, input: { sheets: S
   // roof's hips and valleys, at its pitch.
   const pitched = pitches ? pitchFromElevations(outlined.takeoff, pitches.found, pitches.sheet) : { takeoff: outlined.takeoff, pitched: 0 }
   const hips = measureHipRoofs(pitched.takeoff, measurable)
-  const { takeoff, derived } = skillionEdges(hips.takeoff)
+  // The roofs joined to the hip roof, a lean-to each, at the shallowest pitch the elevation gives.
+  const families = pitches ? familyPitches(pitches.found) : []
+  const shallow = families.length ? Math.min(...families) : null
+  const regions = input.assign && outlined.measured === 0
+    ? await measureRegions(hips.takeoff, { reading, sheets: measurable, scopeNote: input.scopeNote ?? null, pitch: shallow, generate: input.assign })
+    : { takeoff: hips.takeoff, regioned: 0, usage: null, refused: null }
+  const { takeoff, derived } = skillionEdges(regions.takeoff)
   return {
     takeoff: RoofPlanTakeoffSchema.parse(takeoff),
-    changed: scale !== null || outlined.measured > 0 || pitched.pitched > 0 || hips.hipped > 0 || derived > 0,
+    changed: scale !== null || outlined.measured > 0 || pitched.pitched > 0 || hips.hipped > 0 || regions.regioned > 0 || derived > 0,
     sheets: scales.length,
     measured: outlined.measured,
     pitched: pitched.pitched,
     hipped: hips.hipped,
+    regioned: regions.regioned,
+    refused: regions.refused,
+    usage: regions.usage,
     derived,
   }
 }

@@ -4,7 +4,8 @@
 // plans or the reading (client documents, kept out of git) aren't on disk.
 
 import { existsSync, readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import type { generateText } from 'ai'
+import { describe, expect, it, vi } from 'vitest'
 import { areaSchedule, runChecks } from './checks'
 import { pageText } from './classify'
 import { refineReading } from './refine'
@@ -108,5 +109,45 @@ describe.skipIf(!W_FILES.every((f) => existsSync(`${WHITTAKER}/${f}`)) || !exist
     expect(section.planes.map((p) => [p.id, p.plan_area_m2])).toEqual([['S2-P1', null]])
     const score = scoreTakeoff(reference, takeoff)
     expect([score.structures.pass, score.pitch.pass, score.area.pass]).toEqual([true, true, false])
+  }, 60_000)
+
+  // TKO-30's lower roofs and new section: A104's rib-filled areas, numbered on
+  // the sheet and assigned by the model (DEC-047). A stand-in answers as the
+  // drawing reads; the live reads are the eval's.
+  const answering = (reply: object) => vi.fn().mockResolvedValue({ text: JSON.stringify(reply), finishReason: 'stop', usage: { inputTokens: 2600, outputTokens: 250 } }) as unknown as typeof generateText
+  const AS_DRAWN = {
+    areas: [
+      { n: 1, roof: 'S1', fall: 'north' }, { n: 2, roof: 'S1', fall: 'east' }, { n: 3, roof: null, fall: 'west' },
+      { n: 4, roof: 'S2', fall: 'west' }, { n: 5, roof: 'S1', fall: 'south' }, { n: 6, roof: 'S1', fall: 'east' },
+    ],
+    left_out: [{ label: 'Insulated roof over new deck', areas: [3] }],
+  }
+  const refined = (assign: typeof generateText) => {
+    const reading = read(W_READING)
+    const files = new Map(W_FILES.map((f) => [f, new Uint8Array(readFileSync(`${WHITTAKER}/${f}`))]))
+    const scopeNote = JSON.parse(readFileSync('eval/roof-takeoff/whittaker/request.json', 'utf8')).scope_note as string
+    return refineReading(reading, { sheets: reading.sheets, files, scopeNote, assign })
+  }
+  const roofArea = (s: { planes: Array<{ plan_area_m2: number | null }> }) => s.planes.reduce((sum, p) => sum + (p.plan_area_m2 ?? 0), 0)
+
+  it('measures the lower roofs and the new section the model assigns on the numbered A104, which passes every gate', async () => {
+    const { takeoff, regioned, usage } = await refined(answering(AS_DRAWN))
+    expect([regioned, usage]).toEqual([5, { inputTokens: 2600, outputTokens: 250, calls: 1 }])
+    const reference = read('eval/roof-takeoff/whittaker/takeoff.json')
+    expect(scoreTakeoff(reference, takeoff).pass).toBe(true)
+    // Each roof within 3% of the reference's, as the scorer pairing roofs holds them.
+    const [house, section] = takeoff.structures
+    expect([within(roofArea(house), 109.18, 3), within(roofArea(section), 12.9, 3)]).toEqual([true, true])
+    expect(section.planes[0]).toMatchObject({ id: 'S2-P1', fall: 'west', pitch_deg: 5, confidence: 'medium' })
+    // The deck's 45 m² is in no plane.
+    expect(takeoff.structures.flatMap((s) => s.planes).some((p) => (p.plan_area_m2 ?? 0) > 40)).toBe(false)
+  }, 60_000)
+
+  it('never measures the left-out deck: given to the house it is still left out, and not found it stops everything', async () => {
+    const given = { ...AS_DRAWN, areas: AS_DRAWN.areas.map((a) => (a.n === 3 ? { ...a, roof: 'S1' } : a)) }
+    const { takeoff } = await refined(answering(given))
+    expect(takeoff.structures.flatMap((s) => s.planes).some((p) => (p.plan_area_m2 ?? 0) > 40)).toBe(false)
+    const lost = await refined(answering({ ...given, left_out: [] }))
+    expect([lost.regioned, lost.refused]).toEqual([0, expect.stringContaining('Insulated roof over new deck')])
   }, 60_000)
 })
