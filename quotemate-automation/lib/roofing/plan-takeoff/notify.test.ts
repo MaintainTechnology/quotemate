@@ -11,7 +11,7 @@ const RUN = '22222222-2222-4222-8222-222222222222'
 const LINK = `https://takeoff.example/runs/${RUN}`
 const run = (over: Record<string, unknown> = {}) => ({
   id: RUN, tenant_id: TENANT, status: 'ready', status_note: null,
-  site_address: '59 Grange Rd, Eastern Heights QLD 4305', job_ref: 'J14997', job_name: 'Grange Rd dual occupancy',
+  site_address: '12 Sample St, Exampleton QLD 4305', job_ref: 'J10001', job_name: 'Sample St dual occupancy',
   builder: { business: 'Example Constructions Pty Ltd' },
   checks: { status: 'ready', results: [{ id: 'C1', result: 'pass', detail: 'Calibrated on two dimensions' }] },
   ...over,
@@ -24,8 +24,8 @@ const accepting = () => vi.fn<(mail: OperatorMail) => Promise<{ ok: boolean }>>(
 describe('operatorEmail', () => {
   it('says a run is ready, whose it is and where to open it', () => {
     const mail = operatorEmail(facts(), { done: 'finished', status: 'ready' }, LINK)
-    expect(mail.subject).toBe('Takeoff ready: J14997, 59 Grange Rd, Eastern Heights QLD 4305')
-    for (const words of ['Peppers Plumbing', 'Grange Rd dual occupancy', 'Example Constructions Pty Ltd', 'every check passed', LINK]) {
+    expect(mail.subject).toBe('Takeoff ready: J10001, 12 Sample St, Exampleton QLD 4305')
+    for (const words of ['Peppers Plumbing', 'Sample St dual occupancy', 'Example Constructions Pty Ltd', 'every check passed', LINK]) {
       expect(mail.text).toContain(words)
     }
     expect(mail.html).toContain(`<a href="${LINK}">`)
@@ -38,7 +38,7 @@ describe('operatorEmail', () => {
       { id: 'C7', result: 'pass', detail: 'ok' },
     ] }
     const mail = operatorEmail(facts({ status: 'needs_review', checks }), { done: 'finished', status: 'needs_review' }, null)
-    expect(mail.subject).toBe('Takeoff needs review: J14997, 59 Grange Rd, Eastern Heights QLD 4305')
+    expect(mail.subject).toBe('Takeoff needs review: J10001, 12 Sample St, Exampleton QLD 4305')
     expect(mail.text).toContain('C1 failed: No written dimension to calibrate on')
     expect(mail.text).toContain('C5 failed: S1-P1 has no area')
     expect(mail.text).not.toContain('C7')
@@ -48,7 +48,7 @@ describe('operatorEmail', () => {
   it('gives a failed run its note', () => {
     const note = "Bomb.pdf unpacks to far more than any plan set, so it wasn't read. Save it again as a standard PDF."
     const mail = operatorEmail(facts({ status: 'failed', status_note: note }), { done: 'failed', note }, LINK)
-    expect(mail.subject).toBe('Takeoff failed: J14997, 59 Grange Rd, Eastern Heights QLD 4305')
+    expect(mail.subject).toBe('Takeoff failed: J10001, 12 Sample St, Exampleton QLD 4305')
     expect(mail.text).toContain(note)
   })
 
@@ -97,7 +97,7 @@ describe('notifyOperator', () => {
 
 describe('notifyIntakeRefused (TKO-24)', () => {
   const refused = {
-    subject: 'Fw: RESEND of\r\n Quote Request: <b>59 Grange Rd</b>',
+    subject: 'Fw: RESEND of\r\n Quote Request: <b>12 Sample St</b>',
     error: 'no_plans',
     detail: 'The message has no PDF attached, and links in a message are never opened.',
   }
@@ -107,9 +107,9 @@ describe('notifyIntakeRefused (TKO-24)', () => {
     await expect(notifyIntakeRefused(refused, { recipients: ['a@ops.test', 'b@ops.test'], send })).resolves.toEqual({ sent: 2 })
     const mail = send.mock.calls[0][0]
     expect(mail.to).toBe('a@ops.test')
-    expect(mail.subject).toBe('Takeoff request not taken: Fw: RESEND of Quote Request: <b>59 Grange Rd</b>')
+    expect(mail.subject).toBe('Takeoff request not taken: Fw: RESEND of Quote Request: <b>12 Sample St</b>')
     expect(mail.text).toContain('no PDF attached')
-    expect(mail.html).toContain('&lt;b&gt;59 Grange Rd&lt;/b&gt;')
+    expect(mail.html).toContain('&lt;b&gt;12 Sample St&lt;/b&gt;')
     expect(mail.html).not.toContain('<b>')
   })
 

@@ -86,14 +86,14 @@ const TAKEOFF: RoofPlanTakeoff = {
 
 describe('builderQuoteHtml', () => {
   const html = builderQuoteHtml({
-    branding: { businessName: 'Peppers Plumbing' }, builder: 'Example Constructions Pty Ltd', site: '59 Grange Rd, Eastern Heights QLD 4305',
-    jobRef: 'J14997', jobName: 'Grange Rd dual occupancy', takeoff: TAKEOFF, date: new Date('2026-11-03T01:00:00Z'),
+    branding: { businessName: 'Peppers Plumbing' }, builder: 'Example Constructions Pty Ltd', site: '12 Sample St, Exampleton QLD 4305',
+    jobRef: 'J10001', jobName: 'Sample St dual occupancy', takeoff: TAKEOFF, date: new Date('2026-11-03T01:00:00Z'),
     priced: { ok: true, gst_registered: true, structures: [{ id: 'S1', label: 'House 1', material: 'colorbond_corrugated', area_m2: 97.62, pitch_degrees: 5, as_drawn_ex_gst: 6443, upgrade_ex_gst: 8590 }],
       tiers: [{ key: 'as_drawn', label: 'As drawn', ex_gst: 6443, inc_gst: 7087.3 }, { key: 'upgrade', label: 'Upgrade to Colorbond Klip-Lok', ex_gst: 8590, inc_gst: 9449 }] },
   })
 
   it('names the builder, the site, each roof, both tiers and the scope', () => {
-    for (const words of ['Peppers Plumbing', 'Example Constructions Pty Ltd', '59 Grange Rd', 'J14997', 'House 1', '97.62', 'As drawn', '$7,087.30', 'Upgrade to Colorbond Klip-Lok', 'Gutters', 'Colour?', "Measured from the builder's plans"]) {
+    for (const words of ['Peppers Plumbing', 'Example Constructions Pty Ltd', '12 Sample St', 'J10001', 'House 1', '97.62', 'As drawn', '$7,087.30', 'Upgrade to Colorbond Klip-Lok', 'Gutters', 'Colour?', "Measured from the builder's plans"]) {
       expect(html).toContain(words)
     }
   })
@@ -116,8 +116,8 @@ describe('builderQuoteHtml', () => {
 
 describe('builderQuote', () => {
   const setup = (run: Row = {}, rates: unknown = { rate_per_m2: RATES }) => fakeDb({
-    runs: [{ id: RUN, tenant_id: TENANT, status: 'ready', site_address: '59 Grange Rd, Eastern Heights QLD 4305', postcode: null, state: null,
-      latest_extraction_id: 'X1', job_ref: 'J14997', job_name: 'Grange Rd dual occupancy', builder: { business: 'Example Constructions Pty Ltd' }, ...run }],
+    runs: [{ id: RUN, tenant_id: TENANT, status: 'ready', site_address: '12 Sample St, Exampleton QLD 4305', postcode: null, state: null,
+      latest_extraction_id: 'X1', job_ref: 'J10001', job_name: 'Sample St dual occupancy', builder: { business: 'Example Constructions Pty Ltd' }, ...run }],
     extractions: [{ id: 'X1', tenant_id: TENANT, items: TAKEOFF, corrected_items: null }],
     pricingBooks: [{ id: 'PB1', tenant_id: TENANT, trade: 'roofing', overlays: { roofing_rate_card: CARD, roofing_new_work_rates: rates } }],
     tenants: [{ id: TENANT, business_name: 'Peppers Plumbing', abn: '12 345 678 901' }],
@@ -128,7 +128,7 @@ describe('builderQuote', () => {
     const fake = setup()
     const before = JSON.stringify(fake.tables)
     const outcome = await builderQuote(fake.db, { tenantId: TENANT, runId: RUN, render })
-    expect(outcome).toMatchObject({ ok: true, filename: 'Builder quote J14997.pdf' })
+    expect(outcome).toMatchObject({ ok: true, filename: 'Builder quote J10001.pdf' })
     expect(outcome.ok && outcome.pdf.toString().startsWith('%PDF')).toBe(true)
     for (const words of ['Example Constructions Pty Ltd', 'Peppers Plumbing', 'ABN 12 345 678 901']) {
       expect(render.mock.calls.at(-1)?.[0]).toContain(words)

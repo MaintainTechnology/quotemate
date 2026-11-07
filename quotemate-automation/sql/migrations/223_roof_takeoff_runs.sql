@@ -26,7 +26,7 @@ create table if not exists public.roof_takeoff_runs (
   tenant_id              uuid not null references public.tenants(id) on delete cascade,
   created_by             uuid,                         -- auth user of the operator
   job_name               text,
-  job_ref                text,                         -- e.g. TAG job number J14997
+  job_ref                text,                         -- e.g. TAG job number J10001
   site_address           text not null,
   postcode               text,
   state                  text,

@@ -275,7 +275,7 @@ describe('GET /api/tenant/trade-jobs', () => {
         data: [
           {
             id: 'r1',
-            address: '59 Grange Rd',
+            address: '12 Sample St',
             combined_area_m2: 231.33,
             public_token: 'tok-roof',
             measure_token: 'tok-measure',

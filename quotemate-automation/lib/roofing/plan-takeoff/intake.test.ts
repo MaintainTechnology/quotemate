@@ -14,7 +14,7 @@ const NOW = new Date('2026-11-04T01:00:00.000Z')
 
 // Grange's request as a phone's forward, in plain text: header blocks, list
 // bullets, and links in angle brackets.
-const GRANGE_SUBJECT = 'Fw: RESEND of Quote Request: 59 Grange Rd, Eastern Heights (J14997)'
+const GRANGE_SUBJECT = 'Fw: RESEND of Quote Request: 12 Sample St, Exampleton (J10001)'
 const GRANGE_TEXT = [
   'Here is a second one.',
   '',
@@ -22,15 +22,15 @@ const GRANGE_TEXT = [
   '',
   '________________________________',
   'From: TAG Quotes <quotes@tag.example>',
-  'Subject: RE: RESEND of Quote Request: 59 Grange Rd, Eastern Heights (J14997)',
+  'Subject: RE: RESEND of Quote Request: 12 Sample St, Exampleton (J10001)',
   '',
-  'The site address is 59 Grange Rd, Eastern Heights & I have attached a copy of the plans.',
+  'The site address is 12 Sample St, Exampleton & I have attached a copy of the plans.',
   '',
   '________________________________',
   'From: TAG Quotes <quotes@tag.example>',
-  'Subject: RESEND of Quote Request: 59 Grange Rd, Eastern Heights (J14997)',
+  'Subject: RESEND of Quote Request: 12 Sample St, Exampleton (J10001)',
   '',
-  'Could you please submit a quotation by 9/10/2026 for 59 Grange Rd, Eastern Heights 4305 (a won contract).',
+  'Could you please submit a quotation by 9/10/2026 for 12 Sample St, Exampleton 4305 (a won contract).',
   '',
   'Please use the links below to indicate if you intend to quote on this request.',
   '',
@@ -61,12 +61,12 @@ const GRANGE_TEXT = [
 ].join('\r\n')
 
 // Whittaker's, quoted under a reply, its sentence wrapped and its note in bold.
-const WHITTAKER_SUBJECT = 'Fw: RESEND of Quote Request: 5 Whittaker Street, North Ipswich (J14945)'
+const WHITTAKER_SUBJECT = 'Fw: RESEND of Quote Request: 34 Example St, Sampleton (J10002)'
 const WHITTAKER_TEXT = [
   'Do you think these house plans can be turned into a quote for roofing?',
   '',
-  '> Could you please submit a quotation by 9/10/2026 for 5 Whittaker Street,',
-  '> North Ipswich (currently under construction).',
+  '> Could you please submit a quotation by 9/10/2026 for 34 Example St,',
+  '> Sampleton (currently under construction).',
   '>',
   '> Notes pertaining to this quote',
   '>',
@@ -82,22 +82,22 @@ const GRANGE_BUILDER = { business: 'Example Constructions Pty Ltd', contact: 'A.
 describe('parseTagRequest', () => {
   it("reads Grange's request from a phone's forward: its reference, its site with the state, its scope and its builder", () => {
     expect(parseTagRequest({ subject: GRANGE_SUBJECT, text: GRANGE_TEXT })).toEqual({
-      job_ref: 'J14997',
-      site_address: '59 Grange Rd, Eastern Heights QLD 4305',
+      job_ref: 'J10001',
+      site_address: '12 Sample St, Exampleton QLD 4305',
       scope_note: 'Roofing - Steel (Supply & Fit)',
       builder: GRANGE_BUILDER,
     })
   })
 
   it("finds the request under a forward whose own subject doesn't name it", () => {
-    expect(parseTagRequest({ subject: 'Fwd: plans', text: GRANGE_TEXT })).toMatchObject({ job_ref: 'J14997', site_address: '59 Grange Rd, Eastern Heights QLD 4305' })
+    expect(parseTagRequest({ subject: 'Fwd: plans', text: GRANGE_TEXT })).toMatchObject({ job_ref: 'J10001', site_address: '12 Sample St, Exampleton QLD 4305' })
   })
 
   it("reads Whittaker's quoted, wrapped request, keeping the exclusion C6 looks for", () => {
     const request = parseTagRequest({ subject: WHITTAKER_SUBJECT, text: WHITTAKER_TEXT })
     expect(request).toEqual({
-      job_ref: 'J14945',
-      site_address: '5 Whittaker Street, North Ipswich',
+      job_ref: 'J10002',
+      site_address: '34 Example St, Sampleton',
       scope_note: 'Roofing - Steel (Supply & Fit): Complete re-roof of existing + new section of roof over the laundry / bathroom. However, please exclude the insulated roof over the new deck.;',
       builder: null,
     })
@@ -106,14 +106,14 @@ describe('parseTagRequest', () => {
 
   it("takes the subject's address when the body has no sentence for it, or the sentence's would cut it short", () => {
     const notes = 'Notes pertaining to this quote\n\n- Roofing - Steel (Supply & Fit)\n\nClick on the links below to open files for this job:'
-    expect(parseTagRequest({ subject: GRANGE_SUBJECT, text: notes })).toMatchObject({ site_address: '59 Grange Rd, Eastern Heights', scope_note: 'Roofing - Steel (Supply & Fit)' })
+    expect(parseTagRequest({ subject: GRANGE_SUBJECT, text: notes })).toMatchObject({ site_address: '12 Sample St, Exampleton', scope_note: 'Roofing - Steel (Supply & Fit)' })
     const cut = 'Could you please submit a quotation by 9/10/2026 for 12 Smith St. Booval (a tender).'
     expect(parseTagRequest({ subject: 'Quote Request: 12 Smith St. Booval (J20001)', text: cut })).toMatchObject({ site_address: '12 Smith St. Booval' })
   })
 
   it('is null for a message that is not a TAG request', () => {
     expect(parseTagRequest({ subject: 'Lunch on Friday?', text: 'Are you free?' })).toBeNull()
-    expect(parseTagRequest({ subject: 'Quote Request: 59 Grange Rd, Eastern Heights', text: 'No job number here.' })).toBeNull()
+    expect(parseTagRequest({ subject: 'Quote Request: 12 Sample St, Exampleton', text: 'No job number here.' })).toBeNull()
     expect(parseTagRequest({ subject: `Quote Request: 1 Main St (J${'1'.repeat(30)})`, text: '' })).toBeNull()
   })
 
@@ -135,7 +135,7 @@ describe('parseTagRequest', () => {
     const started = performance.now()
     expect(parseTagRequest({ subject: 'x', text: '<http:'.repeat(160_000) })).toBeNull()
     expect(parseTagRequest({ subject: `Quote Request: a${' '.repeat(200_000)}b`, text: `Quote Request: a${' '.repeat(200_000)}b` })).toBeNull()
-    expect(parseTagRequest({ subject: GRANGE_SUBJECT, text: `submit a quotation by 1 for ${'x '.repeat(400_000)}` })).toMatchObject({ job_ref: 'J14997' })
+    expect(parseTagRequest({ subject: GRANGE_SUBJECT, text: `submit a quotation by 1 for ${'x '.repeat(400_000)}` })).toMatchObject({ job_ref: 'J10001' })
     expect(parseTagRequest({ subject: GRANGE_SUBJECT, text: `please contact the member\nEmail: ${'a'.repeat(900_000)}` })).toMatchObject({ builder: null })
     expect(performance.now() - started).toBeLessThan(2000)
   })
@@ -148,10 +148,10 @@ describe('stateOfPostcode and withState', () => {
   })
 
   it('adds the state to an address that ends in a postcode without one, and leaves any other as written', () => {
-    expect(withState('59 Grange Rd, Eastern Heights 4305')).toBe('59 Grange Rd, Eastern Heights QLD 4305')
+    expect(withState('12 Sample St, Exampleton 4305')).toBe('12 Sample St, Exampleton QLD 4305')
     expect(withState('1 Example Pl, Canberra, 2600')).toBe('1 Example Pl, Canberra ACT 2600')
-    expect(withState('59 Grange Rd, Eastern Heights QLD 4305')).toBe('59 Grange Rd, Eastern Heights QLD 4305')
-    expect(withState(' 5 Whittaker Street, North Ipswich ')).toBe('5 Whittaker Street, North Ipswich')
+    expect(withState('12 Sample St, Exampleton QLD 4305')).toBe('12 Sample St, Exampleton QLD 4305')
+    expect(withState(' 34 Example St, Sampleton ')).toBe('34 Example St, Sampleton')
   })
 })
 
@@ -174,9 +174,9 @@ describe('takeTagRequest', () => {
     subject: GRANGE_SUBJECT,
     text: GRANGE_TEXT,
     attachments: [
-      { filename: 'Architectural - 59 Grange Rd.pdf', content_type: 'application/pdf', content: ARCHITECTURAL },
+      { filename: 'Architectural - 12 Sample St.pdf', content_type: 'application/pdf', content: ARCHITECTURAL },
       { filename: 'image001.png', content_type: 'image/png', content: new Uint8Array([137, 80, 78, 71]) },
-      { filename: 'Engineering- 59 GRANGE RD', content_type: 'application/pdf; name="Engineering"', content: ENGINEERING },
+      { filename: 'Engineering- 12 SAMPLE ST', content_type: 'application/pdf; name="Engineering"', content: ENGINEERING },
     ],
     ...over,
   })
@@ -192,16 +192,16 @@ describe('takeTagRequest', () => {
       id: RUN,
       tenant_id: TENANT,
       source: 'tag_email',
-      job_ref: 'J14997',
-      site_address: '59 Grange Rd, Eastern Heights QLD 4305',
+      job_ref: 'J10001',
+      site_address: '12 Sample St, Exampleton QLD 4305',
       scope_note: 'Roofing - Steel (Supply & Fit)',
       builder: GRANGE_BUILDER,
       status: 'queued',
     })])
     const uploads = fake.tables.plan_uploads
     expect(uploads.map((u) => [u.filename, u.doc_type, u.size_bytes])).toEqual([
-      ['Architectural - 59 Grange Rd.pdf', 'plan_set', ARCHITECTURAL.length],
-      ['Engineering- 59 GRANGE RD', 'engineering', ENGINEERING.length],
+      ['Architectural - 12 Sample St.pdf', 'plan_set', ARCHITECTURAL.length],
+      ['Engineering- 12 SAMPLE ST', 'engineering', ENGINEERING.length],
     ])
     expect(fake.objects[runFilePath(TENANT, RUN, String(uploads[0].id))]).toEqual(ARCHITECTURAL)
     expect(fake.objects[runFilePath(TENANT, RUN, String(uploads[1].id))]).toEqual(ENGINEERING)
@@ -222,8 +222,8 @@ describe('takeTagRequest', () => {
     const fake = fakeDb({
       runs: [{ id: RUN, tenant_id: TENANT, status: 'draft' }],
       uploads: [
-        { id: 'upload-a', tenant_id: TENANT, takeoff_run_id: RUN, filename: 'Architectural - 59 Grange Rd.pdf', size_bytes: ARCHITECTURAL.length, pdf_path: architectural },
-        { id: 'upload-e', tenant_id: TENANT, takeoff_run_id: RUN, filename: 'Engineering- 59 GRANGE RD', size_bytes: ENGINEERING.length, pdf_path: engineering },
+        { id: 'upload-a', tenant_id: TENANT, takeoff_run_id: RUN, filename: 'Architectural - 12 Sample St.pdf', size_bytes: ARCHITECTURAL.length, pdf_path: architectural },
+        { id: 'upload-e', tenant_id: TENANT, takeoff_run_id: RUN, filename: 'Engineering- 12 SAMPLE ST', size_bytes: ENGINEERING.length, pdf_path: engineering },
       ],
       objects: { [architectural]: ARCHITECTURAL },
     })
@@ -261,7 +261,10 @@ describe('takeTagRequest', () => {
 
   it('writes nothing while the tenant has started its runs for the hour, and says when it can', async () => {
     const started = new Date(NOW.getTime() - 600_000).toISOString()
-    const fake = fakeDb({ runs: [{ id: 'busy', tenant_id: TENANT, status: 'ready', updated_at: started, usage: { starts: [started] } }] })
+    const fake = fakeDb({
+      runs: [{ id: 'busy', tenant_id: TENANT, status: 'ready', updated_at: started, usage: { starts: [started] } }],
+      starts: [{ tenant_id: TENANT, run_id: 'busy', started_at: started }],
+    })
     await expect(take(fake, {}, { ...LIMITS, runsPerHour: 1 })).resolves.toEqual({ ok: false, error: 'rate_limited', retry_at: '2026-11-04T01:50:00.000Z' })
     expect(fake.tables.roof_takeoff_runs.map((r) => r.id)).toEqual(['busy'])
     expect(fake.objects).toEqual({})
@@ -289,7 +292,7 @@ describe('takeTagRequest', () => {
     const fake = fakeDb()
     await expect(take(fake, {}, { ...LIMITS, maxFiles: 1 })).resolves.toMatchObject({ ok: false, error: 'too_many_files' })
     await expect(take(fake, {}, { ...LIMITS, maxFileBytes: ENGINEERING.length }))
-      .resolves.toMatchObject({ ok: false, error: 'too_large', detail: expect.stringContaining('Architectural - 59 Grange Rd.pdf') })
+      .resolves.toMatchObject({ ok: false, error: 'too_large', detail: expect.stringContaining('Architectural - 12 Sample St.pdf') })
     expect(fake.tables.roof_takeoff_runs).toEqual([])
   })
 

@@ -1,0 +1,920 @@
+{
+  "version": 1,
+  "scale": {
+    "stated": "1:50 @ A1",
+    "sheet_size": "A1",
+    "pdf_page": [
+      1190.52,
+      841.92
+    ],
+    "calibration": {
+      "method": "title_block",
+      "reference_mm": null,
+      "factor": 35.3207,
+      "delta_pct": null
+    }
+  },
+  "sheets": [
+    {
+      "file": "elevations.pdf",
+      "page": 1,
+      "number": "A302",
+      "title": "PROPOSED ELEVATIONS",
+      "revision": "P3",
+      "status_text": "PRELIMINARY 21.04.26",
+      "kind": "elevation",
+      "used": true
+    },
+    {
+      "file": "floor-plan.pdf",
+      "page": 1,
+      "number": "A104",
+      "title": "PROPOSED GROUND & ROOF PLANS",
+      "revision": "P3",
+      "status_text": "PRELIMINARY 21.04.26",
+      "kind": "roof_plan",
+      "used": true
+    },
+    {
+      "file": "sections.pdf",
+      "page": 1,
+      "number": "A303",
+      "title": "PROPOSED SECTIONS",
+      "revision": "P2",
+      "status_text": "PRELIMINARY 21.04.26",
+      "kind": "section",
+      "used": true
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 1,
+      "number": null,
+      "title": null,
+      "revision": null,
+      "status_text": null,
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 2,
+      "number": null,
+      "title": null,
+      "revision": null,
+      "status_text": null,
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 3,
+      "number": "S001",
+      "title": "DRAWING REGISTER AND GENERAL NOTES",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 4,
+      "number": "S101",
+      "title": "FOOTING AND SLAB PLAN",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 5,
+      "number": "S111",
+      "title": "BORED PIER DETAILS",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 6,
+      "number": "S112",
+      "title": "BLOCKWORK RETAINING WALL DETAILS",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 7,
+      "number": "S113",
+      "title": "CONCRETE SLEEPER RETAINING WALL DETAILS",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 8,
+      "number": "S114",
+      "title": "TYPICAL PIER FOUNDING TO ADJACENT STRUCTURES DETAILS",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 9,
+      "number": "S201",
+      "title": "FLOOR AND DECK FRAMING PLAN",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 10,
+      "number": "S202",
+      "title": "ROOF FRAMING PLAN",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "roof_framing",
+      "used": true
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 11,
+      "number": "S211",
+      "title": "FRAMING DETAILS - SHEET 1",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 12,
+      "number": "S212",
+      "title": "FRAMING DETAILS - SHEET 2",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "other",
+      "used": false
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 13,
+      "number": "S213",
+      "title": "SECTION THROUGH NEW FLOOR - SECTION 1",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "section",
+      "used": true
+    },
+    {
+      "file": "engineering.pdf",
+      "page": 14,
+      "number": "S214",
+      "title": "SECTION THROUGH NEW DECK - SECTION 2",
+      "revision": "A",
+      "status_text": "FOR CONSTRUCTION",
+      "kind": "section",
+      "used": true
+    }
+  ],
+  "structures": [
+    {
+      "id": "S1",
+      "label": "Existing house, re-roof",
+      "role": "primary",
+      "source": "plans",
+      "planes": [
+        {
+          "id": "S1-P1",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              3759,
+              11664
+            ],
+            [
+              11431,
+              11664
+            ],
+            [
+              7595,
+              7828
+            ]
+          ],
+          "plan_area_m2": 14.71,
+          "pitch_deg": 25,
+          "pitch_source": "elevation",
+          "fall": "north",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 16.24,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302: the main roof drawn at 25° in all four elevations",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P2",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              3759,
+              11664
+            ],
+            [
+              7595,
+              7828
+            ],
+            [
+              7595,
+              7180
+            ],
+            [
+              3759,
+              3344
+            ]
+          ],
+          "plan_area_m2": 17.2,
+          "pitch_deg": 25,
+          "pitch_source": "elevation",
+          "fall": "west",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 18.98,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302: the main roof drawn at 25° in all four elevations",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P3",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              7595,
+              7828
+            ],
+            [
+              11431,
+              11664
+            ],
+            [
+              11431,
+              7837
+            ],
+            [
+              9184,
+              5590
+            ],
+            [
+              7595,
+              7180
+            ]
+          ],
+          "plan_area_m2": 12.15,
+          "pitch_deg": 25,
+          "pitch_source": "elevation",
+          "fall": "east",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 13.41,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302: the main roof drawn at 25° in all four elevations",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P4",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              3759,
+              3344
+            ],
+            [
+              7595,
+              7180
+            ],
+            [
+              9184,
+              5590
+            ],
+            [
+              11024,
+              5590
+            ],
+            [
+              13270,
+              3344
+            ]
+          ],
+          "plan_area_m2": 18.84,
+          "pitch_deg": 25,
+          "pitch_source": "elevation",
+          "fall": "south",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 20.79,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302: the main roof drawn at 25° in all four elevations",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P5",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              9184,
+              5590
+            ],
+            [
+              11431,
+              7837
+            ],
+            [
+              13270,
+              7837
+            ],
+            [
+              11024,
+              5590
+            ]
+          ],
+          "plan_area_m2": 4.13,
+          "pitch_deg": 25,
+          "pitch_source": "elevation",
+          "fall": "north",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 4.56,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302: the main roof drawn at 25° in all four elevations",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P6",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              13270,
+              7837
+            ],
+            [
+              13270,
+              3344
+            ],
+            [
+              11024,
+              5590
+            ]
+          ],
+          "plan_area_m2": 5.05,
+          "pitch_deg": 25,
+          "pitch_source": "elevation",
+          "fall": "east",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 5.57,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302: the main roof drawn at 25° in all four elevations",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P7",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              3662,
+              3242
+            ],
+            [
+              10914,
+              3242
+            ],
+            [
+              13270,
+              890
+            ],
+            [
+              7519,
+              890
+            ],
+            [
+              7519,
+              97
+            ],
+            [
+              517,
+              97
+            ]
+          ],
+          "plan_area_m2": 27.83,
+          "pitch_deg": 4.9,
+          "pitch_source": "elevation",
+          "fall": "south",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 27.93,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302 east elevation: the kitchen and sleepout roof drawn at 4.9°",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P8",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              10914,
+              3242
+            ],
+            [
+              13270,
+              3242
+            ],
+            [
+              13270,
+              890
+            ]
+          ],
+          "plan_area_m2": 2.77,
+          "pitch_deg": 4.9,
+          "pitch_source": "elevation",
+          "fall": "east",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 2.78,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302 east elevation: the kitchen and sleepout roof drawn at 4.9°",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P9",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              11528,
+              11664
+            ],
+            [
+              13270,
+              11664
+            ],
+            [
+              11528,
+              10091
+            ]
+          ],
+          "plan_area_m2": 1.37,
+          "pitch_deg": 4.8,
+          "pitch_source": "elevation",
+          "fall": "north",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 1.37,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302 north elevation: the entry skillions drawn at 4.8°",
+              "bbox": null
+            }
+          ]
+        },
+        {
+          "id": "S1-P10",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              11528,
+              10091
+            ],
+            [
+              13270,
+              11664
+            ],
+            [
+              13270,
+              7934
+            ],
+            [
+              11528,
+              7934
+            ]
+          ],
+          "plan_area_m2": 5.13,
+          "pitch_deg": 4.8,
+          "pitch_source": "elevation",
+          "fall": "east",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 5.15,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302 north elevation: the entry skillions drawn at 4.8°",
+              "bbox": null
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "eave",
+          "length_m": 7.672,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 3.827,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 1.839,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 4.493,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 9.511,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 8.32,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 5.712,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 5.712,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 5.712,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 2.367,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 3.345,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 3.345,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "valley",
+          "length_m": 3.346,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "ridge",
+          "length_m": 0.648,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "ridge",
+          "length_m": 1.84,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 7.002,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 5.751,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 2.352,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "barge",
+          "length_m": 0.796,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 3.335,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "apron",
+          "length_m": 7.252,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "apron",
+          "length_m": 2.365,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 1.742,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "eave",
+          "length_m": 3.73,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 2.351,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "apron",
+          "length_m": 1.579,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "apron",
+          "length_m": 2.157,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "apron",
+          "length_m": 1.748,
+          "source": "derived",
+          "confidence": "medium"
+        }
+      ],
+      "exclusions": [
+        {
+          "label": "Insulated roof over the new deck",
+          "reason": "Left out by the scope note",
+          "area_m2": 45.67
+        }
+      ]
+    },
+    {
+      "id": "S2",
+      "label": "New laundry and bathroom section",
+      "role": "secondary",
+      "source": "plans",
+      "planes": [
+        {
+          "id": "S2-P1",
+          "plan_dims_mm": null,
+          "polygon_mm": [
+            [
+              101,
+              5107
+            ],
+            [
+              3662,
+              5107
+            ],
+            [
+              3662,
+              3242
+            ],
+            [
+              517,
+              97
+            ],
+            [
+              101,
+              97
+            ]
+          ],
+          "plan_area_m2": 12.9,
+          "pitch_deg": 4.8,
+          "pitch_source": "elevation",
+          "fall": "west",
+          "profile": "MRS",
+          "finish_tag": null,
+          "sloped_area_m2": 12.94,
+          "confidence": "medium",
+          "evidence": [
+            {
+              "file": "floor-plan.pdf",
+              "page": 1,
+              "text": "A104 roof plan, scaled at 1:50 @ A1 printed on A3 (35.3207 mm a point); no roof dimension is written",
+              "bbox": null
+            },
+            {
+              "file": "elevations.pdf",
+              "page": 1,
+              "text": "A302 south elevation: the laundry roof drawn at 4.8°",
+              "bbox": null
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "eave",
+          "length_m": 5.01,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "barge",
+          "length_m": 3.574,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "barge",
+          "length_m": 0.417,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "apron",
+          "length_m": 1.865,
+          "source": "derived",
+          "confidence": "medium"
+        },
+        {
+          "type": "hip",
+          "length_m": 4.456,
+          "source": "derived",
+          "confidence": "medium"
+        }
+      ],
+      "exclusions": []
+    }
+  ],
+  "scope": {
+    "includes": [
+      "Re-roof the existing house: its hip roof at 25° and its lower roofs at about 5°",
+      "Roof the new laundry and bathroom section"
+    ],
+    "excludes": [
+      "The insulated roof over the new deck"
+    ],
+    "questions": [
+      "The drawings give metal roof sheeting (MRS) but no profile or colour. Which sheet is it?",
+      "No pitch is written: are the main roof’s 25° and the lower roofs’ 5°, measured off the elevations, right?",
+      "How far do the lower roofs run under the main roof’s eaves? The roof plan shows them to its gutter line.",
+      "The drawings are marked PRELIMINARY 21.04.26. Is there a later revision?"
+    ]
+  }
+}

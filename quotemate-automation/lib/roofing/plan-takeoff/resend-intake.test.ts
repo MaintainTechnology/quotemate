@@ -90,8 +90,8 @@ describe('fetchResendMessage', () => {
     object: 'email',
     id: EMAIL,
     to: ['Takeoffs <takeoffs@intake.example>'],
-    subject: 'Fw: RESEND of Quote Request: 59 Grange Rd, Eastern Heights (J14997)',
-    text: 'Could you please submit a quotation by 9/10/2026 for 59 Grange Rd, Eastern Heights 4305.',
+    subject: 'Fw: RESEND of Quote Request: 12 Sample St, Exampleton (J10001)',
+    text: 'Could you please submit a quotation by 9/10/2026 for 12 Sample St, Exampleton 4305.',
     html: '<p>ignored while there is text</p>',
     attachments: [
       { id: 'a-1', filename: 'Architectural.pdf', content_type: 'application/pdf', size: PDF_A.length },

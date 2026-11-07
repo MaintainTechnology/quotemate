@@ -53,10 +53,10 @@ describe('inflatesPastLimit', () => {
   })
 
   const fixtures = [
-    'docs/tag-roofing-requests/J14997-59-Grange-Rd/Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf',
-    'docs/tag-roofing-requests/J14997-59-Grange-Rd/Engineering- 59 GRANGE RD, EASTERN HEIGHTS Compressed.pdf',
-    'docs/tag-roofing-requests/J14945-5-Whittaker-St/Sections - 5 Whittaker street.pdf',
-    'docs/tag-roofing-requests/J14945-5-Whittaker-St/final Morgans Engineering plans - 5 Whittaker street .pdf',
+    'docs/tag-roofing-requests/grange/architectural.pdf',
+    'docs/tag-roofing-requests/grange/engineering.pdf',
+    'docs/tag-roofing-requests/whittaker/sections.pdf',
+    'docs/tag-roofing-requests/whittaker/engineering.pdf',
   ].filter((file) => existsSync(file))
   it.skipIf(!fixtures.length)('passes the real plan sets at the default caps', () => {
     for (const file of fixtures) expect(inflatesPastLimit(new Uint8Array(readFileSync(file))), file).toBe(false)

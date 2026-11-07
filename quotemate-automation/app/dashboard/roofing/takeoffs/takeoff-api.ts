@@ -51,6 +51,30 @@ export async function takeoffApi<T>(path: string, init: { method?: string; body?
   return body as T
 }
 
+/** Fetches a file from the takeoff service with the tradie's token, such as
+ *  the Roof Wizard pack (TKO-18). A refusal throws a TakeoffError, as every
+ *  call does. */
+export async function takeoffDownload(path: string): Promise<Blob> {
+  const token = await getAuthToken()
+  const res = await fetch(`${TAKEOFF_API_URL}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} })
+  if (res.ok) return res.blob()
+  const body = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown }
+  throw new TakeoffError(res.status, body.error ?? 'error', res.status === 401 ? NOT_ON_ACCOUNT : words(body.detail), body.detail ?? null)
+}
+
+/** Saves a downloaded file under its name, as the browser saves any download. */
+export function saveFile(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  // The click has started the download; the URL can go once it has the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000)
+}
+
 /** Uploads one PDF straight to its signed storage URL, reporting progress
  *  from 0 to 1. XHR, because fetch can't report upload progress. */
 export function uploadFile(signedUrl: string, file: File, onProgress: (fraction: number) => void): Promise<void> {
@@ -109,6 +133,7 @@ export const CHECK_NAMES: Record<string, string> = {
   C7: 'Confidence',
   C8: 'Drawing status',
   C9: 'Structure count',
+  C10: 'Aerial agrees',
 }
 
 /** The pipeline's six stages in the stepper's words (Design Brief §4.3). */

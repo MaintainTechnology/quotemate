@@ -11,8 +11,8 @@ import { refineReading } from './refine'
 import { RoofPlanTakeoffSchema } from './schema'
 import { scoreTakeoff } from './score'
 
-const DIR = 'docs/tag-roofing-requests/J14997-59-Grange-Rd'
-const PLANS = 'Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf'
+const DIR = 'docs/tag-roofing-requests/grange'
+const PLANS = 'architectural.pdf'
 const READING = `${DIR}/reading.json`
 const read = (path: string) => RoofPlanTakeoffSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
 const within = (actual: number | null, expected: number, pct: number) => Math.abs((actual ?? 0) / expected - 1) * 100 <= pct
@@ -47,5 +47,31 @@ describe.skipIf(!existsSync(`${DIR}/${PLANS}`) || !existsSync(READING))('Grange,
     // Against the hand-measured reference: the roofs, area and pitch now hold.
     const score = scoreTakeoff(read('eval/roof-takeoff/grange/takeoff.json'), takeoff)
     expect([score.structures.pass, score.area.pass, score.pitch.pass]).toEqual([true, true, true])
+  }, 60_000)
+})
+
+// TKO-30's first half on Whittaker: its drawings write no pitch, and its text
+// is drawn as outlines, so its reading has none. Its elevation's roof lines
+// give the hipped house 25° and the new section's skillion 5° (DEC-044).
+const WHITTAKER = 'docs/tag-roofing-requests/whittaker'
+const W_READING = `${WHITTAKER}/reading.json`
+const W_FILES = ['elevations.pdf', 'floor-plan.pdf', 'engineering.pdf', 'sections.pdf']
+
+describe.skipIf(!W_FILES.every((f) => existsSync(`${WHITTAKER}/${f}`)) || !existsSync(W_READING))('Whittaker, pitched from its elevation', () => {
+  it('pitches the hipped house at 25° and the new section at 5°, which passes the pitch gate', async () => {
+    const reading = read(W_READING)
+    const files = new Map(W_FILES.map((f) => [f, new Uint8Array(readFileSync(`${WHITTAKER}/${f}`))]))
+    const { takeoff, pitched } = await refineReading(reading, { sheets: reading.sheets, files })
+
+    expect(pitched).toBe(5)
+    const [house, section] = takeoff.structures
+    expect(house.planes.map((p) => [p.pitch_deg, p.pitch_source])).toEqual(house.planes.map(() => [25, 'elevation']))
+    expect(section.planes[0]).toMatchObject({ pitch_deg: 5, pitch_source: 'elevation' })
+    expect(house.planes[0].evidence.at(-1)).toMatchObject({ file: 'elevations.pdf', page: 1, text: expect.stringMatching(/^Pitch 25°/) })
+
+    // Against the hand-measured reference (TKO-00d): the pitches now hold. The
+    // area waits on TKO-30's second half, measuring the hip roof in plan.
+    const score = scoreTakeoff(read('eval/roof-takeoff/whittaker/takeoff.json'), takeoff)
+    expect([score.structures.pass, score.pitch.pass]).toEqual([true, true])
   }, 60_000)
 })

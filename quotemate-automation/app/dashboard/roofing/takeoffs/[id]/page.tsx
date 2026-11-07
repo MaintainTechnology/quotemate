@@ -14,10 +14,12 @@ import {
   checkChip,
   isPreliminary,
   reviewLine,
+  saveFile,
   STAGES,
   statusChip,
   TAKEOFF_API_URL,
   takeoffApi,
+  takeoffDownload,
 } from '../takeoff-api'
 
 type Preview = Omit<Extract<PriceOutcome, { ok: true }>, 'ok'>
@@ -38,19 +40,28 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const money = (n: number) => `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const measure = (n: number | null, unit: string) => (n === null ? '—' : `${n}${unit}`)
 
-export default function TakeoffRunPage({ params }: { params: Promise<{ id: string }> }) {
+export default function TakeoffRunPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   const { id } = use(params)
+  // /m links a plan measurement here with ?tab=outputs, to export its pack.
+  const asked = use(searchParams).tab
+  const first = TABS.find(([key]) => key === asked)?.[0] ?? 'checks'
   return (
     <FeatureGate slug="roofing" featureLabel="plan takeoffs">
-      {TAKEOFF_API_URL ? <Run id={id} /> : <TakeoffsOff />}
+      {TAKEOFF_API_URL ? <Run id={id} first={first} /> : <TakeoffsOff />}
     </FeatureGate>
   )
 }
 
-function Run({ id }: { id: string }) {
+function Run({ id, first }: { id: string; first: Tab }) {
   const [run, setRun] = useState<RunDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('checks')
+  const [tab, setTab] = useState<Tab>(first)
   const load = useCallback(
     () => takeoffApi<RunDetail>(`/api/takeoff/runs/${encodeURIComponent(id)}`).then(setRun, (e: unknown) => setError(message(e))),
     [id],
@@ -269,12 +280,27 @@ function Outputs({ run, onSaved }: { run: RunDetail; onSaved: () => void }) {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [saved, setSaved] = useState<Saved | null>(null)
   const [accepted, setAccepted] = useState(false)
-  const [busy, setBusy] = useState<'price' | 'save' | null>(null)
+  const [busy, setBusy] = useState<'price' | 'save' | 'export' | null>(null)
+  const [exported, setExported] = useState(false)
   const [error, setError] = useState<string | null>(null)
   if (!SETTLED.includes(run.status) || !run.takeoff) {
     return <p className="text-text-dim">The outputs open once the plans are read and checked.</p>
   }
   const review = run.status === 'needs_review'
+
+  async function exportPack() {
+    setBusy('export')
+    setError(null)
+    try {
+      const pack = await takeoffDownload(`/api/takeoff/runs/${run.run_id}/export${review ? '?accept_review=true' : ''}`)
+      saveFile(pack, `${run.job_ref ?? run.run_id.slice(0, 8)} Roof Wizard pack.zip`)
+      setExported(true)
+    } catch (e) {
+      setError(message(e))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function price() {
     setBusy('price')
@@ -303,11 +329,21 @@ function Outputs({ run, onSaved }: { run: RunDetail; onSaved: () => void }) {
   return (
     <div className="space-y-4">
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      {/* TKO-18: the pack waits on the format Roof Wizard imports (D-01). */}
-      <Output title="Export Roof Wizard pack" line="The outline, quantities and roof brief for the supplier. It waits on the Roof Wizard format.">
-        <button type="button" className={SECONDARY} disabled>
-          Export pack
+      {review ? (
+        <label className="flex min-h-11 items-center gap-3 text-text-sec">
+          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="size-4 accent-accent" />
+          Accept the failed checks to export or save anyway
+        </label>
+      ) : null}
+      <Output title="Export Roof Wizard pack" line="The roof outline (DXF), the quantities (CSV) and the roof brief (PDF), zipped with a manifest for the supplier's Roof Wizard. The pack carries no prices.">
+        <button type="button" className={SECONDARY} disabled={busy !== null || (review && !accepted)} onClick={() => void exportPack()}>
+          {busy === 'export' ? 'Exporting…' : 'Export pack'}
         </button>
+        {exported ? (
+          <p role="status" className="text-text-sec">
+            Exported. The zip is in your downloads.
+          </p>
+        ) : null}
       </Output>
       <Output title="Price preview" line="The roofs on your own rate card, priced as a re-roof: there is no new-roof price yet. Nothing is saved.">
         <button type="button" className={SECONDARY} disabled={busy !== null} onClick={() => void price()}>
@@ -316,12 +352,6 @@ function Outputs({ run, onSaved }: { run: RunDetail; onSaved: () => void }) {
         {preview ? <PreviewTable preview={preview} /> : null}
       </Output>
       <Output title="Save to measurement" line="Saves the priced roofs as a measurement you can open, adjust and share from /m.">
-        {review ? (
-          <label className="flex min-h-11 items-center gap-3 text-text-sec">
-            <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="size-4 accent-accent" />
-            Accept the failed checks and save anyway
-          </label>
-        ) : null}
         <button type="button" className={PRIMARY} disabled={busy !== null || (review && !accepted)} onClick={() => void save()}>
           {busy === 'save' ? 'Saving…' : run.status === 'saved' ? 'Show the /m link' : 'Save to measurement'}
         </button>

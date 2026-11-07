@@ -9,9 +9,9 @@ import { calibrateSheet, chooseScale, pageSegments, type SheetScale } from './ca
 import { pageText, statedScale, type Sheet } from './classify'
 
 const MM_PER_PT = 25.4 / 72
-const GRANGE = 'J14997-59-Grange-Rd'
-const WHITTAKER = 'J14945-5-Whittaker-St'
-const WHITTAKER_PLAN = 'Floor plan - 5 Whittaker street north Ipswich .pdf'
+const GRANGE = 'grange'
+const WHITTAKER = 'whittaker'
+const WHITTAKER_PLAN = 'floor-plan.pdf'
 const pdfPath = (folder: string, file: string) => `docs/tag-roofing-requests/${folder}/${file}`
 
 /** The run scale the calibrate stage would choose from the fixture's chosen plan sheets. */
@@ -31,7 +31,7 @@ async function calibrateFixture(fixture: string, folder: string) {
   return chooseScale(results)
 }
 
-describe.skipIf(!existsSync(pdfPath(GRANGE, 'Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf')))('Grange calibration', () => {
+describe.skipIf(!existsSync(pdfPath(GRANGE, 'architectural.pdf')))('Grange calibration', () => {
   it('is confirmed by its written dimensions within 1% of 1:100 at A1', async () => {
     const scale = await calibrateFixture('grange', GRANGE)
     expect(scale).toMatchObject({ stated: '1:100 @ A1', calibration: { method: 'dimension_string' } })
@@ -39,16 +39,21 @@ describe.skipIf(!existsSync(pdfPath(GRANGE, 'Architectural - 59 Grange Rd, Easte
   }, 120_000)
 })
 
-describe.skipIf(!existsSync(pdfPath(WHITTAKER, WHITTAKER_PLAN)))('Whittaker calibration', () => {
-  it('takes 1:50 at A1 printed on A3, and the deck dimension bears it out within 1%', async () => {
-    const scale = await calibrateFixture('whittaker', WHITTAKER)
+// TAG's resend carries the same drawings with the architect's /Rotate lost: read the
+// way it reads, it calibrates as the original, its lines where they were.
+describe.each([
+  ['Whittaker calibration', WHITTAKER],
+  ["Whittaker calibration, as TAG's resend carries it", `${WHITTAKER}-resend`],
+])('%s', (_name, folder) => {
+  it.skipIf(!existsSync(pdfPath(folder, WHITTAKER_PLAN)))('takes 1:50 at A1 printed on A3, and the deck dimension bears it out within 1%', async () => {
+    const scale = await calibrateFixture('whittaker', folder)
     expect(scale).toMatchObject({ stated: '1:50 @ A1', sheet_size: 'A1', calibration: { method: 'title_block' } })
 
     // The deck's west side is dimensioned 6907, drawn as outlines, so no text
     // pairs with it. Read off a render of A104: its extension lines cross the
     // dimension line (x 47.04 pt) at y 238.9 and 434.6.
     const { getDocumentProxy } = await import('unpdf')
-    const pdf = await getDocumentProxy(new Uint8Array(readFileSync(pdfPath(WHITTAKER, WHITTAKER_PLAN))))
+    const pdf = await getDocumentProxy(new Uint8Array(readFileSync(pdfPath(folder, WHITTAKER_PLAN))))
     const crossings = (await pageSegments(pdf, 1))
       .filter(([x1, y1, x2, y2]) => Math.abs(y1 - y2) < 0.3 && Math.min(x1, x2) <= 47.54 && Math.max(x1, x2) >= 46.54)
       .map(([, y1, , y2]) => (y1 + y2) / 2)

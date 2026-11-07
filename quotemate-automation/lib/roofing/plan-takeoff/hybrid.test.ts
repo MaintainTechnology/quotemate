@@ -8,7 +8,7 @@ import type { RoofMeasuredBuilding, RoofingMultiMeasurementResult } from '@/lib/
 import { runChecks } from './checks'
 import { geoscapeMeasure, measureAndMerge, mergeAerial } from './hybrid'
 import { RoofPlanTakeoffSchema, type RoofPlanTakeoff } from './schema'
-import { fakeDb } from './test-db'
+import { fakeDb, type Row } from './test-db'
 
 const TENANT = '11111111-1111-4111-8111-111111111111'
 const RUN = '22222222-2222-4222-8222-222222222222'
@@ -117,10 +117,12 @@ describe('C10 aerial agrees', () => {
 })
 
 describe('measureAndMerge', () => {
-  const setup = (run = {}) => fakeDb({
-    runs: [{ id: RUN, tenant_id: TENANT, status: 'needs_review', site_address: '5 Whittaker St, North Ipswich QLD 4305', postcode: null, state: null,
-      latest_extraction_id: 'X1', scope_note: null, checks: { schedule: [] }, job_ref: 'J14945', job_name: 'Whittaker St', builder: null, ...run }],
+  // The tenant is on file in NSW, so a lookup in QLD shows the address's own state won.
+  const setup = (run = {}, tenants: Row[] = [{ id: TENANT, state: 'NSW' }]) => fakeDb({
+    runs: [{ id: RUN, tenant_id: TENANT, status: 'needs_review', site_address: '34 Example St, Sampleton QLD 4305', postcode: null, state: null,
+      latest_extraction_id: 'X1', scope_note: null, checks: { schedule: [] }, job_ref: 'J10002', job_name: 'Example St', builder: null, ...run }],
     extractions: [{ id: 'X1', tenant_id: TENANT, items: WHITTAKER, corrected_items: null }],
+    tenants,
   })
   const found = (...buildings: RoofMeasuredBuilding[]): RoofingMultiMeasurementResult => ({ ok: true, buildings, provider: 'geoscape', warnings: [] })
 
@@ -128,11 +130,30 @@ describe('measureAndMerge', () => {
     const fake = setup()
     const measure = vi.fn(async () => found(building('G-house', 120, 22.5)))
     const outcome = await measureAndMerge(fake.db, { tenantId: TENANT, runId: RUN, existing: ['S1'], measure })
-    expect(measure).toHaveBeenCalledWith({ address: '5 Whittaker St, North Ipswich QLD 4305', postcode: '4305', state: 'QLD' })
+    expect(measure).toHaveBeenCalledWith({ address: '34 Example St, Sampleton QLD 4305', postcode: '4305', state: 'QLD' })
     expect(outcome).toMatchObject({ ok: true, run_id: RUN })
     expect(outcome.ok && outcome.checks.results.map((r) => r.id)).toContain('C10')
     const saved = fake.tables.plan_extractions[0].corrected_items as RoofPlanTakeoff
     expect(saved.structures.map((s) => s.source)).toEqual(['hybrid', 'plans'])
+  })
+
+  it("looks up a site named without its state or postcode in the tenant's own state, as TAG named Whittaker", async () => {
+    const fake = setup({ site_address: '34 Example St, Sampleton' }, [{ id: TENANT, state: 'qld' }])
+    const measure = vi.fn(async () => found(building('G-house', 120, 22.5)))
+    const outcome = await measureAndMerge(fake.db, { tenantId: TENANT, runId: RUN, existing: ['S1'], measure })
+    // Geoscape looks an address up within its state; the postcode only gates coverage.
+    expect(measure).toHaveBeenCalledWith({ address: '34 Example St, Sampleton', postcode: '', state: 'QLD' })
+    expect(outcome).toMatchObject({ ok: true, run_id: RUN })
+  })
+
+  it('is aerial_unavailable, with no call made, when neither the address nor the tenant gives a state', async () => {
+    const measure = vi.fn(async () => found(building('G', 100)))
+    for (const tenants of [[{ id: TENANT, state: null }], [{ id: TENANT, state: 'Queensland' }], []]) {
+      const fake = setup({ site_address: '34 Example St, Sampleton' }, tenants)
+      expect(await measureAndMerge(fake.db, { tenantId: TENANT, runId: RUN, existing: ['S1'], measure }))
+        .toEqual({ ok: false, error: 'aerial_unavailable', detail: 'The site address has no state to look up, and the tenant has none on file.' })
+    }
+    expect(measure).not.toHaveBeenCalled()
   })
 
   it('answers aerial_unavailable, writing nothing, when Geoscape finds nothing, fails or runs past its limit', async () => {
