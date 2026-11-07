@@ -108,17 +108,19 @@ export async function evalFixture(fixture: EvalFixture, models: EvalModels = {})
       sheets.push(...classified.sheets)
       spend(classified.usage, classified.modelPages)
     }
+    const schedule = await scheduleOf(fixture.files)
     const read = await readPlans({
       sheets,
       files: copies(fixture.files),
       scopeNote: request.scope_note,
       job: { name: request.job_name, ref: request.job_ref, address: request.site_address },
+      schedule,
     }, models.generate)
     spend(read.usage, read.usage.calls)
     if (!read.ok) return failed(read.note)
 
     const refined = await refineReading(read.takeoff, { sheets, files: copies(fixture.files) })
-    const checks = runChecks(refined.takeoff, { scopeNote: request.scope_note, schedule: await scheduleOf(fixture.files) })
+    const checks = runChecks(refined.takeoff, { scopeNote: request.scope_note, schedule })
     return { fixture: fixture.name, reference, score: scoreTakeoff(reference, refined.takeoff), status: checks.status, reading: refined.takeoff, note: null, usage }
   } catch (error) {
     return failed(`The pipeline stopped: ${error instanceof Error ? error.message : String(error)}`.slice(0, 500))

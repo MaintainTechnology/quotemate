@@ -173,12 +173,16 @@ async function extract(ctx: StageContext) {
   const uploads = (await uploadsOf(ctx)).filter((u) => chosen.some((s) => s.file === u.filename))
   const files = new Map<string, Uint8Array>()
   for (const upload of uploads) files.set(upload.filename, await download(ctx, upload))
+  // The area schedule C3 checks by, so the reader can look again for a roof
+  // it left out (TKO-15).
+  const schedule = await scheduleOf(ctx)
   const started = Date.now()
   const read = await readPlans({
     sheets,
     files,
     scopeNote: job.scope_note,
     job: { name: job.job_name, ref: job.job_ref, address: job.site_address },
+    schedule,
   })
   const seconds = (Date.now() - started) / 1000
   await updateRun(ctx, { usage: withUsage(ctx.run, 'extract', { ...read.usage, seconds }) })

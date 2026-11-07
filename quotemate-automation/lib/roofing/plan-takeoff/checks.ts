@@ -67,11 +67,17 @@ export function dimensionsConsistent(t: Takeoff): CheckResult {
   return { id: 'C2', result: 'pass', detail: `Each plane's dimensions agree with its area within 3% (${compared} compared).` }
 }
 
-/** C3: where the drawings state a roof footprint or area, the takeoff is
- *  within 2%. Like with like (DEC-012): a carport or deck line is an outline
+/** How far C3 lets the planes stray from the schedule's footprint, in %. */
+export const SCHEDULE_PCT = 2
+/** The schedule line C3 reconciles against, which the reader checks itself by
+ *  too (TKO-15). Like with like (DEC-012): a carport or deck line is an outline
  *  to the gutter, not sheeted area, so only footprint and roof-area lines count. */
+export const footprintLine = (schedule: ScheduleLine[]) => schedule.find((l) => /FOOTPRINT|ROOF\s+AREA/i.test(l.label) && !/EXISTING/i.test(l.label))
+
+/** C3: where the drawings state a roof footprint or area, the takeoff is
+ *  within 2%. */
 export function scheduleReconciles(t: Takeoff, ctx: CheckContext): CheckResult {
-  const line = ctx.schedule.find((l) => /FOOTPRINT|ROOF\s+AREA/i.test(l.label) && !/EXISTING/i.test(l.label))
+  const line = footprintLine(ctx.schedule)
   if (!line) return { id: 'C3', result: 'skipped', detail: 'No area schedule on the drawings states a roof footprint.' }
   const planes = planesOf(t)
   if (!planes.length || planes.some((p) => p.plan_area_m2 === null)) {
@@ -79,7 +85,7 @@ export function scheduleReconciles(t: Takeoff, ctx: CheckContext): CheckResult {
   }
   const total = planes.reduce((sum, p) => sum + (p.plan_area_m2 ?? 0), 0)
   const detail = `${m2(total)} on plan against the schedule's ${m2(line.m2)} ${line.label.toLowerCase()} (${off(total, line.m2).toFixed(1)}%).`
-  return { id: 'C3', result: off(total, line.m2) <= 2 ? 'pass' : 'fail', detail, evidence: { file: line.file, page: line.page } }
+  return { id: 'C3', result: off(total, line.m2) <= SCHEDULE_PCT ? 'pass' : 'fail', detail, evidence: { file: line.file, page: line.page } }
 }
 
 // Lowest published pitch per profile (manufacturers' figures, Lysaght and Stramit).
