@@ -171,6 +171,22 @@ function sized(plane: Plane, id: string, box: Box, found: { tag: string; sheet: 
 type Found = NonNullable<ReturnType<typeof outlinesFor>>
 type Edge = Structure['edges'][number]
 
+/** A tag on one sheet: the outlines it sits in are the same wherever it's cited. */
+const tagKey = (f: Found) => `${f.sheet.file}#${f.sheet.page}#${f.tag.replace(/\s+/g, '').toUpperCase()}`
+
+/** A roof read as several planes, none sized, each citing one tag the drawing
+ *  has an outline for each of, is that tag's roofs: it's measured as one plane
+ *  of the tag, which its outlines then size, or split into its separate roofs.
+ *  Grange's carport, read as two RF:03 planes, otherwise took both bays for
+ *  each plane, 72 m² for its 36 (TKO-15). */
+function asOneTagged(structure: Structure, sheets: MeasuredSheet[]): Structure {
+  if (structure.planes.length < 2 || structure.planes.some((p) => p.plan_area_m2 !== null)) return structure
+  const found = structure.planes.map((p) => outlinesFor(p, sheets))
+  const [first] = found
+  if (!first || found.some((f) => !f || tagKey(f) !== tagKey(first)) || first.boxes.length < structure.planes.length) return structure
+  return { ...structure, planes: [structure.planes[0]] }
+}
+
 /** A gap between bays this narrow is a wall between them, such as Grange's
  *  190 mm block wall between its carport bays. */
 const WALL_MM = 400
@@ -206,11 +222,10 @@ function bayEdges(box: Box, bays: Box[], plane: Plane, factor: number): Edge[] {
  *    can share, as Grange's two houses do, so roofs that each have an area
  *    keep theirs. */
 function loneShares(takeoff: Takeoff, sheets: MeasuredSheet[]): Map<Plane, { found: Found; groups: Box[][] }> {
-  const key = (f: Found) => `${f.sheet.file}#${f.sheet.page}#${f.tag.replace(/\s+/g, '').toUpperCase()}`
   const count = (keys: string[]) => keys.reduce((n, k) => n.set(k, (n.get(k) ?? 0) + 1), new Map<string, number>())
   const cited = takeoff.structures.flatMap(({ planes }) => {
     const found = planes.length === 1 ? outlinesFor(planes[0], sheets) : null
-    return found ? [{ plane: planes[0], found, key: key(found) }] : []
+    return found ? [{ plane: planes[0], found, key: tagKey(found) }] : []
   })
   const citers = count(cited.map((c) => c.key))
   const measured = cited.filter(({ plane, found, key: k }) => plane.plan_area_m2 === null || (citers.get(k) === 1 && roofs(found.boxes).length > 1))
@@ -233,13 +248,21 @@ function loneShares(takeoff: Takeoff, sheets: MeasuredSheet[]): Map<Plane, { fou
  *  separate roofs, so a one-plane structure splits into one per roof. */
 export function measureOutlines(takeoff: Takeoff, sheets: MeasuredSheet[]): { takeoff: Takeoff; measured: number } {
   let measured = 0
-  const shares = loneShares(takeoff, sheets)
-  const structures = takeoff.structures.flatMap((structure): Structure[] => {
+  const read = { ...takeoff, structures: takeoff.structures.map((s) => asOneTagged(s, sheets)) }
+  const shares = loneShares(read, sheets)
+  const structures = read.structures.flatMap((structure): Structure[] => {
     const lone = structure.planes.length === 1
     const planes: Plane[] = []
+    const taken = new Set<string>()
     let split: Structure[] = []
     for (const plane of structure.planes) {
-      const found = lone ? shares.get(plane)?.found ?? null : plane.plan_area_m2 === null ? outlinesFor(plane, sheets) : null
+      let found = lone ? shares.get(plane)?.found ?? null : plane.plan_area_m2 === null ? outlinesFor(plane, sheets) : null
+      // A tag's outlines are this roof's planes once: a later plane citing the
+      // same tag stays as read, unsized, for C5 to flag (TKO-15).
+      if (!lone && found) {
+        if (taken.has(tagKey(found))) found = null
+        else taken.add(tagKey(found))
+      }
       const groups = lone ? shares.get(plane)?.groups ?? [] : found ? roofs(found.boxes) : []
       if (!found || !groups.length) {
         planes.push(plane)

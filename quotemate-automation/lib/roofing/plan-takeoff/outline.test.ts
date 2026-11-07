@@ -143,6 +143,42 @@ describe('measureOutlines', () => {
     expect(takeoff.structures[0].planes.map((p) => p.id)).toEqual(['S3-P1', 'S3-P1-2'])
   })
 
+  // Grange's carport, read as one roof of two RF:03 planes, none sized, took
+  // both bays for each plane: 72 m² for its 36 (TKO-15).
+  const twoPlanes = (prepare: (planes: RoofPlanTakeoff['structures'][number]['planes']) => void = () => {}) => {
+    const t = carport()
+    const [plane] = t.structures[0].planes
+    t.structures[0].planes.push({ ...structuredClone(plane), id: 'S3-P2' })
+    prepare(t.structures[0].planes)
+    return t
+  }
+  const shape = (t: RoofPlanTakeoff) => t.structures.map((s) => [s.id, s.planes.map((p) => [p.id, p.plan_area_m2])])
+
+  it("reads a roof of several unsized planes citing one tag as that tag's roofs, each outline measured once (TKO-15)", () => {
+    const apart = measureOutlines(twoPlanes(), [sheet([...bays, ...frames, ...legend], runs)])
+    expect(apart.measured).toBe(2)
+    expect(shape(apart.takeoff)).toEqual([['S3-1', [['S3-1-P1', 16.5]]], ['S3-2', [['S3-2-P1', 16.5]]]])
+
+    const halves = [...rect(100, 100, 160, 210), ...rect(160, 100, 220, 210)]
+    const gable = measureOutlines(twoPlanes(), [sheet(halves, [tag('RF:03', 115, 154), tag('RF:03', 175, 154)])])
+    expect(shape(gable.takeoff)).toEqual([['S3', [['S3-P1', 16.5], ['S3-P1-2', 16.5]]]])
+  })
+
+  it("measures a tag's outlines once in a roof of several planes: a second plane citing it stays as read", () => {
+    // A plane sized from its own dimensions beside two the tag's outlines size.
+    const mixed = twoPlanes((planes) => {
+      planes.unshift({ ...structuredClone(planes[0]), id: 'S3-P0', plan_area_m2: 20, evidence: [{ file: 'A.pdf', page: 1, text: '4000 × 5000', bbox: null }] })
+    })
+    const halves = [...rect(100, 100, 160, 210), ...rect(160, 100, 220, 210)]
+    const { takeoff, measured } = measureOutlines(mixed, [sheet(halves, [tag('RF:03', 115, 154), tag('RF:03', 175, 154)])])
+    expect(measured).toBe(2)
+    expect(shape(takeoff)).toEqual([['S3', [['S3-P0', 20], ['S3-P1', 16.5], ['S3-P1-2', 16.5], ['S3-P2', null]]]])
+
+    // Fewer outlines than planes: one plane takes the one, and the other is left for C5 to flag.
+    const one = measureOutlines(twoPlanes(), [sheet([...rect(100, 100, 160, 210), ...frames.slice(0, 4)], [runs[0]])])
+    expect([one.measured, shape(one.takeoff)]).toEqual([1, [['S3', [['S3-P1', 16.5], ['S3-P2', null]]]]])
+  })
+
   it('leaves a plane alone when its tag sits in no outline, or it has an area already', () => {
     const lonely = measureOutlines(carport(), [sheet(bays, [tag('RF:03', 700, 700)])])
     expect([lonely.measured, lonely.takeoff.structures[0].planes[0].plan_area_m2]).toEqual([0, null])
