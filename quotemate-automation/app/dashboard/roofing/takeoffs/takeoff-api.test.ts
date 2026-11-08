@@ -2,7 +2,21 @@
 // every call, the service's refusals in words, and chips that always carry one.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CHECK_NAMES, checkChip, isPreliminary, reviewLine, statusChip, TakeoffError, takeoffApi, takeoffDownload } from './takeoff-api'
+import type { RegionsView } from '@/lib/roofing/plan-takeoff'
+import {
+  CHECK_NAMES,
+  checkChip,
+  isPreliminary,
+  LEFT_OUT,
+  regionAnswers,
+  regionsLine,
+  reviewLine,
+  startingChoices,
+  statusChip,
+  TakeoffError,
+  takeoffApi,
+  takeoffDownload,
+} from './takeoff-api'
 
 vi.mock('@/lib/auth/client-token', () => ({ getAuthToken: vi.fn(async () => 'tradie-token') }))
 
@@ -92,6 +106,37 @@ describe('chips and lines', () => {
     expect([reviewLine(1), reviewLine(2)]).toEqual([
       '1 check needs a look before this goes to the supplier.',
       '2 checks need a look before this goes to the supplier.',
+    ])
+  })
+})
+
+describe('the numbered roof areas (TKO-30)', () => {
+  const VIEW: RegionsView = {
+    sheet: { file: 'plans.pdf', page: 1 },
+    areas: [{ n: 1, falls: ['north', 'south'] }, { n: 2, falls: ['east', 'west'] }, { n: 3, falls: ['east', 'west'] }],
+    roofs: [{ id: 'S1', label: 'House' }, { id: 'S2', label: 'New section' }],
+    suggested: [{ n: 1, roof: 'S1', fall: 'north', covers: 'Kitchen' }, { n: 2, roof: null, fall: null, covers: 'Deck' }],
+    note: null,
+    confirmed: null,
+  }
+
+  it("starts each area at the operator's last answer, else the reader's suggestion, else unanswered", () => {
+    expect(startingChoices(VIEW)).toEqual({ 1: { roof: 'S1', fall: 'north' }, 2: { roof: LEFT_OUT, fall: '' }, 3: { roof: '', fall: '' } })
+    const confirmed = { ...VIEW, confirmed: { areas: [{ n: 1, roof: 'S2', fall: 'south' as const }, { n: 2, roof: null, fall: null }, { n: 3, roof: 'S1', fall: 'east' as const }], at: '2026-11-08T10:00:00.000Z' } }
+    expect(startingChoices(confirmed)).toEqual({ 1: { roof: 'S2', fall: 'south' }, 2: { roof: LEFT_OUT, fall: '' }, 3: { roof: 'S1', fall: 'east' } })
+  })
+
+  it('gives the service an answer for every area, and none while an area of the job lacks a roof or a fall', () => {
+    const choices = { 1: { roof: 'S1', fall: 'north' }, 2: { roof: LEFT_OUT, fall: 'east' }, 3: { roof: 'S2', fall: 'west' } }
+    expect(regionAnswers(VIEW, choices)).toEqual([{ n: 1, roof: 'S1', fall: 'north' }, { n: 2, roof: null, fall: null }, { n: 3, roof: 'S2', fall: 'west' }])
+    expect(regionAnswers(VIEW, { ...choices, 3: { roof: '', fall: '' } })).toBeNull()
+    expect(regionAnswers(VIEW, { ...choices, 3: { roof: 'S2', fall: '' } })).toBeNull()
+  })
+
+  it('says how many areas wait on the operator', () => {
+    expect([regionsLine(1), regionsLine(6)]).toEqual([
+      'One roof area on the plan needs you to say which roof it is: see Takeoff.',
+      '6 roof areas on the plan need you to say which roof each is: see Takeoff.',
     ])
   })
 })

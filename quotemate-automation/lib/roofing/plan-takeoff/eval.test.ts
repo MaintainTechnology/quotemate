@@ -105,6 +105,22 @@ describe('loadFixtures', () => {
     expect(demo).toMatchObject({ name: 'demo', request: { job_name: 'Demo garage' }, reference: { structures: [{ id: 'S1' }] } })
     expect([...demo.files.keys()]).toEqual(['plans.pdf'])
   })
+
+  it("takes a fixture's operator.json as the operator's answer to its numbered roof areas (TKO-30)", async () => {
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const areas = [{ n: 1, roof: 'S1', fall: 'west' }, { n: 2, roof: null, fall: null }]
+    const { db } = fakeDb({
+      objects: {
+        'eval/demo/request.json': json({ job_name: null, job_ref: 'J1', site_address: null, scope_note: null }),
+        'eval/demo/takeoff.json': json(REFERENCE),
+        'eval/demo/operator.json': json({ note: 'As the drawings read.', areas }),
+        'eval/other/request.json': json({ job_name: null, job_ref: 'J2', site_address: null, scope_note: null }),
+        'eval/other/takeoff.json': json(REFERENCE),
+      },
+    })
+    const [demo, other] = await loadFixtures(db, 'plan-pdfs')
+    expect([demo.operator, other.operator]).toEqual([areas, null])
+  })
 })
 
 describe('recordEval', () => {
@@ -121,6 +137,13 @@ describe('recordEval', () => {
     expect(tables.eval_run_items.map((row) => [row.run_id, row.intake_fixture_id])).toEqual([[id, 'demo'], [id, 'broken']])
     expect(tables.eval_run_items[0]).toMatchObject({ expected: REFERENCE, notes: expect.stringContaining('pass structures: 1 roofs read, 1 expected.') })
     expect(tables.eval_run_items[1]).toMatchObject({ actual: { error: expect.any(String) } })
+  })
+
+  it("notes what came of a fixture's numbered roof areas (TKO-30)", async () => {
+    const { db, tables } = fakeDb()
+    const result = await evalFixture(await fixture(), { generate: answering(reply), readSheet })
+    await recordEval(db, [{ ...result, regions: "6 numbered roof areas; the operator's answer measured 5" }], { model: 'claude-opus-4-8', promptVersion: 'abc123', startedAt: new Date('2026-11-08T10:00:00Z') })
+    expect(tables.eval_run_items[0].notes).toContain("regions: 6 numbered roof areas; the operator's answer measured 5")
   })
 })
 
@@ -182,6 +205,16 @@ describe('promoteRun (TKO-00c)', () => {
     // The nightly eval takes it as it takes the others.
     const loaded = (await loadFixtures(fake.db, 'plan-pdfs')).find((f) => f.name === 'smith-st')
     expect([...(loaded?.files.keys() ?? [])]).toEqual(['plans-1.pdf'])
+  })
+
+  it("carries the operator's answer to the run's numbered roof areas, so the eval measures it as the run page did (TKO-30)", async () => {
+    const fake = await setup()
+    const areas = [{ n: 1, roof: 'S1', fall: 'west' }, { n: 2, roof: null, fall: null }]
+    fake.tables.roof_takeoff_runs[0].regions = { confirmed: { areas, at: '2026-11-06T00:00:00.000Z' } }
+    await expect(promoteRun(fake.db, 'plan-pdfs', { tenantId: 't1', runId: 'r1', name: 'smith-st', now: NOW })).resolves.toMatchObject({ ok: true })
+    expect(fixtureFiles(fake)).toEqual(['eval/smith-st/operator.json', 'eval/smith-st/plans-1.pdf', 'eval/smith-st/request.json', 'eval/smith-st/takeoff.json'])
+    expect(json(fake, 'eval/smith-st/operator.json')).toEqual({ areas })
+    expect((await loadFixtures(fake.db, 'plan-pdfs')).find((f) => f.name === 'smith-st')?.operator).toEqual(areas)
   })
 
   it("refuses a run it can't find, one no tradie corrected, a name that isn't a plain slug, and a name taken", async () => {

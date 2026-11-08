@@ -6,12 +6,13 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { generateText } from 'ai'
 import { areaSchedule, runChecks, type ScheduleLine } from './checks'
 import { CLASSIFY_MODEL, classifyFile, MIN_PAGE_TEXT, pageText, type Sheet } from './classify'
 import { inflatesPastLimit } from './pdf-guard'
 import { readPlans, RUN_TOKEN_BUDGET } from './read'
 import { elevationSheets, planSheets, refineReading } from './refine'
-import type { TakeoffStage } from './runs'
+import { regionsPlanPath, type TakeoffStage } from './runs'
 import type { RoofPlanTakeoff } from './schema'
 
 export const MAX_RUN_PAGES = 200
@@ -227,11 +228,15 @@ async function latestReading({ db, run }: StageContext): Promise<Reading> {
  *  they don't dimension from their drawn outlines (TKO-29), pitches the planes
  *  they give no pitch from an elevation's roof lines and measures a hip roof
  *  from its drawn hips and ridges (TKO-30), and works out
- *  each skillion's edges (TKO-15), through refineReading, which the eval runs too. */
+ *  each skillion's edges (TKO-15), through refineReading, which the eval runs too.
+ *  Roofs still unmeasured beside a hip roof are kept as numbered areas, with
+ *  their numbered plan and the reader's suggestion, for the operator to
+ *  answer on the run page (TKO-30, DEC-048). */
 async function calibrate(ctx: StageContext) {
+  const started = Date.now()
   const reading = await latestReading(ctx)
   const { data: run, error } = await ctx.db.from('roof_takeoff_runs')
-    .select('sheet_index')
+    .select('sheet_index, scope_note')
     .eq('id', ctx.run.id).eq('tenant_id', ctx.run.tenant_id)
     .maybeSingle()
   if (error || !run) throw new Error(`takeoff run read failed: ${error?.message ?? 'no run'}`)
@@ -241,15 +246,31 @@ async function calibrate(ctx: StageContext) {
   for (const upload of (await uploadsOf(ctx)).filter((u) => wanted.some((s) => s.file === u.filename))) {
     files.set(upload.filename, await download(ctx, upload))
   }
-  const refined = await refineReading(reading.items, { sheets, files })
+  const refined = await refineReading(reading.items, { sheets, files, scopeNote: (run.scope_note as string | null) ?? null, suggest: generateText })
   if (refined.changed) {
     const { error: updateError } = await ctx.db.from('plan_extractions')
       .update({ items: refined.takeoff })
       .eq('id', reading.id).eq('tenant_id', ctx.run.tenant_id)
     if (updateError) throw new Error(`takeoff calibration save failed: ${updateError.message}`)
   }
+  // The numbered plan before the areas, so a run that shows them can open it.
+  // A restart writes it again.
+  if (refined.regions) {
+    const { error: planError } = await ctx.db.storage.from(ctx.bucket)
+      .upload(regionsPlanPath(ctx.run.tenant_id, ctx.run.id), refined.regions.plan, { contentType: 'application/pdf', upsert: true })
+    if (planError) throw new Error(`takeoff numbered plan upload failed: ${planError.message}`)
+  }
+  // Null clears the areas a run had before a restart read it again.
+  // ponytail: the suggestion's one small call isn't held to RUN_TOKEN_BUDGET; extract's reading is.
+  await updateRun(ctx, {
+    regions: refined.regions?.stored ?? null,
+    ...(refined.usage ? { usage: withUsage(ctx.run, 'calibrate', { ...refined.usage, seconds: (Date.now() - started) / 1000 }) } : {}),
+  })
   const { method, factor, delta_pct } = refined.takeoff.scale.calibration
-  return { method, factor, delta_pct, sheets: refined.sheets, measured: refined.measured, pitched: refined.pitched, hipped: refined.hipped, derived: refined.derived }
+  return {
+    method, factor, delta_pct, sheets: refined.sheets, measured: refined.measured, pitched: refined.pitched, hipped: refined.hipped, derived: refined.derived,
+    regions: refined.regions?.stored.areas.length ?? 0,
+  }
 }
 
 /** The first area schedule in the run's plan sets, such as Grange's on its

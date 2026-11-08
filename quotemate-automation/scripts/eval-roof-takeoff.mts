@@ -22,6 +22,7 @@ import { parseArgs } from 'node:util'
 import { brokenPrompt, evalFixture, loadFixtures, promptVersion, recordEval, swapReader, type Effort, type EvalFixture, type FixtureResult } from '@/lib/roofing/plan-takeoff/eval'
 import { DEFAULT_TAKEOFF_MODEL } from '@/lib/roofing/plan-takeoff/read'
 import { elevationSheets, planSheets, refineReading } from '@/lib/roofing/plan-takeoff/refine'
+import { placeRegions, RegionAnswersSchema } from '@/lib/roofing/plan-takeoff/regions'
 import { RoofPlanTakeoffSchema } from '@/lib/roofing/plan-takeoff/schema'
 import { scoreTakeoff, type Score } from '@/lib/roofing/plan-takeoff/score'
 import { getServiceClient } from '@/lib/supabase/admin'
@@ -42,6 +43,11 @@ const { values: args } = parseArgs({
 const chosen = FIXTURES.filter((f) => !args.only || f.name === args.only)
 const json = (path: string) => JSON.parse(readFileSync(path, 'utf8'))
 const reference = (name: string) => RoofPlanTakeoffSchema.parse(json(`eval/roof-takeoff/${name}/takeoff.json`))
+/** The operator's answer to the fixture's numbered roof areas (TKO-30), when it has one. */
+const operatorOf = (name: string) => {
+  const path = `eval/roof-takeoff/${name}/operator.json`
+  return existsSync(path) ? RegionAnswersSchema.parse(json(path).areas) : null
+}
 const pdfs = (folder: string) => new Map(readdirSync(folder).filter((f) => /\.pdf$/i.test(f)).sort().map((f) => [f, new Uint8Array(readFileSync(`${folder}/${f}`))]))
 const show = (name: string, score: Score, about: string) => {
   console.log(`${name}: ${score.pass ? 'passes' : 'fails'} (${about})`)
@@ -63,9 +69,14 @@ async function saved(): Promise<boolean> {
     const wanted = [...planSheets(reading.sheets), ...elevationSheets(reading.sheets)]
     const files = new Map([...pdfs(fixture.plans)].filter(([file]) => wanted.some((s) => s.file === file)))
     const refined = await refineReading(reading, { sheets: reading.sheets, files })
-    const score = scoreTakeoff(reference(fixture.name), refined.takeoff)
+    // The operator's answer to the numbered roof areas, measured as the run page measures it.
+    const operator = operatorOf(fixture.name)
+    const placed = refined.regions && operator ? placeRegions(refined.takeoff, refined.regions.stored, operator) : null
+    if (placed && !placed.ok) console.log(`${fixture.name}: the operator's answer couldn't be measured: ${placed.problems.join(' ')}`)
+    const score = scoreTakeoff(reference(fixture.name), placed?.ok ? placed.takeoff : refined.takeoff)
     pass &&= score.pass
-    show(fixture.name, score, `saved reading; scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines, ${refined.pitched} pitched from an elevation, ${refined.hipped} measured from a hip roof's lines, ${refined.derived} skillions' edges worked out`)
+    const regions = refined.regions ? `, ${refined.regions.stored.areas.length} roof areas numbered and ${placed?.ok ? placed.placed : 0} measured as the operator answered` : ''
+    show(fixture.name, score, `saved reading; scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines, ${refined.pitched} pitched from an elevation, ${refined.hipped} measured from a hip roof's lines, ${refined.derived} skillions' edges worked out${regions}`)
   }
   return pass
 }
@@ -80,7 +91,7 @@ async function live(): Promise<boolean> {
   const settings = [system && 'broken prompt', swap.maxOutputTokens && `${swap.maxOutputTokens} output tokens`, swap.effort && `effort ${swap.effort}`].filter(Boolean).join(', ')
   const repeat = Math.max(1, Number(args.repeat ?? 1))
   const fixtures: EvalFixture[] = args.local
-    ? chosen.map(({ name, plans }) => ({ name, request: json(`eval/roof-takeoff/${name}/request.json`), reference: reference(name), files: pdfs(plans) }))
+    ? chosen.map(({ name, plans }) => ({ name, request: json(`eval/roof-takeoff/${name}/request.json`), reference: reference(name), files: pdfs(plans), operator: operatorOf(name) }))
     : (await loadFixtures(getServiceClient(), process.env.TAKEOFF_STORAGE_BUCKET?.trim() || 'plan-pdfs')).filter((f) => !args.only || f.name === args.only)
 
   const startedAt = new Date()

@@ -12,14 +12,22 @@ import { Chip, Notice, PRIMARY, SECONDARY, Table, TakeoffsOff } from '../_compon
 import {
   CHECK_NAMES,
   checkChip,
+  FALL_WORDS,
   isPreliminary,
+  LEFT_OUT,
+  regionAnswers,
+  regionsLine,
   reviewLine,
   saveFile,
   STAGES,
+  startingChoices,
   statusChip,
   TAKEOFF_API_URL,
   takeoffApi,
   takeoffDownload,
+  TakeoffError,
+  when,
+  type AreaChoice,
 } from '../takeoff-api'
 
 type Preview = Omit<Extract<PriceOutcome, { ok: true }>, 'ok'>
@@ -36,6 +44,7 @@ const TABS: Array<[Tab, string]> = [
 ]
 const ROW = 'border-b border-ink-line last:border-0'
 const CELL = 'px-4 py-2.5'
+const SELECT = 'rounded-ctl min-h-11 border border-ink-line bg-ink-deep px-2 text-sm text-text-pri disabled:opacity-50'
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const money = (n: number) => `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const measure = (n: number | null, unit: string) => (n === null ? '—' : `${n}${unit}`)
@@ -108,6 +117,7 @@ function Run({ id, first }: { id: string; first: Tab }) {
         ) : null}
         {run.status === 'failed' && run.status_note ? <Notice tone="danger">{run.status_note}</Notice> : null}
         {run.status === 'needs_review' && fails ? <Notice tone="warning">{reviewLine(fails)}</Notice> : null}
+        {run.regions && !run.regions.confirmed ? <Notice tone="warning">{regionsLine(run.regions.areas.length)}</Notice> : null}
         {preliminary ? <Notice tone="warning">These drawings are marked preliminary. Confirm the current revision with the builder.</Notice> : null}
       </header>
       <div role="tablist" aria-label="Takeoff" className="flex flex-wrap gap-1 border-b border-ink-line">
@@ -130,7 +140,7 @@ function Run({ id, first }: { id: string; first: Tab }) {
         {tab === 'checks' ? (
           <Checks run={run} />
         ) : tab === 'takeoff' ? (
-          <Takeoff run={run} />
+          <Takeoff run={run} onChanged={() => void load()} />
         ) : tab === 'sheets' ? (
           <Sheets run={run} />
         ) : (
@@ -187,11 +197,12 @@ function Checks({ run }: { run: RunDetail }) {
   )
 }
 
-function Takeoff({ run }: { run: RunDetail }) {
+function Takeoff({ run, onChanged }: { run: RunDetail; onChanged: () => void }) {
   const takeoff = run.takeoff
   if (!takeoff) return <p className="text-text-dim">No takeoff yet.</p>
   return (
     <div className="space-y-6">
+      {run.regions ? <PlanRoofs run={run} onMeasured={onChanged} /> : null}
       {/* ponytail: read-only. Corrections go through the API's PATCH; the
           brief's inline edits come with the editor. */}
       {run.corrected ? <Notice tone="neutral">This is the corrected takeoff.</Notice> : null}
@@ -241,6 +252,156 @@ function Takeoff({ run }: { run: RunDetail }) {
         </article>
       ))}
     </div>
+  )
+}
+
+/** The roof areas the drawings left unmeasured, numbered on a copy of the
+ *  plan (TKO-30, DEC-048): the operator says which roof each is, or that it
+ *  isn't part of the job, and the drawing measures what the operator
+ *  confirms. The reader's suggestion fills the form first; nothing is
+ *  measured from it alone. */
+function PlanRoofs({ run, onMeasured }: { run: RunDetail; onMeasured: () => void }) {
+  const regions = run.regions!
+  const [choices, setChoices] = useState(() => startingChoices(regions))
+  const [plan, setPlan] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'plan' | 'measure' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [problems, setProblems] = useState<string[]>([])
+  const [measured, setMeasured] = useState(false)
+  // The plan's object URL goes when another replaces it, or the card closes.
+  useEffect(() => () => {
+    if (plan) URL.revokeObjectURL(plan)
+  }, [plan])
+
+  const sheet = run.sheet_index?.find((s) => s.file === regions.sheet.file && s.page === regions.sheet.page)
+  const sheetName = sheet?.number ?? 'the roof plan'
+  const count = regions.areas.length
+  // One string, as JSX drops the space before text that runs onto a new line.
+  const intro = [
+    `The drawings leave ${count === 1 ? 'one roof area' : `${count} roof areas`} on ${sheetName} unmeasured.`,
+    'Each is numbered on a copy of the sheet: say which roof it belongs to, or that it isn’t part of the job, and the drawing measures it.',
+    regions.suggested ? 'The reader’s suggestion is filled in; check each against the plan.' : '',
+  ].filter(Boolean).join(' ')
+  const answers = regionAnswers(regions, choices)
+  const correctable = run.status === 'ready' || run.status === 'needs_review'
+  const choose = (n: number, change: Partial<AreaChoice>) => setChoices((all) => ({ ...all, [n]: { ...all[n], ...change } }))
+
+  async function openPlan() {
+    setBusy('plan')
+    setError(null)
+    try {
+      setPlan(URL.createObjectURL(await takeoffDownload(`/api/takeoff/runs/${run.run_id}/regions/plan`)))
+    } catch (e) {
+      setError(message(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+  async function measure() {
+    if (!answers) return
+    setBusy('measure')
+    setError(null)
+    setProblems([])
+    setMeasured(false)
+    try {
+      await takeoffApi(`/api/takeoff/runs/${run.run_id}/regions`, { method: 'POST', body: { areas: answers } })
+      setMeasured(true)
+      onMeasured()
+    } catch (e) {
+      const listed = e instanceof TakeoffError ? (e.detail as { problems?: unknown } | null)?.problems : null
+      if (Array.isArray(listed) && listed.length) setProblems(listed.map(String))
+      else setError(message(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <article className="rounded-card space-y-4 border border-ink-line bg-ink-card p-5">
+      <h2 className="font-extrabold uppercase tracking-[-0.01em] text-text-pri">Roofs on the plan</h2>
+      <p className="text-sm text-text-sec">{intro}</p>
+      {regions.note ? <Notice tone="neutral">{regions.note}</Notice> : null}
+      {regions.confirmed ? (
+        <p className="text-sm text-text-dim">
+          Measured {when(regions.confirmed.at)}. Measuring again starts from the takeoff as it was before the first answer, so edits made since are replaced.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={SECONDARY} disabled={busy !== null} onClick={() => void openPlan()}>
+          {busy === 'plan' ? 'Opening…' : plan ? 'Reload the numbered plan' : 'Open the numbered plan'}
+        </button>
+        {plan ? (
+          <a href={plan} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4">
+            Open it full size
+          </a>
+        ) : null}
+      </div>
+      {plan ? <iframe src={plan} title={`Numbered roof plan, ${sheetName}`} className="h-[70vh] w-full border border-ink-line bg-white" /> : null}
+      <Table head={['Area', 'Roof', 'Falls', 'Reader’s suggestion']}>
+        {regions.areas.map(({ n, falls }) => {
+          const choice = choices[n] ?? { roof: '', fall: '' }
+          const out = choice.roof === LEFT_OUT
+          const suggested = regions.suggested?.find((s) => s.n === n)
+          const said = suggested
+            ? `${suggested.roof === null ? 'Not part of the job' : `${suggested.roof}${suggested.fall ? `, falls ${suggested.fall}` : ''}`}${suggested.covers ? ` · ${suggested.covers}` : ''}`
+            : '—'
+          return (
+            <tr key={n} className={ROW}>
+              <td className={`${CELL} font-mono text-text-pri`}>{n}</td>
+              <td className={CELL}>
+                <select aria-label={`Area ${n}: roof`} value={choice.roof} onChange={(e) => choose(n, { roof: e.target.value })} className={SELECT}>
+                  <option value="">Choose…</option>
+                  {regions.roofs.map((roof) => (
+                    <option key={roof.id} value={roof.id}>
+                      {roof.id} · {roof.label}
+                    </option>
+                  ))}
+                  <option value={LEFT_OUT}>Not part of the job</option>
+                </select>
+              </td>
+              <td className={CELL}>
+                <select
+                  aria-label={`Area ${n}: falls`}
+                  value={out ? '' : choice.fall}
+                  disabled={out}
+                  onChange={(e) => choose(n, { fall: e.target.value })}
+                  className={SELECT}
+                >
+                  <option value="">{out ? '—' : 'Choose…'}</option>
+                  {falls.map((fall) => (
+                    <option key={fall} value={fall}>
+                      {FALL_WORDS[fall]}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td className={`${CELL} text-text-sec`}>{said}</td>
+            </tr>
+          )
+        })}
+      </Table>
+      {problems.length ? (
+        <Notice tone="warning">
+          <ul className="list-disc space-y-1 pl-5">
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </Notice>
+      ) : null}
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={PRIMARY} disabled={busy !== null || !answers || !correctable} onClick={() => void measure()}>
+          {busy === 'measure' ? 'Measuring…' : 'Measure these roofs'}
+        </button>
+        {!answers ? <p className="text-sm text-text-dim">Answer every area to measure them.</p> : null}
+        {measured ? (
+          <p role="status" className="text-sm text-text-sec">
+            Measured. The checks ran again.
+          </p>
+        ) : null}
+      </div>
+    </article>
   )
 }
 
