@@ -47,7 +47,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20 # matches Dockerfile `FROM node:20-alpine`
+          # Matches Dockerfile `FROM node:22-alpine`. pdf.js needs Node 22's
+          # ArrayBuffer.transferToFixedLength: on 20 it reads no drawn lines.
+          node-version: 22
           cache: pnpm
           cache-dependency-path: quotemate-automation/pnpm-lock.yaml
 
