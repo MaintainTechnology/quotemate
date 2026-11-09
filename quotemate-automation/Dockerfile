@@ -6,8 +6,10 @@
 # Run:   docker run -p 3000:3000 --env-file .env.local quotemate-automation
 # ─────────────────────────────────────────────────────────────────────
 
-# ─── Base image — pinned Node 20 LTS Alpine ──────────────────────────
-FROM node:20-alpine AS base
+# ─── Base image — pinned Node 22 LTS Alpine ──────────────────────────
+# Node 22, as the receptionists and the takeoff service run: pdf.js calls
+# ArrayBuffer.transferToFixedLength, which Node 20 lacks.
+FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat
 RUN corepack enable
 
