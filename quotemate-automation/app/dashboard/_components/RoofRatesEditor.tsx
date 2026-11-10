@@ -220,7 +220,9 @@ export function RoofRatesEditor({ accessToken }: Props) {
   }, [accessToken])
 
   useEffect(() => {
-    void load()
+    // Started from a promise callback, not the effect's own body, so the
+    // state it sets lands as a fetch result (react-hooks/set-state-in-effect).
+    void Promise.resolve().then(load)
   }, [load])
 
   const save = useCallback(
@@ -358,6 +360,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
                 disabled={loading || saving}
                 hasError={!!fe}
                 ariaLabel={`${label} $/m²`}
+                unit="/m²"
               />
               <Caption error={fe} defaultHint={def !== undefined ? `Default $${def}/m²` : 'Default unavailable'} />
             </label>
@@ -383,6 +386,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
                 disabled={loading || saving}
                 hasError={!!fe}
                 ariaLabel={`${label} new work $/m²`}
+                unit="/m²"
               />
               <Caption error={fe} defaultHint="No default" />
             </label>
@@ -444,6 +448,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
                 disabled={loading || saving}
                 hasError={!!fe}
                 ariaLabel={`${label} rate`}
+                unit={unit}
               />
               <Caption error={fe} defaultHint={def !== undefined ? `Default $${def}${unit}` : 'Default unavailable'} />
             </label>
@@ -470,6 +475,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
                 disabled={loading || saving}
                 hasError={!!fe}
                 ariaLabel={`${label} rate`}
+                unit={unit}
               />
               <Caption error={fe} defaultHint={def !== undefined ? `Default $${def}${unit}` : 'Default unavailable'} />
             </label>
@@ -667,6 +673,7 @@ function CurrencyInput({
   disabled,
   hasError,
   ariaLabel,
+  unit,
 }: {
   value: string
   onChange: (v: string) => void
@@ -674,6 +681,8 @@ function CurrencyInput({
   disabled: boolean
   hasError: boolean
   ariaLabel: string
+  /** What the dollars are per, shown after them ('/m²', '/lm', ' each'); none for a flat amount. */
+  unit?: string
 }) {
   return (
     <div className="relative mt-2">
@@ -701,9 +710,11 @@ function CurrencyInput({
           hasError ? 'border-warning' : 'border-ink-line focus:border-accent'
         }`}
       />
-      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-text-dim">
-        /m²
-      </span>
+      {unit && (
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-text-dim">
+          {unit.trim()}
+        </span>
+      )}
     </div>
   )
 }
