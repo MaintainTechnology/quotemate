@@ -17,6 +17,17 @@ The app is built and live end-to-end against a real Supabase instance across **t
 - **Tradie self-serve onboarding is live** (`/signup`, `/onboard/*`, `/api/onboard/*`), with Twilio + Vapi auto-provisioning (`lib/twilio/provision.ts`, `lib/vapi/provision.ts`). Provisioning flags (`TWILIO_PROVISIONING_ENABLED`, `VAPI_PROVISIONING_ENABLED`) are `false` in dev; every live tenant already has a provisioned SMS + voice number.
 - **Auth is Clerk** (`@clerk/nextjs`, `tenants.clerk_user_id`, migration 163; `lib/clerk/*`, `lib/tenant/current.ts` resolves a Clerk **or** legacy Supabase JWT). Supabase PKCE is the older path still present in `/auth/callback`.
 - **Production**: custom domain **`https://www.quotemax.com.au`** on Vercel (the `APP_URL` default), served by the Vercel deployment `quote-mate-rho.vercel.app`. ⚠ Provisioned Twilio numbers are split: the 5 older numbers point their SMS webhook at `quote-mate-rho.vercel.app`, the 3 newest (roofing) at `www.quotemax.com.au` — both resolve to the same app, but the webhook URL is written once at provision time and never re-asserted. Also Railway-deployable (`Dockerfile` + `railway.json`, `output: 'standalone'`).
+- **Railway fleet: seven services** run beside the website, in Railway's `production` environment, on the one Supabase:
+  - **`qm-front-desk`** (`:3100`) routes an SMS turn by tenant and trade.
+  - **Five per-trade SMS receptionists**: `qm-electrical-receptionist` (`:3101`), `qm-plumbing-receptionist` (`:3102`), `qm-roofing-receptionist` (`:3103`), `qm-painting-receptionist` (`:3104`) and `qm-solar-receptionist` (`:3105`).
+    - `quotemate-automation/scripts/export-receptionist.mjs` generates them from this repo.
+    - Each tenant number is cut over to the Front Desk one at a time (`docs/ai-receptionist-rest-architecture.html`). Until a number is cut over, its SMS still reaches the website's `/api/sms/inbound`, as above.
+  - **`qm-roofing-takeoff`** (`:3106`) reads builders' plan PDFs into a checked roofing takeoff (`docs/strategy.md` v27). The takeoff is exported as a Roof Wizard pack, priced as a builder quote PDF (never a `quotes` row), or saved as a roofing measurement for `/m`.
+    - It isn't behind the Front Desk. The `/dashboard/roofing/takeoffs` pages call it at `NEXT_PUBLIC_TAKEOFF_API_URL` with the tradie's Clerk token, and forwarded quote-request emails reach it through Resend Inbound.
+    - It admits only the tenants in its `TAKEOFF_TENANT_ALLOWLIST` (the pilot). When that variable is unset, it admits every active roofing tenant.
+    - It's its own repo, `MaintainTechnology/qm-roofing-takeoff`, which also holds its vault (`Roofing Takeoff/`: PRD, contract, checklist, decision log).
+    - The repo carries byte-identical copies of `lib/roofing/plan-takeoff/`; change them here first (that vault's `Runbooks/Export and overlay.md`).
+    - It also has a staging environment. Staging's worker is off because it shares production's queue and database, and the takeoff eval runs there nightly.
 - **Money path: Stripe test mode, but Connect Express IS now wired** (migration 160 `connect_payouts`; `lib/stripe/connect.ts`, `checkout.connect.ts`). The `/r/*` mints route with `transfer_data` + a platform `application_fee` for electrical/plumbing/solar/roofing/painting. **1 of 8 tenants** has a connected account onboarded so far. ⚠ `payments` as a table no longer exists (payment state lives on the `quotes`/measurement rows + Stripe).
 
 ## The decisions that shape the work
@@ -43,7 +54,7 @@ Settled after substantive re-evaluation (iteration history at the end of `docs/s
 ├── CLAUDE.md                          # this file
 ├── README.md                          # public overview (⚠ lags: still says fewer tenants/trades)
 ├── docs/
-│   ├── strategy.md                    # living strategy (v18; SMS routing + trade-guard drift logged 2026-07-29)
+│   ├── strategy.md                    # living strategy (latest v27, 2026-11-07: the plan takeoff service)
 │   ├── skills-toolkit.md              # skills/agents/commands → build-phase mapping
 │   └── *.html + markdown/*.md + superpowers/specs/*  # build guide, SOPs, progress, specs
 ├── assets/                            # flow SVG, experience map, logo
@@ -185,6 +196,7 @@ Recent audits (roofing SMS, then the roofing/solar/painting trade-job services) 
 - **Cross-tenant solar actions** — `/api/solar/{confirm,redraft}` check *signed in*, not *owns the quote*; keyed off the customer's own token.
 - ~~Painting deposits bypass Stripe Connect~~ — **fixed by removing the path**: painting's only customer charge is now the $99 site visit, which mints with Connect routing like roofing's (`docs/strategy.md` v19). The retired 30% deposit mints are unreachable from `/r/paint/*`. ⚠ Draft/edit still writes per-tier Sessions into `painting_measurements.stripe_links` (`lib/painting/quote-dispatch.ts`) that nothing reads — dead writes, worth a cleanup.
 - **Tenant-less rows skip the `canTakePayment` guard** on `/r/paint` and `/r/roof` (tenant_id NULL → mint anyway).
+- **`/r/roof` doesn't check release.** `app/r/roof/[token]/[tier]/route.ts` mints the $99 after checking only `paid_at` and `canTakePayment`, not `released_at`. So any `roofing_measurements` row with a `public_token` is payable before a tradie releases it, which goes against v24. That includes a plan takeoff saved as a measurement, which is unreleased by design (`docs/strategy.md` v27). Adding the check needs care first: it would stop any live $99 link on a row that was sent without `released_at` being stamped.
 - **SMS receptionist blockers** (roofing + painting share the class): stop-word false-positives cancel live threads; `y`/`👍`/`ya` not accepted as yes; AU idiom ("no worries") parses as no; multi-pick "1 and 2" truncates; mapper vocabulary gaps route quotable jobs to inspection; the roofing bot's trigger words (gutter/eaves/fascia/paint) hijack painting enquiries; "solar quote please" is a dead lead (no SMS solar flow).
 - **Silent notify black holes** — a held quote with no `owner_mobile` (and no `TRADIE_NOTIFY_NUMBER`) notifies nobody; several save/update routes return HTTP 200 on failure.
 - **Roofing map-verify layer** (`lib/sms/verify-address.ts`) — unbounded loop when Google "corrects" to the wrong address; no timeout on the inline Google call inside the SMS turn.

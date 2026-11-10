@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v24 (2026-09-08).** v24 restores an explicit human approval gate for all newly drafted customer quotes as required by the SMS reliability audit implementation contract.  v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 added **commercial painting**; v12 extended **solar** to Path B auto-send; v13–v15 refined roofing structure/source gates; v16–v20 converged residential trades on a pay-first flat **$99 refundable site visit**; v17–v18 recorded the LLM receptionist and its route-level trade boundaries; v21 moved residential painting to auto-release; v22 replaced v3's blanket EV-charger inspection rule with a narrow, tenant-enabled, tradie-reviewed single-phase pricing path; **v23 carries the job past the paid $99 site visit — final quote, deposit (less the $99 credit) and balance each on their own linked `quotes` row, with the 2% platform fee charged on top so the tradie nets the quoted price.** The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v24 rationale.
+> **Current iteration: v27 (2026-11-07).** v27 records roofing plan takeoff as a seventh Railway service, `qm-roofing-takeoff`; v25 and v26 are taken on the unmerged `wip/rank1-ev-sms` branch. v24 restores an explicit human approval gate for all newly drafted customer quotes as required by the SMS reliability audit implementation contract.  v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 added **commercial painting**; v12 extended **solar** to Path B auto-send; v13–v15 refined roofing structure/source gates; v16–v20 converged residential trades on a pay-first flat **$99 refundable site visit**; v17–v18 recorded the LLM receptionist and its route-level trade boundaries; v21 moved residential painting to auto-release; v22 replaced v3's blanket EV-charger inspection rule with a narrow, tenant-enabled, tradie-reviewed single-phase pricing path; **v23 carries the job past the paid $99 site visit — final quote, deposit (less the $99 credit) and balance each on their own linked `quotes` row, with the 2% platform fee charged on top so the tradie nets the quoted price.** The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v27 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -1725,3 +1725,36 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 - **v24 (2026-09-08): SMS reliability and explicit customer quote approval.** The owner requested execution of `docs/audits/2026-09-08-sms-receptionist-reliability-audit.md`, including F17's instruction to preserve human approval. This supersedes the automatic customer release portions of v6 Path B, v12 and v21 for newly drafted quotes while preserving deterministic estimation, saved drafts and owner notifications. Electrical, plumbing, roofing, painting, solar and enabled quotation tools must record a draft, await an authenticated tradie release, and distinguish review, provider acceptance and delivery. A customer confirming a roof/address or choosing a product is not tradie approval. Existing authorised send operations remain the release boundary. Missing tenant pricing produces tracked setup/review, never default customer prices. This iteration repairs existing tools and does not add a new trade or promote voice to the v1 wedge. Durable receipts, fenced workers, one initial estimate identity and a delivery outbox are required before the repaired fleet can be called stable; deployment and controlled provider evidence remain separate release gates.
 
   Documentation reconciliation: the engineering trade table now records the existing commercial painting expansion in v11 and solar release-policy evolution in v12. Its earlier three-trade count had fallen behind the iteration log; this changes no supported trade or rollout gate.
+
+- **v27 (2026-11-07): roofing plan takeoff runs as a seventh Railway service, `qm-roofing-takeoff`, beside the Front Desk and the five receptionists.** This entry skips v25 and v26 because the Rank 1 entries on the unmerged `wip/rank1-ev-sms` branch already use them, so the numbers never collide. When that branch merges, its v25 and v26 go above this entry.
+
+  The service reads a builder's plan set and returns a checked roofing takeoff: roof areas, pitches and edge lengths, each traced to its sheet. The precedent is v11's commercial painting takeoff, which also reads a construction plan set. The roofer's estimator corrects the takeoff, then takes one of three outputs:
+  - a Roof Wizard pack (DXF outline, CSV quantities, PDF roof brief), to price in the software they already use;
+  - a builder quote PDF, priced from the roofer's own new-work rates;
+  - a roofing measurement, priced on their roofing card and opened at `/m` like an aerial one.
+
+  Plans arrive by dashboard upload, or as a quote request forwarded from the builders' trade network (TAG). The service has run on Railway production since 5 November. It admits only the pilot roofing tenant (`TAKEOFF_TENANT_ALLOWLIST`), and hasn't yet been tried signed in as that tenant (TKO-19).
+
+  Its PRD, contract, build checklist and decision log live in the `Roofing Takeoff/` vault of the `MaintainTechnology/qm-roofing-takeoff` repo. The DEC numbers below are from that log.
+
+  Part of the code is still in open PRs, which the service already runs:
+  - the reading fixes (#7);
+  - the pack and the start ledger (#8);
+  - the eval (#9);
+  - the corpus path (#10).
+
+  **Why a separate service, not the roofing receptionist:** reading a plan set is minutes of work per job across several PDFs. It's done for a tradie, not in an SMS turn for a homeowner. Putting it in the live roofing receptionist would load a long, model-heavy job onto the customer channel. The Front Desk and the five receptionists are unchanged, and the Front Desk never routes to the takeoff (DEC-001).
+
+  **How it keeps the existing decisions:**
+  - **The monorepo stays the source of truth.** The domain code is `quotemate-automation/lib/roofing/plan-takeoff/`. The NestJS 11 service carries byte-identical copies of it, as the receptionists do (DEC-002, DEC-003).
+  - **AI reads, code decides.** The reader is `claude-opus-4-8` (D-07, DEC-041). Every check on its reading is a pure function, and the model never decides pass or fail or sees a price (DEC-004).
+  - **The builder quote takes no money.** It's a PDF, never a `quotes` row, and it never creates a Stripe session or a $99 link (DEC-009). Nothing goes to a builder or supplier automatically.
+  - **A measurement goes through the roofing funnel's gates.** A takeoff saved as a measurement is saved confirmed and unreleased, as v24 requires. ⚠ That funnel's `/r/roof` mint checks `paid_at` and `canTakePayment` but not `released_at`. That gap predates the takeoff, and `CLAUDE.md` records it as debt.
+  - **No new queue, bucket or database.** It uses the fleet's durable queue (`sms_work_jobs`, `kind = 'plan'`), the `plan-pdfs` bucket and the shared Supabase (DEC-005, DEC-006). Its own tables are `roof_takeoff_runs` (migration 223, DEC-007) and `roof_takeoff_starts` (migration 226, DEC-038). The service's worker deletes a run and its plans 12 months after the run's last activity.
+  - **It was measured before it was iterated.** The service runs an eval of hand-measured reference takeoffs nightly on staging and records each run to `eval_runs` (DEC-040). A deliberately broken prompt fails it.
+
+  It adds no trade, since roofing is already live, and changes no homeowner flow. The v1 wedge and the four-agent design stand: the reader drafts and pure checks review, as in v11.
+
+  Two things are still open:
+  - reading a hip roof's lengths from its drawn lines (TKO-30);
+  - the reference corpus, which has 2 of the 6 plan sets it needs.
