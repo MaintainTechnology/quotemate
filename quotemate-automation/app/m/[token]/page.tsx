@@ -35,6 +35,7 @@ import { BrandMark } from '@/app/_components/BrandMark'
 import { roofMeasurementVersion } from '@/lib/roofing/measurement-version'
 import { MeasurementReview } from './MeasurementReview'
 import { RoofLayoutSection } from './RoofLayoutSection'
+import { takeoffRunOf } from './takeoff-link'
 import { Roof3DModelSection } from './Roof3DModelSection'
 import type { LayoutPlan } from '@/lib/roofing/layout-plan'
 import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
@@ -61,6 +62,8 @@ type Row = {
   tenant_id: string | null
   customer_name: string | null
   customer_phone: string | null
+  /** `takeoff:<run id>` for a measurement saved from a plan takeoff (TKO-16). */
+  source_request_key: string | null
 }
 
 /** The page shell — sticky tradie bar, sheet, footer. Shared by the measured
@@ -168,7 +171,7 @@ export default async function MeasurementResultsPage({
 
   const { data, error } = await supabase
     .from('roofing_measurements')
-    .select('address, postcode, state, provider, routing, quote, measure_token, public_token, included_indices, tenant_id, customer_name, customer_phone')
+    .select('address, postcode, state, provider, routing, quote, measure_token, public_token, included_indices, tenant_id, customer_name, customer_phone, source_request_key')
     .eq('measure_token', token)
     .maybeSingle()
 
@@ -361,6 +364,11 @@ export default async function MeasurementResultsPage({
     },
   }))
 
+  // A measurement saved from a plan takeoff exports its Roof Wizard pack from
+  // the takeoff's Outputs (TKO-18, DEC-037): the pack is the tenant's, and
+  // this page's link signs no one in.
+  const takeoffRun = takeoffRunOf(row.provider, row.source_request_key)
+
   return (
     <MeasureShell
       sheetLabel={`Roofing measurement · ${row.address ?? 'measured property'}`}
@@ -382,6 +390,18 @@ export default async function MeasurementResultsPage({
           you don&rsquo;t want in the job. Your selection is what the customer
           quote and the PDF are priced from.
         </p>
+        {takeoffRun && (
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
+            For the supplier:{' '}
+            <Link
+              href={`/dashboard/roofing/takeoffs/${takeoffRun}?tab=outputs`}
+              className="text-accent underline underline-offset-4"
+            >
+              Export to Roof Wizard
+            </Link>{' '}
+            from the takeoff, signed in.
+          </p>
+        )}
       </div>
 
       {/* Satellite / aerial view of the property (same source the customer
