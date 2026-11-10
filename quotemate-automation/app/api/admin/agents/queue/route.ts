@@ -1,7 +1,8 @@
 // GET /api/admin/agents/queue
 //
 // Single endpoint the admin overview + per-agent pages read from. Returns:
-//   - eval_runs       (latest 10)
+//   - eval_runs       (latest 10 quote evals; the plan takeoff's nightly runs
+//                      record into the same table and are left out)
 //   - catalogue_findings (latest 50, by status filter)
 //   - tradie_edit_patterns (latest 50, by status filter)
 //   - quick counts so the overview can render badges without a 2nd call
@@ -13,6 +14,11 @@ import { resolveAdminUserId } from '@/lib/admin-loader/route-auth'
 import { isFindingStatus } from '@/lib/agents/findings'
 
 export const dynamic = 'force-dynamic'
+
+/** The catalogue the plan takeoff's eval records under (its EVAL_CATALOGUE,
+ *  lib/roofing/plan-takeoff/eval.ts). It runs nightly, so its runs would push
+ *  the quote evals off these pages' latest ten. */
+const TAKEOFF_EVAL = 'roof-takeoff'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +38,7 @@ export async function GET(req: Request) {
       supabase
         .from('eval_runs')
         .select('id, prompt_version, catalogue_version, total_score, per_category, started_at, completed_at')
+        .neq('catalogue_version', TAKEOFF_EVAL)
         .order('started_at', { ascending: false })
         .limit(10),
       supabase

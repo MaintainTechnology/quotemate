@@ -6,6 +6,9 @@
 //   node scripts/export-receptionist.mjs            # all five
 //   node scripts/export-receptionist.mjs roofing    # just one
 //   node scripts/export-receptionist.mjs --dry      # report, copy nothing
+//   node scripts/export-receptionist.mjs roofing-takeoff --out-root=<new dir>
+//                                                   # the plan takeoff service
+//                                                   # (sms: false; never in "all five")
 //
 // What it does, per trade:
 //   1. Copies app/api/sms/inbound/route.ts, app/api/intake/structure/route.ts
@@ -85,6 +88,16 @@ const TRADES = {
     port: 3105,
     blurb: 'Solar SMS AI receptionist — address, phase and panel preferences → deterministic saved draft → installer review and release.',
   },
+  // Not an SMS receptionist (TKO-04). `sms: false` exports only the monorepo
+  // closure and the generic service files; the service repo owns its main.ts,
+  // modules, health, Dockerfile and release process. Its overlay is the
+  // service vault's Runbooks/Export and overlay.md.
+  'roofing-takeoff': {
+    sms: false,
+    service: 'qm-roofing-takeoff',
+    port: 3106,
+    blurb: 'Roofing plan takeoff service — builders’ plans → checked roofing takeoff → Roof Wizard pack or priced quote.',
+  },
 }
 
 // Trades whose engine code must be force-included even when the trimmed
@@ -96,6 +109,17 @@ const FORCE_INCLUDE = {
   plumbing: ['lib/estimate/plumbing-prompt.ts'],
   roofing: [],
   painting: [],
+  // P1: tenant auth, the service-role client and cron auth. P2: the durable
+  // queue and the takeoff library (TKO-08), the stage handler (TKO-09), and
+  // the nightly eval, which the worker imports directly (TKO-15). Later phases
+  // add their entry points here as the service first needs them; a path not
+  // yet in this tree is skipped, as every forced path is.
+  'roofing-takeoff': [
+    'lib/tenant/from-request.ts', 'lib/supabase/admin.ts', 'lib/agents/cron.ts',
+    'lib/sms/durable-work.ts', 'lib/roofing/plan-takeoff/index.ts',
+    'lib/roofing/plan-takeoff/eval.ts',
+    'services/roofing-takeoff/process.route.ts',
+  ],
 }
 
 // ── web surface ──────────────────────────────────────────────────────────
@@ -1892,7 +1916,8 @@ Run the release contract and controlled behaviour tests before promotion.
 
 function buildTrade(trade, opts) {
   const cfg = TRADES[trade]
-  const outDir = join(OUT_ROOT, `qm-${trade}-receptionist`)
+  const sms = cfg.sms !== false
+  const outDir = join(OUT_ROOT, cfg.service ?? `qm-${trade}-receptionist`)
   // Existing service customisations are inputs for a reviewed overlay, never
   // disposable generated output. Export candidates to a new directory.
   if (!opts.dry && existsSync(join(outDir, 'src'))) {
@@ -1923,7 +1948,7 @@ function buildTrade(trade, opts) {
 
   // 1. Trim the three routes.
   const generated = []
-  for (const r of ROUTES) {
+  for (const r of sms ? ROUTES : []) {
     let src = readFileSync(join(SRC_ROOT, r.from), 'utf8')
     if (r.trim) {
       for (const [name, flag, key] of [
@@ -1955,7 +1980,8 @@ function buildTrade(trade, opts) {
   }
 
   // 2. Closure over the trimmed routes + forced trade engines.
-  const forced = [...(FORCE_INCLUDE[trade] ?? []), 'lib/sms/durable-work.ts', 'lib/sms/work-delivery-context.ts', 'lib/sms/public-origin.ts', 'lib/sms/scoped-fallback.ts', 'lib/sms/pricing-readiness.ts', 'lib/quote/public-schema.ts']
+  const smsForced = ['lib/sms/durable-work.ts', 'lib/sms/work-delivery-context.ts', 'lib/sms/public-origin.ts', 'lib/sms/scoped-fallback.ts', 'lib/sms/pricing-readiness.ts', 'lib/quote/public-schema.ts']
+  const forced = [...(FORCE_INCLUDE[trade] ?? []), ...(sms ? smsForced : [])]
     .map((p) => join(SRC_ROOT, p))
     .filter((p) => existsSync(p))
   const { files, bare, missing } = collectClosure(
@@ -2030,35 +2056,41 @@ function buildTrade(trade, opts) {
   }
   for (const g of generated) write(g.out, g.text)
 
-  // Trade isolation: the per-service dialog wrapper the route now imports.
-  write('src/lib/sms/service-dialog.ts', serviceDialogModule(trade))
+  // A non-SMS service (sms: false) owns its main.ts, modules, health and
+  // runtime; it gets the closure plus the Express → Web request shim only.
+  if (sms) {
+    // Trade isolation: the per-service dialog wrapper the route now imports.
+    write('src/lib/sms/service-dialog.ts', serviceDialogModule(trade))
 
-  write('src/runtime/after.ts', tpl.after())
-  write('src/runtime/readiness.ts', readFileSync(join(HERE, 'receptionist-runtime/readiness.ts.template'), 'utf8'))
-  write('src/runtime/workers.ts', readFileSync(join(HERE, 'receptionist-runtime/workers.ts.template'), 'utf8'))
-  write('src/runtime/scheduler.ts', readFileSync(join(HERE, 'receptionist-runtime/scheduler.ts.template'), 'utf8'))
-  write('src/runtime/web-request.ts', tpl.webRequest())
-  write('src/main.ts', tpl.main(trade, cfg))
-  write('src/app.module.ts', tpl.appModule())
-  write('src/receptionist/receptionist.module.ts', tpl.receptionistModule())
-  write('src/receptionist/receptionist.controller.ts', tpl.receptionistController(trade))
-  write('src/receptionist/dto/simulate-turn.dto.ts', tpl.simulateDto(trade))
-  write('src/intake/intake.module.ts', tpl.intakeModule())
-  write('src/intake/intake.controller.ts', tpl.intakeController())
-  write('src/estimate/estimate.module.ts', tpl.estimateModule())
-  write('src/estimate/estimate.controller.ts', tpl.estimateController())
-  // Web surface — shared page/auth/sandbox code copied verbatim from
-  // scripts/web-surface/ (edit THERE); only content.ts is per-trade.
-  for (const f of WEB_FILES) {
-    write(`src/web/${f}`, readFileSync(join(HERE, 'web-surface', f), 'utf8'))
+    write('src/runtime/after.ts', tpl.after())
+    write('src/runtime/readiness.ts', readFileSync(join(HERE, 'receptionist-runtime/readiness.ts.template'), 'utf8'))
+    write('src/runtime/workers.ts', readFileSync(join(HERE, 'receptionist-runtime/workers.ts.template'), 'utf8'))
+    write('src/runtime/scheduler.ts', readFileSync(join(HERE, 'receptionist-runtime/scheduler.ts.template'), 'utf8'))
   }
-  write('src/web/content.ts', webContentTs(trade))
+  write('src/runtime/web-request.ts', tpl.webRequest())
+  if (sms) {
+    write('src/main.ts', tpl.main(trade, cfg))
+    write('src/app.module.ts', tpl.appModule())
+    write('src/receptionist/receptionist.module.ts', tpl.receptionistModule())
+    write('src/receptionist/receptionist.controller.ts', tpl.receptionistController(trade))
+    write('src/receptionist/dto/simulate-turn.dto.ts', tpl.simulateDto(trade))
+    write('src/intake/intake.module.ts', tpl.intakeModule())
+    write('src/intake/intake.controller.ts', tpl.intakeController())
+    write('src/estimate/estimate.module.ts', tpl.estimateModule())
+    write('src/estimate/estimate.controller.ts', tpl.estimateController())
+    // Web surface — shared page/auth/sandbox code copied verbatim from
+    // scripts/web-surface/ (edit THERE); only content.ts is per-trade.
+    for (const f of WEB_FILES) {
+      write(`src/web/${f}`, readFileSync(join(HERE, 'web-surface', f), 'utf8'))
+    }
+    write('src/web/content.ts', webContentTs(trade))
+  }
   // Scan AFTER the scaffolding above is on disk — main.ts and the
   // controllers read PORT, RAILWAY_PUBLIC_DOMAIN, SIM_API_KEY and friends,
   // which a scan of the copied lib alone would miss.
   const usedEnv = envVarsUsed(join(outDir, 'src'))
   write('src/config/required-env.ts', tpl.requiredEnv(REQUIRED_ENV.filter((v) => usedEnv.includes(v))))
-  write('src/health/health.controller.ts', tpl.healthController(trade))
+  if (sms) write('src/health/health.controller.ts', tpl.healthController(trade))
 
   const runtimeDeps = {
     '@nestjs/common': '^11.1.6',
@@ -2087,12 +2119,12 @@ function buildTrade(trade, opts) {
   }
 
   write('package.json', JSON.stringify({
-    name: `qm-${trade}-receptionist`,
+    name: cfg.service ?? `qm-${trade}-receptionist`,
     version: '0.1.0',
     private: true,
     description: cfg.blurb,
     scripts: {
-      build: 'node scripts/receptionist-build.mjs',
+      build: sms ? 'node scripts/receptionist-build.mjs' : 'nest build && tsc-alias -p tsconfig.json',
       start: 'node dist/main.js',
       'start:dev': 'nest start --watch',
       typecheck: 'tsc --noEmit',
@@ -2111,12 +2143,17 @@ function buildTrade(trade, opts) {
   }, null, 2) + '\n')
 
   write('tsconfig.json', tpl.tsconfig())
-  for (const file of ['receptionist-build.mjs', 'receptionist-release-fingerprint.mjs']) {
-    write(`scripts/${file}`, readFileSync(join(HERE, file), 'utf8'))
+  // The sealed build, its Dockerfile and the release manifest below are the SMS
+  // fleet's release evidence: they hash every generated file under src/, which
+  // a service with hand-written src/ files can't satisfy.
+  if (sms) {
+    for (const file of ['receptionist-build.mjs', 'receptionist-release-fingerprint.mjs']) {
+      write(`scripts/${file}`, readFileSync(join(HERE, file), 'utf8'))
+    }
   }
   write('nest-cli.json', tpl.nestCli())
   write('.gitignore', tpl.gitignore())
-  write('Dockerfile', tpl.dockerfile(trade))
+  if (sms) write('Dockerfile', tpl.dockerfile(trade))
   write('.dockerignore', tpl.dockerignore())
   write('railway.json', tpl.railwayJson())
   write('.nvmrc', '22\n')
@@ -2125,6 +2162,11 @@ function buildTrade(trade, opts) {
   const body = envBody(trade, cfg, usedEnv)
   write('.env.example', body)
   const envCreated = writeIfAbsent('.env', body)
+  if (!sms) {
+    stats.envVars = usedEnv.length
+    stats.envCreated = envCreated
+    return stats
+  }
   write('README.md', readme(trade, cfg, stats))
   write('ISOLATION.md', isolationDoc(trade, cfg, libFiles))
 
@@ -2175,7 +2217,7 @@ function buildTrade(trade, opts) {
 const args = process.argv.slice(2)
 const dry = args.includes('--dry')
 const wanted = args.filter((a) => !a.startsWith('--'))
-const list = wanted.length ? wanted : Object.keys(TRADES)
+const list = wanted.length ? wanted : Object.keys(TRADES).filter((t) => TRADES[t].sms !== false)
 
 for (const trade of list) {
   if (!TRADES[trade]) { console.error(`unknown trade: ${trade}`); process.exitCode = 1; continue }
