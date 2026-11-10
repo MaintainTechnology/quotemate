@@ -1,47 +1,106 @@
-// TKO-15: scores the eval fixtures' readings against their hand-measured
-// references (eval/roof-takeoff/<fixture>/takeoff.json) on the four P2 gates,
-// each reading finished as the pipeline's calibrate stage finishes it. It
-// scores the readings the live fixture test saves beside the plans:
+// TKO-15: the eval (DEC-040). Each fixture goes through the pipeline as a run
+// does, and its reading is scored against its hand-measured reference on the
+// four P2 gates. Fixtures come from the plans bucket under eval/<fixture>/
+// (scripts/upload-eval-fixtures.mjs puts them there), or with --local from
+// eval/roof-takeoff/ and the git-ignored plans beside it.
 //
-//   TAKEOFF_LIVE_MODEL=1 npx vitest run lib/roofing/plan-takeoff/read.fixtures.test.ts
-//   npx tsx scripts/eval-roof-takeoff.mts
+//   node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/eval-roof-takeoff.mts [options]
+//     --local         the fixtures in this checkout, not the bucket's
+//     --model <id>    the reader's model, for D-07 (sets TAKEOFF_MODEL)
+//     --broken        the reader's prompt with its rules taken out: every fixture must then fail
+//     --max-output <n>  the reader's output limit, for a model whose thinking counts against it
+//     --effort <level>  the reader's effort: low, medium, high, xhigh or max
+//     --repeat <n>    each fixture n times, to see whether it reads the same way
+//     --only <name>   one fixture
+//     --record        write the run to eval_runs and eval_run_items
+//     --saved         score the readings the live fixture test saved, with no model call
 //
-// It writes nothing: recording a run in eval_runs and eval_run_items is a
-// production write that waits for the owner's go-ahead. Exits 1 when a
-// fixture has no reference or reading, or fails a gate.
+// Exits 1 when a reading fails a gate or, with --broken, when one passes.
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { parseArgs } from 'node:util'
+import { brokenPrompt, evalFixture, loadFixtures, promptVersion, recordEval, swapReader, type Effort, type EvalFixture, type FixtureResult } from '@/lib/roofing/plan-takeoff/eval'
+import { DEFAULT_TAKEOFF_MODEL } from '@/lib/roofing/plan-takeoff/read'
 import { planSheets, refineReading } from '@/lib/roofing/plan-takeoff/refine'
 import { RoofPlanTakeoffSchema } from '@/lib/roofing/plan-takeoff/schema'
-import { scoreTakeoff } from '@/lib/roofing/plan-takeoff/score'
+import { scoreTakeoff, type Score } from '@/lib/roofing/plan-takeoff/score'
+import { getServiceClient } from '@/lib/supabase/admin'
 
+// The same fixtures as scripts/upload-eval-fixtures.mjs.
 const FIXTURES = [
   { name: 'grange', plans: 'docs/tag-roofing-requests/J14997-59-Grange-Rd' },
   { name: 'whittaker', plans: 'docs/tag-roofing-requests/J14945-5-Whittaker-St' },
 ]
-const takeoff = (path: string) => RoofPlanTakeoffSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
-
-let failed = false
-for (const fixture of FIXTURES) {
-  const reference = `eval/roof-takeoff/${fixture.name}/takeoff.json`
-  const reading = `${fixture.plans}/reading.json`
-  if (!existsSync(reference) || !existsSync(reading)) {
-    console.log(`${fixture.name}: not scored, no ${existsSync(reference) ? 'saved reading' : 'reference takeoff'} yet`)
-    failed = true
-    continue
-  }
-  // Finished as the calibrate stage finishes it: the scale checked, and the
-  // roofs the drawings don't dimension scaled from their outlines (TKO-29).
-  const saved = takeoff(reading)
-  const files = new Map([...new Set(planSheets(saved.sheets).map((s) => s.file))]
-    .filter((file) => existsSync(`${fixture.plans}/${file}`))
-    .map((file) => [file, new Uint8Array(readFileSync(`${fixture.plans}/${file}`))]))
-  const refined = await refineReading(saved, { sheets: saved.sheets, files })
-  const score = scoreTakeoff(takeoff(reference), refined.takeoff)
-  failed ||= !score.pass
-  console.log(`${fixture.name}: ${score.pass ? 'passes' : 'fails'} (scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines)`)
-  for (const gate of ['structures', 'area', 'pitch', 'edges'] as const) {
-    console.log(`  ${score[gate].pass ? 'pass' : 'FAIL'}  ${gate.padEnd(10)} ${score[gate].detail}`)
-  }
+const GATES = ['structures', 'area', 'pitch', 'edges'] as const
+const { values: args } = parseArgs({
+  options: {
+    local: { type: 'boolean' }, model: { type: 'string' }, broken: { type: 'boolean' }, repeat: { type: 'string' },
+    only: { type: 'string' }, record: { type: 'boolean' }, saved: { type: 'boolean' },
+    'max-output': { type: 'string' }, effort: { type: 'string' },
+  },
+})
+const chosen = FIXTURES.filter((f) => !args.only || f.name === args.only)
+const json = (path: string) => JSON.parse(readFileSync(path, 'utf8'))
+const reference = (name: string) => RoofPlanTakeoffSchema.parse(json(`eval/roof-takeoff/${name}/takeoff.json`))
+const pdfs = (folder: string) => new Map(readdirSync(folder).filter((f) => /\.pdf$/i.test(f)).sort().map((f) => [f, new Uint8Array(readFileSync(`${folder}/${f}`))]))
+const show = (name: string, score: Score, about: string) => {
+  console.log(`${name}: ${score.pass ? 'passes' : 'fails'} (${about})`)
+  for (const gate of GATES) console.log(`  ${score[gate].pass ? 'pass' : 'FAIL'}  ${gate.padEnd(10)} ${score[gate].detail}`)
 }
-process.exitCode = failed ? 1 : 0
+
+/** The readings the live fixture test saved, finished as the calibrate stage finishes them. */
+async function saved(): Promise<boolean> {
+  let pass = true
+  for (const fixture of chosen) {
+    const path = `${fixture.plans}/reading.json`
+    if (!existsSync(path)) {
+      console.log(`${fixture.name}: no saved reading`)
+      pass = false
+      continue
+    }
+    const reading = RoofPlanTakeoffSchema.parse(json(path))
+    const files = new Map([...pdfs(fixture.plans)].filter(([file]) => planSheets(reading.sheets).some((s) => s.file === file)))
+    const refined = await refineReading(reading, { sheets: reading.sheets, files })
+    const score = scoreTakeoff(reference(fixture.name), refined.takeoff)
+    pass &&= score.pass
+    show(fixture.name, score, `saved reading; scale ${refined.takeoff.scale.calibration.method}, ${refined.measured} planes scaled from outlines, ${refined.derived} skillions' edges worked out`)
+  }
+  return pass
+}
+
+/** Each fixture read live, as a run is. */
+async function live(): Promise<boolean> {
+  if (args.model) process.env.TAKEOFF_MODEL = args.model
+  const model = process.env.TAKEOFF_MODEL?.trim() || DEFAULT_TAKEOFF_MODEL
+  const system = args.broken ? brokenPrompt : undefined
+  const swap = { system, maxOutputTokens: args['max-output'] ? Number(args['max-output']) : undefined, effort: args.effort as Effort | undefined }
+  const generate = swap.system || swap.maxOutputTokens || swap.effort ? swapReader(swap) : undefined
+  const settings = [system && 'broken prompt', swap.maxOutputTokens && `${swap.maxOutputTokens} output tokens`, swap.effort && `effort ${swap.effort}`].filter(Boolean).join(', ')
+  const repeat = Math.max(1, Number(args.repeat ?? 1))
+  const fixtures: EvalFixture[] = args.local
+    ? chosen.map(({ name, plans }) => ({ name, request: json(`eval/roof-takeoff/${name}/request.json`), reference: reference(name), files: pdfs(plans) }))
+    : (await loadFixtures(getServiceClient(), process.env.TAKEOFF_STORAGE_BUCKET?.trim() || 'plan-pdfs')).filter((f) => !args.only || f.name === args.only)
+
+  const startedAt = new Date()
+  const results: FixtureResult[] = []
+  for (let read = 1; read <= repeat; read++) {
+    for (const fixture of fixtures) {
+      const started = Date.now()
+      const result = await evalFixture(fixture, { generate })
+      const seconds = Math.round((Date.now() - started) / 1000)
+      const name = repeat > 1 ? `${fixture.name} (read ${read} of ${repeat})` : fixture.name
+      results.push({ ...result, fixture: name })
+      const status = result.status ?? `read failed: ${result.note}`
+      show(name, result.score, `${model}${settings ? `, ${settings}` : ''}; ${status}; ${result.usage.calls} model calls, ${result.usage.inputTokens} in and ${result.usage.outputTokens} out; ${seconds} s`)
+    }
+  }
+  if (args.record) {
+    const id = await recordEval(getServiceClient(), results, { model, promptVersion: promptVersion(system), startedAt })
+    console.log(`Recorded as eval run ${id}.`)
+  }
+  const passing = results.filter((r) => r.score.pass).length
+  console.log(`${passing} of ${results.length} readings pass every gate${system ? '; the broken prompt must pass none' : ''}.`)
+  return system ? passing === 0 : passing === results.length
+}
+
+process.exitCode = (args.saved ? await saved() : await live()) ? 0 : 1

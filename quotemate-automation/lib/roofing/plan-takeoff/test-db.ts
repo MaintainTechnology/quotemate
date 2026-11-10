@@ -34,6 +34,8 @@ export function fakeDb(seed: {
     pricing_book: seed.pricingBooks ?? [],
     tenants: seed.tenants ?? [],
     tenant_licences: [],
+    eval_runs: [],
+    eval_run_items: [],
   }
   const objects = seed.objects ?? {}
   const fail = { uploadRows: false, signing: false, enqueue: false, readings: false, removal: false, upload: false, ledger: false }
