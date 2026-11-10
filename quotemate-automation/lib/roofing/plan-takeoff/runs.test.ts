@@ -249,6 +249,27 @@ describe('listRuns and getRun', () => {
     await expect(get('run-2')).resolves.toMatchObject({ status: 'extracting', takeoff: null, corrected: false })
     await expect(get('run-1', [OTHER_TENANT])).resolves.toBeNull()
   })
+
+  it("gives the run's numbered roof areas as the run page needs them, and not the drawing or the takeoff kept for them (TKO-30)", async () => {
+    const square = [[0, 0], [10, 0], [10, 10], [0, 10]]
+    const regions = {
+      sheet: { file: 'plans.pdf', page: 1 }, factor: 35.3, pitch: 5, houses: [square],
+      areas: [{ axis: 'v', spacing: 3, polygon: square, centre: [5, 5] }, { axis: 'h', spacing: 3, polygon: square, centre: [5, 5] }],
+      roofs: [{ id: 'S1', label: 'House' }], suggested: [{ n: 1, roof: 'S1', fall: 'north', covers: 'Kitchen' }], note: null,
+      confirmed: { areas: [{ n: 1, roof: 'S1', fall: 'north' }, { n: 2, roof: null, fall: null }], at: '2026-11-08T10:00:00.000Z' }, before: GRANGE,
+    }
+    const fake = fakeDb({ runs: [run('run-1', 1, { regions }), run('run-2', 2)] })
+    const get = (runId: string) => getRun(fake.db, { tenants: [TENANT], runId })
+    expect((await get('run-1'))?.regions).toEqual({
+      sheet: { file: 'plans.pdf', page: 1 },
+      areas: [{ n: 1, falls: ['north', 'south'] }, { n: 2, falls: ['east', 'west'] }],
+      roofs: [{ id: 'S1', label: 'House' }],
+      suggested: [{ n: 1, roof: 'S1', fall: 'north', covers: 'Kitchen' }],
+      note: null,
+      confirmed: { areas: [{ n: 1, roof: 'S1', fall: 'north' }, { n: 2, roof: null, fall: null }], at: '2026-11-08T10:00:00.000Z' },
+    })
+    await expect(get('run-2')).resolves.toMatchObject({ regions: null })
+  })
 })
 
 describe('correctTakeoff', () => {

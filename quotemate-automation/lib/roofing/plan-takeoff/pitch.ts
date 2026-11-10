@@ -49,13 +49,18 @@ export function elevationPitches(segments: Segment[], minLength = 20): Elevation
 
 const CONFIDENCE = { low: 0, medium: 1, high: 2 } as const
 
+/** The pitches of the families a roof takes from: each with at least a quarter of the best one's length. */
+export function familyPitches(found: ElevationPitch[]): number[] {
+  const best = Math.max(0, ...found.map((f) => f.support))
+  return found.filter((f) => f.support >= MIN_FAMILY * best).map((f) => f.deg)
+}
+
 /** Gives each plane the reading left without a pitch one of the elevation's.
  *  A roof of several planes, a hip or a gable, takes the steepest; a roof of
  *  one plane, a skillion, the shallowest. A pitch the reading has stays, and
  *  a plane pitched this way is no more than `medium` confidence. */
 export function pitchFromElevations(takeoff: Takeoff, found: ElevationPitch[], sheet: { file: string; page: number }): { takeoff: Takeoff; pitched: number } {
-  const best = Math.max(0, ...found.map((f) => f.support))
-  const roofs = found.filter((f) => f.support >= MIN_FAMILY * best).map((f) => f.deg)
+  const roofs = familyPitches(found)
   if (!roofs.length) return { takeoff, pitched: 0 }
   const steep = Math.max(...roofs)
   const shallow = Math.min(...roofs)

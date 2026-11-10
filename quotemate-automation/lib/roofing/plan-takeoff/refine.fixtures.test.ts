@@ -4,10 +4,14 @@
 // plans or the reading (client documents, kept out of git) aren't on disk.
 
 import { existsSync, readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import type { generateText } from 'ai'
+import { describe, expect, it, vi } from 'vitest'
 import { areaSchedule, runChecks } from './checks'
 import { pageText } from './classify'
+import { packGeometry } from './pack/geometry'
+import { packTakeoff } from './pack/privacy'
 import { refineReading } from './refine'
+import { placeRegions, RegionAnswersSchema } from './regions'
 import { RoofPlanTakeoffSchema } from './schema'
 import { scoreTakeoff } from './score'
 
@@ -108,5 +112,45 @@ describe.skipIf(!W_FILES.every((f) => existsSync(`${WHITTAKER}/${f}`)) || !exist
     expect(section.planes.map((p) => [p.id, p.plan_area_m2])).toEqual([['S2-P1', null]])
     const score = scoreTakeoff(reference, takeoff)
     expect([score.structures.pass, score.pitch.pass, score.area.pass]).toEqual([true, true, false])
+  }, 60_000)
+
+  // TKO-30's lower roofs and new section (DEC-047, DEC-048): A104's rib-filled
+  // areas, numbered on the sheet for the operator. The reader suggests which
+  // roof each is (a stand-in here; the live reads are the eval's), and the
+  // drawing measures the operator's answer, the fixture's operator.json.
+  it("numbers A104's six roof areas for the operator, measures none until answered, and with the operator's answer passes every gate", async () => {
+    const reading = read(W_READING)
+    const files = new Map(W_FILES.map((f) => [f, new Uint8Array(readFileSync(`${WHITTAKER}/${f}`))]))
+    const scopeNote = JSON.parse(readFileSync('eval/roof-takeoff/whittaker/request.json', 'utf8')).scope_note as string
+    const operator = RegionAnswersSchema.parse(JSON.parse(readFileSync('eval/roof-takeoff/whittaker/operator.json', 'utf8')).areas)
+    const suggest = vi.fn().mockResolvedValue({
+      text: JSON.stringify({ areas: operator, left_out: [] }), finishReason: 'stop', usage: { inputTokens: 2600, outputTokens: 250 },
+    }) as unknown as typeof generateText
+    const { takeoff, regions, usage } = await refineReading(reading, { sheets: reading.sheets, files, scopeNote, suggest })
+    expect([regions?.stored.areas.length, regions?.stored.roofs.map((r) => r.id), usage]).toEqual([6, ['S1', 'S2'], { inputTokens: 2600, outputTokens: 250, calls: 1 }])
+    expect(regions?.stored.suggested).toEqual(operator.map((a) => ({ ...a, covers: null })))
+    // The numbered plan is the one sheet, for the operator to read the numbers from.
+    const { getDocumentProxy } = await import('unpdf')
+    expect((await getDocumentProxy(regions!.plan.slice())).numPages).toBe(1)
+
+    // Nothing is measured from the suggestion: the new section waits on the operator.
+    const reference = read('eval/roof-takeoff/whittaker/takeoff.json')
+    expect(takeoff.structures[1].planes[0].plan_area_m2).toBeNull()
+    expect(scoreTakeoff(reference, takeoff).area.pass).toBe(false)
+    const placed = placeRegions(takeoff, regions!.stored, operator)
+    if (!placed.ok) throw new Error(placed.problems.join(' '))
+    expect(placed.placed).toBe(5)
+    expect(scoreTakeoff(reference, placed.takeoff).pass).toBe(true)
+    // Each roof within 3% of the reference's, as the scorer pairing roofs holds them.
+    const roofArea = (s: { planes: Array<{ plan_area_m2: number | null }> }) => s.planes.reduce((sum, p) => sum + (p.plan_area_m2 ?? 0), 0)
+    const [house, section] = placed.takeoff.structures
+    expect([within(roofArea(house), 109.18, 3), within(roofArea(section), 12.9, 3)]).toEqual([true, true])
+    expect(section.planes[0]).toMatchObject({ id: 'S2-P1', fall: 'west', pitch_deg: 5, confidence: 'medium' })
+    // The deck's 45 m² is in no plane, and the pack draws every plane from its
+    // outline, the lower roofs beside the house's faces.
+    const planes = placed.takeoff.structures.flatMap((s) => s.planes)
+    expect(planes.some((p) => (p.plan_area_m2 ?? 0) > 40)).toBe(false)
+    const drawn = packGeometry(packTakeoff(placed.takeoff, null).structures).structures.flatMap((s) => s.planes)
+    expect([drawn.length, drawn.every((p) => p.from === 'polygon' && p.outline !== null)]).toEqual([planes.length, true])
   }, 60_000)
 })

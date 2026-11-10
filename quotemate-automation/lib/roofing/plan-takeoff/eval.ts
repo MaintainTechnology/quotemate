@@ -2,7 +2,9 @@
 // run's do (classified, read, refined and checked), and the reading is scored
 // against the fixture's hand-measured reference on the four gates (score.ts).
 // The script and the service's nightly run share it. Each fixture is a folder
-// of the plans bucket under eval/: its PDFs, request.json and takeoff.json.
+// of the plans bucket under eval/: its PDFs, request.json and takeoff.json,
+// and operator.json where the operator answers its numbered roof areas
+// (TKO-30, DEC-048), as the run page asks them to.
 
 import { createHash, randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -13,6 +15,7 @@ import { namesIn, redact, redactLabel } from './pack/privacy'
 import { READER_SYSTEM } from './prompt'
 import { DEFAULT_TAKEOFF_MODEL, readPlans, type ModelUsage } from './read'
 import { refineReading } from './refine'
+import { placeRegions, RegionAnswersSchema, type PlaceOutcome, type RegionAnswer, type RunRegions } from './regions'
 import { EVAL_FOLDER, RETENTION_MONTHS } from './runs'
 import { RoofPlanTakeoffSchema, type RoofPlanTakeoff } from './schema'
 import { scoreTakeoff, type Score } from './score'
@@ -23,7 +26,14 @@ export const EVAL_CATALOGUE = 'roof-takeoff'
 const GATES = ['structures', 'area', 'pitch', 'edges'] as const
 
 export type EvalRequest = { job_name: string | null; job_ref: string | null; site_address: string | null; scope_note: string | null }
-export type EvalFixture = { name: string; request: EvalRequest; reference: RoofPlanTakeoff; files: Map<string, Uint8Array> }
+export type EvalFixture = {
+  name: string
+  request: EvalRequest
+  reference: RoofPlanTakeoff
+  files: Map<string, Uint8Array>
+  /** The operator's answer to the fixture's numbered roof areas (TKO-30), from its operator.json. */
+  operator?: RegionAnswer[] | null
+}
 export type FixtureResult = {
   fixture: string
   reference: RoofPlanTakeoff
@@ -34,9 +44,27 @@ export type FixtureResult = {
   /** Why the reading failed, or null. */
   note: string | null
   usage: ModelUsage
+  /** What came of the fixture's numbered roof areas (TKO-30), or null when it has none. */
+  regions: string | null
 }
-/** The reader's and the classifier's model calls, swapped by the script and the tests. */
-export type EvalModels = { generate?: typeof generateText; readSheet?: SheetReader }
+/** The models a fixture's run calls, swapped by the script and the tests: the
+ *  reader's, the classifier's, and the one suggesting which roof each numbered
+ *  area is (TKO-30), which a swapped reader leaves alone. */
+export type EvalModels = { generate?: typeof generateText; readSheet?: SheetReader; suggest?: typeof generateText }
+
+/** What came of a fixture's numbered roof areas, for the eval's notes: what
+ *  the operator's answer measured, and how often the reader's suggestion was
+ *  that answer, which says how far the operator's step could be trusted to it. */
+function regionsNote(regions: RunRegions, operator: RegionAnswer[] | null | undefined, placed: PlaceOutcome | null): string {
+  const count = `${regions.areas.length} numbered roof area${regions.areas.length === 1 ? '' : 's'}`
+  if (!operator) return `${count}, and no operator answer in the fixture, so none is measured`
+  if (!placed?.ok) return `${count}; the operator's answer couldn't be measured: ${placed?.problems.join(' ') ?? ''}`
+  const agreed = operator.filter((answer) => {
+    const suggested = regions.suggested?.find((s) => s.n === answer.n)
+    return suggested && suggested.roof === answer.roof && (answer.roof === null || suggested.fall === answer.fall)
+  }).length
+  return `${count}; the operator's answer measured ${placed.placed}; the reader suggested ${agreed} of ${operator.length} as the operator answered`
+}
 
 /** The prompt's version, as eval_runs records it: the first 12 hex of its SHA-256. */
 export const promptVersion = (system: string = READER_SYSTEM) => createHash('sha256').update(system).digest('hex').slice(0, 12)
@@ -99,7 +127,7 @@ export async function evalFixture(fixture: EvalFixture, models: EvalModels = {})
   }
   const failed = (note: string): FixtureResult => {
     const nothing: RoofPlanTakeoff = { ...reference, structures: [] }
-    return { fixture: fixture.name, reference, score: scoreTakeoff(reference, nothing), status: null, reading: null, note, usage }
+    return { fixture: fixture.name, reference, score: scoreTakeoff(reference, nothing), status: null, reading: null, note, usage, regions: null }
   }
   try {
     const sheets: Sheet[] = []
@@ -119,16 +147,25 @@ export async function evalFixture(fixture: EvalFixture, models: EvalModels = {})
     spend(read.usage, read.usage.calls)
     if (!read.ok) return failed(read.note)
 
-    const refined = await refineReading(read.takeoff, { sheets, files: copies(fixture.files) })
-    const checks = runChecks(refined.takeoff, { scopeNote: request.scope_note, schedule })
-    return { fixture: fixture.name, reference, score: scoreTakeoff(reference, refined.takeoff), status: checks.status, reading: refined.takeoff, note: null, usage }
+    const refined = await refineReading(read.takeoff, { sheets, files: copies(fixture.files), scopeNote: request.scope_note, suggest: models.suggest ?? generateText })
+    if (refined.usage) spend(refined.usage, refined.usage.calls)
+    // The operator in the loop (DEC-048): the fixture's answer to its numbered
+    // areas is measured, as the run page measures the operator's.
+    const placed = refined.regions && fixture.operator ? placeRegions(refined.takeoff, refined.regions.stored, fixture.operator) : null
+    const takeoff = placed?.ok ? placed.takeoff : refined.takeoff
+    const checks = runChecks(takeoff, { scopeNote: request.scope_note, schedule })
+    return {
+      fixture: fixture.name, reference, score: scoreTakeoff(reference, takeoff), status: checks.status, reading: takeoff, note: null, usage,
+      regions: refined.regions ? regionsNote(refined.regions.stored, fixture.operator, placed) : null,
+    }
   } catch (error) {
     return failed(`The pipeline stopped: ${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
   }
 }
 
 /** The fixtures in the bucket: each folder under eval/, with its PDFs, its
- *  request.json and its reference, takeoff.json. */
+ *  request.json, its reference, takeoff.json, and the operator's answer to
+ *  its numbered roof areas, operator.json, when it has one. */
 export async function loadFixtures(db: SupabaseClient, bucket: string): Promise<EvalFixture[]> {
   const store = db.storage.from(bucket)
   const get = async (path: string) => {
@@ -145,11 +182,13 @@ export async function loadFixtures(db: SupabaseClient, bucket: string): Promise<
   for (const { name } of (await list(EVAL_FOLDER)).filter((entry) => entry.id === null)) {
     const folder = `${EVAL_FOLDER}/${name}`
     const json = async (file: string) => JSON.parse(new TextDecoder().decode(await get(`${folder}/${file}`)))
+    const entries = (await list(folder)).filter((e) => e.id !== null)
     const files = new Map<string, Uint8Array>()
-    for (const entry of (await list(folder)).filter((e) => e.id !== null && /\.pdf$/i.test(e.name))) {
+    for (const entry of entries.filter((e) => /\.pdf$/i.test(e.name))) {
       files.set(entry.name, await get(`${folder}/${entry.name}`))
     }
-    fixtures.push({ name, request: await json('request.json'), reference: RoofPlanTakeoffSchema.parse(await json('takeoff.json')), files })
+    const operator = entries.some((e) => e.name === 'operator.json') ? RegionAnswersSchema.parse((await json('operator.json')).areas) : null
+    fixtures.push({ name, request: await json('request.json'), reference: RoofPlanTakeoffSchema.parse(await json('takeoff.json')), files, operator })
   }
   return fixtures
 }
@@ -178,6 +217,7 @@ export async function recordEval(db: SupabaseClient, results: FixtureResult[], m
     notes: [
       ...GATES.map((gate) => `${r.score[gate].pass ? 'pass' : 'FAIL'} ${gate}: ${r.score[gate].detail}`),
       `checks: ${r.status ?? 'not run'}; ${r.usage.calls} model calls, ${r.usage.inputTokens} input and ${r.usage.outputTokens} output tokens`,
+      ...(r.regions ? [`regions: ${r.regions}`] : []),
     ].join('\n'),
   })))
   if (itemsError) throw new Error(`eval run items insert failed: ${itemsError.message}`)
@@ -234,18 +274,26 @@ function fixtureTakeoff(takeoff: RoofPlanTakeoff, plain: Map<string, string>, na
  *  - its plan PDFs, as plans-1.pdf and so on, since their names can carry the site;
  *  - its request, without the site address or the job's name, and its scope
  *    note filtered;
- *  - its correction as the reference, through `fixtureTakeoff`.
+ *  - its correction as the reference, through `fixtureTakeoff`;
+ *  - the operator's answer to its numbered roof areas, when there is one
+ *    (TKO-30), so the eval measures it as the run page did.
  *  The fixture is kept as long as the run is (D-06): request.json says when it
  *  expires, and the retention sweep deletes it then. Nothing is overwritten,
  *  and a copy that fails part way leaves nothing behind. */
 export async function promoteRun(db: SupabaseClient, bucket: string, input: { tenantId: string; runId: string; name: string; now?: Date }): Promise<PromoteOutcome> {
   if (!FIXTURE_NAME.test(input.name)) return { ok: false, error: 'invalid_name' }
   const found = await db.from('roof_takeoff_runs')
-    .select('id, job_name, job_ref, scope_note, latest_extraction_id')
+    .select('id, job_name, job_ref, scope_note, latest_extraction_id, regions')
     .eq('id', input.runId).eq('tenant_id', input.tenantId)
     .maybeSingle()
   if (found.error) throw new Error(`run lookup failed: ${found.error.message}`)
-  const run = found.data as { job_name: string | null; job_ref: string | null; scope_note: string | null; latest_extraction_id: string | null } | null
+  const run = found.data as {
+    job_name: string | null
+    job_ref: string | null
+    scope_note: string | null
+    latest_extraction_id: string | null
+    regions?: Pick<RunRegions, 'confirmed'> | null
+  } | null
   if (!run) return { ok: false, error: 'not_found' }
   const reading = run.latest_extraction_id
     ? await db.from('plan_extractions').select('corrected_items').eq('id', run.latest_extraction_id).eq('tenant_id', input.tenantId).maybeSingle()
@@ -296,6 +344,8 @@ export async function promoteRun(db: SupabaseClient, bucket: string, input: { te
     }
     // The reference last: the eval takes a folder as a fixture once it has one.
     await put(`${folder}/request.json`, encode(request), 'application/json')
+    const confirmed = run.regions?.confirmed
+    if (confirmed) await put(`${folder}/operator.json`, encode({ areas: confirmed.areas }), 'application/json')
     await put(`${folder}/takeoff.json`, encode(fixtureTakeoff(correction, plain, names)), 'application/json')
   } catch (error) {
     if (written.length) await store.remove(written)

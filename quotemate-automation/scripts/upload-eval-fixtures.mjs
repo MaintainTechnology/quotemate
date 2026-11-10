@@ -1,12 +1,13 @@
 // Puts the eval's fixtures in the plans bucket (TKO-15, DEC-040). Each goes
 // under eval/<fixture>/: its plan PDFs from the git-ignored
-// docs/tag-roofing-requests/, beside its request and hand-measured reference
+// docs/tag-roofing-requests/, beside its request, hand-measured reference and,
+// where it has one, the operator's answer to its numbered roof areas (TKO-30)
 // from eval/roof-takeoff/. The eval and the service's nightly run read them
 // there. An upload replaces what is there. Prints names and sizes only.
 //
 //   node --env-file=.env.local scripts/upload-eval-fixtures.mjs
 
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 
@@ -20,7 +21,9 @@ const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABA
 
 for (const { name, plans } of FIXTURES) {
   const files = [
-    ...['request.json', 'takeoff.json'].map((file) => ({ file, path: join('eval', 'roof-takeoff', name, file), type: 'application/json' })),
+    ...['request.json', 'takeoff.json', 'operator.json']
+      .map((file) => ({ file, path: join('eval', 'roof-takeoff', name, file), type: 'application/json' }))
+      .filter(({ path }) => existsSync(path)),
     ...readdirSync(plans).filter((file) => /\.pdf$/i.test(file)).sort().map((file) => ({ file, path: join(plans, file), type: 'application/pdf' })),
   ]
   for (const { file, path, type } of files) {

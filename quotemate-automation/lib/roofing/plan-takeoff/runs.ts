@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { enqueueSmsWork, internalWorkPayload } from '@/lib/sms/durable-work'
 import { runChecks, type Checks } from './checks'
 import type { Sheet } from './classify'
+import type { Fall, RegionAnswer, RegionSuggestion, RunRegions } from './regions'
 import { RoofPlanTakeoffSchema, takeoffTooLarge, type RoofPlanTakeoff } from './schema'
 
 // ponytail: one queue key for every environment. Staging shares production's
@@ -29,6 +30,8 @@ const HOUR_MS = 3_600_000
 export const runFolder = (tenantId: string, runId: string) => `roofing/${tenantId}/${runId}`
 export const runFilePath = (tenantId: string, runId: string, uploadId: string) =>
   `${runFolder(tenantId, runId)}/${uploadId}.pdf`
+/** A run's numbered roof plan (TKO-30), in the run's folder, so it goes with the run. */
+export const regionsPlanPath = (tenantId: string, runId: string) => `${runFolder(tenantId, runId)}/regions/plan.pdf`
 
 // Backend Schema §4: work keys are unique, so each restart gets its own number.
 export const stageWorkKey = (runId: string, stage: TakeoffStage, restart: number, part?: string) =>
@@ -317,6 +320,33 @@ export type RunDetail = RunSummary & {
   /** The operator's corrected takeoff when there is one, else the reading's. */
   takeoff: RoofPlanTakeoff | null
   corrected: boolean
+  /** The roof areas numbered on the plan for the operator to answer (TKO-30), or null. */
+  regions: RegionsView | null
+}
+
+/** A run's numbered roof areas as the run page shows them: each number with
+ *  the two ways its sheeting lets it fall, the roofs an area may join, the
+ *  reader's suggestion and the operator's answer. The drawing itself, and the
+ *  takeoff kept from before the answer, stay on the server. */
+export type RegionsView = {
+  sheet: { file: string; page: number }
+  areas: Array<{ n: number; falls: [Fall, Fall] }>
+  roofs: Array<{ id: string; label: string }>
+  suggested: RegionSuggestion[] | null
+  note: string | null
+  confirmed: { areas: RegionAnswer[]; at: string } | null
+}
+
+export function regionsView(regions: RunRegions | null | undefined): RegionsView | null {
+  if (!regions) return null
+  return {
+    sheet: regions.sheet,
+    areas: regions.areas.map((area, i) => ({ n: i + 1, falls: area.axis === 'v' ? ['north', 'south'] : ['east', 'west'] })),
+    roofs: regions.roofs,
+    suggested: regions.suggested,
+    note: regions.note,
+    confirmed: regions.confirmed,
+  }
 }
 
 type DetailRow = SummaryRow & {
@@ -324,13 +354,14 @@ type DetailRow = SummaryRow & {
   sheet_index: Sheet[] | null
   checks: Checks | null
   latest_extraction_id: string | null
+  regions?: RunRegions | null
 }
 
 /** One run in scope, or null. Its takeoff is the reading persist linked, so a
  *  run still in progress has none yet. */
 export async function getRun(db: SupabaseClient, input: { tenants: TenantScope; runId: string }): Promise<RunDetail | null> {
   let query = db.from('roof_takeoff_runs')
-    .select(`${SUMMARY_COLUMNS}, scope_note, sheet_index, checks, latest_extraction_id`)
+    .select(`${SUMMARY_COLUMNS}, scope_note, sheet_index, checks, latest_extraction_id, regions`)
     .eq('id', input.runId)
   if (input.tenants !== 'all') query = query.in('tenant_id', input.tenants)
   const found = await query.maybeSingle()
@@ -354,6 +385,7 @@ export async function getRun(db: SupabaseClient, input: { tenants: TenantScope; 
     checks: row.checks,
     takeoff: reading?.corrected_items ?? reading?.items ?? null,
     corrected: Boolean(reading?.corrected_items),
+    regions: regionsView(row.regions),
   }
 }
 

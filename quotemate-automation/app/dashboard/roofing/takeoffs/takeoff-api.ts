@@ -3,6 +3,7 @@
 // unset, the pages say takeoffs are off and the dashboard doesn't link them.
 
 import { getAuthToken } from '@/lib/auth/client-token'
+import type { Fall, RegionAnswer, RegionsView } from '@/lib/roofing/plan-takeoff'
 
 export const TAKEOFF_API_URL = (process.env.NEXT_PUBLIC_TAKEOFF_API_URL ?? '').replace(/\/+$/, '')
 
@@ -153,3 +154,52 @@ export const isPreliminary = (statusText: string | null) =>
 /** "2 checks need a look", "1 check needs a look". */
 export const reviewLine = (fails: number) =>
   `${fails} check${fails === 1 ? ' needs' : 's need'} a look before this goes to the supplier.`
+
+// ── The numbered roof areas (TKO-30, DEC-048) ────────────────────────────────
+
+/** The roof choice that leaves an area out of the job. */
+export const LEFT_OUT = 'left-out'
+/** One area's choices in the form: a roof's id or LEFT_OUT, and a fall; '' until chosen. */
+export type AreaChoice = { roof: string; fall: string }
+
+/** A fall in words, the plan's north up. */
+export const FALL_WORDS: Record<Fall, string> = {
+  north: 'North, up the plan',
+  south: 'South, down the plan',
+  east: 'East, to the right',
+  west: 'West, to the left',
+}
+
+/** Each area as the form starts it: the operator's last answer, else the
+ *  reader's suggestion, else unanswered. */
+export function startingChoices(regions: RegionsView): Record<number, AreaChoice> {
+  return Object.fromEntries(regions.areas.map(({ n }): [number, AreaChoice] => {
+    const given = regions.confirmed?.areas.find((a) => a.n === n) ?? regions.suggested?.find((a) => a.n === n)
+    if (!given) return [n, { roof: '', fall: '' }]
+    return [n, given.roof === null ? { roof: LEFT_OUT, fall: '' } : { roof: given.roof, fall: given.fall ?? '' }]
+  }))
+}
+
+/** The form's choices as the service takes them: every area answered, each
+ *  area of the job with a fall its sheeting allows; null while one isn't. */
+export function regionAnswers(regions: RegionsView, choices: Record<number, AreaChoice>): RegionAnswer[] | null {
+  const answers: RegionAnswer[] = []
+  for (const { n, falls } of regions.areas) {
+    const choice = choices[n]
+    if (!choice?.roof) return null
+    if (choice.roof === LEFT_OUT) {
+      answers.push({ n, roof: null, fall: null })
+      continue
+    }
+    const fall = falls.find((f) => f === choice.fall)
+    if (!fall) return null
+    answers.push({ n, roof: choice.roof, fall })
+  }
+  return answers
+}
+
+/** The header's line while numbered areas wait on the operator. */
+export const regionsLine = (count: number) =>
+  count === 1
+    ? 'One roof area on the plan needs you to say which roof it is: see Takeoff.'
+    : `${count} roof areas on the plan need you to say which roof each is: see Takeoff.`

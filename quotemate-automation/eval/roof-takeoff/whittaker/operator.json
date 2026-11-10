@@ -1,0 +1,11 @@
+{
+  "note": "The operator's answer to A104's numbered roof areas (TKO-30, DEC-048), read from the drawings as the reference is (TKO-00d): areas 1, 2, 5 and 6 are the house's lower roofs, 3 is the deck the scope leaves out, and 4 is the new section.",
+  "areas": [
+    { "n": 1, "roof": "S1", "fall": "north" },
+    { "n": 2, "roof": "S1", "fall": "east" },
+    { "n": 3, "roof": null, "fall": null },
+    { "n": 4, "roof": "S2", "fall": "west" },
+    { "n": 5, "roof": "S1", "fall": "south" },
+    { "n": 6, "roof": "S1", "fall": "east" }
+  ]
+}

@@ -142,10 +142,11 @@ export function fakeDb(seed: {
         }
         return { data: [...files, ...[...folders].map((name) => ({ name, id: null, metadata: null }))], error: null }
       },
-      // No upsert, as the service's uploads use: an object once there stays.
-      upload: async (path: string, body: Uint8Array) => {
+      // An object once there stays, unless the upload upserts, as the
+      // numbered plan's does when a restart writes it again (TKO-30).
+      upload: async (path: string, body: Uint8Array, options?: { upsert?: boolean }) => {
         if (fail.upload) return { data: null, error: { message: 'upload refused' } }
-        if (objects[path] !== undefined) return { data: null, error: { message: 'The resource already exists' } }
+        if (objects[path] !== undefined && !options?.upsert) return { data: null, error: { message: 'The resource already exists' } }
         objects[path] = new Uint8Array(body)
         hooks.onUpload?.(path)
         return { data: { path }, error: null }
