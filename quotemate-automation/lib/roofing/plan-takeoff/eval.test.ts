@@ -5,7 +5,7 @@
 import type { generateText } from 'ai'
 import { PDFDocument } from 'pdf-lib'
 import { describe, expect, it, vi } from 'vitest'
-import { brokenPrompt, evalFixture, loadFixtures, promptVersion, recordEval, runEval, swapReader, type EvalFixture } from './eval'
+import { brokenPrompt, evalFixture, loadFixtures, promoteRun, promptVersion, recordEval, runEval, swapReader, type EvalFixture } from './eval'
 import { READER_SYSTEM } from './prompt'
 import type { RoofPlanTakeoff } from './schema'
 import { fakeDb } from './test-db'
@@ -137,6 +137,70 @@ describe('runEval', () => {
     const { id, results } = await runEval(db, 'plan-pdfs', { generate: answering(reply), readSheet })
     expect(results.map((r) => [r.fixture, r.score.pass])).toEqual([['demo', true]])
     expect(tables.eval_runs).toEqual([expect.objectContaining({ id, prompt_version: promptVersion(), total_score: 100 })])
+  })
+})
+
+describe('promoteRun (TKO-00c)', () => {
+  const NOW = new Date('2026-11-07T00:00:00.000Z')
+  const PLAN_FILE = 'Floor plan - 5 Smith St.pdf'
+  const corrected = (): RoofPlanTakeoff => ({
+    ...structuredClone(REFERENCE),
+    sheets: [{ file: PLAN_FILE, page: 1, number: 'A104', title: 'SMITH RESIDENCE ROOF PLAN', revision: 'P3', status_text: 'PRELIMINARY', kind: 'roof_plan', used: true }],
+    structures: REFERENCE.structures.map((s) => ({
+      ...structuredClone(s),
+      planes: s.planes.map((p) => ({ ...structuredClone(p), evidence: [{ file: PLAN_FILE, page: 1, text: 'Client: Jane Smith', bbox: null }] })),
+    })),
+    scope: { includes: ['Re-roof'], excludes: [], questions: ['Ask Jane Smith on 0412 345 678 about the gutters.'] },
+  })
+  const setup = async (correction: RoofPlanTakeoff | null = corrected()) => fakeDb({
+    runs: [{
+      id: 'r1', tenant_id: 't1', status: 'needs_review', job_name: 'Smith St re-roof', job_ref: 'J1',
+      site_address: '5 Smith St, Town QLD 4000', scope_note: 'Roofing - Steel. Call Jane Smith on 0412 345 678.', latest_extraction_id: 'x1',
+    }],
+    extractions: [{ id: 'x1', tenant_id: 't1', takeoff_run_id: 'r1', items: REFERENCE, corrected_items: correction }],
+    uploads: [{ id: 'u1', tenant_id: 't1', takeoff_run_id: 'r1', filename: PLAN_FILE, pdf_path: 'roofing/t1/r1/u1.pdf', created_at: '2026-11-01T00:00:00.000Z' }],
+    objects: { 'roofing/t1/r1/u1.pdf': await plansPdf() },
+  })
+  const json = (fake: ReturnType<typeof fakeDb>, path: string) => JSON.parse(new TextDecoder().decode(fake.objects[path] as Uint8Array))
+  const fixtureFiles = (fake: ReturnType<typeof fakeDb>) => Object.keys(fake.objects).filter((key) => key.startsWith('eval/')).sort()
+
+  it('copies a corrected run into eval/<name>/: its PDFs under plain names, and no site, names or drawing text', async () => {
+    const fake = await setup()
+    await expect(promoteRun(fake.db, 'plan-pdfs', { tenantId: 't1', runId: 'r1', name: 'smith-st', now: NOW })).resolves.toEqual({ ok: true, name: 'smith-st', files: 1 })
+    expect(fixtureFiles(fake)).toEqual(['eval/smith-st/plans-1.pdf', 'eval/smith-st/request.json', 'eval/smith-st/takeoff.json'])
+    expect(fake.objects['eval/smith-st/plans-1.pdf']).toEqual(fake.objects['roofing/t1/r1/u1.pdf'])
+    // Kept as long as the run is (D-06), when the sweep removes it.
+    expect(json(fake, 'eval/smith-st/request.json')).toEqual({
+      job_name: null, job_ref: 'J1', site_address: null,
+      scope_note: 'Roofing - Steel. Call [name removed] on [phone removed].',
+      promoted: { run_id: 'r1', at: '2026-11-07T00:00:00.000Z', expires_at: '2027-11-07T00:00:00.000Z' },
+    })
+    const reference = json(fake, 'eval/smith-st/takeoff.json')
+    expect(reference.sheets).toEqual([{ file: 'plans-1.pdf', page: 1, number: 'A104', title: null, revision: 'P3', status_text: null, kind: 'roof_plan', used: true }])
+    expect(reference.structures[0].planes[0].evidence).toEqual([])
+    expect(JSON.stringify(reference)).not.toMatch(/Jane|Smith|SMITH|0412/)
+    // The nightly eval takes it as it takes the others.
+    const loaded = (await loadFixtures(fake.db, 'plan-pdfs')).find((f) => f.name === 'smith-st')
+    expect([...(loaded?.files.keys() ?? [])]).toEqual(['plans-1.pdf'])
+  })
+
+  it("refuses a run it can't find, one no tradie corrected, a name that isn't a plain slug, and a name taken", async () => {
+    const uncorrected = await setup(null)
+    const promote = (fake: ReturnType<typeof fakeDb>, name: string, runId = 'r1') => promoteRun(fake.db, 'plan-pdfs', { tenantId: 't1', runId, name, now: NOW })
+    await expect(promote(uncorrected, 'smith-st', 'nope')).resolves.toEqual({ ok: false, error: 'not_found' })
+    await expect(promote(uncorrected, 'smith-st')).resolves.toEqual({ ok: false, error: 'not_corrected' })
+    await expect(promote(uncorrected, 'Smith St')).resolves.toEqual({ ok: false, error: 'invalid_name' })
+    const taken = await setup()
+    taken.objects['eval/grange/request.json'] = new TextEncoder().encode('{}')
+    await expect(promote(taken, 'grange')).resolves.toEqual({ ok: false, error: 'exists' })
+    expect(fixtureFiles(taken)).toEqual(['eval/grange/request.json'])
+  })
+
+  it('leaves nothing behind when a copy fails part way', async () => {
+    const fake = await setup()
+    fake.hooks.onUpload = () => { fake.fail.upload = true } // the plans copy; then storage refuses
+    await expect(promoteRun(fake.db, 'plan-pdfs', { tenantId: 't1', runId: 'r1', name: 'smith-st', now: NOW })).rejects.toThrow(/upload refused/)
+    expect(fixtureFiles(fake)).toEqual([])
   })
 })
 

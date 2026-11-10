@@ -496,5 +496,44 @@ export async function sweepExpiredRuns(db: SupabaseClient, bucket: string, input
       console.warn(JSON.stringify({ level: 'warn', event: 'takeoff_retention_failed', run_id: run.id, cause: String(error).slice(0, 200) }))
     }
   }
-  return { runs, files, failed }
+  let fixtures = 0
+  try {
+    fixtures = await sweepExpiredFixtures(db, bucket, input.now ?? new Date())
+  } catch (error) {
+    console.warn(JSON.stringify({ level: 'warn', event: 'takeoff_fixture_retention_failed', cause: String(error).slice(0, 200) }))
+  }
+  return { runs, files, failed, fixtures }
+}
+
+/** The folder of the eval's fixtures in the plans bucket (TKO-15, TKO-00c). */
+export const EVAL_FOLDER = 'eval'
+
+/** Deletes each eval fixture promoted from a live job (TKO-00c) whose time is
+ *  up. Its plans are a client's, kept as long as the run's (D-06), so its
+ *  request.json says when it expires. A fixture never promoted, such as Grange
+ *  or Whittaker, has no expiry and stays. Returns how many it deleted. */
+export async function sweepExpiredFixtures(db: SupabaseClient, bucket: string, now: Date): Promise<number> {
+  const store = db.storage.from(bucket)
+  const listed = await store.list(EVAL_FOLDER, { limit: 1000 })
+  if (listed.error) throw failure('fixture list', listed.error)
+  let deleted = 0
+  for (const entry of listed.data.filter((e) => e.id === null && !e.metadata)) {
+    const folder = `${EVAL_FOLDER}/${entry.name}`
+    const request = await store.download(`${folder}/request.json`)
+    if (request.error || !request.data) continue
+    let expires: unknown
+    try {
+      expires = JSON.parse(await request.data.text())?.promoted?.expires_at
+    } catch {
+      continue // not JSON: no expiry to read, so it stays
+    }
+    if (typeof expires !== 'string' || !(new Date(expires) < now)) continue
+    const paths = await filesUnder(db, bucket, folder)
+    if (paths.length) {
+      const removed = await store.remove(paths)
+      if (removed.error) throw failure('fixture delete', removed.error)
+    }
+    deleted++
+  }
+  return deleted
 }
