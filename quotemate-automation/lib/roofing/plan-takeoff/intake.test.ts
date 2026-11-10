@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { exclusionsAsked } from './checks'
-import { intakeRunId, parseTagRequest, stateOfPostcode, takeTagRequest, withState, type IntakeMessage } from './intake'
+import { admitTagRequest, intakeRunId, parseTagRequest, stateOfPostcode, takeTagRequest, withState, type IntakeMessage } from './intake'
 import { runFilePath } from './runs'
 import { fakeDb } from './test-db'
 
@@ -216,6 +216,17 @@ describe('takeTagRequest', () => {
     expect(fake.rpc).toHaveBeenCalledTimes(1)
   })
 
+  it('refuses a message delivered again after the operator deleted its run, whose start the ledger keeps (DEC-046)', async () => {
+    const fake = fakeDb()
+    await take(fake)
+    fake.tables.roof_takeoff_runs.length = 0 // the operator deletes it; its start stays in the ledger
+    await expect(take(fake)).resolves.toEqual({
+      ok: false, error: 'run_deleted', detail: 'The operator deleted the run this message made, so it makes none again.',
+    })
+    expect(fake.tables.roof_takeoff_runs).toEqual([])
+    expect(fake.rpc).toHaveBeenCalledTimes(1) // no job under the old run's work keys
+  })
+
   it('finishes a draft an earlier delivery left: uploads the files it lacks, keeps the one there, then starts it', async () => {
     const architectural = runFilePath(TENANT, RUN, 'upload-a')
     const engineering = runFilePath(TENANT, RUN, 'upload-e')
@@ -277,6 +288,30 @@ describe('takeTagRequest', () => {
     await expect(take(fake, {}, { ...LIMITS, runsPerHour: 1 })).resolves.toEqual({ ok: false, error: 'rate_limited', retry_at: expect.any(String) })
     expect(fake.tables.roof_takeoff_runs[0].status).toBe('draft')
     await expect(take(fake, {}, { ...LIMITS, runsPerHour: 2 })).resolves.toMatchObject({ ok: true, created: false, status: 'queued' })
+  })
+
+  describe('admitTagRequest, which Resend asks before downloading any PDF (DEC-046)', () => {
+    const admit = (fake: ReturnType<typeof fakeDb>, over: Partial<IntakeMessage> = {}, runsPerHour = 8) => {
+      const { message_id, subject, text } = message(over)
+      return admitTagRequest(fake.db, { tenantId: TENANT, message: { message_id, subject, text }, runsPerHour, now: NOW })
+    }
+
+    it('answers mail that is not a request, the run a message made, a deleted run and a full hour, writing nothing', async () => {
+      const fake = fakeDb()
+      await expect(admit(fake, { subject: 'Lunch on Friday?', text: 'Are you free?' })).resolves.toMatchObject({ ok: false, error: 'not_a_tag_request' })
+      await take(fake)
+      await expect(admit(fake)).resolves.toEqual({ ok: true, created: false, run_id: RUN, status: 'queued', stage: 'intake' })
+      fake.tables.roof_takeoff_runs.length = 0
+      await expect(admit(fake)).resolves.toMatchObject({ ok: false, error: 'run_deleted' })
+      await expect(admit(fake, { message_id: '<request-2@tag.example>' }, 1))
+        .resolves.toEqual({ ok: false, error: 'rate_limited', retry_at: '2026-11-04T02:00:00.000Z' })
+      expect(fake.tables.roof_takeoff_runs).toEqual([])
+    })
+
+    it('is null when the files are needed: a new request with room in the hour, or a draft an earlier delivery left', async () => {
+      await expect(admit(fakeDb())).resolves.toBeNull()
+      await expect(admit(fakeDb({ runs: [{ id: RUN, tenant_id: TENANT, status: 'draft' }] }))).resolves.toBeNull()
+    })
   })
 
   it('refuses a message that is not a TAG request, or has no PDF attached, and writes nothing', async () => {
