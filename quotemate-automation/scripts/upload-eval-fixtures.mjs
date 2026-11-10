@@ -12,8 +12,8 @@ import { createClient } from '@supabase/supabase-js'
 
 // The same fixtures as scripts/eval-roof-takeoff.mts.
 const FIXTURES = [
-  { name: 'grange', plans: 'docs/tag-roofing-requests/J14997-59-Grange-Rd' },
-  { name: 'whittaker', plans: 'docs/tag-roofing-requests/J14945-5-Whittaker-St' },
+  { name: 'grange', plans: 'docs/tag-roofing-requests/grange' },
+  { name: 'whittaker', plans: 'docs/tag-roofing-requests/whittaker' },
 ]
 const bucket = process.env.TAKEOFF_STORAGE_BUCKET?.trim() || 'plan-pdfs'
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
@@ -28,5 +28,17 @@ for (const { name, plans } of FIXTURES) {
     const { error } = await db.storage.from(bucket).upload(`eval/${name}/${file}`, body, { contentType: type, upsert: true })
     if (error) throw new Error(`${name}/${file}: ${error.message}`)
     console.log(`${name}/${file}: ${body.length} bytes`)
+  }
+  // Then what this upload didn't write goes, such as a plan renamed since,
+  // which the eval would otherwise read twice. New first, so the eval never
+  // finds the folder empty.
+  const { data: there, error: listed } = await db.storage.from(bucket).list(`eval/${name}`, { limit: 1000 })
+  if (listed) throw new Error(`${name}: ${listed.message}`)
+  const kept = new Set(files.map(({ file }) => file))
+  const stale = (there ?? []).filter((o) => o.id !== null && !kept.has(o.name)).map((o) => `eval/${name}/${o.name}`)
+  if (stale.length) {
+    const { error } = await db.storage.from(bucket).remove(stale)
+    if (error) throw new Error(`${name}: ${error.message}`)
+    console.log(`${name}: removed ${stale.length} file(s) the upload replaced`)
   }
 }

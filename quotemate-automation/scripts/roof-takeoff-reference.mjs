@@ -10,7 +10,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const brief = JSON.parse(readFileSync('docs/tag-roofing-requests/J14997-59-Grange-Rd/brief/takeoff.json', 'utf8'))
+const brief = JSON.parse(readFileSync('docs/tag-roofing-requests/grange/brief/takeoff.json', 'utf8'))
 const sheets = JSON.parse(readFileSync('eval/roof-takeoff/grange/sheets.json', 'utf8')).sheets.map((sheet) => {
   const copy = { ...sheet }
   delete copy.model // the expectations' marker for pages the model reads

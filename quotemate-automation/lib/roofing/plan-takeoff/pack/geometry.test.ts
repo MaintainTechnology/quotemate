@@ -153,7 +153,7 @@ describe('packGeometry', () => {
   })
 
   it('projects an aerial footprint into millimetres, north up', () => {
-    // A 10 m square near North Ipswich: 10 m is 0.0000898° of latitude.
+    // A 10 m square near Sampleton: 10 m is 0.0000898° of latitude.
     const lat = -27.59
     const dLat = 10 / 111_320
     const dLon = dLat / Math.cos((lat * Math.PI) / 180)

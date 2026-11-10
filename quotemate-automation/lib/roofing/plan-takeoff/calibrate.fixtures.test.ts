@@ -9,9 +9,9 @@ import { calibrateSheet, chooseScale, pageSegments, type SheetScale } from './ca
 import { pageText, statedScale, type Sheet } from './classify'
 
 const MM_PER_PT = 25.4 / 72
-const GRANGE = 'J14997-59-Grange-Rd'
-const WHITTAKER = 'J14945-5-Whittaker-St'
-const WHITTAKER_PLAN = 'Floor plan - 5 Whittaker street north Ipswich .pdf'
+const GRANGE = 'grange'
+const WHITTAKER = 'whittaker'
+const WHITTAKER_PLAN = 'floor-plan.pdf'
 const pdfPath = (folder: string, file: string) => `docs/tag-roofing-requests/${folder}/${file}`
 
 /** The run scale the calibrate stage would choose from the fixture's chosen plan sheets. */
@@ -31,7 +31,7 @@ async function calibrateFixture(fixture: string, folder: string) {
   return chooseScale(results)
 }
 
-describe.skipIf(!existsSync(pdfPath(GRANGE, 'Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf')))('Grange calibration', () => {
+describe.skipIf(!existsSync(pdfPath(GRANGE, 'architectural.pdf')))('Grange calibration', () => {
   it('is confirmed by its written dimensions within 1% of 1:100 at A1', async () => {
     const scale = await calibrateFixture('grange', GRANGE)
     expect(scale).toMatchObject({ stated: '1:100 @ A1', calibration: { method: 'dimension_string' } })
@@ -39,7 +39,7 @@ describe.skipIf(!existsSync(pdfPath(GRANGE, 'Architectural - 59 Grange Rd, Easte
   }, 120_000)
 })
 
-// TAG's resend carries the same drawings with Hall's /Rotate lost: read the
+// TAG's resend carries the same drawings with the architect's /Rotate lost: read the
 // way it reads, it calibrates as the original, its lines where they were.
 describe.each([
   ['Whittaker calibration', WHITTAKER],

@@ -35,9 +35,9 @@ const run = (over: Row = {}): Row => ({
   id: RUN,
   tenant_id: TENANT,
   status: 'ready',
-  site_address: '59 Grange Rd, Eastern Heights QLD 4305',
-  job_ref: 'J14997',
-  job_name: 'Grange Rd dual occupancy',
+  site_address: '12 Sample St, Exampleton QLD 4305',
+  job_ref: 'J10001',
+  job_name: 'Sample St dual occupancy',
   scope_note: 'Roofing - Steel (Supply & Fit)',
   builder: { business: 'Example Constructions Pty Ltd', contact: 'A. Builder', email: 'a.builder@example.com', phone: '0400 000 000' },
   checks,
@@ -72,7 +72,7 @@ describe('exportRun', () => {
     expect(manifest).toMatchObject({
       version: 1,
       run_id: RUN,
-      job_ref: 'J14997',
+      job_ref: 'J10001',
       takeoff_version: 1,
       extraction_id: 'reading-1',
       corrected: false,
@@ -91,7 +91,7 @@ describe('exportRun', () => {
     expect(row.export_manifest).toEqual(manifest)
     expect(row.last_exported_at).toBe(NOW.toISOString())
     expect(row.status).toBe('ready')
-    expect(out.filename).toBe('J14997 Roof Wizard pack')
+    expect(out.filename).toBe('J10001 Roof Wizard pack')
   })
 
   it('carries no drawing text, and of the builder only the business', async () => {
@@ -99,7 +99,7 @@ describe('exportRun', () => {
     const out = await exportRun(fake.db, 'plan-pdfs', { tenantId: TENANT, runId: RUN, render, now: NOW })
     if (!out.ok) throw new Error('export refused')
     const text = readZip(out.zip).map((e) => e.data.toString()).join('\n') + render.mock.calls.at(-1)![0]
-    for (const gone of ['SMITH', 'CITIZEN', 'A. Builder', 'a.builder@example.com', '0400 000 000', 'Architectural - 59 Grange Rd']) expect(text).not.toContain(gone)
+    for (const gone of ['SMITH', 'CITIZEN', 'A. Builder', 'a.builder@example.com', '0400 000 000', 'Architectural - 12 Sample St']) expect(text).not.toContain(gone)
     expect(render.mock.calls.at(-1)![0]).toContain('Example Constructions Pty Ltd')
   })
 

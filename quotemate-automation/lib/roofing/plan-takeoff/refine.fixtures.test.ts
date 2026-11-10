@@ -11,8 +11,8 @@ import { refineReading } from './refine'
 import { RoofPlanTakeoffSchema } from './schema'
 import { scoreTakeoff } from './score'
 
-const DIR = 'docs/tag-roofing-requests/J14997-59-Grange-Rd'
-const PLANS = 'Architectural - 59 Grange Rd, Eastern Heights (4) Compressed.pdf'
+const DIR = 'docs/tag-roofing-requests/grange'
+const PLANS = 'architectural.pdf'
 const READING = `${DIR}/reading.json`
 const read = (path: string) => RoofPlanTakeoffSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
 const within = (actual: number | null, expected: number, pct: number) => Math.abs((actual ?? 0) / expected - 1) * 100 <= pct

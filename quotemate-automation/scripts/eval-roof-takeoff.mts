@@ -28,8 +28,8 @@ import { getServiceClient } from '@/lib/supabase/admin'
 
 // The same fixtures as scripts/upload-eval-fixtures.mjs.
 const FIXTURES = [
-  { name: 'grange', plans: 'docs/tag-roofing-requests/J14997-59-Grange-Rd' },
-  { name: 'whittaker', plans: 'docs/tag-roofing-requests/J14945-5-Whittaker-St' },
+  { name: 'grange', plans: 'docs/tag-roofing-requests/grange' },
+  { name: 'whittaker', plans: 'docs/tag-roofing-requests/whittaker' },
 ]
 const GATES = ['structures', 'area', 'pitch', 'edges'] as const
 const { values: args } = parseArgs({

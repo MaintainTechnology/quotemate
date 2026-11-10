@@ -49,8 +49,8 @@ describe('redact', () => {
     'New dwelling roof RF:01',
     'Lysaght Custom Orb 0.42 BMT',
     'Falls south, to the street',
-    '5 Whittaker St, North Ipswich QLD 4305',
-    '12 Banksia Dr, Eastern Heights',
+    '34 Example St, Sampleton QLD 4305',
+    '12 Banksia Dr, Exampleton',
     'Insulated roof over the new deck: 1:20 fall',
     'Is the carport in the scope?',
   ])('leaves %j as it is', (text) => {

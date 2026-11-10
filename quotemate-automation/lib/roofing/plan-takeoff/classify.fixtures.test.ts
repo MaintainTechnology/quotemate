@@ -10,12 +10,12 @@ import { describe, expect, it } from 'vitest'
 import { classifyFile, isPreliminary, readSheetWithModel, type Sheet, type SheetReader } from './classify'
 
 // Each plan set as a fixture folder and the expectations it must meet. TAG's
-// resend of Whittaker carries the same drawings with Hall's /Rotate lost, so
+// resend of Whittaker carries the same drawings with the architect's /Rotate lost, so
 // it must index exactly as the original does.
 const FIXTURES = [
-  { name: 'grange', fixture: 'grange', folder: 'J14997-59-Grange-Rd' },
-  { name: 'whittaker', fixture: 'whittaker', folder: 'J14945-5-Whittaker-St' },
-  { name: "whittaker as TAG's resend carries it", fixture: 'whittaker', folder: 'J14945-5-Whittaker-St-resend' },
+  { name: 'grange', fixture: 'grange', folder: 'grange' },
+  { name: 'whittaker', fixture: 'whittaker', folder: 'whittaker' },
+  { name: "whittaker as TAG's resend carries it", fixture: 'whittaker', folder: 'whittaker-resend' },
 ]
 const LIVE = process.env.TAKEOFF_LIVE_MODEL === '1'
 const norm = (text: string | null) => (text ?? '').toUpperCase().replace(/\s+/g, ' ').trim()

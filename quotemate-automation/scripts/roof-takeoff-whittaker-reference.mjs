@@ -30,8 +30,8 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const PLAN = 'Floor plan - 5 Whittaker street north Ipswich .pdf'
-const ELEVATIONS = 'Elevations 5 Whitaker street .pdf'
+const PLAN = 'floor-plan.pdf'
+const ELEVATIONS = 'elevations.pdf'
 const MAIN = 25 // the main roof
 const SOUTH = 4.9 // the kitchen and sleepout roof
 const LOW = 4.8 // the laundry roof and the entry skillions

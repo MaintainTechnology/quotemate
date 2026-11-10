@@ -44,7 +44,7 @@ const takeoff = (carport: Partial<Plane> = {}): RoofPlanTakeoff => ({
 
 function setup(run: Row = {}, seed: { measurements?: Row[]; card?: boolean; carport?: Partial<Plane> } = {}) {
   return fakeDb({
-    runs: [{ id: RUN, tenant_id: TENANT, status: 'ready', site_address: '59 Grange Rd, Eastern Heights QLD 4305', postcode: null, state: null, latest_extraction_id: 'X1', ...run }],
+    runs: [{ id: RUN, tenant_id: TENANT, status: 'ready', site_address: '12 Sample St, Exampleton QLD 4305', postcode: null, state: null, latest_extraction_id: 'X1', ...run }],
     extractions: [{ id: 'X1', tenant_id: TENANT, items: takeoff(seed.carport), corrected_items: null }],
     pricingBooks: seed.card === false ? [] : [{ id: 'PB1', tenant_id: TENANT, trade: 'roofing', overlays: { roofing_rate_card: CARD } }],
     measurements: seed.measurements ?? [],
@@ -80,7 +80,7 @@ describe('saveTakeoff', () => {
     expect(outcome).toEqual({ ok: true, created: true, run_id: RUN, status: 'saved', measurement_id: row.id, measure_url: `https://www.quotemax.com.au/m/${row.measure_token}` })
     expect(row).toMatchObject({
       tenant_id: TENANT, provider: 'plans', source_request_key: `takeoff:${RUN}`,
-      address: '59 Grange Rd, Eastern Heights QLD 4305', postcode: '4305', state: 'QLD',
+      address: '12 Sample St, Exampleton QLD 4305', postcode: '4305', state: 'QLD',
       structure_count: 2, included_indices: [1, 2], routing: 'tradie_review', confirmed_at: NOW.toISOString(),
       structures: [{ buildingId: 'S1', role: 'primary', label: 'House 1' }, { buildingId: 'S2', role: 'secondary', label: 'Carport' }],
       quote: { pricing_authority: { pricing_book_id: 'PB1' } },
