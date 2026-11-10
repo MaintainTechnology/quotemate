@@ -128,7 +128,7 @@ export async function measureAndMerge(db: SupabaseClient, input: {
     return { ok: false, error: 'aerial_unavailable', detail: `Aerial data found ${n} building${n === 1 ? '' : 's'} at the address, so ${merged.ids.join(', ')} has none to take.` }
   }
   if (!merged.ok) return merged
-  return correctTakeoff(db, { tenantId: input.tenantId, runId: input.runId, takeoff: merged.takeoff, now: input.now })
+  return correctTakeoff(db, { tenantId: input.tenantId, runId: input.runId, takeoff: merged.takeoff, now: input.now, geometrySource: 'hybrid' })
 }
 
 /** The tenant's own state, or null when it has none on file. */
