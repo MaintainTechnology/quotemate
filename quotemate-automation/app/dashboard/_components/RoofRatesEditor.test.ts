@@ -21,8 +21,11 @@ describe('RoofRatesEditor units', () => {
     expect(count('/lm')).toBe(6) // gutter, fascia and soffit; ridge, valley and box gutter
     expect(count('each')).toBe(1) // downpipes
     // The call-out minimum and the two solar allowances are flat amounts.
+    // The whole metacharacter class, backslash included, as lib/estimation/
+    // supplement.ts escapes: escaping only ( ) leaves a backslash unescaped.
+    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     for (const label of ['Call-out minimum (ex GST)', 'Solar detach &amp; reinstate — base']) {
-      expect(html).toMatch(new RegExp(`aria-label="${label.replace(/[()]/g, '\\$&')}"[^>]*/></div>`))
+      expect(html).toMatch(new RegExp(`aria-label="${escapeRegExp(label)}"[^>]*/></div>`))
     }
   })
 })
