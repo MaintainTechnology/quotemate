@@ -1,6 +1,8 @@
 // The plan reader (TKO-11, P2 Reading §5). The chosen sheets go to the model as
 // one PDF; its JSON is checked against the schema, with one repair round that
-// passes the problems back, and assembled into a RoofPlanTakeoff. The reader
+// passes the problems back, and assembled into a RoofPlanTakeoff. When its
+// planes fall short of the drawings' roof footprint, it is asked once to look
+// for a roof it left out (TKO-15). The reader
 // fills in what needs no model: the sheet index, each plane's sloped area, and
 // the file and page behind each piece of evidence.
 
@@ -9,9 +11,10 @@ import { generateText, type ModelMessage } from 'ai'
 import { z } from 'zod'
 import { deterministicSampling } from '@/lib/llm/sampling'
 import { currentSmsWork, smsWorkCheckpoint } from '@/lib/sms/durable-work'
+import { footprintLine, SCHEDULE_PCT, type ScheduleLine } from './checks'
 import { cutPages, type Sheet } from './classify'
 import { READER_SYSTEM, readerRequest } from './prompt'
-import { PlaneSchema, RoofPlanTakeoffSchema, StructureSchema, type RoofPlanTakeoff } from './schema'
+import { PITCH_SOURCES, PlaneSchema, RoofPlanTakeoffSchema, StructureSchema, type RoofPlanTakeoff } from './schema'
 
 export const DEFAULT_TAKEOFF_MODEL = 'claude-opus-4-8'
 // ponytail: one model call reads the whole run, inside the queue's 240-second
@@ -25,8 +28,19 @@ export type ReadOutcome =
   | { ok: true; takeoff: RoofPlanTakeoff; model: string; usage: ModelUsage }
   | { ok: false; note: string; model: string; usage: ModelUsage }
 
+/** A pitch source written as a phrase, such as "note RF:01 and elevation
+ *  5.0°", is the first of the reader's sources it names, as the repair always
+ *  made it: 4 of 7 live Grange readings spent a repair call on that alone
+ *  (TKO-15). A phrase naming none, or aerial data, still goes back. */
+const READ_SOURCES = PITCH_SOURCES.filter((s) => s !== 'aerial')
+const sourceWord = (value: unknown) =>
+  typeof value === 'string' && !(PITCH_SOURCES as readonly string[]).includes(value)
+    ? READ_SOURCES.find((s) => value.toLowerCase().includes(s)) ?? value
+    : value
+
 /** What the model writes: the takeoff without what the reader fills in. */
 const ModelPlane = PlaneSchema.omit({ sloped_area_m2: true, evidence: true }).extend({
+  pitch_source: z.preprocess(sourceWord, PlaneSchema.shape.pitch_source),
   evidence: z.array(z.object({ page: z.number().int().positive(), text: z.string().nullable() })).min(1),
 })
 const ModelTakeoff = z.object({
@@ -88,13 +102,37 @@ export function assemble(reply: string, sheets: Sheet[], pages: Sheet[], sizes: 
   return checked.success ? { takeoff: checked.data } : { problems: issues(checked.error) }
 }
 
-/** Reads the chosen sheets into a takeoff: one model call, and one repair
- *  call when the reply doesn't fit the schema. */
+const planesIn = (t: RoofPlanTakeoff) => t.structures.reduce((n, s) => n + s.planes.length, 0)
+
+/** What to ask the reader again when its planes, every one sized, fall short
+ *  of the drawings' roof footprint by more than C3 allows: a roof it left out,
+ *  as Grange's carport was from 2 of 6 readings (TKO-15). Null when nothing is
+ *  short, or a plane has no area yet, as the drawing may measure it (TKO-29). */
+function shortOfFootprint(takeoff: RoofPlanTakeoff, schedule: ScheduleLine[]): string | null {
+  const line = footprintLine(schedule)
+  const planes = takeoff.structures.flatMap((s) => s.planes)
+  if (!line || !planes.length || planes.some((p) => p.plan_area_m2 === null)) return null
+  const total = round2(planes.reduce((sum, p) => sum + (p.plan_area_m2 ?? 0), 0))
+  if (total >= line.m2 * (1 - SCHEDULE_PCT / 100)) return null
+  // The label is the drawings' text: data, as the request's job details are.
+  const label = line.label.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80).toLowerCase()
+  return [
+    `Your planes total ${total} m² on plan, but the drawings' area schedule gives the ${label} as ${line.m2} m², ${round2(line.m2 - total)} m² more.`,
+    'A roof in scope may be missing, such as a carport, veranda or lean-to. Read every roof the plans draw in scope, each as its own structure with its evidence, and give a roof you can\'t size a null area.',
+    'Never change an area to make the totals agree: if every roof in scope is already read, reply with the same JSON. Reply with the corrected JSON only.',
+  ].join(' ')
+}
+
+/** Reads the chosen sheets into a takeoff: one model call, one repair call
+ *  when the reply doesn't fit the schema, and one more when its planes fall
+ *  short of the `schedule`'s roof footprint. */
 export async function readPlans(input: {
   sheets: Sheet[]
   files: Map<string, Uint8Array>
   scopeNote: string | null
   job: { name: string | null; ref: string | null; address: string | null }
+  /** The drawings' area schedule, which C3 later reconciles against. */
+  schedule?: ScheduleLine[]
 }, generate: typeof generateText = generateText): Promise<ReadOutcome> {
   const pages = input.sheets.filter((s) => s.used)
   const { pdf, sizes } = await cutPages(pages, input.files)
@@ -132,6 +170,7 @@ export async function readPlans(input: {
   // Each reply is checkpointed, so an attempt the queue cut off is picked up
   // where it stopped instead of reading the plans again.
   const draft = await smsWorkCheckpoint('read:draft', () => ask(messages))
+  let reply = draft
   let result = check(draft)
   if ('problems' in result) {
     const cutOff = draft.finishReason === 'length' ? ['The reply was cut off at the output limit: keep evidence texts short and give polygon_mm only for simple planes.'] : []
@@ -143,7 +182,20 @@ export async function readPlans(input: {
       ...(draft.text.trim() ? [{ role: 'assistant' as const, content: draft.text }] : []),
       { role: 'user', content: `That reply can't be used:\n- ${problems.join('\n- ')}\nReply with the corrected JSON only.` },
     ]))
+    reply = repair
     result = check(repair)
+  }
+  const missing = 'takeoff' in result ? shortOfFootprint(result.takeoff, input.schedule ?? []) : null
+  if (missing && 'takeoff' in result) {
+    const again = await smsWorkCheckpoint('read:complete', () => ask([
+      ...messages,
+      { role: 'assistant', content: reply.text },
+      { role: 'user', content: missing },
+    ]))
+    // Only a reading that adds a plane is taken, so no area grows to meet the
+    // schedule; C3 still judges whichever reading stands.
+    const fuller = check(again)
+    if ('takeoff' in fuller && planesIn(fuller.takeoff) > planesIn(result.takeoff)) result = fuller
   }
   return 'takeoff' in result
     ? { ok: true, takeoff: result.takeoff, model, usage }
