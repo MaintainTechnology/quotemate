@@ -9,16 +9,23 @@ import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { classifyFile, isPreliminary, readSheetWithModel, type Sheet, type SheetReader } from './classify'
 
-const FIXTURES = { grange: 'J14997-59-Grange-Rd', whittaker: 'J14945-5-Whittaker-St' }
+// Each plan set as a fixture folder and the expectations it must meet. TAG's
+// resend of Whittaker carries the same drawings with Hall's /Rotate lost, so
+// it must index exactly as the original does.
+const FIXTURES = [
+  { name: 'grange', fixture: 'grange', folder: 'J14997-59-Grange-Rd' },
+  { name: 'whittaker', fixture: 'whittaker', folder: 'J14945-5-Whittaker-St' },
+  { name: "whittaker as TAG's resend carries it", fixture: 'whittaker', folder: 'J14945-5-Whittaker-St-resend' },
+]
 const LIVE = process.env.TAKEOFF_LIVE_MODEL === '1'
 const norm = (text: string | null) => (text ?? '').toUpperCase().replace(/\s+/g, ' ').trim()
 
-for (const [fixture, folder] of Object.entries(FIXTURES)) {
+for (const { name, fixture, folder } of FIXTURES) {
   const expected: Array<Sheet & { model?: true }> = JSON.parse(readFileSync(`eval/roof-takeoff/${fixture}/sheets.json`, 'utf8')).sheets
   const files = [...new Set(expected.map((s) => s.file))]
   const dir = `docs/tag-roofing-requests/${folder}`
 
-  describe.skipIf(!files.every((f) => existsSync(`${dir}/${f}`)))(`${fixture} sheet index`, () => {
+  describe.skipIf(!files.every((f) => existsSync(`${dir}/${f}`)))(`${name} sheet index`, () => {
     it.each(files)('%s', async (file) => {
       const want = expected.filter((s) => s.file === file)
       const answers = want.filter((s) => s.model)

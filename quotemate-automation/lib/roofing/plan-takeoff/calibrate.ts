@@ -6,7 +6,7 @@
 // drawn as outlines, as on Whittaker), the stated scale stands, corrected for
 // the size it was printed at: an A1 sheet printed on A3 is half size.
 
-import type { PageText } from './classify'
+import { readingViewport, type PageText } from './classify'
 import type { RoofPlanTakeoff } from './schema'
 
 /** A straight stroke as printed, in points from the page's top-left. */
@@ -25,17 +25,19 @@ const multiply = (m: Matrix, n: number[]): Matrix => [
 ]
 const apply = (m: Matrix, x: number, y: number) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
 
-/** The page's stroked straight lines as printed; curves are skipped. Reads
- *  pdf.js 5's operator list, where a path is codes (0 move, 1 line, 2 curve,
- *  3 quadratic, 4 close) under the transform in force. */
+/** The page's stroked straight lines as printed, in the frame `pageText`
+ *  reads the page in; curves are skipped. Reads pdf.js 5's operator list,
+ *  where a path is codes (0 move, 1 line, 2 curve, 3 quadratic, 4 close)
+ *  under the transform in force. */
 export async function pageSegments(pdf: PdfDocument, pageNumber: number): Promise<Segment[]> {
   const { getResolvedPDFJS } = await import('unpdf')
   const { OPS } = await getResolvedPDFJS()
   const stroked = new Set([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke])
   const page = await pdf.getPage(pageNumber)
   try {
+    const { items } = await page.getTextContent()
     const { fnArray, argsArray } = await page.getOperatorList()
-    let ctm = page.getViewport({ scale: 1 }).transform as Matrix
+    let ctm = readingViewport(page, items).viewport.transform as Matrix
     const saved: Matrix[] = []
     const segments: Segment[] = []
     for (let i = 0; i < fnArray.length; i++) {
