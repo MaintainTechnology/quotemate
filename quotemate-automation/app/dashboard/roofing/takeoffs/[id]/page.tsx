@@ -12,6 +12,7 @@ import { Chip, Notice, PRIMARY, SECONDARY, Table, TakeoffsOff } from '../_compon
 import {
   CHECK_NAMES,
   checkChip,
+  exportFile,
   FALL_WORDS,
   isPreliminary,
   LEFT_OUT,
@@ -441,21 +442,22 @@ function Outputs({ run, onSaved }: { run: RunDetail; onSaved: () => void }) {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [saved, setSaved] = useState<Saved | null>(null)
   const [accepted, setAccepted] = useState(false)
-  const [busy, setBusy] = useState<'price' | 'save' | 'export' | null>(null)
-  const [exported, setExported] = useState(false)
+  const [busy, setBusy] = useState<'price' | 'save' | 'zip' | 'pdf' | null>(null)
+  const [downloaded, setDownloaded] = useState<'zip' | 'pdf' | null>(null)
   const [error, setError] = useState<string | null>(null)
   if (!SETTLED.includes(run.status) || !run.takeoff) {
     return <p className="text-text-dim">The outputs open once the plans are read and checked.</p>
   }
   const review = run.status === 'needs_review'
 
-  async function exportPack() {
-    setBusy('export')
+  /** The whole pack, or the roof brief alone as a PDF. */
+  async function download(format: 'zip' | 'pdf') {
+    setBusy(format)
     setError(null)
     try {
-      const pack = await takeoffDownload(`/api/takeoff/runs/${run.run_id}/export${review ? '?accept_review=true' : ''}`)
-      saveFile(pack, `${run.job_ref ?? run.run_id.slice(0, 8)} Roof Wizard pack.zip`)
-      setExported(true)
+      const { path, filename } = exportFile(run, format, review)
+      saveFile(await takeoffDownload(path), filename)
+      setDownloaded(format)
     } catch (e) {
       setError(message(e))
     } finally {
@@ -496,11 +498,21 @@ function Outputs({ run, onSaved }: { run: RunDetail; onSaved: () => void }) {
           Accept the failed checks to export or save anyway
         </label>
       ) : null}
-      <Output title="Export Roof Wizard pack" line="The roof outline (DXF), the quantities (CSV) and the roof brief (PDF), zipped with a manifest for the supplier's Roof Wizard. The pack carries no prices.">
-        <button type="button" className={SECONDARY} disabled={busy !== null || (review && !accepted)} onClick={() => void exportPack()}>
-          {busy === 'export' ? 'Exporting…' : 'Export pack'}
+      <Output title="Roof brief" line="The key plan, the roofs and their edges, the scope and questions, the checks and the drawings used, as one PDF to send on. Quantities only, with no prices.">
+        <button type="button" className={SECONDARY} disabled={busy !== null || (review && !accepted)} onClick={() => void download('pdf')}>
+          {busy === 'pdf' ? 'Preparing…' : 'Download roof brief (PDF)'}
         </button>
-        {exported ? (
+        {downloaded === 'pdf' ? (
+          <p role="status" className="text-text-sec">
+            Downloaded. The PDF is in your downloads.
+          </p>
+        ) : null}
+      </Output>
+      <Output title="Export Roof Wizard pack" line="The roof outline (DXF), the quantities (CSV) and the roof brief (PDF), zipped with a manifest for the supplier's Roof Wizard. The pack carries no prices.">
+        <button type="button" className={SECONDARY} disabled={busy !== null || (review && !accepted)} onClick={() => void download('zip')}>
+          {busy === 'zip' ? 'Exporting…' : 'Export pack'}
+        </button>
+        {downloaded === 'zip' ? (
           <p role="status" className="text-text-sec">
             Exported. The zip is in your downloads.
           </p>

@@ -6,6 +6,7 @@ import type { RegionsView } from '@/lib/roofing/plan-takeoff'
 import {
   CHECK_NAMES,
   checkChip,
+  exportFile,
   isPreliminary,
   LEFT_OUT,
   regionAnswers,
@@ -85,6 +86,29 @@ describe('takeoffDownload (TKO-18)', () => {
     })
     vi.stubGlobal('fetch', answer(401, { ok: false, error: 'unauthorized', detail: 'Unauthorized' }))
     await expect(takeoffDownload('/api/takeoff/runs/run-1/export')).rejects.toMatchObject({ status: 401, message: expect.stringMatching(/switched on for this account/) })
+  })
+})
+
+describe('exportFile', () => {
+  const run = { run_id: '9a7b5c3d-1e2f-4a6b-8c0d-2e4f6a8b0c1d', job_ref: 'J10001' }
+
+  it('asks for the whole pack by default, named after the job', () => {
+    expect(exportFile(run, 'zip', false)).toEqual({
+      path: '/api/takeoff/runs/9a7b5c3d-1e2f-4a6b-8c0d-2e4f6a8b0c1d/export',
+      filename: 'J10001 Roof Wizard pack.zip',
+    })
+  })
+
+  it('asks for the roof brief alone as a PDF, accepting a run under review when told to', () => {
+    expect(exportFile(run, 'pdf', true)).toEqual({
+      path: '/api/takeoff/runs/9a7b5c3d-1e2f-4a6b-8c0d-2e4f6a8b0c1d/export?format=pdf&accept_review=true',
+      filename: 'J10001 roof brief.pdf',
+    })
+    expect(exportFile(run, 'zip', true).path).toBe('/api/takeoff/runs/9a7b5c3d-1e2f-4a6b-8c0d-2e4f6a8b0c1d/export?accept_review=true')
+  })
+
+  it('names the file after the run when the request had no job ref', () => {
+    expect(exportFile({ ...run, job_ref: null }, 'pdf', false).filename).toBe('9a7b5c3d roof brief.pdf')
   })
 })
 

@@ -76,6 +76,24 @@ export function saveFile(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
+/** The export route for a run's Roof Wizard pack, or for its roof brief alone
+ *  as a PDF (TKO-18), and the name the browser saves it under. A run under
+ *  review exports only once the operator accepts its checks. */
+export function exportFile(
+  run: { run_id: string; job_ref: string | null },
+  format: 'zip' | 'pdf',
+  acceptReview: boolean,
+): { path: string; filename: string } {
+  const query = new URLSearchParams()
+  if (format === 'pdf') query.set('format', 'pdf')
+  if (acceptReview) query.set('accept_review', 'true')
+  const search = query.toString()
+  return {
+    path: `/api/takeoff/runs/${run.run_id}/export${search ? `?${search}` : ''}`,
+    filename: `${run.job_ref ?? run.run_id.slice(0, 8)} ${format === 'pdf' ? 'roof brief.pdf' : 'Roof Wizard pack.zip'}`,
+  }
+}
+
 /** Uploads one PDF straight to its signed storage URL, reporting progress
  *  from 0 to 1. XHR, because fetch can't report upload progress. */
 export function uploadFile(signedUrl: string, file: File, onProgress: (fraction: number) => void): Promise<void> {
