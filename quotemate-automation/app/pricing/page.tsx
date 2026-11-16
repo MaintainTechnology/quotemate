@@ -1,17 +1,17 @@
-// /pricing — the dedicated plans page. Maintain design system, built on
-// the shared site chrome (Nav/Footer/MarqueeBar) and the shared
+// /pricing — the dedicated plans page, on the QuoteMax Site Kit (SiteShell
+// chrome, Inter at weight 400, paper cards, pill controls) and the shared
 // PricingTiers cards so it never drifts from the homepage section.
-// Structure: ROI-led header → tier cards (monthly/annual toggle) →
-// feature comparison → fair-use & overage explainer → the $99 site-visit
-// explainer → ROI proof band → FAQ → closing CTA.
+// Structure: centred hero carrying the tier cards (monthly/annual toggle) →
+// feature comparison (white table on a paper band) → fair-use & overage
+// explainer → the $99 site-visit explainer → ROI proof → FAQ → dark CTA.
 
 import { Reveal } from "../_components/Reveal"
 import {
-  Nav,
-  Footer,
-  MarqueeBar,
-  Topography,
-  Eyebrow,
+  SiteShell,
+  PageHero,
+  SectionHead,
+  FaqList,
+  CtaBand,
   PrimaryCTA,
   SecondaryCTA,
 } from "../_components/site"
@@ -32,111 +32,134 @@ export const metadata = {
 
 export default function PricingPage() {
   return (
-    <div className="marketing-canvas">
-      <div className="noise-overlay" aria-hidden="true" />
-      <Nav />
+    <SiteShell>
       <Header />
-      <Plans />
       <Comparison />
       <FairUse />
       <SiteVisit />
       <RoiBand />
       <Faq />
       <ClosingCta />
-      <Footer />
-      <MarqueeBar />
-    </div>
+    </SiteShell>
   )
 }
 
-/* ─── Header ──────────────────────────────────────────────────── */
+/* ─── Header + plans (the cards ride in the hero) ─────────────── */
 
 function Header() {
   return (
-    <section className="relative overflow-hidden border-b border-ink-line">
-      <Topography />
+    <>
       <noscript>
         <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
       </noscript>
-      <div className="relative z-10 mx-auto max-w-[88rem] px-6 py-20 md:py-28">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>Pricing</Eyebrow>
-          <h1 className="mt-6 font-extrabold uppercase leading-[0.98] tracking-[-0.04em] text-[clamp(2.4rem,6vw,5rem)]">
-            Pays for itself with{" "}
-            <span className="text-accent">one extra job a month.</span>
-          </h1>
-          <p className="mt-7 max-w-2xl text-lg leading-relaxed text-text-sec">
+      <PageHero
+        eyebrow="Pricing"
+        title="Pays for itself with one extra job a month."
+        lead={
+          <>
             QuoteMax answers every text and call, drafts clean quotes in under a
             minute, and takes the deposit. Pick a plan and you&rsquo;re quoting
             the same day. Starter Monthly comes with a 14-day free trial. We
             never take a cut of your jobs.
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  )
-}
-
-/* ─── Plans (the cards) ───────────────────────────────────────── */
-
-function Plans() {
-  return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-20 md:py-24">
-        <Reveal>
+          </>
+        }
+      >
+        {/* Hero content: no scroll reveal. On phones the ~1700px block
+            never reached Reveal's 15% threshold on load, leaving a blank
+            first screen. */}
+        <div className="qs-container mt-14 md:mt-16">
           <PricingTiers variant="full" />
-        </Reveal>
-      </div>
-    </section>
+        </div>
+      </PageHero>
+    </>
   )
 }
 
 /* ─── Feature comparison ──────────────────────────────────────── */
 
+// Hairline rows on a white panel. Phones: the panel scrolls sideways on its
+// own (the page never does) with the feature column pinned. md+: the panel
+// clips instead of scrolling — `overflow: clip` is not a scroll container,
+// so the header row can stick under the floating nav.
+const CELL = "border-b border-[var(--qs-line)] px-4 py-4 md:px-6"
+// Sticky header cells need an opaque fill: white, or the Pro column's tint.
+// The white shadow caps the 10px gap under the nav once the row sticks; at
+// rest it falls outside the panel and `overflow: clip` hides it.
+const HEAD = `${CELL} md:sticky md:top-[88px] md:z-[2] md:py-5 md:shadow-[0_-12px_0_#fff]`
+const FIRST =
+  "pl-5 md:pl-8 max-md:sticky max-md:left-0 max-md:z-[1] max-md:w-[9.5rem] max-md:min-w-[9.5rem] max-md:bg-white max-md:shadow-[1px_0_0_var(--qs-line)]"
+const FEATURED_COL = "bg-[#faf9f8]"
+
 function Comparison() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <h2 className="font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            Compare the <span className="text-accent">plans.</span>
-          </h2>
+    <section className="qs-section qs-band" aria-labelledby="compare-title">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            id="compare-title"
+            eyebrow="Features"
+            title="Compare the plans."
+          />
         </Reveal>
 
         <Reveal>
-          <div className="mt-12 overflow-x-auto">
-            <table className="w-full min-w-[44rem] border-collapse text-left">
+          {/* `relative`: the sr-only cell labels are absolutely positioned;
+              without a positioned scroller they escape its clip and widen
+              the page on phones. A named, focusable region so keyboard users
+              can scroll it in browsers without focusable scrollers (Safari). */}
+          <div
+            tabIndex={0}
+            role="region"
+            aria-labelledby="compare-title"
+            className={`relative overflow-x-auto rounded-[var(--qs-r-xl)] border border-[var(--qs-line)] bg-white md:overflow-clip`}
+          >
+            <table
+              aria-labelledby="compare-title"
+              className="w-full min-w-[36rem] border-separate border-spacing-0 text-left text-[15px] leading-[1.4]"
+            >
               <thead>
-                <tr className="border-b border-ink-line">
-                  <th className="py-4 pr-4 align-bottom font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                <tr>
+                  <th
+                    scope="col"
+                    className={`${HEAD} ${FIRST} qs-meta bg-white align-bottom font-normal`}
+                  >
                     Feature
                   </th>
                   {PLANS.map((p) => (
                     <th
                       key={p.id}
-                      className={`px-4 py-4 text-center font-extrabold uppercase tracking-tight ${
-                        p.featured ? "text-accent" : "text-text-pri"
+                      scope="col"
+                      className={`${HEAD} w-[22%] text-center font-normal ${
+                        p.featured ? FEATURED_COL : "bg-white"
                       }`}
                     >
-                      {p.name}
+                      <span className="qs-title inline-flex items-center gap-2">
+                        {p.featured && (
+                          <span
+                            className="size-1.5 rounded-full bg-[var(--qs-brand)]"
+                            aria-hidden="true"
+                          />
+                        )}
+                        {p.name}
+                      </span>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {COMPARISON.map((row) => (
-                  <tr key={row.label} className="border-b border-ink-line/60">
+                  <tr key={row.label} className="[&:last-child>*]:border-b-0">
                     <th
                       scope="row"
-                      className="py-4 pr-4 text-sm font-medium text-text-sec"
+                      className={`${CELL} ${FIRST} font-normal text-[var(--qs-ink)]`}
                     >
                       {row.label}
                     </th>
                     {row.values.map((v, i) => (
                       <td
                         key={PLANS[i].id}
-                        className={`px-4 py-4 text-center text-sm ${
-                          PLANS[i].featured ? "bg-accent/[0.04]" : ""
+                        className={`${CELL} text-center ${
+                          PLANS[i].featured ? FEATURED_COL : ""
                         }`}
                       >
                         <Cell value={v} featured={PLANS[i].featured} />
@@ -156,20 +179,42 @@ function Comparison() {
 function Cell({ value, featured }: { value: string; featured?: boolean }) {
   if (value === "✓") {
     return (
-      <span className="font-bold text-accent" aria-label="Included">
-        ✓
-      </span>
+      <>
+        <Glyph d="M4.5 12.5l5 5L19.5 7" className="text-[var(--qs-ink)]" />
+        <span className="sr-only">Included</span>
+      </>
     )
   }
   if (value === "–") {
     return (
-      <span className="text-text-dim" aria-label="Not included">
-        &ndash;
-      </span>
+      <>
+        <Glyph d="M7 12h10" className="text-[var(--qs-muted)]" />
+        <span className="sr-only">Not included</span>
+      </>
     )
   }
   return (
-    <span className={featured ? "text-text-pri" : "text-text-sec"}>{value}</span>
+    <span className={featured ? "text-[var(--qs-ink)]" : "text-[var(--qs-body)]"}>
+      {value}
+    </span>
+  )
+}
+
+// ponytail: the kit ships Arrow + Chevron only; thin check/dash live here.
+function Glyph({ d, className }: { d: string; className: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`mx-auto block size-5 ${className}`}
+    >
+      <path d={d} />
+    </svg>
   )
 }
 
@@ -177,30 +222,33 @@ function Cell({ value, featured }: { value: string; featured?: boolean }) {
 
 function FairUse() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <h2 className="font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            No bill shock.{" "}
-            <span className="text-accent">No cut-offs mid-job.</span>
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Texts and quotes are generous fair-use. Quote as much as you like.
-            The only thing we meter is voice minutes, because answering calls is
-            the one part with a real per-minute cost. Go over and it keeps
-            working; we just bill the extra and nudge you before you get there.
-          </p>
+    <section className="qs-section" aria-labelledby="fair-use-title">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            id="fair-use-title"
+            eyebrow="Fair use"
+            title={
+              <>
+                No bill shock.{" "}
+                <br />
+                No cut-offs mid-job.
+              </>
+            }
+            className="max-w-[36rem]"
+            lead="Texts and quotes are generous fair-use. Quote as much as you like. The only thing we meter is voice minutes, because answering calls is the one part with a real per-minute cost. Go over and it keeps working; we just bill the extra and nudge you before you get there."
+          />
         </Reveal>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
-          <Reveal>
+        <div className="qs-grid qs-grid--3">
+          <Reveal className="h-full">
             <FactCard
               value="Fair-use"
               unit="texts & quotes"
               note="Quote every lead that comes in. We only ever flag genuine abuse, never a busy week."
             />
           </Reveal>
-          <Reveal delay={110}>
+          <Reveal delay={80} className="h-full">
             <FactCard
               value="A$0.50"
               unit="per extra voice minute"
@@ -208,7 +256,7 @@ function FairUse() {
               accent
             />
           </Reveal>
-          <Reveal delay={220}>
+          <Reveal delay={160} className="h-full md:max-[991px]:col-span-2">
             <FactCard
               value="80%"
               unit="usage warning"
@@ -233,26 +281,24 @@ function FactCard({
   accent?: boolean
 }) {
   return (
-    <div
-      className={`edge-lit h-full border bg-ink-card p-6 transition-colors duration-300 md:p-8 ${
-        accent
-          ? "border-accent/40 hover:border-accent/60"
-          : "border-ink-line hover:border-text-dim"
-      }`}
-    >
-      <div className="flex items-baseline gap-3">
-        <span
-          className={`font-mono text-4xl font-bold tracking-tight tabular-nums md:text-5xl ${
-            accent ? "text-accent" : "text-text-pri"
-          }`}
-        >
+    <div className="qs-card h-full justify-between gap-10">
+      <div className="qs-stat">
+        {/* normal-nums: Inter's tabular hyphen renders "Fair-use" as
+            "Fair - use"; no column here needs tabular figures. */}
+        <span className="qs-stat__value normal-nums text-[clamp(2.25rem,1.8rem+1.4vw,3rem)]">
           {value}
         </span>
-        <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+        <span className="qs-stat__label inline-flex items-center gap-2">
+          {accent && (
+            <span
+              className="size-2 rounded-full bg-[var(--qs-brand)]"
+              aria-hidden="true"
+            />
+          )}
           {unit}
         </span>
       </div>
-      <p className="mt-5 text-base leading-relaxed text-text-sec">{note}</p>
+      <p className="qs-text">{note}</p>
     </div>
   )
 }
@@ -278,27 +324,33 @@ function SiteVisit() {
     },
   ]
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>The only fixed price</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            How the <span className="text-accent">A$99 site visit</span> works.
-          </h2>
+    <section
+      className="qs-section qs-section--flush-top"
+      aria-labelledby="site-visit-title"
+    >
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            id="site-visit-title"
+            eyebrow="The only fixed price"
+            title="How the A$99 site visit works."
+          />
         </Reveal>
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
+        <div className="qs-grid qs-grid--3">
           {steps.map((s, i) => (
-            <Reveal key={s.num} delay={i * 110}>
-              <article className="edge-lit h-full border border-ink-line bg-ink-card p-6 md:p-8">
-                <span className="font-mono text-4xl font-bold leading-none text-accent md:text-5xl">
+            <Reveal
+              key={s.num}
+              delay={i * 80}
+              className={`h-full ${i === 2 ? "md:max-[991px]:col-span-2" : ""}`}
+            >
+              <article className="qs-card h-full gap-12">
+                <span className="qs-icon-tile qs-num text-[15px] font-medium">
                   {s.num}
                 </span>
-                <h3 className="mt-5 font-extrabold uppercase tracking-tight text-text-pri text-lg">
-                  {s.title}
-                </h3>
-                <p className="mt-3 text-base leading-relaxed text-text-sec">
-                  {s.body}
-                </p>
+                <div className="qs-card__copy gap-3">
+                  <h3 className="qs-card__title">{s.title}</h3>
+                  <p className="qs-card__text">{s.body}</p>
+                </div>
               </article>
             </Reveal>
           ))}
@@ -308,38 +360,46 @@ function SiteVisit() {
   )
 }
 
-/* ─── ROI proof band ──────────────────────────────────────────── */
+/* ─── ROI proof ───────────────────────────────────────────────── */
 
 function RoiBand() {
   return (
-    <section className="border-b border-ink-line bg-ink/40">
-      <div className="mx-auto max-w-[88rem] px-6 py-20 md:py-24">
-        <Reveal className="max-w-3xl">
-          <h2 className="font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.7rem,3.4vw,2.6rem)]">
-            Do the maths.{" "}
-            <span className="text-accent">One won job covers months.</span>
-          </h2>
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-text-sec">
-            Most jobs a tradie wins carry A$300–A$2,000+ in margin. Pro is A$129 a
-            month. If QuoteMax catches one lead you&rsquo;d otherwise have
-            missed up a ladder, it&rsquo;s already paid for itself, usually many
-            times over.
-          </p>
+    <section
+      className="qs-section qs-section--flush-top"
+      aria-labelledby="roi-title"
+    >
+      <div className="qs-container">
+        <Reveal>
+          <div className="qs-card gap-12 lg:grid lg:grid-cols-2 lg:items-end lg:gap-16 lg:p-14">
+            <SectionHead
+              id="roi-title"
+              eyebrow="ROI"
+              title={
+                <>
+                  Do the maths.{" "}
+                  {/* A block, not a <br>: text-wrap: balance then balances
+                      this line on its own instead of orphaning "months." */}
+                  <span className="block">One won job covers months.</span>
+                </>
+              }
+              className="max-w-[34rem]"
+              lead={
+                <>
+                  Most jobs a tradie wins carry A$300–A$2,000+ in margin. Pro is
+                  A$129 a month. If QuoteMax catches one lead you&rsquo;d
+                  otherwise have missed up a ladder, it&rsquo;s already paid for
+                  itself, usually many times over.
+                </>
+              }
+            />
+            <div className="grid grid-cols-2 gap-x-6 gap-y-10">
+              <Stat value="< 1 min" label="Per quote drafted" />
+              <Stat value="24/7" label="Line always answered" />
+              <Stat value="A$129" label="Pro, billed monthly" />
+              <Stat value="1 job" label="Pays for the year" />
+            </div>
+          </div>
         </Reveal>
-        <div className="mt-12 grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-4">
-          <Reveal>
-            <Stat value="< 1 min" label="Per quote drafted" />
-          </Reveal>
-          <Reveal delay={90}>
-            <Stat value="24/7" label="Line always answered" />
-          </Reveal>
-          <Reveal delay={180}>
-            <Stat value="A$129" label="Pro, billed monthly" />
-          </Reveal>
-          <Reveal delay={270}>
-            <Stat value="1 job" label="Pays for the year" />
-          </Reveal>
-        </div>
       </div>
     </section>
   )
@@ -347,13 +407,11 @@ function RoiBand() {
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div>
-      <div className="font-mono font-bold leading-tight tracking-tight text-accent text-[clamp(2.25rem,4.5vw,3.75rem)]">
+    <div className="qs-stat border-t border-black/[0.08] pt-5">
+      <span className="qs-stat__value text-[clamp(2rem,1.6rem+1.2vw,2.75rem)]">
         {value}
-      </div>
-      <div className="mt-3 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
-        {label}
-      </div>
+      </span>
+      <span className="qs-stat__label">{label}</span>
     </div>
   )
 }
@@ -362,28 +420,22 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 function Faq() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>Good questions</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            Pricing, <span className="text-accent">straight up.</span>
-          </h2>
+    <section
+      className="qs-section qs-section--flush-top"
+      aria-labelledby="pricing-faq-title"
+    >
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            align="center"
+            id="pricing-faq-title"
+            eyebrow="Good questions"
+            title="Pricing, straight up."
+          />
         </Reveal>
-        <dl className="mt-14 grid gap-x-12 gap-y-10 md:grid-cols-2">
-          {PRICING_FAQ.map((it, i) => (
-            <Reveal key={it.q} delay={(i % 2) * 90}>
-              <div className="border-t border-ink-line pt-6">
-                <dt className="text-lg font-extrabold uppercase tracking-tight text-text-pri">
-                  {it.q}
-                </dt>
-                <dd className="mt-3 max-w-prose text-base leading-relaxed text-text-sec">
-                  {it.a}
-                </dd>
-              </div>
-            </Reveal>
-          ))}
-        </dl>
+        <Reveal>
+          <FaqList className="qs-faq--wide" items={PRICING_FAQ} />
+        </Reveal>
       </div>
     </section>
   )
@@ -393,24 +445,19 @@ function Faq() {
 
 function ClosingCta() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-4xl px-6 py-24 md:py-28">
-        <Reveal>
-          <h2 className="font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
-            Start free.{" "}
-            <span className="text-accent">Quoting the same day.</span>
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Connect your number, load your pricing book, and QuoteMax
-            is live in about three minutes. Starter Monthly comes with a 14-day
-            free trial.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <PrimaryCTA href="/signup">Get started</PrimaryCTA>
-            <SecondaryCTA href="/#how">See how it works</SecondaryCTA>
-          </div>
-        </Reveal>
-      </div>
-    </section>
+    <CtaBand
+      id="pricing-cta-title"
+      title={
+        <>
+          Start free.{" "}
+          <br />
+          Quoting the same day.
+        </>
+      }
+      lead="Connect your number, load your pricing book, and QuoteMax is live in about three minutes. Starter Monthly comes with a 14-day free trial."
+    >
+      <PrimaryCTA href="/signup">Get started</PrimaryCTA>
+      <SecondaryCTA href="/#how">See how it works</SecondaryCTA>
+    </CtaBand>
   )
 }

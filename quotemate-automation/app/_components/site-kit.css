@@ -1,0 +1,1023 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax Site Kit — the public marketing surface (/, /pricing,
+   /trades/*, /legal/*, /watch, 404).
+
+   Reverse-engineered from the atomos99.webflow.io design kit: Inter set
+   at weight 400 with tight negative tracking, a white canvas with one warm
+   paper surface (#f5f3f1), hairline warm borders, 100px pill controls,
+   24px card radii, a floating pill nav, and a page that ends in black
+   (testimonials → FAQ → CTA → footer) over a warm gradient glow.
+
+   Adapted for QuoteMax, deliberately:
+   · the single accent is the brand's Caterpillar yellow, not the
+     reference's orange-red. Yellow is a FILL here (button hover, glow,
+     logo notch), never small text on white, where it fails contrast;
+   · the nav is sticky and translucent (content scrolls under it) rather
+     than scrolling away with the page.
+
+   SCOPING — every rule lives under `.qm-site`. Next.js never unloads a
+   global stylesheet on client navigation, so an unscoped rule here would
+   leak into /dashboard after a tradie signs in. `.qm-site` also remaps the
+   legacy theme tokens (--text-pri, --ink-line …) so any child still on the
+   old utilities harmonises, and a stored dark-theme choice cannot flip
+   the marketing pages (that choice still applies inside the app).
+
+   LAYERS — the declaration below matches Tailwind v4's own, so it holds
+   whichever stylesheet loads first. Kit components sit in `components`:
+   Tailwind utilities still override them for one-off tweaks, and the
+   preflight reset (base) cannot. The few overrides of UNLAYERED rules in
+   globals.css (reveal, duotone, buttons) live unlayered at the bottom.
+   ════════════════════════════════════════════════════════════════════ */
+
+@layer theme, base, components, utilities;
+
+@layer components {
+  .qm-site {
+    /* ── Palette ─────────────────────────────────────────────── */
+    --qs-white: #ffffff;
+    --qs-paper: #f5f3f1;        /* the one warm surface */
+    --qs-line: #efedec;         /* hairline */
+    --qs-line-strong: #e4e4e4;  /* control borders */
+    --qs-nav-line: #e8e8e8;
+    --qs-body: #6d6962;         /* body copy — 5.3:1 on white, 4.8:1 on paper */
+    --qs-muted: #77726a;        /* meta text — 4.8:1 on white */
+    --qs-ink: #000000;          /* headings */
+    --qs-ink-soft: #1a1a1a;     /* cards on black */
+    --qs-ink-raise: #242322;
+    --qs-on-dark: #ffffff;
+    --qs-on-dark-body: rgba(255, 255, 255, 0.64);
+    --qs-on-dark-line: rgba(255, 255, 255, 0.12);
+    --qs-brand: #ffc400;        /* QuoteMax yellow — fills only */
+    --qs-brand-press: #e6ac00;
+    --qs-brand-ink: #1c1812;    /* text on a yellow fill (13:1) */
+    --qs-glow: linear-gradient(90deg, #ff6b2c 0%, #ffa41f 45%, #ffc400 70%, #e6f05a 100%);
+
+    /* ── Type ────────────────────────────────────────────────── */
+    --qs-font: var(--font-qs), "Inter", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", sans-serif;
+
+    /* ── Shape + layout ──────────────────────────────────────── */
+    --qs-r-xs: 8px;
+    --qs-r-sm: 12px;
+    --qs-r-md: 16px;
+    --qs-r-lg: 20px;
+    --qs-r-xl: 24px;
+    --qs-r-pill: 100px;
+    --qs-max: 1272px;
+    --qs-gutter: 30px;
+    --qs-section-y: 120px;
+
+    /* ── Motion (critically damped feel; no overshoot) ───────── */
+    --qs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --qs-ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+
+    /* ── Legacy token remap (see header) ─────────────────────── */
+    --ink-deep: #ffffff;
+    --ink: #ffffff;
+    --ink-card: #ffffff;
+    --ink-line: #efedec;
+    --text-pri: #000000;
+    --text-sec: #6d6962;
+    --text-dim: #77726a;
+    --accent: #ffc400;
+    --accent-press: #e6ac00;
+    --accent-soft: #ffd23d;
+    --accent-ink: #1c1812;
+    --teal-glow: #d9d4cd;
+    --logo-body: #16120f;
+    --logo-notch: #e3c13c;
+    --font-manrope: var(--font-qs);
+    --font-jetbrains-mono: var(--font-qs);
+
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    width: 100%;
+    background: var(--qs-white);
+    color: var(--qs-body);
+    font-family: var(--qs-font);
+    font-size: 16px;
+    line-height: 1.5;
+    letter-spacing: -0.02em;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    interpolate-size: allow-keywords;
+  }
+
+  @media (max-width: 991px) {
+    .qm-site { --qs-section-y: 96px; }
+  }
+  @media (max-width: 767px) {
+    .qm-site { --qs-section-y: 72px; --qs-gutter: 20px; }
+  }
+  @media (max-width: 479px) {
+    .qm-site { --qs-section-y: 64px; --qs-gutter: 16px; }
+  }
+
+  .qm-site :where(h1, h2, h3, h4, h5, h6) {
+    margin: 0;
+    color: var(--qs-ink);
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+  .qm-site :where(p) { text-wrap: pretty; }
+  .qm-site :where(strong, b) { color: var(--qs-ink); font-weight: 500; }
+  .qm-site ::selection { background: var(--qs-brand); color: var(--qs-brand-ink); }
+  .qm-site :focus-visible { outline: 2px solid var(--qs-ink); outline-offset: 3px; }
+  /* In-page anchors (/#how, /#faq …) land below the sticky pill nav. */
+  .qm-site :where([id]) { scroll-margin-top: 104px; }
+
+  /* Skip link — invisible until keyboard focus lands on it. */
+  .qm-site .qs-skip {
+    position: absolute;
+    left: 16px;
+    top: -60px;
+    z-index: 100;
+    padding: 10px 18px;
+    border-radius: var(--qs-r-pill);
+    background: var(--qs-ink);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    transition: top 0.2s var(--qs-ease);
+  }
+  .qm-site .qs-skip:focus-visible { top: 12px; }
+
+  /* ── Type scale ──────────────────────────────────────────────
+     Tracking is size-specific (Apple): the larger the size, the
+     tighter. Values follow the reference (h1 56px/-3px,
+     h2 40px/-1.2px, card titles 24px/-1.2px), expressed in em so
+     they stay proportional as clamp() scales the size. */
+  .qm-site .qs-display {
+    font-size: clamp(2.5rem, 1.45rem + 3.6vw, 4rem);
+    line-height: 1.04;
+    letter-spacing: -0.056em;
+  }
+  .qm-site .qs-h1 {
+    font-size: clamp(2.25rem, 1.3rem + 3vw, 3.5rem);
+    line-height: 1.08;
+    letter-spacing: -0.054em;
+  }
+  .qm-site .qs-h2 {
+    font-size: clamp(1.875rem, 1.35rem + 1.4vw, 2.5rem);
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+  }
+  .qm-site .qs-h3 {
+    font-size: clamp(1.5rem, 1.2rem + 0.9vw, 2rem);
+    line-height: 1.2;
+    letter-spacing: -0.04em;
+  }
+  .qm-site .qs-h4 {
+    font-size: clamp(1.25rem, 1.1rem + 0.4vw, 1.5rem);
+    line-height: 1.2;
+    letter-spacing: -0.05em;
+  }
+  .qm-site .qs-h5 { font-size: 1.25rem; line-height: 1.3; letter-spacing: -0.03em; }
+  .qm-site .qs-title { /* small card titles — "Discover" weight */
+    color: var(--qs-ink);
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: -0.02em;
+  }
+  .qm-site .qs-lead { font-size: 1.125rem; line-height: 1.5; color: var(--qs-body); }
+  .qm-site .qs-text { font-size: 1rem; line-height: 1.5; color: var(--qs-body); }
+  .qm-site .qs-small { font-size: 0.875rem; line-height: 1.5; letter-spacing: -0.01em; }
+  .qm-site .qs-meta { font-size: 0.875rem; line-height: 1.4; color: var(--qs-muted); letter-spacing: -0.01em; }
+  .qm-site .qs-ink { color: var(--qs-ink); }
+  .qm-site .qs-num { font-variant-numeric: tabular-nums; }
+
+  /* ── Badge eyebrow — two slanted bars + uppercase label ────── */
+  .qm-site .qs-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--qs-body);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .qm-site .qs-badge__mark { display: inline-flex; gap: 3px; }
+  .qm-site .qs-badge__mark > i {
+    display: block;
+    width: 2px;
+    height: 11px;
+    border-radius: 1px;
+    background: currentColor;
+    transform: rotate(10deg);
+  }
+
+  /* ── Layout primitives ───────────────────────────────────────── */
+  .qm-site .qs-container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: var(--qs-max);
+    margin-inline: auto;
+  }
+  .qm-site .qs-container--narrow { max-width: 1000px; }
+  .qm-site .qs-container--text { max-width: 768px; }
+  .qm-site .qs-section { position: relative; padding: var(--qs-section-y) var(--qs-gutter); }
+  .qm-site .qs-section--flush-top { padding-top: 0; }   /* reference: .padding-bottom */
+  .qm-site .qs-section--flush-bottom { padding-bottom: 0; }
+  .qm-site .qs-band { background: var(--qs-paper); }
+  .qm-site .qs-stack { display: flex; flex-direction: column; gap: 48px; }
+  .qm-site .qs-stack--lg { gap: 80px; }
+  .qm-site .qs-grid { display: grid; gap: 16px; }
+  .qm-site .qs-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .qm-site .qs-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .qm-site .qs-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 991px) {
+    .qm-site .qs-grid--3, .qm-site .qs-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 767px) {
+    .qm-site .qs-grid--2, .qm-site .qs-grid--3, .qm-site .qs-grid--4 { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* Section header: badge → title → lead, left by default. */
+  .qm-site .qs-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    max-width: 30rem;
+  }
+  .qm-site .qs-head--center { align-items: center; margin-inline: auto; text-align: center; max-width: 42rem; }
+  .qm-site .qs-head-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px 48px;
+  }
+  .qm-site .qs-head-row > .qs-head-aside { max-width: 20rem; }
+  @media (max-width: 767px) {
+    .qm-site .qs-head-row { flex-direction: column; align-items: flex-start; }
+  }
+
+  /* ── Buttons — pill, text-roll on hover ────────────────────────
+     Markup comes from <Button>/<BtnInner> (site-ui.tsx): the label is
+     rendered twice and the arrow twice; hover slides each pair by one
+     line/width. The press scale fires on :active (pointer-down), so
+     feedback starts before the click completes. */
+  .qm-site .qs-btn {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 10px 22px;
+    border: 1px solid var(--qs-ink);
+    border-radius: var(--qs-r-pill);
+    background: var(--qs-ink);
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .qm-site .qs-btn--light { background: var(--qs-white); border-color: var(--qs-line-strong); color: var(--qs-ink); }
+  .qm-site .qs-btn--brand { background: var(--qs-brand); border-color: var(--qs-brand); color: var(--qs-brand-ink); }
+  .qm-site .qs-btn--sm { min-height: 36px; padding: 6px 16px; font-size: 13px; }
+  .qm-site .qs-btn--lg { min-height: 52px; padding: 13px 28px; font-size: 15px; }
+  .qm-site .qs-btn--block { width: 100%; }
+  .qm-site .qs-btn:disabled, .qm-site .qs-btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+  @media (hover: hover) {
+    .qm-site .qs-btn:hover { background: var(--qs-brand); border-color: var(--qs-brand); color: var(--qs-brand-ink); }
+    .qm-site .qs-btn--light:hover { background: var(--qs-ink); border-color: var(--qs-ink); color: #fff; }
+    .qm-site .qs-btn--brand:hover { background: var(--qs-ink); border-color: var(--qs-ink); color: #fff; }
+  }
+  .qm-site .qs-btn__roll { position: relative; display: block; height: 1.5em; overflow: hidden; }
+  .qm-site .qs-btn__roll > span { display: block; transition: transform 0.45s var(--qs-ease); }
+  .qm-site .qs-btn__roll > span + span { position: absolute; inset: 0; transform: translateY(105%); }
+  .qm-site .qs-btn__icon { position: relative; display: inline-flex; width: 16px; height: 16px; overflow: hidden; }
+  .qm-site .qs-btn__icon > svg { width: 16px; height: 16px; transition: transform 0.45s var(--qs-ease); }
+  .qm-site .qs-btn__icon > svg + svg { position: absolute; inset: 0; transform: translateX(-130%); }
+  @media (hover: hover) {
+    .qm-site .qs-btn:hover .qs-btn__roll > span:first-child { transform: translateY(-105%); }
+    .qm-site .qs-btn:hover .qs-btn__roll > span + span { transform: translateY(0); }
+    .qm-site .qs-btn:hover .qs-btn__icon > svg:first-child { transform: translateX(130%); }
+    .qm-site .qs-btn:hover .qs-btn__icon > svg + svg { transform: translateX(0); }
+  }
+
+  /* Quiet text link with an arrow — "Read full story →". */
+  .qm-site .qs-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--qs-ink);
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-color: var(--qs-line-strong);
+    text-underline-offset: 4px;
+    transition: text-decoration-color 0.2s var(--qs-ease);
+  }
+  .qm-site .qs-link:hover { text-decoration-color: currentColor; }
+
+  /* ── Nav — a floating translucent pill ───────────────────────── */
+  .qm-site .qs-nav-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    padding: 16px var(--qs-gutter) 0;
+  }
+  .qm-site .qs-nav {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: 1fr auto; /* brand | burger; desktop adds the link row */
+    align-items: center;
+    gap: 16px;
+    max-width: var(--qs-max);
+    margin-inline: auto;
+    padding: 8px 8px 8px 18px;
+    border: 1px solid var(--qs-nav-line);
+    border-radius: var(--qs-r-pill);
+    /* Shadow grows in as the page scrolls (scroll-driven, no JS). */
+    animation: qs-nav-lift linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 140px;
+  }
+  /* The material sits on a pseudo-element: backdrop-filter on the bar
+     itself would make it the containing block for the mobile menu's
+     position:fixed scrim, shrinking the scrim to the size of the pill. */
+  .qm-site .qs-nav::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.78);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+  }
+  @keyframes qs-nav-lift {
+    from { box-shadow: 0 0 0 rgba(0, 0, 0, 0); }
+    to { box-shadow: 0 12px 32px -18px rgba(0, 0, 0, 0.22); }
+  }
+  .qm-site .qs-nav__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-self: start;
+    color: var(--qs-ink);
+  }
+  .qm-site .qs-wordmark {
+    color: var(--logo-body);
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+  .qm-site .qs-nav__links { display: none; align-items: center; gap: 2px; }
+  .qm-site .qs-nav__actions { display: none; align-items: center; justify-self: end; gap: 6px; }
+  .qm-site .qs-nav__mobile { display: flex; align-items: center; justify-self: end; gap: 8px; }
+  @media (min-width: 1024px) {
+    .qm-site .qs-nav { grid-template-columns: 1fr auto 1fr; }
+    .qm-site .qs-nav__links, .qm-site .qs-nav__actions { display: flex; }
+    .qm-site .qs-nav__mobile { display: none; }
+  }
+  .qm-site .qs-nav__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 8px 14px;
+    border-radius: var(--qs-r-pill);
+    color: var(--qs-ink);
+    font-size: 15px;
+    line-height: 1.5;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    transition: background-color 0.2s var(--qs-ease);
+  }
+  .qm-site .qs-nav__link:hover,
+  .qm-site .qs-nav__link[aria-expanded="true"],
+  .qm-site .qs-nav__link[data-active="true"] { background: var(--qs-paper); }
+  .qm-site .qs-nav__link[aria-current="page"] { background: var(--qs-paper); }
+  .qm-site .qs-nav__link[aria-current="page"]::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--qs-brand);
+  }
+
+  /* Dropdown (Trades) */
+  .qm-site .qs-menu {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    z-index: 70;
+    padding-top: 12px;
+    transform: translateX(-50%);
+  }
+  .qm-site .qs-menu__panel {
+    min-width: 248px;
+    padding: 8px;
+    border: 1px solid var(--qs-line);
+    border-radius: var(--qs-r-md);
+    background: var(--qs-white);
+    box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.22);
+    transform-origin: top center;
+    transition: opacity 0.18s var(--qs-ease), transform 0.25s var(--qs-ease);
+  }
+  .qm-site .qs-menu[data-open="false"] { visibility: hidden; pointer-events: none; }
+  .qm-site .qs-menu[data-open="false"] .qs-menu__panel { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  .qm-site .qs-menu__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: var(--qs-ink);
+    font-size: 15px;
+    transition: background-color 0.15s var(--qs-ease);
+  }
+  .qm-site .qs-menu__item:hover, .qm-site .qs-menu__item:focus-visible { background: var(--qs-paper); outline: none; }
+  .qm-site .qs-menu__tag { color: var(--qs-muted); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  /* Mobile menu — a floating card under the pill */
+  .qm-site .qs-burger {
+    position: relative;
+    z-index: 2;
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--qs-line-strong);
+    border-radius: 50%;
+    background: var(--qs-white);
+    color: var(--qs-ink);
+    touch-action: manipulation;
+  }
+  .qm-site .qs-mnav {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    right: 0;
+    z-index: 2;
+    max-height: calc(100dvh - 110px);
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid var(--qs-line);
+    border-radius: var(--qs-r-xl);
+    background: var(--qs-white);
+    box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.3);
+    transform-origin: top right;
+    transition: opacity 0.2s var(--qs-ease), transform 0.3s var(--qs-ease), visibility 0.3s;
+  }
+  .qm-site .qs-mnav[data-open="false"] { visibility: hidden; opacity: 0; transform: translateY(-6px) scale(0.98); pointer-events: none; }
+  .qm-site .qs-mnav__link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    padding: 12px 14px;
+    border-radius: var(--qs-r-sm);
+    color: var(--qs-ink);
+    font-size: 20px;
+    letter-spacing: -0.04em;
+  }
+  .qm-site .qs-mnav__link:hover { background: var(--qs-paper); }
+  .qm-site .qs-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.18);
+    transition: opacity 0.2s var(--qs-ease);
+  }
+  .qm-site .qs-scrim[data-open="false"] { opacity: 0; pointer-events: none; }
+
+  /* ── Hero (home) + page hero (subpages) ───────────────────────── */
+  .qm-site .qs-hero { position: relative; padding: 80px var(--qs-gutter) 0; }
+  .qm-site .qs-hero__inner { display: flex; flex-direction: column; align-items: center; gap: 80px; }
+  .qm-site .qs-hero__copy {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-width: 680px;
+    text-align: center;
+  }
+  .qm-site .qs-hero__copy > .qs-lead { max-width: 490px; }
+  .qm-site .qs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .qm-site .qs-hero__copy > .qs-actions { justify-content: center; margin-top: 8px; }
+
+  .qm-site .qs-page-hero { position: relative; padding: 96px var(--qs-gutter) 64px; }
+  .qm-site .qs-page-hero__center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-width: 720px;
+    margin-inline: auto;
+    text-align: center;
+  }
+  .qm-site .qs-page-hero__center > .qs-actions { justify-content: center; margin-top: 8px; }
+  .qm-site .qs-page-hero__split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 344px);
+    align-items: center;
+    gap: 32px 64px;
+  }
+  .qm-site .qs-page-hero__split > :first-child { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; max-width: 640px; }
+  .qm-site .qs-page-hero__split > :last-child { display: flex; flex-direction: column; gap: 20px; }
+  @media (max-width: 991px) {
+    .qm-site .qs-page-hero__split { grid-template-columns: minmax(0, 1fr); }
+    .qm-site .qs-page-hero__split > :last-child { max-width: 36rem; }
+    .qm-site .qs-hero, .qm-site .qs-page-hero { padding-top: 64px; }
+    .qm-site .qs-hero__inner { gap: 56px; }
+  }
+
+  /* ── Browser-window frame (the hero "widget") ─────────────────── */
+  .qm-site .qs-browser {
+    position: relative;
+    isolation: isolate;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--qs-r-lg);
+    background: var(--qs-white);
+  }
+  .qm-site .qs-browser__bar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    padding-left: 15px;
+    background: var(--qs-ink);
+  }
+  .qm-site .qs-browser__bar > i { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; }
+  .qm-site .qs-browser__bar > i:nth-child(2) { background: #f59e0b; }
+  .qm-site .qs-browser__bar > i:nth-child(3) { background: #10b981; }
+  .qm-site .qs-browser__body {
+    position: relative;
+    padding: 24px clamp(14px, 4.2vw, 60px) 0;
+    background: linear-gradient(180deg, #f6f7fa 0%, #fbf9f7 50%, #fff6ec 100%);
+  }
+  /* Glow paints over the body gradient but under the content (the
+     reference's .widget-shadow: an orange→lime wash along the floor). */
+  .qm-site .qs-browser__glow {
+    position: absolute;
+    left: -10%;
+    bottom: -44px;
+    z-index: 0;
+    width: 120%;
+    height: 130px;
+    background: var(--qs-glow);
+    filter: blur(32px);
+    pointer-events: none;
+  }
+  .qm-site .qs-browser__content { position: relative; z-index: 1; }
+  .qm-site .qs-tabs { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 12px; }
+  .qm-site .qs-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 10px 16px;
+    border: 1px solid #dbdad9;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--qs-ink);
+    font-size: 14px;
+    line-height: 1.4;
+    white-space: nowrap;
+    transition: background-color 0.25s var(--qs-ease), border-color 0.25s var(--qs-ease), box-shadow 0.25s var(--qs-ease);
+  }
+  .qm-site .qs-tab:hover { border-color: #c9c7c5; }
+  .qm-site .qs-tab[aria-selected="true"], .qm-site .qs-tab[aria-current="page"], .qm-site .qs-tab[data-active="true"] {
+    border-color: var(--qs-white);
+    background: var(--qs-white);
+    box-shadow: 0 3px 6px 1px rgba(0, 0, 1, 0.05);
+  }
+  .qm-site .qs-tab__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff6b2c, #ffc400);
+  }
+
+  /* ── Cards ────────────────────────────────────────────────────── */
+  .qm-site .qs-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 40px;
+    overflow: hidden;
+    border-radius: var(--qs-r-xl);
+    background: var(--qs-paper);
+  }
+  .qm-site .qs-card--outline { padding: 32px; border: 1px solid var(--qs-line); background: var(--qs-white); }
+  .qm-site .qs-card--white { background: var(--qs-white); }
+  .qm-site .qs-card--dark { padding: 32px 32px 30px; background: var(--qs-ink-soft); color: var(--qs-on-dark-body); }
+  .qm-site .qs-card--dark :where(h2, h3, h4, h5, .qs-title, .qs-ink) { color: var(--qs-on-dark); }
+  .qm-site .qs-card--flush { padding: 0; }
+  .qm-site .qs-card--link { transition: border-color 0.25s var(--qs-ease), background-color 0.25s var(--qs-ease), transform 0.4s var(--qs-ease); }
+  @media (hover: hover) {
+    .qm-site .qs-card--link:hover { border-color: var(--qs-line-strong); transform: translateY(-2px); }
+  }
+  @media (max-width: 767px) {
+    .qm-site .qs-card { padding: 28px; }
+    .qm-site .qs-card--outline, .qm-site .qs-card--dark { padding: 24px; }
+    .qm-site .qs-card--flush { padding: 0; }
+  }
+  .qm-site .qs-card__title { color: var(--qs-ink); font-size: clamp(1.25rem, 1.1rem + 0.4vw, 1.5rem); line-height: 1.2; letter-spacing: -0.05em; }
+  .qm-site .qs-card__text { color: var(--qs-body); }
+  .qm-site .qs-card__copy { display: flex; flex-direction: column; gap: 6px; }
+
+  /* Tab container — white panel with logo/tabs on top (case-study pattern). */
+  .qm-site .qs-panel {
+    padding: 20px 12px 12px;
+    border: 1px solid var(--qs-line);
+    border-radius: var(--qs-r-xl);
+    background: var(--qs-white);
+  }
+
+  .qm-site .qs-icon-tile {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 50px;
+    height: 50px;
+    border: 1px solid var(--qs-line);
+    border-radius: var(--qs-r-sm);
+    background: var(--qs-paper);
+    color: var(--qs-ink);
+  }
+  .qm-site :is(.qs-card, .qs-band) .qs-icon-tile { background: var(--qs-white); }
+  .qm-site .qs-card--outline .qs-icon-tile { background: var(--qs-paper); }
+
+  /* Mini UI chip — the white "node" cards inside illustrations. */
+  .qm-site .qs-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px 8px 8px;
+    border-radius: 10px;
+    background: var(--qs-white);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.08);
+    color: var(--qs-ink);
+    font-size: 14px;
+    line-height: 1.3;
+  }
+  .qm-site .qs-chip__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: var(--qs-paper);
+    color: var(--qs-ink);
+  }
+
+  /* Pill tag — "Downlights", "Power points". */
+  .qm-site .qs-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 5px 12px;
+    border: 1px solid var(--qs-line-strong);
+    border-radius: var(--qs-r-pill);
+    background: var(--qs-white);
+    color: var(--qs-ink);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .qm-site .qs-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* Stats — "3.2x / Customer engagement". */
+  .qm-site .qs-stat { display: flex; flex-direction: column; gap: 8px; }
+  .qm-site .qs-stat__value {
+    color: var(--qs-ink);
+    font-size: clamp(1.75rem, 1.4rem + 1vw, 2.25rem);
+    line-height: 1.05;
+    letter-spacing: -0.045em;
+    font-variant-numeric: tabular-nums;
+  }
+  .qm-site .qs-stat__label { color: var(--qs-body); font-size: 14px; line-height: 1.4; }
+
+  /* Photo + photo card (image with bottom caption — the blog-card pattern). */
+  .qm-site .qs-photo { position: relative; overflow: hidden; border-radius: var(--qs-r-md); background: var(--qs-paper); }
+  .qm-site .qs-photo-card {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border-radius: var(--qs-r-md);
+    background: var(--qs-ink-soft);
+    color: #fff;
+    isolation: isolate;
+  }
+  .qm-site .qs-photo-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.78) 100%);
+    pointer-events: none;
+  }
+  .qm-site .qs-photo-card__body {
+    position: absolute;
+    inset: auto 0 0 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 24px;
+  }
+  .qm-site .qs-photo-card__title { color: #fff; font-size: 1rem; font-weight: 500; line-height: 1.5; max-width: 22rem; }
+  .qm-site .qs-photo-card__meta { color: rgba(255, 255, 255, 0.72); font-size: 14px; }
+  .qm-site .qs-photo-card img { transition: transform 0.9s var(--qs-ease); }
+  @media (hover: hover) {
+    .qm-site a.qs-photo-card:hover img { transform: scale(1.03); }
+  }
+
+  /* Logo strip — "Trusted by…" */
+  .qm-site .qs-logos {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    width: 100%;
+    padding-bottom: 80px;
+    border-bottom: 1px solid var(--qs-line);
+    text-align: center;
+  }
+  .qm-site .qs-logos__title { color: var(--qs-ink); font-size: 16px; }
+  .qm-site .qs-logos__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px 48px;
+    width: 100%;
+  }
+  .qm-site .qs-logos__row > * { filter: grayscale(1) brightness(0); opacity: 0.86; }
+  @media (max-width: 991px) {
+    .qm-site .qs-logos__row { justify-content: center; }
+  }
+
+  /* ── Forms (contact) ──────────────────────────────────────────── */
+  .qm-site .qs-field { display: flex; flex-direction: column; gap: 8px; }
+  .qm-site .qs-label { color: var(--qs-ink); font-size: 14px; font-weight: 500; }
+  .qm-site .qs-input {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 16px;
+    border: 1px solid var(--qs-line-strong);
+    border-radius: var(--qs-r-sm);
+    background: var(--qs-white);
+    color: var(--qs-ink);
+    font: inherit;
+    font-size: 16px; /* ≥16px stops iOS zooming the page on focus */
+    transition: border-color 0.2s var(--qs-ease), box-shadow 0.2s var(--qs-ease);
+  }
+  .qm-site .qs-input::placeholder { color: var(--qs-muted); }
+  .qm-site .qs-input:focus { outline: none; border-color: var(--qs-ink); box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.06); }
+  .qm-site .qs-input[aria-invalid="true"] { border-color: #c2410c; }
+  .qm-site textarea.qs-input { min-height: 140px; resize: vertical; }
+
+  /* ── FAQ — native <details>, animated via ::details-content ───── */
+  .qm-site .qs-faq { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 552px; margin-inline: auto; }
+  .qm-site .qs-faq--wide { max-width: 768px; }
+  .qm-site .qs-faq__item { overflow: hidden; border-radius: var(--qs-r-md); background: var(--qs-paper); }
+  .qm-site .qs-faq__q {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 56px;
+    padding: 16px 20px;
+    border-radius: var(--qs-r-md); /* the inset focus ring follows the item's corners */
+    color: var(--qs-ink);
+    font-weight: 500;
+    line-height: 1.4;
+    list-style: none;
+    cursor: pointer;
+  }
+  .qm-site .qs-faq__q::-webkit-details-marker { display: none; }
+  .qm-site .qs-faq__chev { flex: none; transition: transform 0.35s var(--qs-ease); }
+  .qm-site .qs-faq__item[open] .qs-faq__chev { transform: rotate(180deg); }
+  .qm-site .qs-faq__a { padding: 0 20px 20px; color: var(--qs-body); max-width: 34rem; }
+  .qm-site .qs-faq__item::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition: block-size 0.4s var(--qs-ease), content-visibility 0.4s allow-discrete;
+  }
+  .qm-site .qs-faq__item[open]::details-content { block-size: auto; }
+
+  /* ── Dark zone — the page's closing run on black ──────────────── */
+  .qm-site .qs-dark {
+    --ink-deep: #000000;
+    --ink: #000000;
+    --ink-card: #1a1a1a;
+    --ink-line: rgba(255, 255, 255, 0.12);
+    --text-pri: #ffffff;
+    --text-sec: rgba(255, 255, 255, 0.72);
+    --text-dim: rgba(255, 255, 255, 0.56);
+    --logo-body: #ffffff;
+    background: #000000;
+    color: var(--qs-on-dark-body);
+  }
+  .qm-site .qs-dark :where(h1, h2, h3, h4, h5, h6, strong, b, .qs-title, .qs-ink, .qs-stat__value, .qs-card__title) { color: var(--qs-on-dark); }
+  .qm-site .qs-dark :is(.qs-text, .qs-lead, .qs-card__text, .qs-stat__label) { color: var(--qs-on-dark-body); }
+  .qm-site .qs-dark .qs-meta { color: rgba(255, 255, 255, 0.5); }
+  .qm-site .qs-dark .qs-badge { color: rgba(255, 255, 255, 0.86); }
+  .qm-site .qs-dark .qs-card:not(.qs-card--white) { background: var(--qs-ink-soft); color: var(--qs-on-dark-body); }
+  .qm-site .qs-dark .qs-faq__item { background: var(--qs-ink-soft); }
+  .qm-site .qs-dark .qs-faq__q { color: var(--qs-on-dark); }
+  .qm-site .qs-dark .qs-faq__a { color: rgba(255, 255, 255, 0.6); }
+  .qm-site .qs-dark .qs-btn { background: #fff; border-color: #fff; color: var(--qs-ink); }
+  .qm-site .qs-dark .qs-btn--light { background: transparent; border-color: rgba(255, 255, 255, 0.24); color: #fff; }
+  @media (hover: hover) {
+    .qm-site .qs-dark .qs-btn:hover { background: var(--qs-brand); border-color: var(--qs-brand); color: var(--qs-brand-ink); }
+    .qm-site .qs-dark .qs-btn--light:hover { background: #fff; border-color: #fff; color: var(--qs-ink); }
+  }
+  .qm-site .qs-dark .qs-link { color: #fff; text-decoration-color: rgba(255, 255, 255, 0.3); }
+  .qm-site .qs-dark .qs-tag { background: transparent; border-color: rgba(255, 255, 255, 0.2); color: #fff; }
+  .qm-site .qs-dark .qs-icon-tile { border-color: rgba(255, 255, 255, 0.1); background: var(--qs-ink-raise); color: #fff; }
+
+  /* Closing CTA band */
+  .qm-site .qs-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    /* No floor of its own: the footer's 96px top padding is the gap, so
+       band and footer read as one run (reference: ~123px buttons→logo). */
+    padding: var(--qs-section-y) var(--qs-gutter) 24px;
+    text-align: center;
+  }
+  .qm-site .qs-cta > .qs-h2 { max-width: 30rem; }
+  .qm-site .qs-cta > .qs-text { max-width: 34rem; }
+  .qm-site .qs-cta > .qs-actions { justify-content: center; margin-top: 12px; }
+
+  /* ── Footer — black, faint grid, warm glow at the floor ───────── */
+  .qm-site .qs-footer {
+    position: relative;
+    overflow: hidden;
+    padding: 96px var(--qs-gutter) 0;
+  }
+  .qm-site .qs-footer__grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 64px 64px;
+    background-position: center top;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 70%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 70%, transparent 100%);
+    pointer-events: none;
+  }
+  .qm-site .qs-footer__top {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr));
+    gap: 40px 24px;
+  }
+  .qm-site .qs-footer__about { display: flex; flex-direction: column; gap: 24px; max-width: 20rem; }
+  .qm-site .qs-footer__about p { color: rgba(255, 255, 255, 0.6); }
+  .qm-site .qs-footer__label { color: rgba(255, 255, 255, 0.5); font-size: 15px; }
+  .qm-site .qs-footer__links { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+  .qm-site .qs-footer__link { color: #fff; font-size: 15px; transition: color 0.2s var(--qs-ease); }
+  .qm-site .qs-footer__link:hover { color: var(--qs-brand); }
+  .qm-site .qs-footer__bottom {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 24px;
+    margin-top: 72px;
+    padding: 24px 0 120px;
+    border-top: 1px solid var(--qs-on-dark-line);
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 14px;
+  }
+  .qm-site .qs-footer__glow {
+    position: absolute;
+    left: -10%;
+    bottom: -90px;
+    width: 120%;
+    height: 190px;
+    background: var(--qs-glow);
+    filter: blur(48px);
+    opacity: 0.92;
+    pointer-events: none;
+  }
+  @media (max-width: 991px) {
+    .qm-site .qs-footer__top { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .qm-site .qs-footer__about { grid-column: 1 / -1; }
+  }
+
+  /* Ticker — the brand lines, monochrome, inside the footer. */
+  .qm-site .qs-ticker {
+    margin-top: 72px;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+  .qm-site .qs-ticker__track { display: flex; width: max-content; animation: qs-ticker 48s linear infinite; }
+  .qm-site .qs-ticker__track > span {
+    display: flex;
+    flex: none;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.25rem);
+    letter-spacing: -0.04em;
+    white-space: nowrap;
+  }
+  .qm-site .qs-ticker__track > span > span { padding-inline: 28px; }
+  .qm-site .qs-ticker__track > span > i { width: 7px; height: 7px; border-radius: 50%; background: var(--qs-brand); }
+  @keyframes qs-ticker { to { transform: translateX(-50%); } }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Unlayered overrides — rules in globals.css that are themselves
+   unlayered would beat anything inside @layer, so these restate them
+   with enough specificity to win inside the marketing scope.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Scroll reveal: a longer, softer rise (reference: .scroll-fade-in). */
+.qm-site .reveal {
+  transform: translateY(24px);
+  transition:
+    opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.qm-site .reveal-visible { transform: translateY(0); }
+
+/* Natural photography (the reference never tints its photos). Beats the
+   theme-pinned duotone rules, which reach specificity (0,3,0). */
+:root body .qm-site .duotone-img { filter: saturate(0.94) contrast(1.02); }
+:root body .qm-site .duotone-frame {
+  --duo-shadow: rgba(0, 0, 0, 0.04);
+  --duo-highlight: transparent;
+  --duo-edge: rgba(0, 0, 0, 0.32);
+}
+
+/* Focus ring: globals.css paints every :focus-visible in --accent-soft,
+   which .qm-site maps to yellow (~1.4:1 on white, fails WCAG 1.4.11). Only
+   the colour is restated, so widths and offsets stay as they were. */
+.qm-site :focus-visible { outline-color: var(--qs-ink); }
+.qm-site .qs-dark :focus-visible { outline-color: var(--qs-on-dark); }
+.qm-site .qs-input:focus-visible { outline: none; } /* the ink border is its ring */
+/* Inset, or .qs-faq__item's overflow:hidden clips the whole ring. */
+.qm-site .qs-faq__q:focus-visible { outline-offset: -3px; }
+
+/* Buttons: the global button rule (0,2,1) re-times every transition; the
+   kit's pill needs its own colour timing and an <a> press scale. */
+:root .qm-site .qs-btn {
+  transition:
+    background-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease,
+    transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+:root .qm-site :is(.qs-btn, .qs-tab, .qs-burger):active:not(:disabled, [aria-disabled="true"]) {
+  transform: scale(0.97);
+  transition-duration: 90ms;
+}
+
+/* ── Accessibility preferences ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .qm-site .qs-btn__roll > span,
+  .qm-site .qs-btn__icon > svg { transition: none; }
+  .qm-site .qs-btn:hover .qs-btn__roll > span:first-child,
+  .qm-site .qs-btn:hover .qs-btn__icon > svg:first-child { transform: none; }
+  .qm-site .qs-btn:hover .qs-btn__roll > span + span,
+  .qm-site .qs-btn:hover .qs-btn__icon > svg + svg { transform: translateY(105%); }
+  .qm-site .reveal { transform: none; transition: opacity 400ms ease; }
+  .qm-site .qs-faq__item::details-content { transition: none; }
+  .qm-site .qs-ticker__track { animation: none; }
+  .qm-site .qs-nav { animation: none; }
+  .qm-site .qs-photo-card img { transition: none; }
+  .qm-site :is(.qs-menu__panel, .qs-mnav, .qs-card--link) { transition: opacity 0.15s ease; transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .qm-site .qs-nav::before { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  .qm-site { --qs-body: #45413b; --qs-muted: #4f4b45; --qs-line: #c9c4bc; --qs-line-strong: #8f8a82; --qs-nav-line: #8f8a82; }
+  .qm-site .qs-nav::before { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

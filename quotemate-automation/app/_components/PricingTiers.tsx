@@ -2,14 +2,16 @@
 
 // The three plan cards with a Monthly / Annual billing toggle. Shared by
 // the homepage pricing section (variant="home") and the dedicated
-// /pricing page (variant="full"). The "command-centre" system: rounded cards,
-// Caterpillar-yellow accent on the featured (Pro) tier, mono tabular-nums.
+// /pricing page (variant="full"). QuoteMax Site Kit: a pill segmented
+// toggle, paper cards (24px radius) with the featured (Pro) tier as a black
+// card, prices in tabular Inter at weight 400. "home" is the same cards,
+// tighter, with the link through to /pricing.
 
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { getAuthToken } from "@/lib/auth/client-token"
 import { writePlanIntent } from "@/lib/billing/plan-intent"
+import { BtnInner, Button, btnClass } from "./site-ui"
 import {
   PLANS,
   annualPerMonth,
@@ -26,32 +28,35 @@ export function PricingTiers({
   variant?: "home" | "full"
 }) {
   const [annual, setAnnual] = useState(true)
+  const compact = variant === "home"
 
   return (
     <div>
-      <BillingToggle annual={annual} setAnnual={setAnnual} />
+      <BillingToggle annual={annual} setAnnual={setAnnual} centred={!compact} />
 
-      <div className="mt-10 grid gap-4 lg:grid-cols-3">
+      <div className="mt-8 grid gap-4 lg:grid-cols-3">
         {PLANS.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} annual={annual} />
+          <PlanCard key={plan.id} plan={plan} annual={annual} compact={compact} />
         ))}
       </div>
 
-      <p className="mt-6 text-sm leading-relaxed text-text-dim">
-        All prices in AUD, ex-GST. Starter Monthly includes a 14-day free
-        trial; every other plan starts straight away. Cancel anytime.
-      </p>
-
-      {variant === "home" && (
-        <div className="mt-7">
-          <Link
-            href="/pricing"
-            className="link-underline pb-0.5 font-mono text-sm font-semibold uppercase tracking-[0.12em] text-accent hover:text-accent-soft"
-          >
-            See full pricing &amp; feature comparison →
-          </Link>
-        </div>
-      )}
+      <div
+        className={`mt-6 flex flex-wrap items-center gap-x-8 gap-y-5 ${
+          compact ? "justify-between" : "justify-center text-center"
+        }`}
+      >
+        {/* qs-small (body colour), not qs-meta: the muted meta grey drops
+            under 4.5:1 if the home section sits on the paper band. */}
+        <p className="qs-small max-w-[40rem]">
+          All prices in AUD, ex-GST. Starter Monthly includes a 14-day free
+          trial; every other plan starts straight away. Cancel anytime.
+        </p>
+        {compact && (
+          <Button href="/pricing" variant="secondary" arrow>
+            See full pricing &amp; feature comparison
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -59,14 +64,20 @@ export function PricingTiers({
 function BillingToggle({
   annual,
   setAnnual,
+  centred,
 }: {
   annual: boolean
   setAnnual: (v: boolean) => void
+  centred: boolean
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-4">
+    <div
+      className={`flex flex-wrap items-center gap-x-5 gap-y-3 ${
+        centred ? "justify-center" : ""
+      }`}
+    >
       <div
-        className="inline-flex rounded-xl border border-ink-line bg-ink-card p-1"
+        className="inline-flex rounded-full border border-[var(--qs-line-strong)] bg-white p-[3px]"
         role="group"
         aria-label="Billing period"
       >
@@ -77,7 +88,11 @@ function BillingToggle({
           Annual
         </ToggleButton>
       </div>
-      <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.14em] text-accent">
+      <span className="qs-small inline-flex items-center gap-2 font-medium text-[var(--qs-ink)]">
+        <span
+          className="size-2 rounded-full bg-[var(--qs-brand)]"
+          aria-hidden="true"
+        />
         Save ~17% · 2 months free
       </span>
     </div>
@@ -98,10 +113,10 @@ function ToggleButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-lg px-5 py-2 text-xs font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep ${
+      className={`min-h-11 min-w-[6.5rem] rounded-full px-5 text-[14px] font-medium tracking-[-0.02em] ${
         active
-          ? "bg-accent text-white"
-          : "bg-transparent text-text-sec hover:text-text-pri"
+          ? "bg-[var(--qs-ink)] text-white"
+          : "text-[var(--qs-body)] hover:bg-[var(--qs-paper)] hover:text-[var(--qs-ink)]"
       }`}
     >
       {children}
@@ -116,10 +131,12 @@ function CheckoutButton({
   plan,
   interval,
   featured,
+  compact,
 }: {
   plan: PlanId
   interval: "month" | "year"
   featured: boolean
+  compact: boolean
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -173,116 +190,164 @@ function CheckoutButton({
   }
 
   return (
-    <>
-    <button
-      type="button"
-      onClick={start}
-      disabled={loading}
-      aria-busy={loading}
-      aria-describedby={error ? `${plan}-checkout-error` : undefined}
-      className={`mt-7 inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep disabled:opacity-60 ${
-        featured
-          ? "bg-accent text-white hover:bg-accent-press"
-          : "border border-ink-line bg-transparent text-text-pri hover:border-text-dim hover:bg-ink"
-      }`}
-    >
-      {loading
-        ? "Starting…"
-        : hasFreeTrial(plan, interval)
-          ? "Start free trial"
-          : "Get started"}
-    </button>
+    <div>
+      {/* On the black (featured) card the kit's .qs-dark scope turns the
+          primary pill white; the paper cards get the white hairline pill. */}
+      <button
+        type="button"
+        onClick={start}
+        disabled={loading}
+        aria-busy={loading}
+        aria-describedby={error ? `${plan}-checkout-error` : undefined}
+        className={btnClass(
+          featured ? "primary" : "secondary",
+          compact ? "md" : "lg",
+          "qs-btn--block",
+        )}
+      >
+        <BtnInner arrow>
+          {loading
+            ? "Starting…"
+            : hasFreeTrial(plan, interval)
+              ? "Start free trial"
+              : "Get started"}
+        </BtnInner>
+      </button>
       {error && (
         <p
           id={`${plan}-checkout-error`}
           role="alert"
-          className="mt-2 text-xs font-medium text-danger-bright"
+          className={`mt-2 text-[13px] font-medium ${
+            featured ? "text-[#ffb4a8]" : "text-[#b42318]"
+          }`}
         >
           {error}
         </p>
       )}
-    </>
+    </div>
   )
 }
 
-function PlanCard({ plan, annual }: { plan: Plan; annual: boolean }) {
+function PlanCard({
+  plan,
+  annual,
+  compact,
+}: {
+  plan: Plan
+  annual: boolean
+  compact: boolean
+}) {
   const featured = !!plan.featured
   const perMonth = annual ? annualPerMonth(plan) : plan.monthly
+  // h2 on /pricing (the cards sit straight under the page's h1); h3 under
+  // the homepage pricing section's h2 — the outline stays in order on both.
+  const Name = compact ? "h3" : "h2"
 
   return (
     <div
-      className={`edge-lit card-sweep relative flex h-full flex-col overflow-hidden rounded-2xl border bg-ink-card p-6 transition-colors duration-300 md:p-8 ${
-        featured
-          ? "border-accent/50 hover:border-accent/70"
-          : "border-ink-line hover:border-text-dim"
-      }`}
+      className={[
+        "qs-card h-full",
+        // .qs-dark remaps the type, the pill CTA and focus ring to the black card.
+        featured && "qs-card--dark qs-dark",
+        compact ? "gap-6 p-6 sm:p-8" : "gap-8 p-7 sm:p-8 xl:p-10",
+        // 768–1023px: the cards stack, so each lays out as two columns; the
+        // highlight list gets the wider one so its lines don't orphan a word.
+        "md:max-lg:grid md:max-lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:max-lg:items-start md:max-lg:gap-x-8",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
-      {featured && (
-        <>
-          <span
-            className="absolute inset-x-0 top-0 h-0.5 bg-accent"
-            aria-hidden="true"
-          />
-          <span className="absolute right-5 top-5 rounded-md bg-accent px-2.5 py-1 font-mono text-[0.75rem] font-bold uppercase tracking-[0.1em] text-accent-ink">
-            Most popular
-          </span>
-        </>
-      )}
+      <div className={`flex flex-col ${compact ? "gap-5" : "gap-6"}`}>
+        {/* The badge shares the name's row (negative margin keeps the row at
+            the name's height) so the tagline gets the full width and the
+            prices line up across all three cards. */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-3">
+            <Name className="qs-title">{plan.name}</Name>
+            {featured && (
+              <span className="-my-1 inline-flex flex-none items-center rounded-full bg-[var(--qs-brand)] px-3 py-1 text-[12px] font-medium leading-[1.4] text-[var(--qs-brand-ink)]">
+                Most popular
+              </span>
+            )}
+          </div>
+          <p className="qs-small">{plan.tagline}</p>
+        </div>
 
-      <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-2xl">
-        {plan.name}
-      </h3>
-      <p className="mt-1.5 font-mono text-[0.75rem] uppercase tracking-[0.1em] text-text-dim">
-        {plan.tagline}
-      </p>
-
-      <div className="mt-6 flex items-baseline gap-2">
-        <span
-          className={`font-mono text-5xl font-bold tabular-nums tracking-tight ${
-            featured ? "text-accent" : "text-text-pri"
-          }`}
-        >
-          {aud(perMonth)}
-        </span>
-        <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
-          / mo
-        </span>
-      </div>
-      <p className="mt-2 min-h-[1.25rem] text-sm text-text-sec">
-        {annual ? (
-          <>
-            Billed {aud(plan.annual)}/yr ·{" "}
-            <span className="text-accent">save {aud(annualSaving(plan))}</span>
-          </>
-        ) : (
-          <>Billed monthly · or {aud(plan.annual)}/yr</>
-        )}
-      </p>
-
-      <CheckoutButton
-        plan={plan.id}
-        interval={annual ? "year" : "month"}
-        featured={featured}
-      />
-
-      {plan.inheritsFrom && (
-        <p className="mt-7 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
-          Everything in {plan.inheritsFrom}, plus:
-        </p>
-      )}
-      <ul className={`grid gap-2.5 ${plan.inheritsFrom ? "mt-3" : "mt-7"}`}>
-        {plan.highlights.map((h) => (
-          <li
-            key={h}
-            className="flex items-baseline gap-3 text-sm leading-relaxed text-text-sec"
-          >
-            <span className="font-mono text-xs text-accent" aria-hidden="true">
-              →
+        <div>
+          <p className="flex items-baseline gap-1.5">
+            <span
+              className={`qs-stat__value ${
+                compact ? "" : "text-[clamp(2.5rem,2rem+1.2vw,3rem)]"
+              }`}
+            >
+              {aud(perMonth)}
             </span>
-            {h}
-          </li>
-        ))}
-      </ul>
+            <span className="qs-small">/ mo</span>
+          </p>
+          <p className="qs-small mt-2">
+            {annual ? (
+              <>
+                Billed {aud(plan.annual)}/yr ·{" "}
+                <span className="qs-ink font-medium">
+                  save {aud(annualSaving(plan))}
+                </span>
+              </>
+            ) : (
+              <>Billed monthly · or {aud(plan.annual)}/yr</>
+            )}
+          </p>
+        </div>
+
+        <CheckoutButton
+          plan={plan.id}
+          interval={annual ? "year" : "month"}
+          featured={featured}
+          compact={compact}
+        />
+      </div>
+
+      <div
+        className={`flex flex-col gap-4 border-t pt-6 md:max-lg:border-t-0 md:max-lg:border-l md:max-lg:pt-0 md:max-lg:pl-8 ${
+          featured ? "border-white/[0.12]" : "border-black/[0.08]"
+        }`}
+      >
+        {plan.inheritsFrom && (
+          <p className="qs-small qs-ink font-medium">
+            Everything in {plan.inheritsFrom}, plus:
+          </p>
+        )}
+        <ul className="flex flex-col gap-3">
+          {plan.highlights.map((h) => (
+            <li
+              key={h}
+              className="flex items-start gap-3 text-[15px] leading-[1.45] text-pretty"
+            >
+              <Check className="qs-ink mt-px size-[18px] flex-none" />
+              {/* Glue "mins / mo" so a wrap never strands "/ mo"; text-pretty
+                  then carries the number down with its unit. */}
+              {h.replace(" / ", " / ")}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
+  )
+}
+
+// ponytail: the kit ships Arrow + Chevron only; a thin check lives here.
+function Check({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M4.5 12.5l5 5L19.5 7" />
+    </svg>
   )
 }
