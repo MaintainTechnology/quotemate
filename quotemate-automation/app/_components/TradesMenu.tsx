@@ -1,9 +1,10 @@
 "use client"
 
-// Accessible "Trades" dropdown for the desktop pill nav. Opens on hover and
-// on click/keyboard; closes on Escape, outside-click, or selection. A small
-// client island so the rest of the Nav stays a server component. On mobile
-// the same routes live in MobileNav and the footer.
+// Accessible "Trades" dropdown for the desktop pill nav: a disclosure of
+// links. Opens on mouse hover and on click/tap/keyboard; closes on Escape
+// (handing focus back to the button), outside-click, focus leaving it, or
+// selection. A small client island so the rest of the Nav stays a server
+// component. On mobile the same routes live in MobileNav and the footer.
 //
 // The panel scales in from its trigger (transform-origin: top centre) and
 // leaves the way it came — the dropdown is anchored to the button that
@@ -25,6 +26,10 @@ const TRADE_LINKS = [
 export function TradesMenu() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  // True while a mouse hover holds the panel open, so the click that usually
+  // follows keeps it open instead of toggling it shut.
+  const hoverOpen = useRef(false)
   const menuId = useId()
   const onTradePage = usePathname().startsWith("/trades")
 
@@ -34,7 +39,10 @@ export function TradesMenu() {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false)
+      if (e.key !== "Escape") return
+      // Focus inside the panel would fall to <body> as it hides: hand it back.
+      if (ref.current?.contains(document.activeElement)) buttonRef.current?.focus()
+      setOpen(false)
     }
     document.addEventListener("mousedown", onDown)
     document.addEventListener("keydown", onKey)
@@ -48,29 +56,51 @@ export function TradesMenu() {
     <div
       ref={ref}
       className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      // Hover opens for a real mouse only (a tap fires mouseenter too, which
+      // opened the panel just before the tap's click toggled it shut), and
+      // pins only a panel it opened, so one click still shuts a keyed one.
+      onPointerEnter={(e) => {
+        if (e.pointerType !== "mouse" || open) return
+        hoverOpen.current = true
+        setOpen(true)
+      }}
+      // A passing mouse never shuts the panel under keyboard focus, which
+      // would drop that focus to <body>.
+      onPointerLeave={(e) => {
+        if (e.pointerType !== "mouse" || e.currentTarget.querySelector(":focus-visible")) return
+        hoverOpen.current = false
+        setOpen(false)
+      }}
+      // Tabbing out closes it, so the panel never covers what gets focus next.
+      // (A null target is a click on something unfocusable: onDown has it.)
+      onBlur={(e) => {
+        const to = e.relatedTarget
+        if (to && !e.currentTarget.contains(to)) setOpen(false)
+      }}
     >
       <button
+        ref={buttonRef}
         type="button"
-        aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         data-active={onTradePage ? "true" : undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          const pinned = hoverOpen.current
+          hoverOpen.current = false
+          setOpen((o) => pinned || !o)
+        }}
         className="qs-nav__link"
       >
         Trades
         <Chevron className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
       </button>
 
-      <div id={menuId} role="menu" aria-label="Trades" className="qs-menu" data-open={open}>
+      <div id={menuId} className="qs-menu" data-open={open}>
         <div className="qs-menu__panel">
           {TRADE_LINKS.map((t) => (
             <Link
               key={t.href}
               href={t.href}
-              role="menuitem"
               onClick={() => setOpen(false)}
               className="qs-menu__item"
             >

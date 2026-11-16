@@ -91,7 +91,7 @@ function Hero() {
     <section className="qs-page-hero" aria-labelledby="watch-hero">
       <div className="qs-container qs-page-hero__center">
         <Eyebrow>You&rsquo;re in &middot; 15 minutes</Eyebrow>
-        <h1 id="watch-hero" className="qs-display">
+        <h1 id="watch-hero" className="qs-h1">
           Every lead quoted the same day.
         </h1>
         <p className="qs-lead">
@@ -441,7 +441,7 @@ function WhatHappensNext() {
             <li key={s.num}>
               <Reveal delay={i * 80} className="h-full">
                 <article className="qs-card h-full">
-                  <span className="qs-tag qs-num self-start">
+                  <span className="qs-icon-tile qs-num grid-flow-col gap-1.5 text-[15px]">
                     {i === GO_LIVE.length - 1 ? <span className="qs-tab__dot" aria-hidden="true" /> : null}
                     {s.num}
                   </span>

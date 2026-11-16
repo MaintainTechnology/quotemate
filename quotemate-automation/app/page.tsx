@@ -54,6 +54,9 @@ export const metadata = {
 export default function Home() {
   return (
     <SiteShell>
+      {/* First in <main> so keyboard users reach its buttons right after the
+          nav, not after the whole page (it's fixed, so this moves no layout). */}
+      <CookieConsent />
       <Hero />
       <HowItWorks />
       <Trades />
@@ -69,7 +72,6 @@ export default function Home() {
       <Testimonials />
       <Faq />
       <ClosingCta />
-      <CookieConsent />
     </SiteShell>
   )
 }
@@ -120,7 +122,9 @@ function Hero() {
             under a minute. You review, tweak, send.
           </p>
 
-          <div className={`qs-actions ${RISE}`} style={{ animationDelay: "460ms" }}>
+          {/* data-keep-clear: the cookie card waits until this row has
+              scrolled clear of it, so it never rises over the CTAs. */}
+          <div className={`qs-actions ${RISE}`} style={{ animationDelay: "460ms" }} data-keep-clear>
             <AuthNav variant="hero" />
             <SecondaryCTA href="#how">See how it works</SecondaryCTA>
           </div>
@@ -523,7 +527,7 @@ function NumberedCard({
     <article className="qs-card h-full">
       <span className="qs-icon-tile qs-num text-[15px]">{num}</span>
       <div className="qs-card__copy">
-        <h3 className="qs-title">{title}</h3>
+        <h3 className="qs-card__title">{title}</h3>
         <p className="qs-text">{body}</p>
       </div>
       <div
@@ -851,7 +855,7 @@ function CoveredTrades() {
               }
             >
               <Reveal delay={(i % 3) * 90} className="h-full">
-                <Link href={t.href} className="qs-photo-card h-[17rem] sm:h-[22rem] lg:h-[26rem]">
+                <Link href={t.href} className="qs-photo-card qs-photo-card--scrim h-[17rem] sm:h-[22rem] lg:h-[26rem]">
                   <Image
                     src={t.img}
                     alt={`${t.label} work in Australia`}

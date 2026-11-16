@@ -52,7 +52,8 @@ export function PricingTiers({
           trial; every other plan starts straight away. Cancel anytime.
         </p>
         {compact && (
-          <Button href="/pricing" variant="secondary" arrow>
+          // Below 360px the label is wider than the pill (WCAG 1.4.10 at 320).
+          <Button href="/pricing" variant="secondary" arrow className="max-[359px]:px-4 max-[359px]:text-[13px]">
             See full pricing &amp; feature comparison
           </Button>
         )}

@@ -40,7 +40,7 @@
     --qs-line-strong: #e4e4e4;  /* control borders */
     --qs-nav-line: #e8e8e8;
     --qs-body: #6d6962;         /* body copy — 5.3:1 on white, 4.8:1 on paper */
-    --qs-muted: #77726a;        /* meta text — 4.8:1 on white */
+    --qs-muted: #726e68;        /* meta text — 5.1:1 on white, 4.6:1 on paper */
     --qs-ink: #000000;          /* headings */
     --qs-ink-soft: #1a1a1a;     /* cards on black */
     --qs-ink-raise: #242322;
@@ -78,7 +78,7 @@
     --ink-line: #efedec;
     --text-pri: #000000;
     --text-sec: #6d6962;
-    --text-dim: #77726a;
+    --text-dim: var(--qs-muted);
     --accent: #ffc400;
     --accent-press: #e6ac00;
     --accent-soft: #ffd23d;
@@ -152,11 +152,6 @@
      tighter. Values follow the reference (h1 56px/-3px,
      h2 40px/-1.2px, card titles 24px/-1.2px), expressed in em so
      they stay proportional as clamp() scales the size. */
-  .qm-site .qs-display {
-    font-size: clamp(2.5rem, 1.45rem + 3.6vw, 4rem);
-    line-height: 1.04;
-    letter-spacing: -0.056em;
-  }
   .qm-site .qs-h1 {
     font-size: clamp(2.25rem, 1.3rem + 3vw, 3.5rem);
     line-height: 1.08;
@@ -734,6 +729,17 @@
     background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.78) 100%);
     pointer-events: none;
   }
+  /* Opt-in for cards whose caption covers much of the photo (short cards,
+     long blurbs): a scrim that tracks the caption, not the card's height.
+     At its 0.65 floor, white and 72% white text keep 4.5:1 over any photo. */
+  .qm-site .qs-photo-card--scrim .qs-photo-card__body::before {
+    content: "";
+    position: absolute;
+    inset: -48px 0 0;
+    z-index: -1;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.65) 48px);
+    pointer-events: none;
+  }
   .qm-site .qs-photo-card__body {
     position: absolute;
     inset: auto 0 0 0;
@@ -782,7 +788,8 @@
     width: 100%;
     min-height: 48px;
     padding: 12px 16px;
-    border: 1px solid var(--qs-line-strong);
+    /* An empty field's border is its only boundary: 3.4:1 on white (WCAG 1.4.11). */
+    border: 1px solid #8f8a82;
     border-radius: var(--qs-r-sm);
     background: var(--qs-white);
     color: var(--qs-ink);
