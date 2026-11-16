@@ -12,16 +12,21 @@
 //   slide 11  the 20-minute assessment framing
 //   slide 13  configure -> train -> test -> live
 //
-// Built on the shared marketing chrome (Nav/Footer/MarqueeBar) so it cannot
-// drift from / and /pricing.
+// Built on the shared SiteShell (pill nav + black footer, site-kit.css) so it
+// cannot drift from / and /pricing. The flow follows the kit: a centred hero,
+// the player inside the browser-frame widget, white sections, one paper band,
+// then the closing run on black (questions, next steps, CTA, footer).
 
+import type { LucideIcon } from "lucide-react"
+import { BookOpen, Clock, Moon, PhoneIncoming, Route, SlidersHorizontal } from "lucide-react"
 import { Reveal } from "../_components/Reveal"
 import {
-  Nav,
-  Footer,
-  MarqueeBar,
-  Topography,
+  SiteShell,
   Eyebrow,
+  SectionHead,
+  BrowserFrame,
+  FaqList,
+  CtaBand,
   PrimaryCTA,
   SecondaryCTA,
 } from "../_components/site"
@@ -48,76 +53,64 @@ export const metadata = {
 
 export default function WatchPage() {
   return (
-    <div className="marketing-canvas">
-      <div className="noise-overlay" aria-hidden="true" />
-      <Nav />
+    <SiteShell>
+      <noscript>
+        <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
+      </noscript>
       <Hero />
-      {/* Everything below the hero shares one wrapper so the CTA bar can be a
-          plain `sticky bottom-0` child — pinned to the viewport while the
-          reader is in this range, settling inline at the end. No JS. */}
-      <div className="relative">
+      {/* Everything between the hero and the closing CTA shares one wrapper so
+          the CTA pill can be a plain `sticky bottom-0` child — pinned to the
+          viewport while the reader is in this range, settling into the last
+          section's floor at the end, where the closing CTA takes over. No JS.
+          Clipped on y so the pill, resting at this wrapper's top edge while
+          the reader is still in the hero, stays tucked behind the hero's floor
+          instead of hanging over it (clip, unlike hidden, keeps sticky). */}
+      <div className="relative overflow-y-clip">
         <Chapters />
         <Benefits />
         <RoiBand />
         <Objections />
         <WhatHappensNext />
-        <ClosingCta />
         <StickyCta />
       </div>
-      <Footer />
-      <MarqueeBar />
-    </div>
+      <ClosingCta />
+    </SiteShell>
   )
 }
 
 /* ─── Hero + the video itself ─────────────────────────────────── */
+// The one page where the video is the whole point, so the player sits straight
+// under the lead, capped at 1000px (the old max-w-5xl) so it lands in the first
+// screen, and the CTAs follow it. Not in a Reveal: on a short screen the frame
+// sits below the observer's line and would paint as a white band on load.
+// PageHero's centred markup, written out (as not-found.tsx does) because the
+// player sits between the lead and the CTAs, which PageHero can't order.
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden border-b border-ink-line">
-      <Topography />
-      <noscript>
-        <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
-      </noscript>
-      {/* Tighter than the /pricing hero (py-20 md:py-28) on purpose: every
-          pixel of chrome here pushes the player further below the fold. */}
-      <div className="relative z-10 mx-auto max-w-[88rem] px-6 py-12 md:py-16">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>You&rsquo;re in &middot; 15 minutes</Eyebrow>
-          <h1 className="mt-6 font-extrabold uppercase leading-[0.98] tracking-[-0.04em] text-[clamp(2.2rem,5.5vw,4.5rem)]">
-            Every lead quoted{" "}
-            <span className="text-accent">the same day.</span>
-          </h1>
-          <p className="mt-7 max-w-2xl text-lg leading-relaxed text-text-sec">
-            No slide deck. A real screen recording of an enquiry going in and a
-            finished quote coming out, then the numbers on what quoting after
-            hours is actually costing you. Watch it once and you&rsquo;ll know
-            whether this fits your business.
-          </p>
-        </Reveal>
-
-        <Reveal delay={120}>
-          {/* Capped rather than run to the 88rem gutter: 16:9 at the full
-              content width is 765px tall on a desktop, which pushes the player
-              and its CTA outside the fold on the one page where the video is
-              the whole point. */}
-          <div className="mt-12 max-w-5xl">
-            <VideoFrame />
-          </div>
-        </Reveal>
-
-        <Reveal delay={200}>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <PrimaryCTA href={BOOKING_HREF}>
-              Book the 20-minute assessment
-            </PrimaryCTA>
-            <SecondaryCTA href="/pricing">See pricing</SecondaryCTA>
-          </div>
-          <p className="mt-5 max-w-2xl text-sm leading-relaxed text-text-dim">
-            Prefer to watch first? The button is here when you&rsquo;re done.
-            The assessment is a look at your own numbers, not a cold sales call.
-          </p>
-        </Reveal>
+    <section className="qs-page-hero" aria-labelledby="watch-hero">
+      <div className="qs-container qs-page-hero__center">
+        <Eyebrow>You&rsquo;re in &middot; 15 minutes</Eyebrow>
+        <h1 id="watch-hero" className="qs-display">
+          Every lead quoted the same day.
+        </h1>
+        <p className="qs-lead">
+          No slide deck. A real screen recording of an enquiry going in and a
+          finished quote coming out, then the numbers on what quoting after
+          hours is actually costing you. Watch it once and you&rsquo;ll know
+          whether this fits your business.
+        </p>
+      </div>
+      <div className="qs-container qs-container--narrow mt-12">
+        <VideoFrame />
+        <div className="qs-actions mt-10 justify-center">
+          <PrimaryCTA href={BOOKING_HREF}>Book the 20-minute assessment</PrimaryCTA>
+          <SecondaryCTA href="/pricing">See pricing</SecondaryCTA>
+        </div>
+        <p className="qs-meta mx-auto mt-4 max-w-md text-center">
+          Prefer to watch first? The button is here when you&rsquo;re done.
+          The assessment is a look at your own numbers, not a cold sales call.
+        </p>
       </div>
     </section>
   )
@@ -125,53 +118,50 @@ function Hero() {
 
 function VideoFrame() {
   return (
-    <div className="edge-lit overflow-hidden border border-ink-line bg-ink-card">
-      <div className="relative aspect-video w-full">
-        {VIDEO_SRC ? (
-          <video
-            className="absolute inset-0 h-full w-full"
-            controls
-            preload="metadata"
-            playsInline
-            poster={VIDEO_POSTER || undefined}
-            src={VIDEO_SRC}
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
-            <PlayGlyph />
-            <span className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-text-dim">
-              The 15-minute walkthrough
-            </span>
-            <span className="max-w-sm text-sm leading-relaxed text-text-dim">
-              Player placeholder — set VIDEO_SRC in this file once the recording
-              is hosted.
-            </span>
-          </div>
-        )}
+    <BrowserFrame>
+      <div className="pb-[clamp(20px,3.4vw,48px)]">
+        <div className="relative aspect-video w-full overflow-hidden rounded-[var(--qs-r-md)] bg-[var(--qs-ink-soft)] shadow-[0_24px_48px_-24px_rgba(0,0,0,0.45)]">
+          {VIDEO_SRC ? (
+            <video
+              className="absolute inset-0 h-full w-full"
+              controls
+              preload="metadata"
+              playsInline
+              poster={VIDEO_POSTER || undefined}
+              src={VIDEO_SRC}
+            />
+          ) : (
+            <div className="qs-dark absolute inset-0 flex flex-col items-center justify-center gap-3 bg-transparent px-6 text-center md:gap-4">
+              <PlayGlyph />
+              <span className="qs-h5 qs-ink">The 15-minute walkthrough</span>
+              <span className="qs-meta max-w-sm">
+                Player placeholder — set VIDEO_SRC in this file once the recording
+                is hosted.
+              </span>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </BrowserFrame>
+  )
+}
+
+function PlayIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M8 5.5v13l11-6.5z" />
+    </svg>
   )
 }
 
 function PlayGlyph() {
   return (
-    <svg
-      width="56"
-      height="56"
-      viewBox="0 0 56 56"
-      fill="none"
+    <span
       aria-hidden="true"
+      className="grid size-12 place-items-center rounded-full bg-white pl-0.5 text-[var(--qs-ink)] shadow-[0_0_0_8px_rgba(255,255,255,0.08)] md:size-16"
     >
-      <rect
-        x="0.5"
-        y="0.5"
-        width="55"
-        height="55"
-        stroke="var(--accent)"
-        strokeWidth="1"
-      />
-      <path d="M22 17 L40 28 L22 39 Z" fill="var(--accent)" />
-    </svg>
+      <PlayIcon size={22} />
+    </span>
   )
 }
 
@@ -180,78 +170,117 @@ function PlayGlyph() {
 const CHAPTERS = [
   {
     time: "0–4m",
+    from: 0,
+    to: 4,
     title: "The problem, and the promise",
     body: "Six enquiries in, three quotes owed, and the pricing still to do tonight. Slow quotes lose jobs — this is the cost of the way it works now.",
   },
   {
     time: "4–9m",
+    from: 4,
+    to: 9,
     title: "Watch it actually work",
     body: "A real screen recording. A lead comes in, a clean quote goes out, the follow-up runs itself. No mock-ups, no edits between the enquiry and the price.",
   },
   {
     time: "9–14m",
+    from: 9,
+    to: 14,
     title: "The numbers, and your questions",
     body: "What the hours are worth, what one extra won job a month is worth, and straight answers to the four things every owner asks before they commit.",
   },
 ]
 
+// The kit's 3-up grid drops to two columns at 768–991px, where the third card
+// would sit alone on its row; there it takes the full row instead.
+const SPAN_LAST_ON_TABLET = "min-[768px]:max-[992px]:[&>:last-child]:col-span-2"
+
 function Chapters() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-20 md:py-24">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>What&rsquo;s in it</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            Fifteen minutes,{" "}
-            <span className="text-accent">three parts.</span>
-          </h2>
+    <section className="qs-section" aria-labelledby="watch-chapters">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            id="watch-chapters"
+            eyebrow={<>What&rsquo;s in it</>}
+            title="Fifteen minutes, three parts."
+          />
         </Reveal>
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
+        <ol className={`qs-grid qs-grid--3 ${SPAN_LAST_ON_TABLET}`}>
           {CHAPTERS.map((c, i) => (
-            <Reveal key={c.time} delay={i * 110}>
-              <article className="edge-lit h-full border border-ink-line bg-ink-card p-6 md:p-8">
-                <span className="font-mono text-3xl font-bold leading-none tabular-nums text-accent md:text-4xl">
-                  {c.time}
-                </span>
-                <h3 className="mt-5 text-lg font-extrabold uppercase tracking-tight text-text-pri">
-                  {c.title}
-                </h3>
-                <p className="mt-3 text-base leading-relaxed text-text-sec">
-                  {c.body}
-                </p>
-              </article>
-            </Reveal>
+            <li key={c.time}>
+              <Reveal delay={i * 80} className="h-full">
+                <article className="qs-card h-full">
+                  <p className="qs-h2 qs-num qs-ink">{c.time}</p>
+                  <div className="qs-card__copy">
+                    <h3 className="qs-card__title">{c.title}</h3>
+                    <p className="qs-card__text">{c.body}</p>
+                  </div>
+                  <ChapterTrack active={i} />
+                </article>
+              </Reveal>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   )
 }
 
+// The card's mini UI: a player scrubber with the three chapters at their real
+// proportions (4 / 5 / 5 minutes) and this card's chapter lit.
+function ChapterTrack({ active }: { active: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="mt-auto flex items-center gap-3 rounded-[var(--qs-r-md)] bg-white p-3 pr-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)]"
+    >
+      <span className="grid size-8 flex-none place-items-center rounded-full bg-[var(--qs-ink)] pl-px text-white">
+        <PlayIcon size={12} />
+      </span>
+      <span className="flex flex-1 gap-1">
+        {CHAPTERS.map((c, i) => (
+          <span
+            key={c.time}
+            className={`h-1.5 basis-0 rounded-full ${i === active ? "bg-[image:var(--qs-glow)]" : "bg-[var(--qs-line-strong)]"}`}
+            style={{ flexGrow: c.to - c.from }}
+          />
+        ))}
+      </span>
+    </div>
+  )
+}
+
 /* ─── Key benefits ────────────────────────────────────────────── */
 
-const BENEFITS = [
+const BENEFITS: { icon: LucideIcon; title: string; body: string }[] = [
   {
+    icon: Clock,
     title: "Same-day quoting. Guaranteed.",
     body: "Every enquiry that lands gets a real quote back the same day. Not a callback, not a “we’ll get to it” — a priced quote, while they still care.",
   },
   {
+    icon: PhoneIncoming,
     title: "It answers when you can’t.",
     body: "Text, phone call or web form. Nine o’clock on a Tuesday, up a ladder, mid-job — QuoteMax picks it up and starts the quote without you.",
   },
   {
+    icon: BookOpen,
     title: "Priced from your book, not a guess.",
     body: "Your rates, your materials, your margins, your exclusions. Every figure on the quote traces back to a number you set. Nothing is invented.",
   },
   {
+    icon: Route,
     title: "Exceptions come to you. Nothing else does.",
     body: "Anything that can’t be safely priced from a photo and a description routes to a paid site visit instead. You handle the hard ones, not all of them.",
   },
   {
+    icon: Moon,
     title: "Get your nights back.",
     body: "Ten hours a week on quoting is over 500 hours a year. That’s the block of your life this takes back, and it starts the week you go live.",
   },
   {
+    icon: SlidersHorizontal,
     title: "Configured with you, not dumped on you.",
     body: "We set it up around how you already quote, load your pricing, and train it on your past quotes. You approve the output before anything goes live.",
   },
@@ -259,31 +288,34 @@ const BENEFITS = [
 
 function Benefits() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>What you actually get</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            We do <span className="text-accent">the quoting.</span>
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            QuoteMax is not another app to keep on top of. It is the quoting
-            taken off your plate — answered, priced, sent and followed up.
-          </p>
+    <section className="qs-section qs-section--flush-top" aria-labelledby="watch-benefits">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <div className="qs-head-row">
+            <SectionHead id="watch-benefits" eyebrow="What you actually get" title="We do the quoting." />
+            <p className="qs-head-aside qs-text">
+              QuoteMax is not another app to keep on top of. It is the quoting
+              taken off your plate — answered, priced, sent and followed up.
+            </p>
+          </div>
         </Reveal>
-        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {BENEFITS.map((b, i) => (
-            <Reveal key={b.title} delay={(i % 3) * 110}>
-              <article className="edge-lit h-full border border-ink-line bg-ink-card p-6 transition-colors duration-300 hover:border-text-dim md:p-8">
-                <h3 className="text-lg font-extrabold uppercase leading-tight tracking-tight text-text-pri">
-                  {b.title}
-                </h3>
-                <p className="mt-4 text-base leading-relaxed text-text-sec">
-                  {b.body}
-                </p>
-              </article>
-            </Reveal>
-          ))}
+        <div className="qs-grid qs-grid--3">
+          {BENEFITS.map((b, i) => {
+            const Icon = b.icon
+            return (
+              <Reveal key={b.title} delay={(i % 3) * 80} className="h-full">
+                <article className="qs-card qs-card--outline h-full md:min-h-[16.5rem]">
+                  <span className="qs-icon-tile">
+                    <Icon size={20} strokeWidth={1.6} />
+                  </span>
+                  <div className="qs-card__copy mt-auto">
+                    <h3 className="qs-card__title">{b.title}</h3>
+                    <p className="qs-card__text">{b.body}</p>
+                  </div>
+                </article>
+              </Reveal>
+            )
+          })}
         </div>
       </div>
     </section>
@@ -292,54 +324,46 @@ function Benefits() {
 
 /* ─── ROI band (deck slide 07) ────────────────────────────────── */
 
+const STATS = [
+  { value: "500+", label: "Hours a year quoting" },
+  { value: "A$50k+", label: "Of owner time" },
+  { value: "A$120k", label: "Added revenue" },
+]
+
 function RoiBand() {
   return (
-    <section className="border-b border-ink-line bg-ink/40">
-      <div className="mx-auto max-w-[88rem] px-6 py-20 md:py-24">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>The maths</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.7rem,3.4vw,2.6rem)]">
-            Save the admin. Quote faster.{" "}
-            <span className="text-accent">Win more work.</span>
-          </h2>
+    <section className="qs-section qs-band" aria-labelledby="watch-maths">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            id="watch-maths"
+            eyebrow="The maths"
+            title="Save the admin. Quote faster. Win more work."
+          />
         </Reveal>
-        <div className="mt-12 grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-3">
-          <Reveal>
-            <Stat value="500+" label="Hours a year quoting" />
-          </Reveal>
-          <Reveal delay={110}>
-            <Stat value="A$50k+" label="Of owner time" />
-          </Reveal>
-          <Reveal delay={220}>
-            <Stat value="A$120k" label="Added revenue" />
-          </Reveal>
+        <div className={`qs-grid qs-grid--3 ${SPAN_LAST_ON_TABLET}`}>
+          {STATS.map((s, i) => (
+            <Reveal key={s.label} delay={i * 80} className="h-full">
+              <div className="qs-card qs-card--white h-full">
+                <div className="qs-stat">
+                  <span className="qs-stat__value text-[clamp(2.5rem,1.9rem+1.8vw,3.5rem)]">
+                    {s.value}
+                  </span>
+                  <span className="qs-stat__label">{s.label}</span>
+                </div>
+              </div>
+            </Reveal>
+          ))}
         </div>
-        <Reveal delay={280}>
-          <p className="mt-12 max-w-3xl text-lg leading-relaxed text-text-sec">
-            Ten hours a week quoting is{" "}
-            <span className="font-semibold text-text-pri">
-              500+ hours a year
-            </span>
-            . Win one extra A$10k job a month and that is{" "}
-            <span className="font-semibold text-accent">A$120k</span> more
+        <Reveal delay={240}>
+          <p className="qs-lead max-w-[46rem]">
+            Ten hours a week quoting is <strong>500+ hours a year</strong>. Win
+            one extra A$10k job a month and that is <strong>A$120k</strong> more
             revenue. The video walks through both numbers with real figures.
           </p>
         </Reveal>
       </div>
     </section>
-  )
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <div className="font-mono font-bold leading-tight tracking-tight text-accent text-[clamp(2.25rem,4.5vw,3.75rem)]">
-        {value}
-      </div>
-      <div className="mt-3 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
-        {label}
-      </div>
-    </div>
   )
 }
 
@@ -366,29 +390,19 @@ const OBJECTIONS = [
 
 function Objections() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>Fair questions</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            The four things{" "}
-            <span className="text-accent">everyone asks.</span>
-          </h2>
+    <section className="qs-section qs-dark" aria-labelledby="watch-questions">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            id="watch-questions"
+            align="center"
+            eyebrow="Fair questions"
+            title="The four things everyone asks."
+          />
         </Reveal>
-        <dl className="mt-14 grid gap-x-12 gap-y-10 md:grid-cols-2">
-          {OBJECTIONS.map((it, i) => (
-            <Reveal key={it.q} delay={(i % 2) * 90}>
-              <div className="border-t border-ink-line pt-6">
-                <dt className="text-lg font-extrabold uppercase tracking-tight text-text-pri">
-                  {it.q}
-                </dt>
-                <dd className="mt-3 max-w-prose text-base leading-relaxed text-text-sec">
-                  {it.a}
-                </dd>
-              </div>
-            </Reveal>
-          ))}
-        </dl>
+        <Reveal delay={80}>
+          <FaqList items={OBJECTIONS} />
+        </Reveal>
       </div>
     </section>
   )
@@ -405,38 +419,41 @@ const GO_LIVE = [
 
 function WhatHappensNext() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>After the video</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(1.8rem,3.6vw,2.8rem)]">
-            A 20-minute assessment,{" "}
-            <span className="text-accent">not a cold discovery.</span>
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            We already have your leads, your quote volume and your average job
-            value from the form. The call is spent on where the hours are going
-            and what your business looks like without them — then, if it fits,
-            how we get you live.
-          </p>
+    // A fixed 120px floor at every width: the sticky CTA pill (~74px with its
+    // offset) docks here 46px under the last row of cards.
+    <section
+      className="qs-section qs-section--flush-top qs-dark pb-30"
+      aria-labelledby="watch-next"
+    >
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            id="watch-next"
+            className="max-w-[42rem]"
+            eyebrow="After the video"
+            title="A 20-minute assessment, not a cold discovery."
+            lead="We already have your leads, your quote volume and your average job value from the form. The call is spent on where the hours are going and what your business looks like without them — then, if it fits, how we get you live."
+          />
         </Reveal>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* 2x2 until 1200px: four across at 992-1199 leaves a ~150px measure. */}
+        <ol className="qs-grid qs-grid--4 min-[992px]:max-[1200px]:grid-cols-2">
           {GO_LIVE.map((s, i) => (
-            <Reveal key={s.num} delay={i * 90}>
-              <article className="edge-lit h-full border border-ink-line bg-ink-card p-6 md:p-7">
-                <span className="font-mono text-3xl font-bold leading-none text-accent md:text-4xl">
-                  {s.num}
-                </span>
-                <h3 className="mt-5 text-base font-extrabold uppercase tracking-tight text-text-pri">
-                  {s.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-text-sec">
-                  {s.body}
-                </p>
-              </article>
-            </Reveal>
+            <li key={s.num}>
+              <Reveal delay={i * 80} className="h-full">
+                <article className="qs-card h-full">
+                  <span className="qs-tag qs-num self-start">
+                    {i === GO_LIVE.length - 1 ? <span className="qs-tab__dot" aria-hidden="true" /> : null}
+                    {s.num}
+                  </span>
+                  <div className="qs-card__copy">
+                    <h3 className="qs-card__title">{s.title}</h3>
+                    <p className="qs-card__text">{s.body}</p>
+                  </div>
+                </article>
+              </Reveal>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   )
@@ -446,50 +463,58 @@ function WhatHappensNext() {
 
 function ClosingCta() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-4xl px-6 py-24 md:py-28">
-        <Reveal>
-          <h2 className="font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
+    // ponytail: CtaBand takes no className. Its 30rem title cap is ~14px short
+    // of the first sentence at 40px and split it "…night. Book / the
+    // assessment."; widened here so each sentence holds its own line.
+    // Top padding trimmed to 48px: the section above already ends on a 120px
+    // floor holding the docked pill, so cards -> pill -> mark is one ~168px step.
+    <div className="[&_.qs-cta]:pt-12 [&_.qs-cta>h2]:max-w-[40rem]">
+      <CtaBand
+        id="watch-cta"
+        title={
+          <>
             Stop quoting at nine at night.{" "}
-            <span className="text-accent">Book the assessment.</span>
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
+            <span className="block">Book the assessment.</span>
+          </>
+        }
+        lead={
+          <>
             Twenty minutes, your numbers, no obligation. If QuoteMax isn&rsquo;t
             right for your business we&rsquo;ll tell you on the call.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <PrimaryCTA href={BOOKING_HREF}>
-              Book the 20-minute assessment
-            </PrimaryCTA>
-            <SecondaryCTA href="/pricing">See pricing</SecondaryCTA>
-          </div>
-        </Reveal>
-      </div>
-    </section>
+          </>
+        }
+      >
+        <PrimaryCTA href={BOOKING_HREF}>Book the 20-minute assessment</PrimaryCTA>
+        <SecondaryCTA href="/pricing">See pricing</SecondaryCTA>
+      </CtaBand>
+    </div>
   )
 }
 
-/* ─── Persistent CTA bar ──────────────────────────────────────── */
+/* ─── Persistent CTA pill ─────────────────────────────────────── */
 // The deck wants a CTA that is always reachable from about minute twelve.
 // Rather than watch playback progress, this rides the scroll: sticky from the
-// moment the reader leaves the hero, inline once they reach the bottom.
+// moment the reader leaves the hero, settling at the end of the range, where
+// the closing CTA takes over.
+// Zero-height on purpose: the pill hangs above the sticky point, so it adds no
+// strip of its own to the layout, and the row around it is click-through.
 
 function StickyCta() {
   return (
-    <div className="sticky bottom-0 z-40 border-t border-ink-line bg-ink-deep/95 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[88rem] items-center justify-between gap-4 px-6 py-3 md:py-4">
-        <span className="text-sm font-semibold uppercase tracking-wide text-text-pri">
-          Seen enough?{" "}
-          {/* The qualifier is a nicety on a wide bar and a second wrapped line
-              on a phone, where the sticky bar was taking 17% of the viewport. */}
-          <span className="hidden font-normal normal-case text-text-sec sm:inline">
-            Twenty minutes on your numbers.
+    <div className="pointer-events-none sticky bottom-0 z-40 h-0">
+      <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex justify-center px-[var(--qs-gutter)]">
+        <div className="qs-dark pointer-events-auto flex items-center gap-4 rounded-[var(--qs-r-pill)] border border-white/15 py-1.5 pr-1.5 pl-5 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.5)]">
+          <span className="qs-small">
+            <span className="font-medium text-white">Seen enough?</span>{" "}
+            {/* The qualifier is a nicety on a wide bar and a second wrapped line
+                on a phone, where the sticky bar was taking 17% of the viewport. */}
+            <span className="hidden sm:inline">Twenty minutes on your numbers.</span>
           </span>
-        </span>
-        {/* Short label deliberately: "Book the assessment" wraps to two lines
-            inside the button at 375px and doubles the bar's height. The full
-            phrasing lives on the hero and closing CTAs. */}
-        <PrimaryCTA href={BOOKING_HREF}>Book a call</PrimaryCTA>
+          {/* Short label deliberately: "Book the assessment" wraps to two lines
+              inside the button at 375px and doubles the bar's height. The full
+              phrasing lives on the hero and closing CTAs. */}
+          <PrimaryCTA href={BOOKING_HREF}>Book a call</PrimaryCTA>
+        </div>
       </div>
     </div>
   )

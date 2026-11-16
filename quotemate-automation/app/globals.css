@@ -678,23 +678,6 @@ html {
    .text-accent overrides, further down — it has to be declared after the
    shim it overrides, since the two selectors tie on specificity.) */
 
-/* The typing indicator must retire when the quote lands. Left looping, the
-   panel claims to still be typing beside a finished quote. Collapsing the
-   grid row (1fr -> 0fr) removes it from flow with no hardcoded height, and
-   the negative margin swallows the flex gap it would otherwise leave. */
-.sms-typing-slot {
-  display: grid;
-  grid-template-rows: 1fr;
-  animation: typing-retire 420ms cubic-bezier(0.22, 1, 0.36, 1) 3760ms forwards;
-}
-@keyframes typing-retire {
-  to {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    margin-top: -0.75rem;
-  }
-}
-
 /* Typing indicator dots in the live SMS demo — the receptionist is
    "thinking" just before the quote drops. Motivated motion: it signals
    work in progress, not decoration. */

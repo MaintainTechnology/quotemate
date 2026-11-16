@@ -15,8 +15,13 @@
 // network. It takes focus when it appears so a screen-reader or keyboard user
 // is told what happened, rather than being left on a submit button whose
 // label just changed.
+//
+// Presentation: the kit's white form card on the paper band (24px radius,
+// hairline border), qs-field / qs-label / qs-input controls and the black
+// pill submit. Site-ui, not site: this is a client island.
 
-import { useRef, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { BtnInner, Chevron, btnClass } from "./site-ui"
 
 const TOPICS = [
   "General enquiry",
@@ -29,6 +34,9 @@ const TOPICS = [
 /** Mirrors MESSAGE_MIN in app/api/contact/route.ts. */
 const MESSAGE_MIN = 10
 
+const CARD =
+  "rounded-[var(--qs-r-xl)] border border-[var(--qs-line)] bg-[var(--qs-white)] p-6 sm:p-8"
+
 export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
   const [topic, setTopic] = useState<string>(TOPICS[0])
   const [company, setCompany] = useState("") // honeypot
@@ -36,6 +44,13 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
   const statusRef = useRef<HTMLDivElement>(null)
+
+  // The submit button unmounts with the form, which would drop focus to
+  // <body>; and a status region that mounts already filled often goes
+  // unannounced. Focusing the confirmation fixes both.
+  useEffect(() => {
+    if (sent) statusRef.current?.focus()
+  }, [sent])
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -86,18 +101,28 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
         role="status"
         // min-h keeps the panel roughly the height of the form it replaces,
         // so confirming does not yank the rest of the page up the viewport.
-        className="edge-lit flex min-h-[26rem] flex-col justify-center rounded-2xl border border-ink-line bg-ink-card p-8 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:p-10"
+        className={`${CARD} flex min-h-[26rem] flex-col items-center justify-center gap-4 text-center focus:outline-none`}
       >
+        {/* Yellow as a fill with an ink tick (13:1), never as text. */}
         <span
-          className="mx-auto grid h-12 w-12 place-items-center rounded-lg border border-accent/45 bg-accent/10 font-mono text-xl font-bold text-accent"
+          className="grid h-14 w-14 place-items-center rounded-full bg-[var(--qs-brand)] text-[var(--qs-brand-ink)]"
           aria-hidden="true"
         >
-          &#10003;
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
         </span>
-        <h3 className="mt-5 font-extrabold uppercase tracking-tight text-text-pri text-xl">
-          Message sent
-        </h3>
-        <p className="mx-auto mt-3 max-w-sm text-base leading-relaxed text-text-sec">
+        <h3 className="qs-h4">Message sent</h3>
+        <p className="qs-text max-w-sm">
           Thanks for getting in touch. Someone will read it and come back to you,
           usually within one business day.
         </p>
@@ -108,19 +133,19 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="edge-lit flex flex-col rounded-2xl border border-ink-line bg-ink-card p-6 md:p-8"
+      // The kit marks a focused field with an ink border + soft halo
+      // (.qs-input:focus); this drops the extra ring globals.css adds.
+      // @container: the field pairs below split on the card's own width,
+      // not the viewport's — the card is narrowest beside the copy at 1024.
+      className={`${CARD} @container flex flex-col`}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-ink-line pb-4">
-        <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
-          Send us a message
-        </span>
-        <span className="font-mono text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
-          Takes a minute
-        </span>
+      <div className="flex items-baseline justify-between gap-3 border-b border-[var(--qs-line)] pb-5">
+        <p className="qs-h5 qs-ink">Send us a message</p>
+        <p className="qs-meta">Takes a minute</p>
       </div>
 
       <div className="mt-6 grid gap-5">
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 @md:grid-cols-2">
           <Field id="cf-name" label="Your name" required>
             <input
               id="cf-name"
@@ -129,7 +154,7 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
               required
               autoComplete="name"
               maxLength={100}
-              className={INPUT}
+              className="qs-input"
               placeholder="Dave Roberts"
             />
           </Field>
@@ -141,13 +166,13 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
               required
               autoComplete="email"
               maxLength={200}
-              className={INPUT}
+              className="qs-input"
               placeholder="you@yourtrade.com.au"
             />
           </Field>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 @md:grid-cols-2">
           <Field id="cf-phone" label="Mobile" hint="Optional">
             <input
               id="cf-phone"
@@ -156,24 +181,29 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
               inputMode="tel"
               autoComplete="tel"
               maxLength={40}
-              className={INPUT}
+              className="qs-input"
               placeholder="04xx xxx xxx"
             />
           </Field>
           <Field id="cf-topic" label="What is it about?">
-            <select
-              id="cf-topic"
-              name="topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              className={INPUT}
-            >
-              {TOPICS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            {/* Native select, with the kit chevron in place of the
+                platform arrow so it matches the inputs beside it. */}
+            <div className="relative">
+              <select
+                id="cf-topic"
+                name="topic"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                className="qs-input cursor-pointer appearance-none pr-11"
+              >
+                {TOPICS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <Chevron className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--qs-ink)]" />
+            </div>
           </Field>
         </div>
 
@@ -185,7 +215,7 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
             rows={5}
             minLength={MESSAGE_MIN}
             maxLength={4000}
-            className={`${INPUT} resize-y`}
+            className="qs-input"
             placeholder="Tell us what you are after. If you are a tradie, your trade and where you work helps us answer properly."
           />
         </Field>
@@ -216,16 +246,13 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
         className="focus:outline-none"
       >
         {error ? (
-          <p className="mt-5 rounded-lg border border-danger-bright/45 bg-danger-bright/10 px-4 py-3 text-sm leading-relaxed text-text-pri">
+          <p className="mt-5 rounded-[var(--qs-r-sm)] border border-[#c2410c]/30 bg-[#c2410c]/[0.06] px-4 py-3 text-sm leading-relaxed text-[var(--qs-ink)]">
             {error}
             {fallbackEmail ? (
               <>
                 {" "}
                 You can also email us at{" "}
-                <a
-                  href={`mailto:${fallbackEmail}`}
-                  className="link-underline font-semibold"
-                >
+                <a href={`mailto:${fallbackEmail}`} className="qs-link">
                   {fallbackEmail}
                 </a>
                 .
@@ -235,25 +262,22 @@ export function ContactForm({ fallbackEmail }: { fallbackEmail?: string }) {
         ) : null}
       </div>
 
-      <div className="mt-7 flex flex-wrap items-center gap-4">
+      <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
         <button
           type="submit"
           disabled={submitting}
           aria-busy={submitting}
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-7 py-3.5 text-sm font-semibold uppercase tracking-wider text-accent-ink transition-colors hover:bg-accent-press focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-card disabled:cursor-not-allowed disabled:opacity-60"
+          className={btnClass("primary", "lg")}
         >
-          {submitting ? "Sending" : "Send message"}
+          <BtnInner arrow>{submitting ? "Sending" : "Send message"}</BtnInner>
         </button>
-        <p className="text-sm text-text-dim">
+        <p className="qs-meta">
           We use your details to answer you. Nothing else.
         </p>
       </div>
     </form>
   )
 }
-
-const INPUT =
-  "mt-2 w-full min-h-11 rounded-lg border border-ink-line bg-ink px-3.5 py-2.5 text-sm text-text-pri placeholder:text-text-dim outline-none transition-colors focus:border-accent/60 focus-visible:ring-2 focus-visible:ring-accent-soft"
 
 function Field({
   id,
@@ -267,21 +291,21 @@ function Field({
   /** Shown beside the label, e.g. "Optional". */
   hint?: string
   required?: boolean
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
-    <div>
+    <div className="qs-field">
       {/* "Required" is spelled out rather than left to a bare asterisk,
           which carries no meaning to a screen reader on its own. */}
       <label
         htmlFor={id}
-        className="flex items-baseline justify-between gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-dim"
+        className="qs-label flex items-baseline justify-between gap-2"
       >
         <span>{label}</span>
         {required ? (
-          <span className="text-text-dim/80">Required</span>
+          <span className="qs-meta font-normal">Required</span>
         ) : hint ? (
-          <span className="text-text-dim/80">{hint}</span>
+          <span className="qs-meta font-normal">{hint}</span>
         ) : null}
       </label>
       {children}

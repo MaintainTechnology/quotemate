@@ -41,7 +41,7 @@ export default function TermsPage() {
 
       <LegalSection id="service" n={2} heading="The service">
         <p>
-          {COMPANY.product} helps Australian tradespeople capture customer
+          {COMPANY.product}{' '}helps Australian tradespeople capture customer
           enquiries (by web, SMS and voice), draft quotes using the tradie&rsquo;s
           own configured pricing, send those quotes to customers, and collect
           deposits or inspection bookings.

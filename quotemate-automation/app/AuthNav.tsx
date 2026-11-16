@@ -1,14 +1,16 @@
 // Auth-aware nav buttons for the public marketing pages.
 //
-// Mounted from both the sticky top Nav and the hero CTA block on /
-// (the home page). Dual-auth (Clerk↔Supabase): a tradie may be signed
-// in via Clerk (new) or the legacy Supabase session. Signed-in tradies
-// see "Dashboard + Sign out"; everyone else sees the original "Sign in +
-// Get started" pair. While the session is being resolved we render a
-// single-pixel placeholder of the same width so the layout doesn't shift.
+// Mounted from the pill Nav (desktop row + mobile bar), the mobile menu,
+// and the hero CTA block on / (the home page). Dual-auth (Clerk↔Supabase):
+// a tradie may be signed in via Clerk (new) or the legacy Supabase session.
+// Signed-in tradies see "Dashboard + Sign out"; everyone else sees the
+// original "Sign in + Get started" pair. While the session is being
+// resolved we render a placeholder of the same height so the layout
+// doesn't shift.
 //
-// Server-rendered pages stay server-rendered — this is the only
-// island that needs hydration.
+// Server-rendered pages stay server-rendered — this is the only island
+// that needs hydration. Visuals are the Site Kit's pill buttons
+// (site-ui.tsx), so these always render inside a `.qm-site` scope.
 
 'use client'
 
@@ -17,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@clerk/nextjs'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { BtnInner, btnClass } from './_components/site-ui'
 
 type Variant = 'nav' | 'hero' | 'mobileBar'
 
@@ -89,48 +92,42 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   // height stays stable — avoids the "Sign in" flashing before the
   // dashboard buttons appear for an already-authed visitor.
   if (authed === null) {
-    return <span className={variant === 'hero' ? 'h-11 block' : 'h-11 md:h-9 block'} aria-hidden />
+    // The hero spacer is an invisible copy of the signed-out pill: a 0-wide
+    // spacer let the CTA row reflow onto two lines at 360px once it resolved.
+    if (variant === 'hero') {
+      return (
+        <span className={`${btnClass('primary', 'md')} invisible`} aria-hidden>
+          <BtnInner arrow>Get my QuoteMax</BtnInner>
+        </span>
+      )
+    }
+    return <span className={variant === 'mobileBar' ? 'block h-9' : 'block h-11'} aria-hidden />
   }
 
   if (variant === 'mobileBar') {
-    // Single compact button on the mobile nav bar (next to the hamburger),
-    // so signing in doesn't require opening the menu first. Auth-aware:
-    // signed-in tradies get "Dashboard" instead.
-    const pill =
-      'inline-flex items-center min-h-11 rounded-lg border border-ink-line px-3.5 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft'
+    // Single compact pill on the mobile nav bar (next to the burger), so
+    // signing in doesn't require opening the menu first.
     return authed ? (
-      <Link href="/dashboard" className={pill}>
-        Dashboard
+      <Link href="/dashboard" className={btnClass('secondary', 'sm')}>
+        <BtnInner>Dashboard</BtnInner>
       </Link>
     ) : (
-      <Link href="/sign-in" className={pill}>
-        Sign in
+      <Link href="/sign-in" className={btnClass('secondary', 'sm')}>
+        <BtnInner>Sign in</BtnInner>
       </Link>
     )
   }
 
   if (variant === 'hero') {
     // One primary in the hero (the page supplies the single secondary CTA).
-    // Sign-in lives in the nav. Square, focus-ringed, with an arrow that
-    // nudges forward on hover.
-    // `border border-transparent` is load-bearing: the secondary CTA beside
-    // this one is bordered, so without it the two buttons sit 2px different
-    // in height on the same row.
-    const heroPrimary =
-      'group inline-flex items-center gap-2 rounded-lg border border-transparent bg-accent hover:bg-accent-press text-white font-semibold px-7 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep'
+    // Sign-in lives in the nav.
     return authed ? (
-      <Link href="/dashboard" className={heroPrimary}>
-        Open my dashboard
-        <span className="transition-transform duration-300 group-hover:translate-x-0.5">
-          <Arrow />
-        </span>
+      <Link href="/dashboard" className={btnClass('primary', 'md')}>
+        <BtnInner arrow>Open my dashboard</BtnInner>
       </Link>
     ) : (
-      <Link href="/signup" className={heroPrimary}>
-        Get my QuoteMax
-        <span className="transition-transform duration-300 group-hover:translate-x-0.5">
-          <Arrow />
-        </span>
+      <Link href="/signup" className={btnClass('primary', 'md')}>
+        <BtnInner arrow>Get my QuoteMax</BtnInner>
       </Link>
     )
   }
@@ -138,55 +135,27 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   // Default nav variant
   return authed ? (
     <>
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-      >
-        Dashboard
-        <Arrow />
-      </Link>
       <button
         type="button"
         onClick={handleSignOut}
         disabled={signingOut}
-        className="inline-flex items-center min-h-11 md:min-h-0 px-3 py-2 text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+        aria-busy={signingOut || undefined}
+        className="qs-nav__link disabled:opacity-50"
       >
         {signingOut ? 'Signing out…' : 'Sign out'}
       </button>
+      <Link href="/dashboard" className={btnClass('primary', 'md')}>
+        <BtnInner arrow>Dashboard</BtnInner>
+      </Link>
     </>
   ) : (
     <>
-      <Link
-        href="/sign-in"
-        className="inline-flex items-center min-h-11 md:min-h-0 px-3 py-2 text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-      >
+      <Link href="/sign-in" className="qs-nav__link">
         Sign in
       </Link>
-      <Link
-        href="/signup"
-        className="inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-      >
-        Get my QuoteMax
-        <Arrow />
+      <Link href="/signup" className={btnClass('primary', 'md')}>
+        <BtnInner arrow>Get my QuoteMax</BtnInner>
       </Link>
     </>
-  )
-}
-
-function Arrow() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="square"
-      strokeLinejoin="miter"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14M13 5l7 7-7 7" />
-    </svg>
   )
 }

@@ -1,24 +1,25 @@
-// QuoteMax home — the "command-centre" design system: warm-charcoal canvas,
-// Caterpillar-yellow accent, all-caps display, rounded corners, borders over
-// shadows. Depth comes from a restrained twin glow
-// + film grain + lit panel edges (see globals.css), never from drop
-// shadows. The hero carries a live SMS-thread demo so the product shows
+// QuoteMax home — QuoteMax Site Kit (site-kit.css): Inter at weight 400, a
+// white canvas with one warm paper surface, pill controls, and a page that
+// closes on one black run (reviews → FAQ → CTA → footer). The hero's
+// browser frame carries the live SMS-intake demo, so the product shows
 // itself rather than being described twice.
 //
-// Shared chrome (Nav/Footer/MarqueeBar/CTAs) lives in _components/site so
-// it stays identical to /pricing; the pricing cards come from the shared
-// PricingTiers client island.
+// Shared chrome (Nav/Footer) comes from <SiteShell>; the pricing cards come
+// from the shared PricingTiers client island.
 
 import Link from "next/link"
 import Image from "next/image"
+import type { ReactNode } from "react"
 import AuthNav from "./AuthNav"
 import { Reveal } from "./_components/Reveal"
 import {
-  Nav,
-  Footer,
-  MarqueeBar,
-  Topography,
+  SiteShell,
+  Arrow,
   Eyebrow,
+  SectionHead,
+  BrowserFrame,
+  FaqList,
+  CtaBand,
   PrimaryCTA,
   SecondaryCTA,
 } from "./_components/site"
@@ -52,411 +53,569 @@ export const metadata = {
 
 export default function Home() {
   return (
-    <div className="marketing-canvas">
-      {/* Film grain over the whole page — fixed, non-interactive. */}
-      <div className="noise-overlay" aria-hidden="true" />
-
-      <Nav />
+    <SiteShell>
       <Hero />
-      <PoweredBy />
       <HowItWorks />
       <Trades />
       <Shift />
       <CoveredTrades />
       <Numbers />
-      {/* Proof sits between the numbers and the price: the reader has just
-          been told what it does, and is about to be told what it costs. */}
-      <Testimonials />
       <Pricing />
-      <BuiltForAustralia />
-      <AppDownload />
-      <Faq />
-      {/* Directly after the FAQ, which is where the unanswered questions are. */}
+      <Benefits />
+      {/* Before the black run: a paper band can't sit inside it. The FAQ
+          links back here for the questions it doesn't answer. */}
       <ContactSection />
+      {/* The closing black run, as in the kit: reviews → FAQ → CTA → footer. */}
+      <Testimonials />
+      <Faq />
       <ClosingCta />
-      <Footer />
-      <MarqueeBar />
       <CookieConsent />
-    </div>
+    </SiteShell>
   )
 }
 
 /* ─── Hero ────────────────────────────────────────────────────── */
 
-// Two bands, not one column with a card bolted beside it:
-//
-//   row 1   [ pitch ............. | demo ........ ]
-//   row 2   [ trade band, full width ............ ]
-//
-// The old layout put the filmstrip inside the left column, which made that
-// column ~365px taller than the demo card and left the right half of the
-// fold empty at desktop widths. Moving the strip to its own full-width row
-// leaves two columns of near-equal height, and `items-stretch` + `h-full`
-// on the demo makes them end on the same baseline at every breakpoint
-// instead of relying on the copy staying a fixed length.
+// Centred pitch, then the product in a browser frame (trade tabs, the SMS
+// thread, the drafted quote), then the logo strip — the kit's hero order.
 function Hero() {
   return (
-    <section className="hero-band relative overflow-hidden border-b border-ink-line">
-      {/* Backdrop photograph — bottom-most layer, under the topography,
-          grid and ember. Decorative only (alt=""), so it is invisible to
-          assistive tech; every photo that carries meaning on this page is
-          a real <DuotoneImage> with a written alt. `sizes` is deliberately
-          tiny: the blur destroys all detail, so a small source is
-          indistinguishable from a large one and costs a fraction. */}
-      <div
-        className="hero-photo pointer-events-none absolute inset-0 overflow-hidden"
-        aria-hidden="true"
-      >
-        <Image
-          src="/marketing/home-on-the-tools.jpg"
-          alt=""
-          fill
-          sizes="900px"
-          loading="eager"
-          className="object-cover"
-        />
-      </div>
-      <Topography />
-      {/* Command-centre field (see globals.css): an engineering grid that
-          fades downward, plus one warm ember behind the demo panel. Both
-          are token-driven, so the hero has texture on the cream canvas as
-          well as the charcoal one — the topography alone does not. */}
-      <div
-        className="hero-grid pointer-events-none absolute inset-0"
-        aria-hidden="true"
-      />
-      <div
-        className="hero-ember pointer-events-none absolute right-[-10%] top-[-15%] hidden aspect-square w-[42rem] motion-safe:animate-[ember-drift_24s_ease-in-out_infinite_alternate] lg:block"
-        aria-hidden="true"
-      />
+    <section className="qs-hero" aria-labelledby="home-hero-title">
       {/* Scroll-reveal fallback for no-JS visitors — content must never
           stay hidden behind the observer. */}
       <noscript>
         <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
       </noscript>
-      <div className="relative z-10 mx-auto grid max-w-[88rem] gap-x-10 gap-y-12 px-6 py-20 md:py-24 lg:grid-cols-[1.06fr_0.94fr] lg:gap-x-16 xl:gap-x-24">
-        {/* ── Pitch ─────────────────────────────────────────────── */}
-        <div className="flex flex-col justify-center lg:col-start-1 lg:row-start-1">
-          <div className={`mb-6 ${RISE}`}>
-            <span className="inline-flex items-center gap-2 rounded-md border border-ink-line bg-ink/60 px-3 py-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+      <div className="qs-container qs-hero__inner">
+        <div className="qs-hero__copy">
+          <div className={RISE}>
+            <Eyebrow>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/brand/au-flag.svg"
                 alt="Australia"
-                className="h-3.5 w-auto rounded-sm border border-ink-line/60"
+                className="h-3 w-auto rounded-[2px]"
               />
               Built for Australian tradies
-            </span>
+            </Eyebrow>
           </div>
 
-          {/* Three deliberate lines of near-equal length. The old markup
-              set two lines with a <br>, but each of those wrapped again in
-              the column, so the break points were accidental. Each line is
-              its own block so it also carries its own entrance delay and
-              the headline assembles top-down. `hero-display` retunes the
-              light-theme highlighter for display size (globals.css). */}
-          <h1 className="hero-display font-extrabold uppercase leading-[0.95] tracking-[-0.04em] text-[clamp(2.5rem,5.8vw,5rem)] [overflow-wrap:anywhere]">
-            <span className={`block ${RISE}`} style={{ animationDelay: "80ms" }}>
+          {/* Each phrase rises on its own beat, so the headline assembles
+              left to right; inline-block keeps it one wrapping sentence. */}
+          <h1 id="home-hero-title" className="qs-h1">
+            <span className={`inline-block ${RISE}`} style={{ animationDelay: "80ms" }}>
               Drafts your
-            </span>
-            <span
-              className={`block ${RISE}`}
-              style={{ animationDelay: "170ms" }}
-            >
-              <span className="text-accent">quote</span> before
-            </span>
-            <span
-              className={`block ${RISE}`}
-              style={{ animationDelay: "260ms" }}
-            >
-              they <span className="text-accent">hang up.</span>
+            </span>{" "}
+            <span className={`inline-block ${RISE}`} style={{ animationDelay: "170ms" }}>
+              quote before
+            </span>{" "}
+            <span className={`inline-block ${RISE}`} style={{ animationDelay: "260ms" }}>
+              they hang up.
             </span>
           </h1>
 
-          <p
-            className={`mt-7 max-w-xl text-lg leading-relaxed text-text-sec ${RISE}`}
-            style={{ animationDelay: "360ms" }}
-          >
+          <p className={`qs-lead max-w-[34rem] ${RISE}`} style={{ animationDelay: "360ms" }}>
             Customers text your QuoteMax number. QuoteMax asks the right
             questions, applies your pricing book, and drafts a clean quote in
             under a minute. You review, tweak, send.
           </p>
 
-          <div
-            className={`mt-9 flex flex-wrap items-center gap-3 ${RISE}`}
-            style={{ animationDelay: "460ms" }}
-          >
+          <div className={`qs-actions ${RISE}`} style={{ animationDelay: "460ms" }}>
             <AuthNav variant="hero" />
-            <a
-              href="#how"
-              className="inline-flex items-center gap-2 rounded-lg border border-ink-line bg-transparent px-7 py-4 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-            >
-              See how it works
-            </a>
+            <SecondaryCTA href="#how">See how it works</SecondaryCTA>
           </div>
 
-          <p
-            className={`mt-5 text-sm text-text-dim ${RISE}`}
-            style={{ animationDelay: "540ms" }}
-          >
+          <p className={`qs-meta ${RISE}`} style={{ animationDelay: "540ms" }}>
             Starter Monthly includes a 14-day free trial. Setup takes about
             three minutes.
           </p>
         </div>
 
-        {/* ── Demo ──────────────────────────────────────────────── */}
-        <div
-          className={`h-full lg:col-start-2 lg:row-start-1 ${RISE}`}
-          style={{ animationDelay: "300ms" }}
-        >
-          <SmsDemo />
+        <div className={`w-full ${RISE}`} style={{ animationDelay: "300ms" }}>
+          <BrowserFrame>
+            {/* The trade tabs link through to each trade page; the demo
+                below is an electrical job, so that tab reads as active. */}
+            <div className={`qs-tabs ${RISE}`} style={{ animationDelay: "620ms" }}>
+              <HeroTile
+                href="/trades/electrical"
+                src="/marketing/trade-electrical.jpg"
+                alt="Australian electrician in a yellow hard hat testing a switchboard with a multimeter"
+                caption="Electrical"
+                position="center 30%"
+                active
+              />
+              <HeroTile
+                href="/trades/plumbing"
+                src="/marketing/trade-plumbing-2.jpg"
+                alt="Plumber on her back under a kitchen sink, tightening the tap tailpiece with a wrench"
+                caption="Plumbing"
+              />
+              <HeroTile
+                href="/trades/solar"
+                src="/marketing/trade-solar.jpg"
+                alt="Two installers carrying a solar panel across a Colorbond roof to a half-finished array"
+                caption="Solar"
+                position="center 35%"
+              />
+            </div>
+            <SmsDemo />
+          </BrowserFrame>
         </div>
 
-        {/* ── Trade band ────────────────────────────────────────────
-            Full width under both columns. The tiles are links now: the
-            same three photos appear as clickable trade cards further down
-            the page, so an inert copy directly under the primary CTA was
-            a dead end for anyone who tried to tap one. The first tile is
-            the LCP image (preloaded); the rest lazy-load. */}
-        <div
-          className={`grid gap-2 sm:grid-cols-3 sm:gap-3 lg:col-span-2 ${RISE}`}
-          style={{ animationDelay: "620ms" }}
-        >
-          <HeroTile
-            href="/trades/electrical"
-            src="/marketing/trade-electrical.jpg"
-            alt="Australian electrician in a yellow hard hat testing a switchboard with a multimeter"
-            caption="Electrical"
-            position="center 30%"
-            priority
-          />
-          {/* Below sm the three tiles would be ~104px wide — too narrow to
-              hold their own captions, and too small to read as photographs.
-              One full-width photo carries the same signal properly; the
-              other trades are covered at length further down the page. */}
-          <HeroTile
-            href="/trades/plumbing"
-            src="/marketing/trade-plumbing-2.jpg"
-            alt="Plumber on her back under a kitchen sink, tightening the tap tailpiece with a wrench"
-            caption="Plumbing"
-            className="hidden sm:block"
-          />
-          <HeroTile
-            href="/trades/solar"
-            src="/marketing/trade-solar.jpg"
-            alt="Two installers carrying a solar panel across a Colorbond roof to a half-finished array"
-            caption="Solar"
-            position="center 35%"
-            className="hidden sm:block"
-          />
-        </div>
+        <PoweredBy />
       </div>
     </section>
   )
 }
 
-// A single tile in the hero trade band — a brand-tinted photo linking
-// through to that trade's page. The photo eases in slightly on hover
-// (transform on the frame, clipped by the link's own overflow) so the
-// tile reads as live without any layout cost.
+// One trade tab: a link with the trade's photo as a small avatar (hidden
+// on phones, where the three labels need the whole width). The arrow says
+// it leaves for the trade page; it isn't an in-place demo switch.
 function HeroTile({
   href,
   src,
   alt,
   caption,
-  priority = false,
   position,
-  className = "",
+  active = false,
 }: {
   href: string
   src: string
   alt: string
   caption: string
-  priority?: boolean
   /** object-position override so a face isn't clipped by the crop. */
   position?: string
-  /** Extra classes on the tile itself (e.g. hiding it below sm). */
-  className?: string
+  /** The trade the demo below is about. */
+  active?: boolean
 }) {
   return (
-    <Link
-      href={href}
-      className={`edge-lit group relative block overflow-hidden rounded-xl border border-ink-line transition-colors hover:border-accent/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep ${className}`}
-    >
-      <DuotoneImage
-        src={src}
-        alt={alt}
-        aspect="aspect-[16/10]"
-        sizes="(max-width: 640px) 100vw, 31vw"
-        priority={priority}
-        tone="hero"
-        position={position}
-        className="transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-safe:group-hover:scale-[1.04]"
-      />
-      <div className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-3 pb-2.5 pt-8 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white">
-        {caption}
-        <span
-          className="shrink-0 transition-transform duration-300 group-hover:translate-x-0.5"
-          aria-hidden="true"
-        >
-          &rarr;
-        </span>
-      </div>
+    <Link href={href} className="qs-tab max-sm:gap-1 max-sm:px-2" data-active={active || undefined}>
+      <span className="relative hidden size-6 shrink-0 overflow-hidden rounded-full sm:block">
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes="48px"
+          className="object-cover"
+          style={position ? { objectPosition: position } : undefined}
+        />
+      </span>
+      {caption}
+      <Arrow className="size-3.5 shrink-0 text-[var(--qs-muted)]" />
     </Link>
   )
 }
 
-/* ─── Powered-by logo marquee ─────────────────────────────────── */
-// The real stack that drafts the quotes and runs the voice agent, shown
-// as a slow ticker in each brand's own colours. Logos are real brand SVGs
-// under /public/brand — swap a file (same name) to update a mark. The
-// track holds the set twice so the `marquee` keyframe (-50%) loops
-// seamlessly; reduced-motion users see the static leading set.
+/* ─── Powered-by logo strip ───────────────────────────────────── */
+// The real stack that drafts the quotes and runs the voice agent. Logos are
+// real brand SVGs under /public/brand — swap a file (same name) to update a
+// mark. The kit renders every mark as a monochrome silhouette.
 //
-// `art` is what the SVG actually contains, and it matters: only three of
-// these marks ship with brand colour in the file. The rest are monochrome
-// glyphs that would disappear against one theme or the other, so they are
-// re-inked to the current theme instead (see --logo-mono-invert in
-// globals.css). Getting this wrong is silent — the logo just vanishes.
-//   colour = has its own brand colour, leave it alone
-//   dark   = black artwork  (fine on paper, must invert on charcoal)
-//   light  = white artwork  (fine on charcoal, must invert on paper)
-type LogoArt = "colour" | "dark" | "light"
-const POWERED_BY: {
-  name: string
-  logo: string
-  art: LogoArt
-  wordmark?: boolean
-  /** Near-black brand colour that needs lifting on the dark canvas. */
-  lift?: boolean
-}[] = [
-  { name: "Anthropic", logo: "/brand/anthropic.svg", art: "dark" },
-  { name: "Gemini", logo: "/brand/gemini.svg", art: "dark" },
-  { name: "Twilio", logo: "/brand/twilio.svg", art: "colour" },
-  {
-    name: "ElevenLabs",
-    logo: "/brand/elevenlabs.svg",
-    art: "dark",
-    wordmark: true,
-  },
-  { name: "Deepgram", logo: "/brand/deepgram.svg", art: "colour" },
-  { name: "Vapi", logo: "/brand/vapi.svg", art: "light" },
-  { name: "Voyage", logo: "/brand/voyage.svg", art: "colour", lift: true },
+// Sized optically, not by box: glyph marks share one square; the wordmark
+// sits lower so its width doesn't outweigh the row; Vapi's artwork fills
+// only ~2/3 of its square viewBox, so it scales up (transform, so the row
+// spacing still counts the 40px box).
+const LOGO_SIZE = "h-8 sm:h-10"
+const POWERED_BY: { name: string; logo: string; size?: string }[] = [
+  { name: "Anthropic", logo: "/brand/anthropic.svg" },
+  { name: "Gemini", logo: "/brand/gemini.svg" },
+  { name: "Twilio", logo: "/brand/twilio.svg" },
+  { name: "ElevenLabs", logo: "/brand/elevenlabs.svg", size: "h-5 sm:h-6" },
+  { name: "Deepgram", logo: "/brand/deepgram.svg" },
+  { name: "Vapi", logo: "/brand/vapi.svg", size: `${LOGO_SIZE} scale-150` },
+  { name: "Voyage", logo: "/brand/voyage.svg" },
 ]
 
 function PoweredBy() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-14">
-        <p className="text-center font-mono text-[0.75rem] font-semibold uppercase tracking-[0.24em] text-text-dim">
-          Powered by
-        </p>
-        <div className="mt-8 overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)]">
-          <div className="flex w-max items-center motion-safe:animate-[marquee_44s_linear_infinite] hover:[animation-play-state:paused]">
-            {[0, 1].map((copy) => (
-              <div
-                key={copy}
-                aria-hidden={copy === 1}
-                className="flex shrink-0 items-center"
-              >
-                {POWERED_BY.map((tool) => (
-                  <span
-                    key={tool.name}
-                    className="flex items-center px-8 sm:px-14"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={tool.logo}
-                      alt={tool.name}
-                      className={`w-auto ${
-                        tool.art === "dark"
-                          ? "logo-mono"
-                          : tool.art === "light"
-                            ? "logo-mono-inv"
-                            : tool.lift
-                              ? "logo-lift"
-                              : ""
-                      } ${tool.wordmark ? "h-7 sm:h-9" : "h-10 sm:h-14"}`}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </span>
-                ))}
-              </div>
-            ))}
+    <Reveal className="w-full">
+      <div className="qs-logos">
+        <p className="qs-logos__title">Powered by</p>
+        <ul className="qs-logos__row max-lg:gap-x-8 max-sm:gap-x-6">
+          {POWERED_BY.map((tool) => (
+            <li key={tool.name}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={tool.logo}
+                alt={tool.name}
+                className={`block w-auto ${tool.size ?? LOGO_SIZE}`}
+                loading="lazy"
+                decoding="async"
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Reveal>
+  )
+}
+
+/* ─── SMS demo (inside the hero browser frame) ────────────────── */
+
+// A live-example conversation on the left and the drafted quote as a small
+// workflow on the right. It plays itself once on load (each message pops
+// in on a timeline), ends on a typing indicator, then the quote lands.
+function SmsDemo() {
+  return (
+    <div className="grid gap-6 pb-6 pt-8 md:pt-12 lg:min-h-[27rem] lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:gap-12 lg:pb-0 xl:px-[5%]">
+      <div className="flex flex-col overflow-hidden rounded-[var(--qs-r-lg)] border border-[var(--qs-line)] bg-white shadow-[0_24px_48px_-30px_rgba(0,0,0,0.28)] lg:self-end lg:rounded-b-none lg:border-b-0">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--qs-line)] px-5 py-4">
+          <span className="qs-title text-[14px]">Live example · SMS intake</span>
+          <span className="qs-meta flex items-center gap-1.5 text-[13px]">
+            <span className="size-1.5 rounded-full bg-[#10b981] motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]" />
+            Online
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-4 px-4 pb-5 pt-4 sm:px-5">
+          <div className="flex items-center gap-3" aria-hidden="true">
+            <span className="h-px flex-1 bg-[var(--qs-line)]" />
+            <span className="qs-meta text-[12px]">Today · 7:42 am</span>
+            <span className="h-px flex-1 bg-[var(--qs-line)]" />
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <Bubble side="in" at={700}>
+              Hey mate, need 6 downlights in the lounge. What&rsquo;s it cost?
+            </Bubble>
+            <Bubble side="out" at={1500}>
+              All new fittings, or swapping existing? And is there roof-space
+              access?
+            </Bubble>
+            <Bubble side="in" at={2300}>
+              All new. Roof access is easy.
+            </Bubble>
+            {/* Fades out as the quote lands but keeps its height, so nothing
+                below jumps. Skipped under reduced motion, where the quote is
+                already on screen and a frozen "typing" would contradict it. */}
+            <div
+              className="motion-reduce:hidden motion-safe:animate-[fade-in_300ms_ease-out_3760ms_reverse_forwards]"
+              aria-hidden="true"
+            >
+              <TypingBubble at={3100} />
+            </div>
           </div>
         </div>
+      </div>
+
+      <QuoteFlow />
+    </div>
+  )
+}
+
+// The drafted quote as workflow nodes: drafted → three tiers → sent. Three
+// tiers, because Good/Better/Best is what the pipeline actually writes.
+// Marked "Sample" — these are illustrative numbers, not a quoted job.
+function QuoteFlow() {
+  return (
+    <div
+      className={`flex flex-col items-center lg:self-end lg:pb-12 ${RISE}`}
+      style={{ animationDelay: "3900ms" }}
+    >
+      <p className="qs-chip">
+        <span className="qs-chip__icon">
+          <Glyph name="sparkle" />
+        </span>
+        Quote drafted · under a minute
+        <span className="rounded-full bg-[var(--qs-paper)] px-2 py-0.5 text-[11px] text-[var(--qs-body)]">
+          Sample
+        </span>
+      </p>
+      <div className="w-full max-w-[28rem]">
+        <Fork cols={3} />
+        <div className="grid grid-cols-3 gap-3">
+          <QuoteTier tier="Good" price="$890" at={4150} />
+          <QuoteTier tier="Better" price="$1,140" at={4280} featured />
+          <QuoteTier tier="Best" price="$1,460" at={4410} />
+        </div>
+        <Fork cols={3} merge />
+      </div>
+      <p className={`qs-chip ${RISE}`} style={{ animationDelay: "4560ms" }}>
+        <span className="qs-chip__icon bg-[var(--qs-brand)] text-[var(--qs-brand-ink)]">
+          <Glyph name="send" />
+        </span>
+        Sent to the customer with a deposit link.
+      </p>
+    </div>
+  )
+}
+
+// One tier of the drafted sample quote. Only the recommended tier carries
+// the yellow rail — three accents in a row would turn the signal into a wash.
+function QuoteTier({
+  tier,
+  price,
+  at,
+  featured = false,
+}: {
+  tier: string
+  price: string
+  /** When this tier lands on the demo timeline (ms after load). */
+  at: number
+  featured?: boolean
+}) {
+  return (
+    <div
+      className={`relative rounded-[12px] bg-white px-2 py-3 text-center shadow-[0_2px_10px_-3px_rgba(0,0,0,0.14)] ${POP}`}
+      style={{ animationDelay: `${at}ms` }}
+    >
+      {featured ? (
+        <span
+          className="absolute inset-x-5 top-0 h-[3px] rounded-b-full bg-[var(--qs-brand)]"
+          aria-hidden="true"
+        />
+      ) : null}
+      <div
+        className={`text-[12px] ${featured ? "font-medium text-[var(--qs-ink)]" : "text-[var(--qs-muted)]"}`}
+      >
+        {tier}
+      </div>
+      <div className="qs-num mt-1 text-[20px] leading-tight tracking-[-0.04em] text-[var(--qs-ink)]">
+        {price}
+      </div>
+      <div className="mt-0.5 text-[11px] text-[var(--qs-muted)]">inc GST</div>
+    </div>
+  )
+}
+
+function Bubble({
+  side,
+  at,
+  children,
+}: {
+  side: "in" | "out"
+  /** When this message lands on the demo timeline (ms after load). */
+  at: number
+  children: ReactNode
+}) {
+  const inbound = side === "in"
+  return (
+    <div
+      className={`flex ${inbound ? "justify-start" : "justify-end"} ${POP}`}
+      style={{ animationDelay: `${at}ms` }}
+    >
+      <div
+        className={`max-w-[88%] rounded-[14px] px-3.5 py-2.5 text-[14px] leading-[1.45] text-[var(--qs-ink)] ${
+          inbound
+            ? "rounded-bl-[4px] bg-[var(--qs-paper)]"
+            : "rounded-br-[4px] border border-[var(--qs-line-strong)] bg-white"
+        }`}
+      >
+        {!inbound && (
+          <span className="mb-1 flex items-center gap-1.5 text-[12px] font-medium">
+            <span className="size-1.5 rounded-full bg-[var(--qs-brand)]" aria-hidden="true" />
+            QuoteMax
+          </span>
+        )}
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// QuoteMax "thinking" just before the quote drops — three dots bouncing in
+// sequence. Pops onto the timeline, then bounces in place.
+function TypingBubble({ at }: { at: number }) {
+  return (
+    <div className={`flex justify-end ${POP}`} style={{ animationDelay: `${at}ms` }}>
+      {/* No role="status": the slot around this is aria-hidden, and a live
+          region would announce a decorative sample on page load. */}
+      <div className="flex items-center gap-1.5 rounded-[14px] rounded-br-[4px] border border-[var(--qs-line-strong)] bg-white px-3.5 py-3">
+        {[0, 1, 2].map((d) => (
+          <span
+            key={d}
+            className="size-1.5 rounded-full bg-[#a39e96] motion-safe:animate-[typing-bounce_1.3s_ease-in-out_infinite]"
+            style={{ animationDelay: `${at + d * 160}ms` }}
+            aria-hidden="true"
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ─── How it works (process cards) ────────────────────────────── */
+
+function HowItWorks() {
+  return (
+    <section id="how" className="qs-section" aria-labelledby="home-how-title">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            eyebrow="How it works"
+            id="home-how-title"
+            title={
+              <>
+                Three steps.
+                <br />
+                You stay on the tools.
+              </>
+            }
+          />
+        </Reveal>
+
+        <div className="qs-grid qs-grid--3">
+          <Reveal className="h-full">
+            <NumberedCard
+              num="01"
+              title="Customer texts your number"
+              body="Each tradie gets a dedicated AU number. Voice or SMS, both feed QuoteMax while you stay on the tools."
+            >
+              <IntakeSketch />
+            </NumberedCard>
+          </Reveal>
+          <Reveal delay={110} className="h-full">
+            <NumberedCard
+              num="02"
+              title="QuoteMax drafts the quote"
+              body="QuoteMax asks the right questions for the job type, applies your pricing book, and writes the line items in under a minute."
+            >
+              <DraftSketch />
+            </NumberedCard>
+          </Reveal>
+          {/* Two columns between 768 and 991px (the kit's grid): the last
+              card takes the full row instead of sitting alone. */}
+          <Reveal delay={220} className="h-full md:max-[992px]:col-span-2">
+            <NumberedCard
+              num="03"
+              title="You review, send, get paid"
+              body="The quote lands in your dashboard. Approve as-is or tweak it. The customer pays a deposit and the job is booked."
+            >
+              <ReviewSketch />
+            </NumberedCard>
+          </Reveal>
+        </div>
+
+        {/* A real tradesperson at the bench — the quoting runs itself so
+            the work stays where it belongs. */}
+        <Reveal delay={120}>
+          <figure className="qs-photo-card">
+            <DuotoneImage
+              src="/marketing/trade-carpentry.jpg"
+              alt="Carpenter planing a length of timber by hand at a tidy workshop bench"
+              aspect="aspect-[4/3] sm:aspect-[16/9] lg:aspect-[21/8]"
+              sizes="(max-width: 1332px) 100vw, 1272px"
+              position="center 30%"
+            />
+            <figcaption className="qs-photo-card__body">
+              <span className="qs-photo-card__title">You stay on the tools</span>
+            </figcaption>
+          </figure>
+        </Reveal>
       </div>
     </section>
   )
 }
 
-/* ─── How it works (numbered timeline) ────────────────────────── */
-
-function HowItWorks() {
+function NumberedCard({
+  num,
+  title,
+  body,
+  children,
+}: {
+  num: string
+  title: string
+  body: string
+  /** The card's decorative UI sketch. */
+  children: ReactNode
+}) {
   return (
-    <section id="how" className="border-b border-ink-line scroll-mt-20">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>How it works</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(2rem,4vw,3.25rem)]">
-            Three steps.{" "}
-            <span className="text-accent">You stay on the tools.</span>
-          </h2>
-        </Reveal>
-
-        <div className="mt-14 grid items-stretch gap-10 lg:grid-cols-[1.4fr_1fr] lg:gap-14">
-          {/* The spine sits behind the number column and connects the steps. */}
-          <div className="relative grid gap-4">
-            <div
-              className="timeline-spine pointer-events-none absolute left-[2.1rem] top-10 bottom-10 hidden w-px md:block"
-              aria-hidden="true"
-            />
-            <Reveal>
-              <NumberedCard
-                num="01"
-                title="Customer texts your number"
-                body="Each tradie gets a dedicated AU number. Voice or SMS, both feed QuoteMax while you stay on the tools."
-              />
-            </Reveal>
-            <Reveal delay={110}>
-              <NumberedCard
-                num="02"
-                title="QuoteMax drafts the quote"
-                body="QuoteMax asks the right questions for the job type, applies your pricing book, and writes the line items in under a minute."
-              />
-            </Reveal>
-            <Reveal delay={220}>
-              <NumberedCard
-                num="03"
-                title="You review, send, get paid"
-                body="The quote lands in your dashboard. Approve as-is or tweak it. The customer pays a deposit and the job is booked."
-              />
-            </Reveal>
-          </div>
-
-          {/* A real tradesperson at the bench — the quoting runs itself so the
-              work stays where it belongs. Hidden on small screens to keep the
-              timeline the focus. */}
-          <Reveal delay={120} className="hidden h-full lg:block">
-            <figure className="edge-lit relative h-full overflow-hidden rounded-2xl border border-ink-line">
-              <DuotoneImage
-                src="/marketing/trade-carpentry.jpg"
-                alt="Carpenter planing a length of timber by hand at a tidy workshop bench"
-                aspect="aspect-[3/4] lg:aspect-auto lg:h-full"
-                sizes="(max-width: 1024px) 0px, 32vw"
-                position="center 30%"
-              />
-              <figcaption className="photo-caption absolute inset-x-0 bottom-0 p-5 pt-12">
-                <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-white">
-                  You stay on the tools
-                </span>
-              </figcaption>
-            </figure>
-          </Reveal>
-        </div>
+    <article className="qs-card h-full">
+      <span className="qs-icon-tile qs-num text-[15px]">{num}</span>
+      <div className="qs-card__copy">
+        <h3 className="qs-title">{title}</h3>
+        <p className="qs-text">{body}</p>
       </div>
-    </section>
+      <div
+        className="mt-auto flex min-h-[11.5rem] items-center justify-center pt-2"
+        aria-hidden="true"
+      >
+        {children}
+      </div>
+    </article>
+  )
+}
+
+// The three process sketches. Decorative (the card copy carries the
+// meaning), built from kit chips, and worded only from the card copy.
+function IntakeSketch() {
+  return (
+    <div className="flex w-full max-w-[16rem] flex-col items-center">
+      <div className="grid w-full grid-cols-2 gap-3">
+        <span className="qs-chip">
+          <span className="qs-chip__icon">
+            <Glyph name="phone" />
+          </span>
+          Voice
+        </span>
+        <span className="qs-chip">
+          <span className="qs-chip__icon">
+            <Glyph name="message" />
+          </span>
+          SMS
+        </span>
+      </div>
+      <Fork cols={2} merge />
+      <span className="qs-chip">
+        <span className="qs-chip__icon bg-[var(--qs-brand)] text-[var(--qs-brand-ink)]">
+          <Glyph name="mobile" />
+        </span>
+        Dedicated AU number
+      </span>
+    </div>
+  )
+}
+
+function DraftSketch() {
+  return (
+    <div className="flex flex-col items-center">
+      {["Job type", "Pricing book", "Line items"].map((step, i) => (
+        <div key={step} className="flex flex-col items-center">
+          {i > 0 ? <span className="h-5 w-px bg-[#d6d2cc]" /> : null}
+          <span className="qs-chip">
+            <span className="qs-chip__icon">
+              <Glyph name="sparkle" />
+            </span>
+            {step}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ReviewSketch() {
+  const rows: [string, boolean][] = [
+    ["Approve as-is", true],
+    ["Deposit paid", true],
+    ["Job booked", false],
+  ]
+  return (
+    <div className="w-full max-w-[17rem] rounded-[var(--qs-r-md)] bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)]">
+      <p className="flex items-center gap-2.5 border-b border-[var(--qs-line)] pb-3 text-[14px] text-[var(--qs-ink)]">
+        <span className="qs-chip__icon">
+          <Glyph name="sparkle" />
+        </span>
+        Your dashboard
+      </p>
+      <ul>
+        {rows.map(([label, done]) => (
+          <li
+            key={label}
+            className="flex items-center gap-2.5 border-b border-[var(--qs-line)] py-2.5 text-[13px] text-[var(--qs-body)] last:border-0 last:pb-0"
+          >
+            <span
+              className={`grid size-4 place-items-center rounded-full ${
+                done ? "bg-[var(--qs-ink)] text-white" : "border border-[var(--qs-line-strong)]"
+              }`}
+            >
+              {done ? <Glyph name="check" className="size-2.5" /> : null}
+            </span>
+            {label}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -496,63 +655,72 @@ const HOME_TRADE_PHOTOS: Record<
 
 function Trades() {
   return (
-    <section id="scope" className="border-b border-ink-line scroll-mt-20">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <h2 className="font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(2rem,4vw,3.25rem)]">
-            Straightforward jobs{" "}
-            <span className="text-accent">auto-quote</span>.
-            <br />
-            The tricky ones book a site visit.
-          </h2>
-        </Reveal>
-        {/* One slide per live trade. Copy comes from the same module as the
-            trade pages (app/trades/_data.ts) so the two can never disagree,
-            but the PHOTOGRAPHY is the home-page marketing set below, not
-            _data.ts's heroImage — those /trades/* shots are framed for the
-            tall hero band on each trade page and crop poorly in a wide
-            slide. Positions carry over from the panels these replaced. */}
-        <Reveal className="mt-14">
-          <TradeCarousel
-            slides={TRADE_ORDER.map((slug) => {
-              const t = TRADES[slug]
-              const photo = HOME_TRADE_PHOTOS[slug]
-              return {
-                slug: t.slug,
-                name: t.name,
-                eyebrow: t.eyebrow,
-                body: t.scopeBody,
-                image: photo.src,
-                alt: photo.alt,
-                position: photo.position,
-                tags: t.scopeTags.slice(0, 6),
-              }
-            })}
+    <section id="scope" className="qs-band qs-section" aria-labelledby="home-scope-title">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            eyebrow="Trades"
+            id="home-scope-title"
+            className="max-w-[40rem]"
+            title={
+              <>
+                Straightforward jobs auto-quote.{" "}
+                <br className="max-sm:hidden" />
+                The tricky ones book a site visit.
+              </>
+            }
           />
         </Reveal>
 
-        {/* Generic "request your trade" prompt. The workshop photo adds warmth
-            without claiming a trade we don't yet support. */}
-        <Reveal delay={180}>
-          <div className="edge-lit mt-8 grid items-stretch gap-0 overflow-hidden rounded-2xl border border-ink-line bg-ink-card md:grid-cols-[1fr_1.3fr]">
-            <DuotoneImage
-              src="/marketing/workshop.jpg"
-              alt="Tradesperson checking a finished part at a well-kept workshop bench"
-              aspect="aspect-[4/3] md:aspect-auto md:h-full"
-              sizes="(max-width: 768px) 100vw, 38vw"
-              position="center 30%"
-              className="md:border-r md:border-ink-line"
+        <div className="flex flex-col gap-4">
+          {/* One slide per live trade. Copy comes from the same module as
+              the trade pages (app/trades/_data.ts) so the two can never
+              disagree, but the PHOTOGRAPHY is the home-page marketing set
+              above, not _data.ts's heroImage — those /trades/* shots are
+              framed for the tall hero band on each trade page and crop
+              poorly in a wide slide. */}
+          <Reveal>
+            <TradeCarousel
+              slides={TRADE_ORDER.map((slug) => {
+                const t = TRADES[slug]
+                const photo = HOME_TRADE_PHOTOS[slug]
+                return {
+                  slug: t.slug,
+                  name: t.name,
+                  eyebrow: t.eyebrow,
+                  body: t.scopeBody,
+                  image: photo.src,
+                  alt: photo.alt,
+                  position: photo.position,
+                  tags: t.scopeTags.slice(0, 6),
+                }
+              })}
             />
-            <div className="flex flex-col items-start justify-center gap-5 p-6 md:p-8">
-              <p className="max-w-2xl text-base leading-relaxed text-text-sec md:text-lg">
-                Not on the list yet? Carpenters, cabinetmakers, HVAC and the
-                rest. Tell us your trade and we&rsquo;ll line you up for
-                the next pilot.
-              </p>
-              <SecondaryCTA href="/signup">Request your trade</SecondaryCTA>
+          </Reveal>
+
+          {/* Generic "request your trade" prompt. The workshop photo adds
+              warmth without claiming a trade we don't yet support. */}
+          <Reveal delay={180}>
+            <div className="grid gap-3 rounded-[var(--qs-r-xl)] border border-[var(--qs-line)] bg-white p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+              <DuotoneImage
+                src="/marketing/workshop.jpg"
+                alt="Tradesperson checking a finished part at a well-kept workshop bench"
+                aspect="aspect-[4/3] md:aspect-auto md:min-h-[16rem]"
+                sizes="(max-width: 768px) 100vw, 38vw"
+                position="center 30%"
+                className="rounded-[var(--qs-r-md)]"
+              />
+              <div className="flex flex-col items-start justify-center gap-6 px-3 pb-4 pt-2 md:p-10">
+                <p className="qs-lead max-w-[32rem]">
+                  Not on the list yet? Carpenters, cabinetmakers, HVAC and the
+                  rest. Tell us your trade and we&rsquo;ll line you up for
+                  the next pilot.
+                </p>
+                <SecondaryCTA href="/signup">Request your trade</SecondaryCTA>
+              </div>
             </div>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
       </div>
     </section>
   )
@@ -576,39 +744,34 @@ function Shift() {
     },
   ]
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <h2 className="font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(2rem,4vw,3.25rem)]">
-            The job goes to whoever quotes first.{" "}
-            <span className="text-accent">Now that&rsquo;s you.</span>
-          </h2>
+    <section className="qs-section" aria-labelledby="home-shift-title">
+      <div className="qs-container grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] lg:gap-16">
+        <Reveal className="lg:sticky lg:top-32">
+          <SectionHead
+            eyebrow="What you actually get"
+            id="home-shift-title"
+            title={<>The job goes to whoever quotes first. Now that&rsquo;s you.</>}
+          />
         </Reveal>
 
-        <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-ink-line bg-ink-line">
-          <div className="hidden grid-cols-[1fr_auto_1fr] items-center gap-6 bg-ink-deep px-6 py-4 md:grid">
-            <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-              The usual
-            </span>
+        <div className="qs-card gap-3 p-3 sm:p-4">
+          <div className="hidden grid-cols-[minmax(0,1fr)_1rem_minmax(0,1fr)] items-center gap-6 px-5 pb-1 pt-3 md:grid">
+            <span className="qs-small">The usual</span>
             <span aria-hidden="true" />
-            <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            <span className="qs-title flex items-center gap-2 text-[14px]">
+              <span className="size-1.5 rounded-full bg-[var(--qs-brand)]" aria-hidden="true" />
               With QuoteMax
             </span>
           </div>
           {rows.map((r, i) => (
             <Reveal key={r.old} delay={i * 90}>
-              <div className="grid grid-cols-1 items-center gap-4 bg-ink-card px-6 py-6 md:grid-cols-[1fr_auto_1fr] md:gap-6 md:px-6">
-                <p className="text-base leading-snug text-text-dim line-through decoration-text-dim/40 md:text-lg">
+              <div className="grid items-center gap-2 rounded-[var(--qs-r-md)] bg-white px-5 py-5 md:grid-cols-[minmax(0,1fr)_1rem_minmax(0,1fr)] md:gap-6 md:py-6">
+                <p className="qs-text line-through decoration-[#b5b0a8]">
                   <span className="sr-only">The usual: </span>
                   {r.old}
                 </p>
-                <span
-                  className="hidden shrink-0 font-mono text-accent md:block"
-                  aria-hidden="true"
-                >
-                  →
-                </span>
-                <p className="text-base font-medium leading-snug text-text-pri md:text-lg">
+                <Arrow className="hidden text-[var(--qs-muted)] md:block" />
+                <p className="qs-ink">
                   <span className="sr-only">With QuoteMax: </span>
                   {r.now}
                 </p>
@@ -618,515 +781,6 @@ function Shift() {
         </div>
       </div>
     </section>
-  )
-}
-
-/* ─── Numbers ─────────────────────────────────────────────────── */
-
-function Numbers() {
-  return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto grid max-w-[88rem] grid-cols-2 gap-x-6 gap-y-12 px-6 py-20 md:grid-cols-4">
-        <Reveal>
-          <Stat value="< 1 min" label="Per quote drafted" />
-        </Reveal>
-        <Reveal delay={90}>
-          <Stat value="24/7" label="Line always answered" />
-        </Reveal>
-        <Reveal delay={180}>
-          <Stat value="A$0" label="Cut of your jobs" />
-        </Reveal>
-        <Reveal delay={270}>
-          <Stat value="A$99" label="Locked site-visit price" />
-        </Reveal>
-      </div>
-    </section>
-  )
-}
-
-/* ─── Pricing (3-tier teaser → full /pricing page) ────────────── */
-
-function Pricing() {
-  return (
-    <section id="pricing" className="border-b border-ink-line scroll-mt-20">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>Pricing</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.9rem,3.8vw,3rem)]">
-            Costs less than{" "}
-            <span className="text-accent">one missed job.</span>
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Pick a plan and QuoteMax is quoting the same day.
-            Starter Monthly comes with a 14-day free trial. We never take a cut
-            of your jobs. The only fixed price is the A$99 site visit, credited
-            straight back to the job.
-          </p>
-        </Reveal>
-
-        <Reveal delay={120}>
-          <div className="mt-12">
-            <PricingTiers variant="home" />
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  )
-}
-
-/* ─── FAQ (two-column Q&A, no accordion) ──────────────────────── */
-
-function Faq() {
-  const items = [
-    {
-      q: "Do I lose control of my pricing?",
-      a: "No. QuoteMax only ever uses your pricing book. Every quote lands in your dashboard for you to approve or tweak before it goes out.",
-    },
-    {
-      q: "What about complex jobs?",
-      a: "Anything non-standard books an A$99 site visit instead of auto-quoting. You quote those the way you always have, with the deposit already paid.",
-    },
-    {
-      q: "Whose number is it?",
-      a: "Yours. Each tradie gets a dedicated Australian number. Customers text or call it; you stay on the tools.",
-    },
-    {
-      q: "What does it cost?",
-      a: "Plans start at A$49/mo, and the Starter Monthly plan comes with a 14-day free trial. See the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the A$99 site visit, credited back to the job.",
-    },
-    {
-      q: "Which trades are live?",
-      a: "Electrical in NSW and plumbing in QLD are piloting now. More trades are being onboarded, so tell us yours.",
-    },
-    {
-      q: "How long does setup take?",
-      a: "About three minutes. Connect your number, load your pricing book, and you're drafting quotes the same day.",
-    },
-  ]
-  return (
-    <section id="faq" className="border-b border-ink-line scroll-mt-20">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>Good questions</Eyebrow>
-          <h2 className="mt-3 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(2rem,4vw,3.25rem)]">
-            The stuff tradies <span className="text-accent">actually</span> ask.
-          </h2>
-        </Reveal>
-        <dl className="mt-14 grid gap-x-12 gap-y-10 md:grid-cols-2">
-          {items.map((it, i) => (
-            <Reveal key={it.q} delay={(i % 2) * 90}>
-              <div className="border-t border-ink-line pt-6">
-                <dt className="font-extrabold uppercase tracking-tight text-text-pri text-lg">
-                  {it.q}
-                </dt>
-                <dd className="mt-3 max-w-prose text-base leading-relaxed text-text-sec">
-                  {it.a}
-                </dd>
-              </div>
-            </Reveal>
-          ))}
-        </dl>
-      </div>
-    </section>
-  )
-}
-
-/* ─── Closing CTA ─────────────────────────────────────────────── */
-
-function ClosingCta() {
-  return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-4xl px-6 py-24 md:py-28">
-        <Reveal>
-          <h2 className="font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
-            <span className="text-accent">Both pilots</span> are live.
-            <br />
-            Your turn is next.
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Both pilots run on the same platform. Each tradie gets their own
-            number, pricing book, and QuoteMax tuned to their brand
-            voice. Setup takes about three minutes.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <PrimaryCTA href="/signup">Get my QuoteMax</PrimaryCTA>
-            <SecondaryCTA href="#how">See how it works</SecondaryCTA>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  )
-}
-
-/* ─── App download (iOS + Android · coming soon) ──────────────── */
-// An image feature band (device left, copy right). The apps aren't
-// shipped yet, so the store badges are deliberately NON-interactive and
-// clearly marked "coming soon" — no dead links, no fake store pages (see
-// /ux ethical design). The one real action is the "get notified" link
-// into signup, so a keen tradie isn't left at a dead end.
-function AppDownload() {
-  return (
-    <section id="app" className="border-b border-ink-line scroll-mt-20">
-      <div className="mx-auto grid max-w-[88rem] items-center gap-14 px-6 py-24 md:grid-cols-[0.85fr_1.15fr] md:gap-16 md:py-32">
-        <Reveal className="flex justify-center md:justify-start">
-          <AppPhone />
-        </Reveal>
-        <Reveal delay={120}>
-          <span className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-accent-soft">
-            <span
-              className="h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
-              aria-hidden="true"
-            />
-            Coming soon
-          </span>
-          <h2 className="mt-6 font-extrabold uppercase leading-[1.02] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
-            Your quoting line,{" "}
-            <span className="text-accent">in your pocket.</span>
-          </h2>
-          <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
-            Approve drafts, check your pipeline, and get paid, from the
-            ute, the roof, or the couch. The iOS and Android apps are still on
-            the workbench; we&rsquo;re building them now.
-          </p>
-
-          <div className="mt-9 flex flex-wrap gap-3">
-            <StoreBadge platform="apple" />
-            <StoreBadge platform="google" />
-          </div>
-
-          <p className="mt-5 text-sm text-text-dim">
-            Want first dibs?{" "}
-            <Link
-              href="/signup"
-              className="link-underline font-semibold text-text-pri hover:text-accent"
-            >
-              Get notified at launch &rarr;
-            </Link>
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  )
-}
-
-// A store badge in the shape users recognise (glyph + two-line label),
-// re-cut in the Maintain style: square corners, bordered ink-card, mono
-// eyebrow. It is not a link — the app isn't live — so it renders as a
-// labelled image with an explicit "Soon" tag (never colour alone).
-function StoreBadge({ platform }: { platform: "apple" | "google" }) {
-  const isApple = platform === "apple"
-  const label = isApple ? "App Store" : "Google Play"
-  const top = isApple ? "Download on the" : "Get it on"
-  return (
-    <div
-      role="img"
-      aria-label={`${label} · coming soon`}
-      className="inline-flex cursor-default select-none items-center gap-3 rounded-lg border border-ink-line bg-ink-card px-4 py-3"
-    >
-      <span className="text-text-pri" aria-hidden="true">
-        {isApple ? <AppleGlyph /> : <PlayGlyph />}
-      </span>
-      <span className="flex flex-col leading-none">
-        <span className="font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim">
-          {top}
-        </span>
-        <span className="mt-1 text-[0.95rem] font-semibold tracking-tight text-text-pri">
-          {label}
-        </span>
-      </span>
-      <span className="ml-1.5 self-start rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-accent-soft">
-        Soon
-      </span>
-    </div>
-  )
-}
-
-// A real device shot — the live QuoteMax mobile homepage composited into
-// an iPhone frame (public/marketing/app-iphone-quotemax.png; the PNG is
-// transparent outside the body, so it sits on either theme). No border,
-// no drop shadow — the frame is the device, depth comes from the single
-// accent glow behind it.
-function AppPhone() {
-  return (
-    <div className="relative">
-      <div
-        className="pointer-events-none absolute -inset-8 bg-accent/15 blur-[64px]"
-        aria-hidden="true"
-      />
-      <Image
-        src="/marketing/app-iphone-quotemax.png"
-        alt="The QuoteMax mobile site on an iPhone. Drafts your quote before they hang up"
-        width={1022}
-        height={2082}
-        sizes="(max-width: 768px) 264px, 300px"
-        className="relative z-10 h-auto w-[264px] md:w-[300px]"
-      />
-    </div>
-  )
-}
-
-function AppleGlyph() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M16.365 1.43c0 1.14-.42 2.2-1.1 2.98-.75.86-1.98 1.53-3.02 1.45-.13-1.1.42-2.26 1.06-2.98.72-.82 2.02-1.44 3.06-1.45zm4.575 15.59c-.55 1.27-.82 1.84-1.53 2.97-.99 1.57-2.39 3.52-4.12 3.53-1.54.02-1.94-.99-4.03-.98-2.09.01-2.52.99-4.06.97-1.73-.01-3.06-1.79-4.05-3.36-2.77-4.4-3.06-9.56-1.35-12.31 1.21-1.95 3.12-3.09 4.92-3.09 1.83 0 2.98 1.01 4.49 1.01 1.47 0 2.36-1.01 4.48-1.01 1.6 0 3.3.87 4.51 2.38-3.96 2.17-3.31 7.82.31 9.9z" />
-    </svg>
-  )
-}
-
-function PlayGlyph() {
-  return (
-    <svg width="20" height="22" viewBox="0 0 20 22" fill="currentColor" aria-hidden="true">
-      <path d="M1.02 1.31C.76 1.45.6 1.72.6 2.06v17.88c0 .34.16.61.42.75l.06.03L11 11.06v-.12L1.08 1.28l-.06.03z" />
-      <path d="M14.3 14.36l-3.3-3.3v-.12l3.3-3.3.08.05 3.91 2.22c1.12.63 1.12 1.67 0 2.31l-3.91 2.22-.08.02z" opacity="0.85" />
-      <path d="M14.38 14.31L11 10.94 1.02 20.69c.37.39.98.44 1.67.05l11.69-6.43" opacity="0.7" />
-      <path d="M14.38 7.59L2.69 1.16C2 .77 1.39.82 1.02 1.21L11 10.94l3.38-3.35z" opacity="0.9" />
-    </svg>
-  )
-}
-
-/* ─── SMS demo card ───────────────────────────────────────────── */
-
-// A live-example conversation rendered as plain content bubbles on the
-// canvas — deliberately NOT wrapped in a fake phone frame. It shows the
-// intake → quote path, plays itself once on load (each message pops in on
-// a timeline), ends on a typing indicator, then the drafted quote lands.
-function SmsDemo() {
-  return (
-    <div className="sms-demo flex h-full flex-col overflow-hidden rounded-2xl border border-ink-line bg-ink-card">
-      <div className="flex items-center justify-between border-b border-ink-line px-4 py-3 sm:px-5">
-        <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
-          Live example · SMS intake
-        </span>
-        {/* Green, not the warm --teal-glow: that token resolves to a muted
-            brown on paper, and a brown status dot reads as offline. */}
-        <span className="flex items-center gap-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
-          <span className="h-1.5 w-1.5 rounded-full bg-success-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]" />
-          Online
-        </span>
-      </div>
-
-      {/* justify-between, not justify-end. The panel is stretched to match
-          the pitch column, and bottom-anchoring dumped every pixel of that
-          slack into one empty band above the first bubble. Pinning a thread
-          marker to the top and the messages to the bottom turns the same
-          slack into structure — which is what a real thread looks like. */}
-      <div className="flex flex-1 flex-col justify-between gap-4 px-4 py-4 sm:px-5">
-        <div className="flex items-center gap-3" aria-hidden="true">
-          <span className="h-px flex-1 bg-ink-line" />
-          <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
-            Today · 7:42 am
-          </span>
-          <span className="h-px flex-1 bg-ink-line" />
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <Bubble side="in" at={700}>
-            Hey mate, need 6 downlights in the lounge. What&rsquo;s it cost?
-          </Bubble>
-          <Bubble side="out" at={1500}>
-            All new fittings, or swapping existing? And is there roof-space
-            access?
-          </Bubble>
-          <Bubble side="in" at={2300}>
-            All new. Roof access is easy.
-          </Bubble>
-          {/* Retires itself as the quote lands — see .sms-typing-slot. */}
-          <div className="sms-typing-slot" aria-hidden="true">
-            <div className="min-h-0 overflow-hidden">
-              <TypingBubble at={3100} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* The drafted quote. Three tiers, because Good/Better/Best is what
-          the pipeline actually writes. Marked "Sample" — these are
-          illustrative numbers, not a quoted job. */}
-      <div
-        className={`sms-demo__plate border-t border-ink-line px-4 py-4 sm:px-5 ${RISE}`}
-        style={{ animationDelay: "3900ms" }}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-accent">
-            <span className="h-3 w-0.5 shrink-0 bg-accent" aria-hidden="true" />
-            Quote drafted · under a minute
-          </span>
-          <span className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.08em] text-text-dim">
-            Sample
-          </span>
-        </div>
-        <div className="mt-3.5 grid grid-cols-3 gap-2">
-          <QuoteTier tier="Good" price="$890" at={4150} />
-          <QuoteTier tier="Better" price="$1,140" at={4280} featured />
-          <QuoteTier tier="Best" price="$1,460" at={4410} />
-        </div>
-        {/* Sentence case: the brand reserves caps for short labels, and this
-            is a sentence. All-caps here just shouted at the reader. */}
-        <p
-          className={`mt-3.5 text-[0.8125rem] leading-snug text-text-dim ${RISE}`}
-          style={{ animationDelay: "4560ms" }}
-        >
-          Sent to the customer with a deposit link.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// One tier of the drafted sample quote. Only the recommended tier carries
-// the accent — three accent prices in a row would turn the signal into a
-// wash (and, in the light theme, three highlighter underlines side by side).
-function QuoteTier({
-  tier,
-  price,
-  at,
-  featured = false,
-}: {
-  tier: string
-  price: string
-  /** When this tier lands on the demo timeline (ms after load). */
-  at: number
-  featured?: boolean
-}) {
-  return (
-    <div
-      className={`relative overflow-hidden rounded-xl border px-2 py-3 text-center ${POP} ${
-        featured
-          ? "border-accent/45 bg-accent/10"
-          : "border-ink-line bg-ink-card"
-      }`}
-      style={{ animationDelay: `${at}ms` }}
-    >
-      {featured ? (
-        <span
-          className="absolute inset-x-0 top-0 h-0.5 bg-accent"
-          aria-hidden="true"
-        />
-      ) : null}
-      <div
-        className={`font-mono text-[0.7rem] font-semibold uppercase tracking-[0.1em] ${
-          featured ? "text-text-pri" : "text-text-dim"
-        }`}
-      >
-        {tier}
-      </div>
-      {/* Every price is ink. The recommended tier is already carried by the
-          rail, the tint and the label weight — colouring the number too
-          spent the accent four times on one idea. */}
-      <div className="mt-1 font-mono text-lg font-bold tabular-nums text-text-pri">
-        {price}
-      </div>
-      <div className="mt-0.5 font-mono text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
-        inc GST
-      </div>
-    </div>
-  )
-}
-
-function Bubble({
-  side,
-  at,
-  children,
-}: {
-  side: "in" | "out"
-  /** When this message lands on the demo timeline (ms after load). */
-  at: number
-  children: React.ReactNode
-}) {
-  const inbound = side === "in"
-  return (
-    <div
-      className={`${inbound ? "flex justify-start" : "flex justify-end"} ${POP}`}
-      style={{ animationDelay: `${at}ms` }}
-    >
-      {/* The inbound fill is derived from the TEXT colour, not from a
-          surface token. bg-ink-deep is the page canvas, which on paper sits
-          within 2% of the card behind it — the customer's messages were
-          effectively invisible. A tint of the ink reads correctly on both
-          canvases without a second set of tokens. */}
-      <div
-        className={`max-w-[88%] rounded-2xl border px-3.5 py-2.5 text-sm leading-snug ${
-          inbound
-            ? "rounded-bl-md border-text-pri/10 bg-text-pri/[0.055] text-text-sec"
-            : "rounded-br-md border-accent/40 bg-accent/[0.13] text-text-pri"
-        }`}
-      >
-        {!inbound && (
-          <span className="mb-1 block font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-accent">
-            QuoteMax
-          </span>
-        )}
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// QuoteMax "thinking" just before the quote drops — three dots
-// bouncing in sequence. Pops onto the timeline, then bounces in place.
-function TypingBubble({ at }: { at: number }) {
-  return (
-    <div
-      className={`flex justify-end ${POP}`}
-      style={{ animationDelay: `${at}ms` }}
-    >
-      {/* No role="status": the slot around this is aria-hidden, and the old
-          live region announced "QuoteMax is drafting the quote" on page load
-          to every screen-reader user, for a decorative sample. */}
-      <div className="flex items-center gap-1.5 rounded-2xl rounded-br-md border border-accent/40 bg-accent/[0.13] px-3.5 py-3">
-        {[0, 1, 2].map((d) => (
-          <span
-            key={d}
-            className="h-1.5 w-1.5 rounded-full bg-accent-soft motion-safe:animate-[typing-bounce_1.3s_ease-in-out_infinite]"
-            style={{ animationDelay: `${at + d * 160}ms` }}
-            aria-hidden="true"
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/* ─── Page-specific building blocks ───────────────────────────── */
-
-function NumberedCard({
-  num,
-  title,
-  body,
-}: {
-  num: string
-  title: string
-  body: string
-}) {
-  return (
-    <article className="group card-sweep edge-lit relative overflow-hidden rounded-2xl border border-ink-line bg-ink-card p-6 transition-colors duration-300 hover:border-accent/40 hover:bg-ink md:p-10">
-      <div className="flex items-start gap-6 md:gap-10">
-        <span className="shrink-0 font-mono text-5xl font-bold leading-none text-accent/80 transition-[color,transform] duration-300 group-hover:translate-x-1 group-hover:text-accent md:text-7xl">
-          {num}
-        </span>
-        <div className="min-w-0">
-          <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-xl md:text-2xl">
-            {title}
-          </h3>
-          <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec md:text-lg">
-            {body}
-          </p>
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <div className="font-mono font-bold leading-tight tracking-tight text-accent text-[clamp(2.5rem,5vw,4.25rem)]">
-        {value}
-      </div>
-      <div className="mt-3 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
-        {label}
-      </div>
-    </div>
   )
 }
 
@@ -1162,93 +816,435 @@ const COVERED_TRADES = [
     label: "Painting",
     img: "/marketing/home-painting.jpg",
     blurb: "Repaints inside and out, measured room by room.",
+    // The photo has a thin black film border baked in (~0.7% a side),
+    // which shows on the white canvas; zoom just past it.
+    crop: "scale-[1.02]",
   },
 ]
 
 function CoveredTrades() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>Built for your trade</Eyebrow>
-          <h2 className="mt-6 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(2rem,4vw,3.25rem)]">
-            One number. <span className="text-accent">Every trade</span> you run.
-          </h2>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-text-sec">
-            QuoteMax prices each trade against its own book and conventions. See
-            how it quotes yours.
-          </p>
+    <section className="qs-band qs-section" aria-labelledby="home-covered-title">
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <div className="qs-head-row">
+            <SectionHead
+              eyebrow="Built for your trade"
+              id="home-covered-title"
+              title="One number. Every trade you run."
+            />
+            <p className="qs-text qs-head-aside">
+              QuoteMax prices each trade against its own book and conventions.
+              See how it quotes yours.
+            </p>
+          </div>
         </Reveal>
-        <div className="mt-14 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+
+        {/* ponytail: the spans assume five trades — three across, then two
+            wide (a full-width last card on tablets). */}
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           {COVERED_TRADES.map((t, i) => (
-            <Reveal key={t.href} delay={i * 90} className="h-full">
-              <Link
-                href={t.href}
-                className="edge-lit group flex h-full flex-col overflow-hidden rounded-2xl border border-ink-line bg-ink-card transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-              >
-                <DuotoneImage
-                  src={t.img}
-                  alt={`${t.label} work in Australia`}
-                  aspect="aspect-[4/5]"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 22vw"
-                />
-                <div className="flex items-start justify-between gap-3 p-5">
-                  <div>
-                    <h3 className="font-extrabold uppercase tracking-tight text-text-pri">
-                      {t.label}
-                    </h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-text-sec">
-                      {t.blurb}
-                    </p>
+            <li
+              key={t.href}
+              className={
+                i < 3 ? "lg:col-span-2" : i === 3 ? "lg:col-span-3" : "sm:col-span-2 lg:col-span-3"
+              }
+            >
+              <Reveal delay={(i % 3) * 90} className="h-full">
+                <Link href={t.href} className="qs-photo-card h-[17rem] sm:h-[22rem] lg:h-[26rem]">
+                  <Image
+                    src={t.img}
+                    alt={`${t.label} work in Australia`}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 640px"
+                    className={`object-cover ${t.crop ?? ""}`}
+                  />
+                  <div className="qs-photo-card__body">
+                    <h3 className="qs-photo-card__title">{t.label}</h3>
+                    <p className="qs-photo-card__meta">{t.blurb}</p>
                   </div>
-                  <span
-                    className="mt-1 shrink-0 font-mono text-accent transition-transform duration-300 group-hover:translate-x-0.5"
-                    aria-hidden="true"
-                  >
-                    &rarr;
-                  </span>
-                </div>
-              </Link>
-            </Reveal>
+                </Link>
+              </Reveal>
+            </li>
           ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+/* ─── Numbers ─────────────────────────────────────────────────── */
+
+// Hairline dividers between the stats once they sit in one row.
+const STAT_DIVIDER = "md:border-l md:border-[var(--qs-line-strong)] md:pl-8"
+
+function Numbers() {
+  return (
+    <div className="qs-section">
+      <div className="qs-container">
+        <div className="qs-card grid grid-cols-2 gap-y-10 md:grid-cols-4">
+          <Reveal>
+            <Stat value="< 1 min" label="Per quote drafted" />
+          </Reveal>
+          <Reveal delay={90} className={STAT_DIVIDER}>
+            <Stat value="24/7" label="Line always answered" />
+          </Reveal>
+          <Reveal delay={180} className={STAT_DIVIDER}>
+            <Stat value="A$0" label="Cut of your jobs" />
+          </Reveal>
+          <Reveal delay={270} className={STAT_DIVIDER}>
+            <Stat value="A$99" label="Locked site-visit price" />
+          </Reveal>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="qs-stat">
+      <div className="qs-stat__value text-[clamp(2.25rem,1.5rem+2.2vw,3.5rem)]">{value}</div>
+      <div className="qs-stat__label">{label}</div>
+    </div>
+  )
+}
+
+/* ─── Pricing (3-tier teaser → full /pricing page) ────────────── */
+
+function Pricing() {
+  return (
+    <section
+      id="pricing"
+      className="qs-section qs-section--flush-top"
+      aria-labelledby="home-pricing-title"
+    >
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <div className="qs-head-row">
+            <SectionHead
+              eyebrow="Pricing"
+              id="home-pricing-title"
+              title="Costs less than one missed job."
+            />
+            <p className="qs-text qs-head-aside lg:max-w-[28rem]">
+              Pick a plan and QuoteMax is quoting the same day.
+              Starter Monthly comes with a 14-day free trial. We never take a cut
+              of your jobs. The only fixed price is the A$99 site visit, credited
+              straight back to the job.
+            </p>
+          </div>
+        </Reveal>
+
+        {/* No Reveal: on a phone the block is ~1700px tall, so a 15% trigger
+            left a blank band under the heading while scrolling. */}
+        <PricingTiers variant="home" />
+      </div>
+    </section>
+  )
+}
+
+/* ─── Built in Australia + the app (benefits bento) ───────────── */
+
+function Benefits() {
+  return (
+    <div className="qs-section qs-section--flush-top">
+      <div className="qs-container qs-grid qs-grid--2">
+        <Reveal className="h-full">
+          <BuiltForAustralia />
+        </Reveal>
+        <Reveal delay={120} className="h-full">
+          <AppDownload />
+        </Reveal>
+      </div>
+    </div>
+  )
+}
+
+function BuiltForAustralia() {
+  return (
+    <section className="qs-card h-full" aria-labelledby="home-built-title">
+      <DuotoneImage
+        src="/marketing/home-crew.jpg"
+        alt="A crew of Australian tradies at the back of a work ute, sorting tools at the end of the day"
+        aspect="h-[16rem] sm:h-[22rem]"
+        sizes="(max-width: 768px) 100vw, 50vw"
+        className="rounded-[var(--qs-r-md)]"
+      />
+      <div className="flex flex-1 flex-col items-start gap-4">
+        {/* Same 32px label row as the neighbouring card's "Coming soon" tag,
+            so the two titles share a line. */}
+        <div className="flex min-h-8 items-center">
+          <Eyebrow>Built in Australia</Eyebrow>
+        </div>
+        <h2 id="home-built-title" className="qs-h3">
+          Made for the way AU tradies quote.
+        </h2>
+        <p className="qs-text max-w-md">
+          GST handled, licence details on every quote, NSW and QLD conventions
+          baked in. Built with sparkies and plumbers, for the crews
+          who&rsquo;d rather be on site than chasing paperwork at 11pm.
+        </p>
+        {/* Follows the copy rather than pinning to the card floor: on tablets
+            the next card runs ~140px longer (its store badges wrap), and a
+            pinned button left that much air above itself. */}
+        <div className="pt-2">
+          <PrimaryCTA href="/signup">Get my QuoteMax</PrimaryCTA>
         </div>
       </div>
     </section>
   )
 }
 
-/* ─── Built in Australia (image feature band) ─────────────────── */
-
-function BuiltForAustralia() {
+// The apps aren't shipped yet, so the store badges are deliberately
+// NON-interactive and clearly marked "coming soon" — no dead links, no fake
+// store pages. The one real action is the "get notified" link into signup.
+function AppDownload() {
   return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto grid max-w-[88rem] items-center gap-10 px-6 py-24 md:grid-cols-2 md:gap-16 md:py-32">
-        <Reveal>
-          <Eyebrow>Built in Australia</Eyebrow>
-          <h2 className="mt-6 font-extrabold uppercase leading-[1.02] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
-            Made for the way <span className="text-accent">AU tradies</span>{" "}
-            quote.
-          </h2>
-          <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
-            GST handled, licence details on every quote, NSW and QLD conventions
-            baked in. Built with sparkies and plumbers, for the crews
-            who&rsquo;d rather be on site than chasing paperwork at 11pm.
-          </p>
-          <div className="mt-8">
-            <PrimaryCTA href="/signup">Get my QuoteMax</PrimaryCTA>
-          </div>
-        </Reveal>
-        <Reveal delay={120}>
-          <DuotoneImage
-            src="/marketing/home-crew.jpg"
-            alt="A crew of Australian tradies at the back of a work ute, sorting tools at the end of the day"
-            aspect="aspect-[4/3]"
-            sizes="(max-width: 768px) 100vw, 50vw"
-            className="edge-lit rounded-2xl border border-ink-line"
+    <section id="app" className="qs-card h-full" aria-labelledby="home-app-title">
+      <AppPhone />
+      <div className="flex flex-1 flex-col items-start gap-4">
+        <span className="qs-tag">
+          <span
+            className="size-1.5 rounded-full bg-[var(--qs-brand)] motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
+            aria-hidden="true"
           />
+          Coming soon
+        </span>
+        <h2 id="home-app-title" className="qs-h3">
+          Your quoting line, in your pocket.
+        </h2>
+        <p className="qs-text max-w-md">
+          Approve drafts, check your pipeline, and get paid, from the
+          ute, the roof, or the couch. The iOS and Android apps are still on
+          the workbench; we&rsquo;re building them now.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <StoreBadge platform="apple" />
+          <StoreBadge platform="google" />
+        </div>
+        <p className="qs-small">
+          Want first dibs?{" "}
+          <Link href="/signup" className="qs-link">
+            Get notified at launch &rarr;
+          </Link>
+        </p>
+      </div>
+    </section>
+  )
+}
+
+// A store badge in the shape users recognise (glyph + two-line label), as a
+// black pill. It is not a link — the app isn't live — so it renders as a
+// labelled image with an explicit "Soon" tag (never colour alone).
+function StoreBadge({ platform }: { platform: "apple" | "google" }) {
+  const isApple = platform === "apple"
+  const label = isApple ? "App Store" : "Google Play"
+  const top = isApple ? "Download on the" : "Get it on"
+  return (
+    <div
+      role="img"
+      aria-label={`${label} · coming soon`}
+      className="inline-flex min-h-[52px] cursor-default select-none items-center gap-3 rounded-[var(--qs-r-pill)] bg-[var(--qs-ink)] py-2 pl-4 pr-3 text-white"
+    >
+      <span aria-hidden="true">{isApple ? <AppleGlyph /> : <PlayGlyph />}</span>
+      <span className="flex flex-col leading-none">
+        <span className="text-[11px] text-white/70">{top}</span>
+        <span className="mt-1 text-[15px] font-medium">{label}</span>
+      </span>
+      <span className="ml-1 rounded-full bg-[var(--qs-brand)] px-2 py-0.5 text-[11px] font-medium text-[var(--qs-brand-ink)]">
+        Soon
+      </span>
+    </div>
+  )
+}
+
+// A real device shot — the live QuoteMax mobile homepage composited into an
+// iPhone frame (transparent outside the body), rising from the card floor
+// over the warm glow. Re-shoot it when the hero changes, under a new file
+// name: next/image caches the optimised copy by URL for hours.
+function AppPhone() {
+  return (
+    <div className="relative flex h-[16rem] justify-center overflow-hidden rounded-[var(--qs-r-md)] bg-white sm:h-[22rem]">
+      <div
+        className="pointer-events-none absolute inset-x-[12%] bottom-[-35%] h-[70%] bg-[image:var(--qs-glow)] opacity-40 blur-[56px]"
+        aria-hidden="true"
+      />
+      <Image
+        src="/marketing/app-iphone-quotemax-v2.png"
+        alt="The QuoteMax mobile site on an iPhone. Drafts your quote before they hang up"
+        width={1022}
+        height={2082}
+        sizes="240px"
+        className="relative mt-8 h-auto w-[200px] self-start sm:mt-10 sm:w-[240px]"
+      />
+    </div>
+  )
+}
+
+function AppleGlyph() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M16.365 1.43c0 1.14-.42 2.2-1.1 2.98-.75.86-1.98 1.53-3.02 1.45-.13-1.1.42-2.26 1.06-2.98.72-.82 2.02-1.44 3.06-1.45zm4.575 15.59c-.55 1.27-.82 1.84-1.53 2.97-.99 1.57-2.39 3.52-4.12 3.53-1.54.02-1.94-.99-4.03-.98-2.09.01-2.52.99-4.06.97-1.73-.01-3.06-1.79-4.05-3.36-2.77-4.4-3.06-9.56-1.35-12.31 1.21-1.95 3.12-3.09 4.92-3.09 1.83 0 2.98 1.01 4.49 1.01 1.47 0 2.36-1.01 4.48-1.01 1.6 0 3.3.87 4.51 2.38-3.96 2.17-3.31 7.82.31 9.9z" />
+    </svg>
+  )
+}
+
+function PlayGlyph() {
+  return (
+    <svg width="20" height="22" viewBox="0 0 20 22" fill="currentColor" aria-hidden="true">
+      <path d="M1.02 1.31C.76 1.45.6 1.72.6 2.06v17.88c0 .34.16.61.42.75l.06.03L11 11.06v-.12L1.08 1.28l-.06.03z" />
+      <path d="M14.3 14.36l-3.3-3.3v-.12l3.3-3.3.08.05 3.91 2.22c1.12.63 1.12 1.67 0 2.31l-3.91 2.22-.08.02z" opacity="0.85" />
+      <path d="M14.38 14.31L11 10.94 1.02 20.69c.37.39.98.44 1.67.05l11.69-6.43" opacity="0.7" />
+      <path d="M14.38 7.59L2.69 1.16C2 .77 1.39.82 1.02 1.21L11 10.94l3.38-3.35z" opacity="0.9" />
+    </svg>
+  )
+}
+
+/* ─── FAQ (on black — the start of the closing run's FAQ → CTA) ── */
+
+function Faq() {
+  const items = [
+    {
+      q: "Do I lose control of my pricing?",
+      a: "No. QuoteMax only ever uses your pricing book. Every quote lands in your dashboard for you to approve or tweak before it goes out.",
+    },
+    {
+      q: "What about complex jobs?",
+      a: "Anything non-standard books an A$99 site visit instead of auto-quoting. You quote those the way you always have, with the deposit already paid.",
+    },
+    {
+      q: "Whose number is it?",
+      a: "Yours. Each tradie gets a dedicated Australian number. Customers text or call it; you stay on the tools.",
+    },
+    {
+      q: "What does it cost?",
+      a: "Plans start at A$49/mo, and the Starter Monthly plan comes with a 14-day free trial. See the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the A$99 site visit, credited back to the job.",
+    },
+    {
+      q: "Which trades are live?",
+      a: "Electrical in NSW and plumbing in QLD are piloting now. More trades are being onboarded, so tell us yours.",
+    },
+    {
+      q: "How long does setup take?",
+      a: "About three minutes. Connect your number, load your pricing book, and you're drafting quotes the same day.",
+    },
+  ]
+  return (
+    // Flush top and bottom: the reviews above and the CTA below each bring
+    // their own section padding, so the black run keeps one rhythm.
+    <section
+      id="faq"
+      className="qs-dark qs-section qs-section--flush-top qs-section--flush-bottom"
+      aria-labelledby="home-faq-title"
+    >
+      <div className="qs-container qs-stack">
+        <Reveal>
+          <SectionHead
+            align="center"
+            eyebrow="Good questions"
+            id="home-faq-title"
+            title="The stuff tradies actually ask."
+          />
+        </Reveal>
+        <Reveal delay={80}>
+          <FaqList items={items} />
+        </Reveal>
+        {/* The contact band sits before the black run, so the questions
+            this list doesn't answer get a way back to it. */}
+        <Reveal delay={160} className="flex justify-center">
+          <Link href="#contact" className="qs-link min-h-11">
+            Contact us
+            <Arrow />
+          </Link>
         </Reveal>
       </div>
     </section>
   )
 }
 
+/* ─── Closing CTA ─────────────────────────────────────────────── */
+
+function ClosingCta() {
+  return (
+    <CtaBand
+      id="home-cta-title"
+      title={
+        <>
+          Both pilots are live.
+          <br />
+          Your turn is next.
+        </>
+      }
+      lead="Both pilots run on the same platform. Each tradie gets their own number, pricing book, and QuoteMax tuned to their brand voice. Setup takes about three minutes."
+    >
+      <PrimaryCTA href="/signup">Get my QuoteMax</PrimaryCTA>
+      <SecondaryCTA href="#how">See how it works</SecondaryCTA>
+    </CtaBand>
+  )
+}
+
+/* ─── Glyphs for the illustration chips (lucide paths, inlined so
+       the page stays a server component with no icon runtime) ───── */
+
+const GLYPHS = {
+  sparkle:
+    "M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z",
+  phone:
+    "M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384",
+  message:
+    "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z",
+  mobile: "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM12 18h.01",
+  send: "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11zM21.854 2.147l-10.94 10.939",
+  check: "M20 6 9 17l-5-5",
+}
+
+function Glyph({
+  name,
+  className = "size-3.5",
+}: {
+  name: keyof typeof GLYPHS
+  className?: string
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={name === "sparkle" ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d={GLYPHS[name]} />
+    </svg>
+  )
+}
+
+// Thin wires between illustration nodes: one stem that forks out to (or,
+// with `merge`, gathers in from) the centres of a `cols`-column grid with
+// the 12px gap used above. Rounded corners, like the kit's workflow lines.
+function Fork({ cols, merge = false }: { cols: 2 | 3; merge?: boolean }) {
+  const span =
+    cols === 3
+      ? "inset-x-[calc((100%_-_1.5rem)/6)]"
+      : "inset-x-[calc((100%_-_0.75rem)/4)]"
+  return (
+    <div className="relative h-8 w-full" aria-hidden="true">
+      <span
+        className={`absolute left-1/2 h-1/2 w-px bg-[#d6d2cc] ${merge ? "bottom-0" : "top-0"}`}
+      />
+      <span
+        className={`absolute h-1/2 border-[#d6d2cc] ${span} ${
+          merge ? "top-0 rounded-b-[10px] border-x border-b" : "bottom-0 rounded-t-[10px] border-x border-t"
+        }`}
+      />
+      {cols === 3 ? (
+        <span
+          className={`absolute left-1/2 h-1/2 w-px bg-[#d6d2cc] ${merge ? "top-0" : "bottom-0"}`}
+        />
+      ) : null}
+    </div>
+  )
+}

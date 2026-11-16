@@ -3,55 +3,46 @@
 // not-found boundary). Server Component; Next returns a 404 status and
 // auto-injects <meta name="robots" content="noindex">.
 //
-// Maintain design system: deep navy canvas, drifting topography, oversized
-// mono "404", and the shared Nav/Footer so a lost visitor still has the full
-// site around them.
+// QuoteMax Site Kit: a centred hero on the white canvas — an oversized
+// "404" over a soft warm glow — inside the shared shell, so a lost visitor
+// still has the full site (nav + footer) around them.
 
 import Link from 'next/link'
-import { Nav, Footer, Topography, PrimaryCTA, SecondaryCTA } from './_components/site'
+import { SiteShell, Eyebrow, PrimaryCTA, SecondaryCTA } from './_components/site'
 
 export default function NotFound() {
   return (
-    <div className="marketing-canvas flex min-h-screen flex-col">
-      <div className="noise-overlay" aria-hidden="true" />
-      <Nav />
-
-      <main className="relative flex flex-1 items-center justify-center overflow-hidden px-6 py-20">
-        <div className="pointer-events-none absolute inset-0 opacity-60">
-          <Topography />
-        </div>
-
-        <div className="relative mx-auto max-w-2xl text-center">
-          <div className="font-mono text-[clamp(5rem,22vw,12rem)] font-bold leading-none tracking-[-0.04em] text-accent">
-            404
+    <SiteShell>
+      <section className="qs-page-hero overflow-hidden">
+        <div className="qs-container qs-page-hero__center">
+          <Eyebrow>Error 404</Eyebrow>
+          <div className="relative" aria-hidden="true">
+            <div className="absolute inset-x-[-20%] bottom-[8%] h-[38%] bg-[image:var(--qs-glow)] opacity-60 blur-[48px]" />
+            <p className="qs-num relative text-[clamp(6rem,24vw,13rem)] leading-[0.9] tracking-[-0.075em] text-[var(--qs-ink)]">
+              404
+            </p>
           </div>
-          <h1 className="mt-4 font-extrabold uppercase text-[clamp(1.75rem,5vw,2.75rem)] leading-[1.04] tracking-[-0.035em] text-text-pri">
-            This page went off the grid
-          </h1>
-          <p className="mx-auto mt-5 max-w-md text-text-sec leading-relaxed">
+          <h1 className="qs-h1">This page went off the grid</h1>
+          <p className="qs-lead max-w-md">
             The link may be broken or the page may have moved. Let&rsquo;s get you
             back to somewhere useful.
           </p>
-
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <div className="qs-actions">
             <PrimaryCTA href="/">Back to home</PrimaryCTA>
             <SecondaryCTA href="/dashboard">Go to dashboard</SecondaryCTA>
           </div>
-
-          <p className="mt-8 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+          <p className="qs-meta mt-4">
             Need a hand?{' '}
-            <Link href="/pricing" className="link-underline text-text-sec hover:text-text-pri">
+            <Link href="/pricing" className="qs-link">
               See plans
             </Link>{' '}
             ·{' '}
-            <Link href="/signin" className="link-underline text-text-sec hover:text-text-pri">
+            <Link href="/signin" className="qs-link">
               Sign in
             </Link>
           </p>
         </div>
-      </main>
-
-      <Footer />
-    </div>
+      </section>
+    </SiteShell>
   )
 }

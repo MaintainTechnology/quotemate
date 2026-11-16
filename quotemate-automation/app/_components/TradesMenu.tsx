@@ -1,14 +1,18 @@
 "use client"
 
-// Accessible "Trades" dropdown for the desktop nav. Opens on hover and on
-// click/keyboard; closes on Escape, outside-click, or selection. Built as a
-// small client island so the rest of the Nav stays a server component.
-// Theme-aware via the Maintain tokens (matches the nav surface in light or
-// dark). On mobile the nav links are hidden, so the same routes also live
-// in the footer.
+// Accessible "Trades" dropdown for the desktop pill nav. Opens on hover and
+// on click/keyboard; closes on Escape, outside-click, or selection. A small
+// client island so the rest of the Nav stays a server component. On mobile
+// the same routes live in MobileNav and the footer.
+//
+// The panel scales in from its trigger (transform-origin: top centre) and
+// leaves the way it came — the dropdown is anchored to the button that
+// opened it. Styling: .qs-menu* in site-kit.css.
 
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { useEffect, useId, useRef, useState } from "react"
+import { Chevron } from "./site-ui"
 
 const TRADE_LINKS = [
   { href: "/trades/electrical", label: "Electrical", region: "NSW" },
@@ -22,6 +26,7 @@ export function TradesMenu() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const menuId = useId()
+  const onTradePage = usePathname().startsWith("/trades")
 
   useEffect(() => {
     if (!open) return
@@ -51,47 +56,26 @@ export function TradesMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
+        data-active={onTradePage ? "true" : undefined}
         onClick={() => setOpen((o) => !o)}
-        className="link-underline inline-flex items-center gap-1 pb-0.5 hover:text-text-pri"
+        className="qs-nav__link"
       >
         Trades
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          aria-hidden="true"
-          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-        >
-          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <Chevron className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
       </button>
 
-      <div
-        id={menuId}
-        role="menu"
-        aria-label="Trades"
-        className={`absolute left-1/2 top-full z-50 -translate-x-1/2 pt-3 transition-opacity duration-150 ${
-          open ? "visible opacity-100" : "invisible opacity-0"
-        }`}
-      >
-        <div className="min-w-[230px] rounded-xl border border-ink-line bg-ink-deep/95 p-2 backdrop-blur-md">
+      <div id={menuId} role="menu" aria-label="Trades" className="qs-menu" data-open={open}>
+        <div className="qs-menu__panel">
           {TRADE_LINKS.map((t) => (
             <Link
               key={t.href}
               href={t.href}
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center justify-between gap-6 rounded-lg px-3 py-2.5 text-sm text-text-sec transition-colors hover:bg-ink-card hover:text-text-pri focus:bg-ink-card focus:text-text-pri focus:outline-none"
+              className="qs-menu__item"
             >
-              <span className="font-medium">{t.label}</span>
-              {t.region && (
-                <span className="font-mono text-[0.75rem] uppercase tracking-[0.1em] text-text-dim">
-                  {t.region}
-                </span>
-              )}
+              <span>{t.label}</span>
+              {t.region ? <span className="qs-menu__tag">{t.region}</span> : null}
             </Link>
           ))}
         </div>
