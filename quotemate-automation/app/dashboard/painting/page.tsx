@@ -304,11 +304,11 @@ function PaintingEstimatePageInner() {
   }, [token, address, postcode, stateCode])
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
+    <main className="min-h-screen bg-(--qd-canvas) text-text-pri">
       <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 pb-8 sm:px-10 md:pt-20">
         <Breadcrumb />
         <div className="mt-8 grid gap-10 md:grid-cols-[1.5fr_1fr] md:items-end md:gap-16">
-          <h1 className="font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)]">
+          <h1 className="font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)]">
             Paint <span className="text-accent">estimate</span>
           </h1>
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">

@@ -177,7 +177,7 @@ export default function QuoteReportViewerClient(props: {
   const htmlSrc = htmlUrl ? `${htmlUrl}${htmlUrl.includes('?') ? '&' : '?'}v=${reloadKey}` : null
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
+    <main className="min-h-screen bg-(--qd-canvas) text-text-pri">
       {/* ─── Toolbar (modelled on the report-viewer reference) ─── */}
       {/* top-11: sticks below the layout's h-11 dashboard bar. */}
       <div className="sticky top-11 z-30 border-b border-ink-line bg-ink-deep/95 backdrop-blur-sm">

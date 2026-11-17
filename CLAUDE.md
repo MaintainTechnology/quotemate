@@ -211,8 +211,11 @@ Design sources of truth for any UI/frontend work (initialized 2026-07-06 via `/i
 - **[PRODUCT.md](PRODUCT.md)** — strategic design context: register (`brand` default; tradie `/dashboard`+`/admin` is a secondary `product` register), users, purpose, brand personality, anti-references, principles, accessibility. Wins on strategy/voice.
 - **[DESIGN.md](DESIGN.md)** + **`.impeccable/design.json`** — the visual system: palette, type, elevation, components, do's/don'ts. Wins on visual decisions.
 - **[redesign/DesignSystem/](redesign/DesignSystem/)** — the canonical, fuller QuoteMax design system (tokens, foundations, React primitives, UI kits). The `quotemax-design` skill (`redesign/DesignSystem/SKILL.md`) is user-invocable.
-- **North Star:** "The Command Centre" — warm-charcoal canvas `#16120F`, one accent (Caterpillar yellow `#FFC400`), Manrope + JetBrains Mono, square corners, borders/lit-edges/grain over shadows, Australian English, zero emoji.
-- ⚠ **Retired identity:** the old navy `#0E1622` + orange `#FF5A1F` "Maintain" palette and the vendored `.claude/skills/maintain-design-system/` skill are **deprecated** — do not reintroduce. Yellow + charcoal is canonical.
+- **Two design languages, scoped by surface** (DESIGN.md opens with the table):
+  - **Marketing** (`/`, `/pricing`, `/trades/*`, `/legal/*`, `/watch`, 404) and the **tradie dashboard** (`/dashboard/**`) use the **Atomos kits**, reverse-engineered from atomos99.webflow.io: Inter, white canvas + `#f5f3f1` paper, hairline borders, black primary pills, 24px cards, yellow `#FFC400` as a *fill* only. Marketing = `app/_components/site-kit.css` (`.qm-site`, `qs-*`); dashboard = `app/dashboard/dash-kit.css` (`.qm-dash`, `qd-*`). DESIGN.md §7.
+  - ⚠ Inside `.qm-dash` the `--accent` token means **ink** (black/white), not yellow — that is how the ~550 existing `text-accent` / `border-accent` utilities stay legible on white. Yellow is `--qd-brand`. Don't "fix" accent back to yellow there.
+  - **Everything else** (customer quote pages `/q/*`, booking, onboarding, sign-in, admin) keeps **"The Command Centre"** — warm-charcoal canvas `#16120F`, one accent (Caterpillar yellow `#FFC400`), Manrope + JetBrains Mono, borders/lit-edges/grain over shadows. Australian English and zero emoji apply everywhere.
+- ⚠ **Retired identity:** the old navy `#0E1622` + orange `#FF5A1F` "Maintain" palette and the vendored `.claude/skills/maintain-design-system/` skill are **deprecated** — do not reintroduce. Caterpillar yellow is the one brand colour on every surface (with charcoal on the Command Centre, with ink/white on the Atomos kits).
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

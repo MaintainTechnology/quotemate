@@ -218,13 +218,20 @@
   --viz-6: #C3B8AC;   /* bone                                           */
   --viz-7: #A8785F;   /* clay                                           */
   --viz-8: #E8B4A0;   /* blush                                          */
+}
 
-  /* ─── DASHBOARD CORNER RADII ─────────────────────────────────────
-     The tradie dashboard surface adopts the soft rounded corners of the
-     QuoteMax dashboard reference (the broader brand system is square-
-     cornered; the product cockpit is deliberately friendlier). Cards
-     round to 14px + lit edge; controls/nav/inputs to 9px. Exposed as
-     `rounded-card` / `rounded-ctl` Tailwind utilities. */
+/* ─── DASHBOARD CORNER RADII ─────────────────────────────────────────
+   Exposed as `rounded-card` / `rounded-ctl` Tailwind utilities. Cards
+   round to 14px; controls/nav/inputs to 9px.
+
+   Deliberately a plain `@theme`, NOT `@theme inline`: inline bakes the
+   literal into each utility (`border-radius: 14px`), while a plain theme
+   variable compiles to `border-radius: var(--radius-card)`. The values
+   here are unchanged everywhere, but the dashboard kit
+   (app/dashboard/dash-kit.css) can now re-point both tokens inside
+   `.qm-dash` — 24px cards, 16px nested, pill buttons — without touching
+   the ~550 call sites. */
+@theme {
   --radius-card: 14px;
   --radius-ctl: 9px;
 }

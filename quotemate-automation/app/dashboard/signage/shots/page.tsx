@@ -106,7 +106,7 @@ export default function SignageShotsPage() {
   }, [token, shots, brandSlug])
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+    <main className="relative min-h-screen overflow-hidden bg-(--qd-canvas) text-text-pri">
       <TopoBackdrop />
 
       <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 sm:px-10 md:pt-16">
@@ -119,7 +119,7 @@ export default function SignageShotsPage() {
             ]}
           />
         </div>
-        <h1 className={`mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)] ${REVEAL}`} style={delay(60)}>
+        <h1 className={`mt-6 font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)] ${REVEAL}`} style={delay(60)}>
           Photo <span className="text-accent">shots</span>
         </h1>
         <p className={`mt-4 max-w-2xl text-base leading-relaxed text-text-sec ${REVEAL}`} style={delay(120)}>

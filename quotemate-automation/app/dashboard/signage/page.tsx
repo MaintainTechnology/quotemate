@@ -202,7 +202,7 @@ function SignageHubPageInner() {
   )
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+    <main className="relative min-h-screen overflow-hidden bg-(--qd-canvas) text-text-pri">
       <TopoBackdrop />
 
       {/* ── Header ── */}
@@ -212,7 +212,7 @@ function SignageHubPageInner() {
         </div>
         <div className="mt-8 grid gap-8 md:grid-cols-[1.5fr_1fr] md:items-end md:gap-16">
           <h1
-            className={`font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)] ${REVEAL}`}
+            className={`font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)] ${REVEAL}`}
             style={delay(60)}
           >
             Signage <span className="text-accent">compliance</span>
@@ -391,7 +391,7 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
             Sweep · {sweep.required_shots.length} shot{sweep.required_shots.length === 1 ? '' : 's'}
             {created && <span className="text-text-dim"> · {created}</span>}
           </div>
-          <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{sweep.name}</h3>
+          <h3 className="mt-1.5 font-medium tracking-[-0.02em] text-xl text-text-pri">{sweep.name}</h3>
         </div>
         <div className="flex items-center gap-3">
           <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">

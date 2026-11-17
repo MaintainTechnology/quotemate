@@ -107,7 +107,7 @@ function Run({ id, first }: { id: string; first: Tab }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-accent">{run.job_ref ?? 'Plan takeoff'}</div>
-            <h1 className="mt-2 text-2xl font-extrabold uppercase tracking-[-0.02em] text-text-pri">{run.site_address}</h1>
+            <h1 className="mt-2 text-2xl font-medium tracking-[-0.02em] text-text-pri">{run.site_address}</h1>
             {run.job_name ? <p className="mt-1 text-text-sec">{run.job_name}</p> : null}
           </div>
           <Chip chip={statusChip(run.status)} />

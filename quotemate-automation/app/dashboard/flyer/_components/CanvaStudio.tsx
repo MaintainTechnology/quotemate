@@ -205,7 +205,7 @@ export default function CanvaStudio({
           &larr; Back to flyers
         </button>
         <span className={chip}>Canva · Flyer Studio</span>
-        <h2 className="mt-2 text-2xl font-extrabold uppercase leading-none tracking-[-0.02em] text-text-pri sm:text-3xl">
+        <h2 className="mt-2 text-2xl font-normal leading-[1.1] tracking-[-0.02em] text-text-pri sm:text-3xl">
           Design with <span className="text-accent">Canva</span>
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">

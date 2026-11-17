@@ -202,7 +202,7 @@ export default function CrmPage() {
   const campaign = status?.campaign ?? null
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+    <main className="relative min-h-screen overflow-hidden bg-(--qd-canvas) text-text-pri">
       {/* atmosphere — faint orange glow + hairline grid */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div
@@ -246,7 +246,7 @@ export default function CrmPage() {
               </span>
             )}
           </div>
-          <h1 className="mt-4 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,5vw,3.4rem)]">
+          <h1 className="mt-4 font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2rem,5vw,3.4rem)]">
             {isConnected ? (
               <>Your <span className="text-accent">lead engine</span>.</>
             ) : (
@@ -367,7 +367,7 @@ export default function CrmPage() {
                   <div className="mt-6 grid gap-6 md:grid-cols-[1fr_auto]">
                     <div>
                       <p className="text-lg leading-snug">
-                        <span className="font-mono text-4xl font-bold text-accent">{preview.recipient_count}</span>
+                        <span className="text-4xl font-normal tracking-[-0.045em] text-accent">{preview.recipient_count}</span>
                         <br />
                         recipient(s) will receive the announcement.
                       </p>
@@ -522,9 +522,9 @@ function Section({ num, title, blurb, children }: { num: string; title: string; 
   return (
     <section className="mt-14">
       <div className="flex items-start gap-5 md:gap-7">
-        <span className="shrink-0 font-mono text-5xl font-bold leading-none text-accent md:text-6xl">{num}</span>
+        <span className="shrink-0 text-5xl font-normal leading-none tracking-[-0.045em] text-accent md:text-6xl">{num}</span>
         <div className="pt-1">
-          <h2 className="font-extrabold uppercase leading-none tracking-[-0.02em] text-2xl md:text-[1.7rem]">{title}</h2>
+          <h2 className="font-medium leading-[1.1] tracking-[-0.02em] text-2xl md:text-[1.7rem]">{title}</h2>
           <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-text-sec">{blurb}</p>
         </div>
       </div>

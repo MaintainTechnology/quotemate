@@ -36,7 +36,7 @@ function TakeoffsList() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-accent">Roofing · Plan takeoffs</div>
-          <h1 className="mt-2 text-3xl font-extrabold uppercase tracking-[-0.02em] text-text-pri">Takeoffs</h1>
+          <h1 className="mt-2 text-3xl font-normal tracking-[-0.02em] text-text-pri">Takeoffs</h1>
         </div>
         <Link href="/dashboard/roofing/takeoffs/new" className={PRIMARY}>
           New takeoff

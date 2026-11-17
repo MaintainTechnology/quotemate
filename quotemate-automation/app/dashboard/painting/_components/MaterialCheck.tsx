@@ -69,7 +69,7 @@ export function MaterialCheck({ token, address, postcode, state, yearBuilt }: Pr
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
             <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">Exterior wall material</div>
-            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">What are the walls made of?</h3>
+            <h3 className="mt-2 font-medium tracking-[-0.02em] text-xl text-text-pri">What are the walls made of?</h3>
           </div>
           <button
             type="button"

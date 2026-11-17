@@ -300,7 +300,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">Paint rates</div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">Tune the painting pricing engine</h3>
+          <h3 className="mt-2 font-medium tracking-tight text-xl text-text-pri sm:text-2xl">Tune the painting pricing engine</h3>
           <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
             Override the defaults the painting estimator uses. Blank fields fall back to the
             default. New estimates use the updated rates instantly.

@@ -515,7 +515,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-extrabold uppercase tracking-[-0.02em] text-lg text-text-pri">
+                      <div className="font-medium tracking-[-0.02em] text-lg text-text-pri">
                         {e.customerName || 'Customer'}
                       </div>
                       {e.address && (

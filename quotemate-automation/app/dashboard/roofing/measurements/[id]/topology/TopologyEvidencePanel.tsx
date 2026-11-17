@@ -102,7 +102,7 @@ export function TopologyEvidencePanel({ structures, gate, disclaimer }: Props) {
           <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">
             Roof topology evidence · synthetic benchmark
           </div>
-          <h2 id="topology-evidence-title" className="mt-2 font-extrabold uppercase tracking-[-0.03em] text-2xl text-text-pri sm:text-3xl">
+          <h2 id="topology-evidence-title" className="mt-2 font-normal tracking-[-0.03em] text-2xl text-text-pri sm:text-3xl">
             Review <span className="text-accent">candidate runs</span>
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-text-sec">{disclaimer}</p>

@@ -120,6 +120,16 @@ components:
 
 # Design System: QuoteMax
 
+> **Scope — which system styles which surface (2026-11).** QuoteMax now runs two design languages side by side. Check the surface before applying any rule in this file.
+>
+> | Surface | System | Source |
+> |---|---|---|
+> | Marketing — `/`, `/pricing`, `/trades/*`, `/legal/*`, `/watch`, 404 | **Atomos Site Kit** | `quotemate-automation/app/_components/site-kit.css` (+ `site-ui.tsx`) |
+> | Tradie dashboard — `/dashboard` and every `/dashboard/*` route | **Atomos Dashboard Kit** | `quotemate-automation/app/dashboard/dash-kit.css` (scoped to `.qm-dash`) |
+> | Everything else — customer quote pages (`/q/*`), booking, onboarding, sign-in, admin | **The Command Centre** (sections 1–6 below) | `app/globals.css` tokens, `.qm-quote` |
+>
+> Both kits are reverse-engineered from the atomos99.webflow.io design kit and are documented in **section 7**. Sections 1–6, including the Do's and Don'ts (no pill buttons, no gradients, no glass), describe the Command Centre surfaces only. The kits deliberately use pill buttons, a translucent floating nav and one warm glow per view.
+
 ## 1. Overview
 
 **Creative North Star: "The Command Centre"**
@@ -285,3 +295,55 @@ The live intake demo: dark bubbles with a 3-dot typing bounce and pop-in arrival
 - **Don't** raise `--hero-photo-opacity` without re-measuring worst-case text contrast; the current values are a measured ceiling, not a taste call.
 - **Don't** use exclamation marks or em-dashes in customer-visible copy; use a full stop, a comma, or a middot (`·`).
 - **Don't** center display headlines, and never use a cool-grey or blue-black canvas.
+
+## 7. The Atomos kits — marketing + dashboard
+
+Two scoped stylesheets reverse-engineered from the atomos99.webflow.io design kit (its published style guide: Inter, neutral-01 `#fff`, neutral-02 `#f5f3f1`, neutral-03 `#6d6962`, neutral-04 black, border `#efedec`, radii 8/12/16/20/24/100px). The marketing **Site Kit** (`site-kit.css`, scope `.qm-site`, classes `qs-*`) and the **Dashboard Kit** (`dash-kit.css`, scope `.qm-dash`, classes `qd-*`) share one palette and one type face (`app/fonts/inter.ts`, variable `--font-qs`) so the product reads as one brand from the landing page into the cockpit.
+
+**North Star: "The Quiet Workbench."** A white canvas, one warm paper surface, hairline borders, black as the primary colour and Caterpillar yellow as a *fill* that marks the moment that matters. Big numbers at regular weight, sentence-case headings, pill actions. Calm enough to work in all day; the brand shows in the details, not the volume.
+
+### Palette (light, default)
+| Role | Token | Value |
+|---|---|---|
+| Canvas | `--qd-canvas` | `#ffffff` |
+| Paper (the one warm surface; recessed areas, hover, active nav) | `--qd-paper` | `#f5f3f1` |
+| Hairline | `--qd-line` | `#efedec` |
+| Control border | `--qd-line-strong` | `#e4e4e4` |
+| Field border (3.4:1, WCAG 1.4.11) | `--qd-field-line` | `#8f8a82` |
+| Body copy (5.3:1) | `--qd-body` | `#6d6962` |
+| Meta text (5.1:1) | `--qd-muted` | `#726e68` |
+| Ink — headings, primary fills, focus | `--qd-ink` | `#000000` |
+| Brand fill | `--qd-brand` | `#ffc400` (text on it `--qd-brand-ink` `#1c1812`) |
+
+**Dark theme** is the reference's own dark zone: canvas `#0a0a0a`, panels `#1a1a1a`, hairline `#2a2a2a`, white ink, `#a6a6a6` body. Primary pills turn white; yellow is still the fill.
+
+### The accent split (Dashboard Kit)
+Inside `.qm-dash` the legacy `--accent` token means **ink** (black in light, white in dark): lines, accent text, focus rings, selected states, primary fills. Yellow moved to `--qd-brand`. This is what lets ~550 existing `text-accent` / `border-accent` / `hover:text-accent` / `focus:border-accent` utilities render legibly on white without editing them. `--accent-ink` keeps its meaning: text *on* an accent fill (white on black, black on white).
+
+### Type
+- Inter for every role. The kit re-points `--font-manrope` and `--font-jetbrains-mono` to Inter inside `.qm-dash`; numbers keep column alignment with `tabular-nums`, not a monospace face.
+- Weight diet: Tailwind's `--font-weight-*` scale steps one notch lighter inside the dashboard (semibold → 500, bold/extrabold → 600). Page titles and big figures are 400.
+- Headings are sentence case with tracking that tightens as size grows (`qd-title` −0.04em). The small uppercase label is the reference's eyebrow voice and stays (11–12px, 500, +0.06–0.08em).
+
+### Shape
+- Cards 24px (`--radius-card`), nested cards step down to 16px automatically.
+- Fields and small controls 12px (`--radius-ctl`); buttons and button-shaped links resolve `--radius-ctl` to 24px, which renders a full pill at standard heights and soft corners on tall buttons.
+
+### Components (`qd-*`)
+- **Floating pill nav** (`qd-topbar-wrap` / `qd-topbar`): translucent, blurred material on a pseudo-element, content scrolls under it, a soft shadow grows in with scroll.
+- **Buttons**: `qd-btn` (black pill → yellow on hover), `qd-btn--light` (white pill → black on hover). Every existing `bg-accent` button inherits the same behaviour; selected tabs and pressed toggles do not flash yellow.
+- **Eyebrow** (`qd-eyebrow`): two slanted bars + uppercase label. Every page header is eyebrow (the sidebar band) → `qd-title` → `qd-lead`.
+- **Sidebar rail** (`qd-rail`, `qd-nav-item`): paper pill for hover/current page, a yellow dot marks the current page.
+- **Tabs** (`qd-tabs`, `qd-tab`): paper track, raised white chip for the selected item (`aria-selected`, `aria-pressed`, `aria-current`).
+- **Chips** (`qd-chip`, `qd-chipbar`): the mobile tab strip; the current tab is the ink chip.
+- **Hero** (`qd-hero` + `qd-glow`): the reference's widget wash with the orange→lime glow at the floor. Once per view (Overview's headline figure).
+- **Count** (`qd-count`), **avatar** (`qd-avatar`, round yellow disc), **popover** (`qd-pop`), **quiet link** (`qd-link`).
+
+### Rules for new dashboard UI
+- **Do** build with the token utilities (`bg-ink-card`, `text-text-sec`, `border-ink-line`, `rounded-card`) or the `qd-*` primitives. Never hard-code a hex value; both themes come from the tokens.
+- **Do** keep yellow to fills: a dot, a hover, a highlight, a chart series. Never yellow text on white.
+- **Do** keep page roots unpainted (or `bg-(--qd-canvas)`); the layout's `.qm-dash` wrapper paints the canvas for both themes.
+- **Do** give anything portalled into `<body>` the `qm-dash qm-dash--portal` classes so it inherits the kit.
+- **Don't** reintroduce mono labels, ALL-CAPS headings or 800-weight display type in the dashboard.
+- **Don't** raise the small label layer's size uniformly (see the reverted type-scale note in `globals.css`); hierarchy comes from one large element per view.
+- **Don't** add a second glow or gradient to a view, or a coloured border for decoration; status colours are for status.

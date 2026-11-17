@@ -205,7 +205,7 @@ export default function SignageQueuePage() {
 
   return (
     // overflow-x-clip (not -hidden) so the lg:sticky detail panel still sticks.
-    <main className="relative min-h-screen overflow-x-clip bg-ink-deep text-text-pri">
+    <main className="relative min-h-screen overflow-x-clip bg-(--qd-canvas) text-text-pri">
       <TopoBackdrop />
 
       <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 sm:px-10 md:pt-16">
@@ -219,7 +219,7 @@ export default function SignageQueuePage() {
           />
         </div>
         <div className="mt-6 flex flex-wrap items-end justify-between gap-6">
-          <h1 className={`font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)] ${REVEAL}`} style={delay(60)}>
+          <h1 className={`font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)] ${REVEAL}`} style={delay(60)}>
             Review <span className="text-accent">queue</span>
           </h1>
           {authState === 'ready' && brands.length > 1 && (
@@ -367,7 +367,7 @@ function DetailPanel({
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             {assessment.region ?? 'Studio'}
           </div>
-          <h3 className="mt-1 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri">{assessment.studio_name}</h3>
+          <h3 className="mt-1 font-medium tracking-[-0.02em] text-2xl text-text-pri">{assessment.studio_name}</h3>
         </div>
         <OverallChip overall={assessment.overall} />
       </div>

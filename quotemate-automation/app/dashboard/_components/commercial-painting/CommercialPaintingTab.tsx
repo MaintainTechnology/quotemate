@@ -800,7 +800,7 @@ export function CommercialPaintingWorkspace({ accessToken, scope }: { accessToke
       {/* ── 01 · Documents ──────────────────────────────────────────── */}
       <section className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
         <div className="flex items-start gap-5">
-          <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">01</span>
+          <span className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-5xl">01</span>
           <div className="min-w-0 flex-1">
             <h3 className="font-extrabold uppercase tracking-tight text-text-pri">Job documents</h3>
             <p className="mt-1 text-sm leading-relaxed text-text-sec">
@@ -961,7 +961,7 @@ export function CommercialPaintingWorkspace({ accessToken, scope }: { accessToke
       {extraction && (
         <section className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
           <div className="flex items-start gap-5">
-            <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">02</span>
+            <span className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-5xl">02</span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-4">
                 <h3 className="font-extrabold uppercase tracking-tight text-text-pri">Confirm the takeoff</h3>
@@ -1021,7 +1021,7 @@ export function CommercialPaintingWorkspace({ accessToken, scope }: { accessToke
       {bom && extraction && runId && (
         <section className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
           <div className="flex items-start gap-5">
-            <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">03</span>
+            <span className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-5xl">03</span>
             <div className="min-w-0 flex-1">
               <h3 className="font-extrabold uppercase tracking-tight text-text-pri">Tender price</h3>
               <PaintPricedSummary bom={bom} />

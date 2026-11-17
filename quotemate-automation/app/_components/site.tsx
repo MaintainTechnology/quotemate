@@ -11,7 +11,7 @@
 
 import { Fragment, type ReactNode } from "react"
 import Link from "next/link"
-import { Inter } from "next/font/google"
+import { inter } from "../fonts/inter"
 import AuthNav from "../AuthNav"
 import { BrandMark } from "./BrandMark"
 import { TradesMenu } from "./TradesMenu"
@@ -35,9 +35,9 @@ export {
   CtaBand,
 } from "./site-ui"
 
-// Loaded here, not in the root layout, so only marketing routes download
-// and preload it; the app keeps Manrope.
-const inter = Inter({ subsets: ["latin"], variable: "--font-qs", display: "swap" })
+// Inter comes from the shared definition (app/fonts/inter.ts), not the root
+// layout, so only the routes that use it — marketing and the dashboard —
+// download and preload it; the customer quote pages keep Manrope.
 
 /* ─── Shell ───────────────────────────────────────────────────────
    Every marketing page renders inside this. It owns the scope class the

@@ -320,7 +320,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
     <div className="max-w-4xl">
       {/* ── Ask your documents ──────────────────────────────────── */}
       <section>
-        <h2 className="font-extrabold uppercase tracking-tight text-text-pri text-xl">
+        <h2 className="font-medium tracking-tight text-text-pri text-xl">
           Ask your documents
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-text-sec">
@@ -409,7 +409,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
 
       {/* ── Document list ───────────────────────────────────────── */}
       <section className="mt-12">
-        <h2 className="font-extrabold uppercase tracking-tight text-text-pri text-xl">
+        <h2 className="font-medium tracking-tight text-text-pri text-xl">
           Your documents
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-text-sec">

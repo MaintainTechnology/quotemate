@@ -57,7 +57,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
           <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">
             Indicative estimate
           </div>
-          <h3 className="mt-1.5 text-xl font-extrabold uppercase tracking-tight text-text-pri sm:text-2xl">
+          <h3 className="mt-1.5 text-xl font-medium tracking-tight text-text-pri sm:text-2xl">
             Bill of materials &amp; labour
           </h3>
         </div>

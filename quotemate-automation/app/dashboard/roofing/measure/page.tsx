@@ -395,13 +395,13 @@ function RoofingMeasurePageInner() {
   }, [resp, saveState, busy, onSave])
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
+    <main className="min-h-screen bg-(--qd-canvas) text-text-pri">
       <TopographicBackdrop />
 
       <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 pb-10 sm:px-10 md:pt-20">
         <Breadcrumb />
         <div className="mt-8 grid gap-10 md:grid-cols-[1.5fr_1fr] md:items-end md:gap-16">
-          <h1 className="font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)]">
+          <h1 className="font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)]">
             Roof <span className="text-accent">measure</span>
           </h1>
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
@@ -708,7 +708,7 @@ function MultiResultBlock({
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Combined total · {combined.count} structure{combined.count === 1 ? '' : 's'} included
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri">
+          <h3 className="mt-2 font-medium tracking-[-0.02em] text-2xl text-text-pri">
             {combined.area.toFixed(0)} m² across the job
           </h3>
         </div>
@@ -860,7 +860,7 @@ function StructureCard({
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             {structure.role === 'primary' ? 'Main dwelling' : 'Secondary structure'} · {String(index + 1).padStart(2, '0')}
           </div>
-          <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{structure.label}</h3>
+          <h3 className="mt-1.5 font-medium tracking-[-0.02em] text-xl text-text-pri">{structure.label}</h3>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 text-text-sec" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={isIncluded} onChange={onToggleInclude} className="h-4 w-4 accent-accent" />
@@ -983,7 +983,7 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
   return (
     <div>
       <div className=" text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-accent">{eyebrow}</div>
-      <h2 className="mt-3 font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1]">{title}</h2>
+      <h2 className="mt-3 font-normal tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1]">{title}</h2>
     </div>
   )
 }

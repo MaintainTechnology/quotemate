@@ -73,7 +73,7 @@ export default function SignageAuditPage() {
   )
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+    <main className="relative min-h-screen overflow-hidden bg-(--qd-canvas) text-text-pri">
       <TopoBackdrop />
 
       <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 sm:px-10 md:pt-16">
@@ -86,7 +86,7 @@ export default function SignageAuditPage() {
             ]}
           />
         </div>
-        <h1 className={`mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)] ${REVEAL}`} style={delay(60)}>
+        <h1 className={`mt-6 font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)] ${REVEAL}`} style={delay(60)}>
           Instant <span className="text-accent">audit</span>
         </h1>
         <p className={`mt-4 max-w-2xl text-base leading-relaxed text-text-sec ${REVEAL}`} style={delay(120)}>
@@ -206,7 +206,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
   return (
     <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
       <NumberedEyebrow n="01">Upload standards PDF</NumberedEyebrow>
-      <h2 className="mt-3 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">Decipher the rules</h2>
+      <h2 className="mt-3 font-medium tracking-[-0.02em] text-xl text-text-pri">Decipher the rules</h2>
       <p className="mt-2 text-sm leading-relaxed text-text-sec">
         Drop a brand standards PDF — the AI reads it and proposes the photo shots + a tagged rule set.
       </p>
@@ -334,7 +334,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
   return (
     <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
       <NumberedEyebrow n="02">Upload photos</NumberedEyebrow>
-      <h2 className="mt-3 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">Assess compliance</h2>
+      <h2 className="mt-3 font-medium tracking-[-0.02em] text-xl text-text-pri">Assess compliance</h2>
       <p className="mt-2 text-sm leading-relaxed text-text-sec">Add a photo per shot; the AI scores them against the rules instantly.</p>
 
       <div className="mt-5 grid gap-3">
