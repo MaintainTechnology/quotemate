@@ -343,11 +343,9 @@ function SiteVisit() {
               delay={i * 80}
               className={`h-full ${i === 2 ? "md:max-[991px]:col-span-2" : ""}`}
             >
-              <article className="qs-card h-full gap-12">
-                <span className="qs-icon-tile qs-num text-[15px] font-medium">
-                  {s.num}
-                </span>
-                <div className="qs-card__copy gap-3">
+              <article className="qs-card h-full">
+                <span className="qs-icon-tile qs-num text-[15px]">{s.num}</span>
+                <div className="qs-card__copy">
                   <h3 className="qs-card__title">{s.title}</h3>
                   <p className="qs-card__text">{s.body}</p>
                 </div>

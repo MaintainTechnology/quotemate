@@ -170,7 +170,7 @@ export function TradePage({ data }: { data: TradeData }) {
                 <li key={step.n}>
                   <Reveal delay={i * 80} className="h-full">
                     {/* Top-aligned, so titles share a line across a row whatever the body length. */}
-                    <div className="qs-card h-full gap-12">
+                    <div className="qs-card h-full">
                       <span className="qs-icon-tile qs-num text-[15px]">{step.n}</span>
                       <div className="qs-card__copy">
                         <h3 className="qs-card__title">{step.title}</h3>

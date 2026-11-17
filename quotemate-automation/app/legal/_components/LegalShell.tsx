@@ -57,7 +57,7 @@ export function LegalShell({
       <header className="qs-page-hero">
         <div className="qs-container qs-page-hero__center items-start text-left sm:items-center sm:text-center">
           <Eyebrow>{eyebrow}</Eyebrow>
-          <h1 id="legal-title" className="qs-display">
+          <h1 id="legal-title" className="qs-h1">
             {title}
           </h1>
           <p className="rounded-[var(--qs-r-pill)] bg-[var(--qs-ink)] px-3.5 py-2 text-sm font-medium text-white">

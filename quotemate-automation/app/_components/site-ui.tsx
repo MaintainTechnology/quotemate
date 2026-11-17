@@ -188,7 +188,7 @@ export function PageHero({
         <div className="qs-container qs-page-hero__split">
           <div>
             {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
-            <h1 id={id} className="qs-display">{title}</h1>
+            <h1 id={id} className="qs-h1">{title}</h1>
           </div>
           <div>
             {lead ? <p className="qs-text">{lead}</p> : null}
@@ -203,7 +203,7 @@ export function PageHero({
     <section className="qs-page-hero" aria-labelledby={id}>
       <div className="qs-container qs-page-hero__center">
         {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
-        <h1 id={id} className="qs-display">{title}</h1>
+        <h1 id={id} className="qs-h1">{title}</h1>
         {lead ? <p className="qs-lead">{lead}</p> : null}
         {actions ? <div className="qs-actions">{actions}</div> : null}
       </div>

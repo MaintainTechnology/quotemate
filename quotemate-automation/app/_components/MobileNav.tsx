@@ -10,7 +10,7 @@
 // pointer-events-none on the decorative bars.
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import AuthNav from "../AuthNav"
 import { Arrow, Eyebrow } from "./site-ui"
 
@@ -33,12 +33,16 @@ const BAR = "absolute left-0 h-[1.5px] w-[18px] rounded-full bg-current transiti
 
 export function MobileNav() {
   const [open, setOpen] = useState(false)
+  const burgerRef = useRef<HTMLButtonElement>(null)
   const close = () => setOpen(false)
 
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false)
+      if (e.key !== "Escape") return
+      // Focus inside the menu would fall to <body> as it hides: hand it back.
+      if (document.getElementById("mobile-menu")?.contains(document.activeElement)) burgerRef.current?.focus()
+      setOpen(false)
     }
     document.addEventListener("keydown", onKey)
     const prevOverflow = document.body.style.overflow
@@ -50,8 +54,18 @@ export function MobileNav() {
   }, [open])
 
   return (
-    <>
+    // Focus leaving the burger and card together (Tab past the last link,
+    // Shift+Tab off the burger) closes the menu instead of leaving it open
+    // over the page. `contents` keeps this wrapper out of the nav's layout.
+    <div
+      className="contents"
+      onBlur={(e) => {
+        const to = e.relatedTarget
+        if (to && !e.currentTarget.contains(to)) setOpen(false)
+      }}
+    >
       <button
+        ref={burgerRef}
         type="button"
         aria-label={open ? "Close menu" : "Open menu"}
         aria-expanded={open}
@@ -102,6 +116,6 @@ export function MobileNav() {
           </div>
         </nav>
       </div>
-    </>
+    </div>
   )
 }
