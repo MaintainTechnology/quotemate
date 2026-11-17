@@ -156,7 +156,7 @@ export function PhotoVerify({ accessToken, address }: Props) {
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             AI photo verification
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
+          <h3 className="mt-2 font-medium tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
             Upload a photo of the property
           </h3>
         </div>

@@ -12,20 +12,28 @@ import { DEFAULT_CAROUSEL, STUDIO_PHOTOS } from '@/lib/studio/presets'
 import { fetchStudioPng, renderStudioCarousel, studioBlobDataUrl, type StudioToken } from '@/lib/studio/client-render'
 import { StudioAccess } from './StudioAccess'
 
-// Pin the studio chrome to the command-centre DARK palette regardless of the
-// app's light-first default, by declaring the DS dark tokens on the root (the
-// bg-*/text-*/border-* utilities resolve these vars). Mirrors how .qm-quote
-// re-declares the palette in-scope for the customer quote page.
+// Pin the studio chrome to a DARK palette regardless of the app's light-first
+// default — an editor for dark brand posts reads best on a dark surface — by
+// declaring the tokens on the root (the bg-*/text-*/border-* utilities
+// resolve these vars). Mirrors how .qm-quote re-declares the palette in-scope
+// for the customer quote page. The values are the Dashboard Kit's dark zone
+// (app/dashboard/dash-kit.css), including its --qd-* variables so the kit's
+// field, focus and primary-button rules resolve dark here too: ink is white,
+// yellow stays a fill (--qd-brand).
 const DARK = {
-  '--ink-deep': '#16120F', '--ink': '#1E1813', '--ink-card': '#2B2422', '--ink-line': '#3A322C',
-  '--accent': '#FFC400', '--accent-press': '#E6AC00', '--accent-soft': '#FFD23D', '--accent-ink': '#1C1812',
-  '--text-pri': '#F6F1EA', '--text-sec': '#C3B8AC', '--text-dim': '#A2968A', '--warning-bright': '#F59E0B',
+  '--ink-deep': '#0f0f0f', '--ink': '#141414', '--ink-card': '#1a1a1a', '--ink-line': '#2a2a2a',
+  '--accent': '#ffffff', '--accent-press': '#e5e5e5', '--accent-soft': '#ffffff', '--accent-ink': '#000000',
+  '--text-pri': '#ffffff', '--text-sec': '#a6a6a6', '--text-dim': '#8c8c8c', '--warning-bright': '#F59E0B',
+  '--qd-canvas': '#0a0a0a', '--qd-paper': '#141414', '--qd-line': '#262626', '--qd-line-strong': '#333333',
+  '--qd-field': '#0f0f0f', '--qd-field-line': '#666666', '--qd-body': '#a6a6a6', '--qd-muted': '#8c8c8c',
+  '--qd-ink': '#ffffff', '--qd-on-ink': '#000000', '--qd-focus': '#ffffff',
+  colorScheme: 'dark',
 } as React.CSSProperties
 
 const LABEL = ' text-[0.62rem] uppercase tracking-[0.08em] text-text-dim'
-const INPUT = 'w-full bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri outline-none focus:border-accent transition-colors'
-const BTN = 'inline-flex items-center gap-2 border border-ink-line hover:border-accent text-text-pri px-4 py-2.5 text-xs uppercase tracking-[0.08em] transition-colors disabled:opacity-40 disabled:pointer-events-none'
-const BTNFILL = 'inline-flex items-center gap-2 bg-accent text-accent-ink hover:bg-accent-press px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition-colors disabled:opacity-40 disabled:pointer-events-none'
+const INPUT = 'w-full rounded-xl bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri outline-none focus:border-accent transition-colors'
+const BTN = 'inline-flex items-center gap-2 rounded-full border border-ink-line hover:border-accent text-text-pri px-4 py-2.5 text-xs uppercase tracking-[0.08em] transition-colors disabled:opacity-40 disabled:pointer-events-none'
+const BTNFILL = 'inline-flex items-center gap-2 rounded-full bg-accent text-accent-ink hover:bg-accent-press px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition-colors disabled:opacity-40 disabled:pointer-events-none'
 
 export default function StudioPage() {
   return <StudioAccess>{(identity, getToken) => <StudioEditor key={identity} getToken={getToken} />}</StudioAccess>

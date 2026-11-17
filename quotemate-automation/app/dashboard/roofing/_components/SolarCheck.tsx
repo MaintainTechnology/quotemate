@@ -103,7 +103,7 @@ export function SolarCheck({
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Existing solar
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
+          <h3 className="mt-2 font-medium tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
             Scan the roof for solar panels
           </h3>
         </div>

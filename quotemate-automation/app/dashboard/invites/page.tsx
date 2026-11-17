@@ -110,7 +110,7 @@ export default function MarketingPage() {
   const totalScans = customerQrs.reduce((n, q) => n + q.scan_count, 0)
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+    <main className="relative min-h-screen overflow-hidden bg-(--qd-canvas) text-text-pri">
       <style>{`
         @keyframes mtUp { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
         .mt-up { animation: mtUp .55s cubic-bezier(.22,1,.36,1) both }
@@ -142,7 +142,7 @@ export default function MarketingPage() {
         {/* hero header */}
         <header className="mt-up" style={{ animationDelay: '0ms' }}>
           <span className={EYEBROW}>Marketing</span>
-          <h1 className="mt-4 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.25rem,6vw,4rem)]">
+          <h1 className="mt-4 font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2.25rem,6vw,4rem)]">
             Turn flyers<br />into <span className="text-accent">quotes</span>.
           </h1>
           <p className="mt-5 max-w-xl text-text-sec leading-relaxed">

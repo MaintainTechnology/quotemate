@@ -319,7 +319,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
             Roof rates
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
+          <h3 className="mt-2 font-medium tracking-tight text-xl text-text-pri sm:text-2xl">
             Tune the roofing pricing engine
           </h3>
           <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">

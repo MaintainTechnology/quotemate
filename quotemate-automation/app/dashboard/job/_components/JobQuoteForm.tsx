@@ -393,7 +393,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
   }
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
+    <main className="min-h-screen bg-(--qd-canvas) text-text-pri">
       <div className="mx-auto max-w-3xl px-6 py-12 sm:px-10">
         <div className="flex flex-wrap items-center gap-3 text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
           <Link href="/dashboard" className="transition-colors hover:text-text-pri">
@@ -403,7 +403,7 @@ export default function JobQuoteForm({ trade }: { trade: 'electrical' | 'plumbin
           <span className="text-text-pri">{formatJobType(trade)} job quote</span>
         </div>
 
-        <h1 className="mt-6 text-3xl font-extrabold uppercase tracking-[-0.02em] sm:text-4xl">
+        <h1 className="mt-6 text-3xl font-normal tracking-[-0.02em] sm:text-4xl">
           Quote {ARTICLE[trade]} {trade} job
         </h1>
         <p className="mt-4 text-base leading-relaxed text-text-sec">

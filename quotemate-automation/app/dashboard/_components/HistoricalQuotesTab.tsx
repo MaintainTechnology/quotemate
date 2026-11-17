@@ -314,7 +314,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
     <div className="max-w-4xl">
       {/* ── Import ─────────────────────────────────────────────────── */}
       <section>
-        <h2 className="font-extrabold uppercase tracking-tight text-text-pri text-xl">Historical quotes</h2>
+        <h2 className="font-medium tracking-tight text-text-pri text-xl">Historical quotes</h2>
         <p className="mt-2 text-sm leading-relaxed text-text-sec">
           Import your past quotes (a CSV export or PDF) to see what you’ve charged before and price new
           jobs consistently. Your data stays private to your business.
@@ -355,7 +355,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
       {reviewing && (
         <section className="mt-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-lg">
+            <h3 className="font-medium tracking-tight text-text-pri text-lg">
               Review categorisations
             </h3>
             <div className="flex items-center gap-2">
@@ -441,7 +441,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
 
       {/* ── Analytics ──────────────────────────────────────────────── */}
       <section className="mt-12">
-        <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-lg">Your pricing by job</h3>
+        <h3 className="font-medium tracking-tight text-text-pri text-lg">Your pricing by job</h3>
         <p className="mt-2 text-sm text-text-sec">
           Averages across your confirmed history — what you’ve typically charged per job type.
         </p>
@@ -486,7 +486,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
       {/* ── Calibration ────────────────────────────────────────────── */}
       <section className="mt-12">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-lg">
+          <h3 className="font-medium tracking-tight text-text-pri text-lg">
             Calibrate my pricing book
           </h3>
           <button
@@ -561,7 +561,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
 
       {/* ── Browse ─────────────────────────────────────────────────── */}
       <section className="mt-12">
-        <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-lg">Browse history</h3>
+        <h3 className="font-medium tracking-tight text-text-pri text-lg">Browse history</h3>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <select
             value={filterJobType}

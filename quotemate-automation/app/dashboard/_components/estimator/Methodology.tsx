@@ -40,13 +40,13 @@ export function Methodology({ model, runtimeSeconds, sheets, bom }: Props) {
       <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">
         Transparency
       </div>
-      <h3 className="mt-1.5 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
+      <h3 className="mt-1.5 font-medium tracking-tight text-xl text-text-pri sm:text-2xl">
         How this estimate was built
       </h3>
       <div className="rounded-card mt-5 grid gap-px border border-ink-line bg-ink-line lg:grid-cols-2">
         {steps.map((s, i) => (
           <article key={s.title} className="flex items-start gap-5 bg-ink-card p-6">
-            <span aria-hidden="true" className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">
+            <span aria-hidden="true" className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-5xl">
               {String(i + 1).padStart(2, '0')}
             </span>
             <div>

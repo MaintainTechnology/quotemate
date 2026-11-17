@@ -304,7 +304,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
     return (
       <WorkspaceShell>
         <div className="rounded-card border border-ink-line bg-ink-card p-10">
-          <h1 className="font-extrabold uppercase tracking-tight text-2xl text-text-pri">Run not found</h1>
+          <h1 className="font-medium tracking-tight text-2xl text-text-pri">Run not found</h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-text-sec">
             This analysis doesn’t exist or belongs to another account. It may have been deleted.
           </p>
@@ -368,7 +368,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
           <span className="text-text-sec">Run</span>
         </nav>
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <h1 className="font-extrabold uppercase tracking-tight text-2xl text-text-pri sm:text-4xl">
+          <h1 className="font-normal tracking-tight text-2xl text-text-pri sm:text-4xl">
             {filename.replace(/\.pdf$/i, '')}
           </h1>
           <RunStatusChip status={status} />
@@ -410,7 +410,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
             <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">
               Take-off
             </div>
-            <h2 className="mt-1.5 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
+            <h2 className="mt-1.5 font-medium tracking-tight text-xl text-text-pri sm:text-2xl">
               Quantity ledger
             </h2>
           </div>
@@ -591,7 +591,7 @@ function Spinner({ light }: { light?: boolean }) {
 
 function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-screen bg-ink-deep px-4 pb-10 pt-8 text-text-pri sm:px-6">
+    <main className="min-h-screen bg-(--qd-canvas) px-4 pb-10 pt-8 text-text-pri sm:px-6">
       <div className="mx-auto max-w-screen-2xl space-y-7">{children}</div>
     </main>
   )

@@ -209,14 +209,14 @@ function AirconRecommendPageInner() {
 
   if (authState === 'loading') {
     return (
-      <main className="min-h-screen bg-ink-deep p-10">
+      <main className="min-h-screen bg-(--qd-canvas) p-10">
         <p className="qm-loading text-sm uppercase tracking-[0.08em] text-text-dim">Loading…</p>
       </main>
     )
   }
   if (authState === 'signed-out') {
     return (
-      <main className="min-h-screen bg-ink-deep p-10">
+      <main className="min-h-screen bg-(--qd-canvas) p-10">
         <p className=" text-sm uppercase tracking-[0.08em] text-text-dim">
           Sign in to use the AC recommender.
         </p>
@@ -225,14 +225,14 @@ function AirconRecommendPageInner() {
   }
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
+    <main className="min-h-screen bg-(--qd-canvas) text-text-pri">
       <div className="mx-auto max-w-6xl px-6 py-12 sm:px-8 sm:py-16">
         {/* ── Header ── */}
         <header className="mb-10 sm:mb-14">
           <span className=" text-xs uppercase tracking-[0.08em] text-text-dim">
             Trade tool · HVAC sizing &amp; pricing
           </span>
-          <h1 className="mt-4 text-[clamp(2rem,4.5vw,3.5rem)] font-extrabold uppercase leading-none tracking-[-0.03em]">
+          <h1 className="mt-4 text-[clamp(2rem,4.5vw,3.5rem)] font-normal leading-[1.1] tracking-[-0.03em]">
             Air-conditioning <span className="text-accent">recommender</span>
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-text-sec">
@@ -411,9 +411,9 @@ function FormSectionHeading({ num, title, sub }: { num: string; title: string; s
 function SectionHeader({ num, title, sub }: { num: string; title: string; sub?: string }) {
   return (
     <div className="mb-6 flex items-end gap-5">
-      <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">{num}</span>
+      <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">{num}</span>
       <div>
-        <h2 className="text-xl font-extrabold uppercase leading-tight tracking-[-0.01em] sm:text-2xl">
+        <h2 className="text-xl font-medium leading-tight tracking-[-0.01em] sm:text-2xl">
           {title}
         </h2>
         {sub && (
@@ -485,7 +485,7 @@ function Result({
       <div>
         <SectionHeader num="04" title="Next step" />
         <div className="rounded-card edge-lit border border-ink-line bg-ink-card p-6 sm:p-8">
-          <p className="text-lg font-extrabold uppercase tracking-[0.02em]">
+          <p className="text-lg font-medium tracking-[0.02em]">
             Book a <span className="text-accent">site assessment</span>
           </p>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-sec">{r.routing.reason}</p>
@@ -747,8 +747,8 @@ function Stat({
   return (
     <div className="rounded-card flex min-w-0 flex-col justify-between gap-2 border border-ink-line bg-ink-deep px-4 py-4 sm:px-5">
       <p
-        className={`wrap-break-word font-bold leading-tight text-text-pri ${
- text ? 'text-base uppercase tracking-wide sm:text-lg' : 'text-2xl leading-none sm:text-3xl'
+        className={`wrap-break-word font-normal leading-tight text-text-pri ${
+ text ? 'text-base tracking-wide sm:text-lg' : 'text-2xl leading-[1.1] sm:text-3xl'
  }`}
       >
         {value}
@@ -845,7 +845,7 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
           <p className=" text-[0.65rem] uppercase tracking-[0.08em] text-text-dim">
             {o.capacity_kw} kW system
           </p>
-          <h3 className="mt-1 text-2xl font-extrabold uppercase tracking-[-0.01em]">{o.system_type}</h3>
+          <h3 className="mt-1 text-2xl font-medium tracking-[-0.01em]">{o.system_type}</h3>
         </div>
         {o.best_fit && <StatusPill label="Best fit" tone="accent" dot />}
       </div>

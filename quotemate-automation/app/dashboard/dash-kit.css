@@ -1,0 +1,843 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax Dashboard Kit — the tradie cockpit (/dashboard and every
+   /dashboard/* route).
+
+   The same design language as the marketing Site Kit (site-kit.css), which
+   was reverse-engineered from the atomos99.webflow.io kit, translated for a
+   dense working tool rather than a landing page:
+
+   · Inter for every role, weight 400–600, negative tracking that tightens
+     as the size grows (Apple: tracking is size-specific).
+   · A white canvas, one warm paper surface (#f5f3f1), hairline borders
+     (#efedec), 24px cards (16px when nested), 12px fields, pill buttons.
+   · Black is the primary colour. Caterpillar yellow is a FILL only — the
+     active-nav dot, a primary button's hover, the selection highlight,
+     the logo notch and the data-viz ramp. Never small text on white,
+     where it fails contrast.
+   · Dark theme = the reference's own dark zone: near-black canvas, #1a1a1a
+     panels, white headings, 64% white body copy, white primary pills.
+
+   HOW IT REACHES ~45k LINES WITHOUT EDITING THEM
+   The dashboard was built on semantic tokens (--ink-card, --text-dim,
+   --accent …) and Tailwind theme variables (--font-weight-bold,
+   --radius-card …). This file re-points those variables inside `.qm-dash`,
+   so every existing utility class renders in the new language. The one
+   deliberate semantic split: --accent (lines, text, focus, selection
+   state) becomes INK, and yellow moves to --qd-brand. Yellow as a hover
+   text colour (121 uses) or a focus border (68 uses) was unreadable on a
+   white canvas; as ink it is the reference's own primary colour.
+
+   SCOPING — every rule lives under `.qm-dash` (app/dashboard/layout.tsx).
+   Next.js never unloads a global stylesheet on client navigation, so an
+   unscoped rule would leak into the marketing site and the customer quote
+   pages. Two overlays portal into <body>, outside the wrapper; they carry
+   `qm-dash qm-dash--portal`, which inherits the tokens without the
+   wrapper's own canvas paint.
+
+   LAYERS — kit defaults sit in `components` so a one-off Tailwind utility
+   still wins; the few rules that must beat a utility (or an unlayered rule
+   in globals.css) are unlayered at the bottom and say why.
+   ════════════════════════════════════════════════════════════════════ */
+
+@layer theme, base, components, utilities;
+
+/* ── 1. Tokens — light (the default theme) ─────────────────────────── */
+.qm-dash {
+  /* Palette (atomos neutral-01…04, border, secondary) */
+  --qd-canvas: #ffffff;
+  --qd-paper: #f5f3f1;
+  --qd-paper-strong: #ece9e5;
+  --qd-line: #efedec;
+  --qd-line-strong: #e4e4e4;
+  /* An empty field's border is its only boundary: 3.4:1 on white
+     (WCAG 1.4.11) — the same value the Site Kit's contact form uses. */
+  --qd-field-line: #8f8a82;
+  --qd-field: #ffffff;
+  --qd-body: #6d6962;   /* 5.3:1 on white, 4.8:1 on paper */
+  --qd-muted: #726e68;  /* 5.1:1 on white, 4.6:1 on paper */
+  --qd-ink: #000000;
+  --qd-ink-soft: #1a1a1a;
+  --qd-on-ink: #ffffff;
+  --qd-brand: #ffc400;
+  --qd-brand-press: #e6ac00;
+  --qd-brand-ink: #1c1812; /* text on a yellow fill, 13:1 */
+  --qd-glow: linear-gradient(90deg, #ff6b2c 0%, #ffa41f 45%, #ffc400 70%, #e6f05a 100%);
+  --qd-nav-bg: rgba(255, 255, 255, 0.78);
+  --qd-scrim: rgba(0, 0, 0, 0.18);
+  --qd-shadow-pop: 0 24px 48px -24px rgba(0, 0, 0, 0.22);
+  --qd-shadow-chip: 0 3px 6px 1px rgba(0, 0, 1, 0.05);
+  --qd-shadow-float: 0 12px 32px -18px rgba(0, 0, 0, 0.22);
+  --qd-focus: #000000;
+
+  /* Type. --font-qs is the shared Inter instance (app/fonts/inter.ts),
+     named after the Site Kit that loaded it first. The fallback inside
+     var() matters for the portalled overlays: they sit outside the wrapper
+     that carries the variable, and an undefined var() with no fallback
+     would invalidate the whole font stack back to the body's Manrope. */
+  --qd-font: var(--font-qs, "Inter"), "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Shape + motion (critically damped; no overshoot) */
+  --qd-r-xs: 8px;
+  --qd-r-sm: 12px;
+  --qd-r-md: 16px;
+  --qd-r-lg: 20px;
+  --qd-r-xl: 24px;
+  --qd-r-pill: 100px;
+  --qd-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Legacy token remap — every existing utility follows these. */
+  --ink-deep: var(--qd-paper);   /* recessed surface + hover tint */
+  --ink: var(--qd-paper);        /* secondary surface */
+  --ink-card: var(--qd-canvas);  /* card / panel */
+  --ink-line: var(--qd-line);
+  --text-pri: var(--qd-ink);
+  --text-sec: var(--qd-body);
+  --text-dim: var(--qd-muted);
+  --accent: var(--qd-ink);        /* see header: lines, text, focus, selected */
+  --accent-press: #2b2927;
+  --accent-soft: var(--qd-focus); /* drives the global focus ring */
+  --accent-ink: var(--qd-on-ink); /* text on an --accent fill */
+  --teal-glow: #c9c4bc;
+  --teal-deep: #a39e96;
+  /* A transparent zero shadow, not `none`: --lift is composed into
+     comma lists (`box-shadow: var(--lift), …`), where `none` is invalid
+     and would drop the whole declaration. */
+  --lift: 0 0 #0000;
+  --canvas-radial: transparent;
+  --glow-cool: transparent;
+  --glow-warm: transparent;
+  --noise-opacity: 0;
+
+  /* Every font role resolves to Inter. Mono had one job here — numbers —
+     and Inter's tabular figures do it (see the font-variant rule below). */
+  --font-manrope: var(--qd-font);
+  --font-jetbrains-mono: var(--qd-font);
+
+  /* Weight diet. The reference sets display type at 400 and UI at 500;
+     the cockpit leaned on 600–800. Shifting the scale one notch lighter
+     keeps every relative step but drops the shouting. */
+  --font-weight-medium: 500;
+  --font-weight-semibold: 500;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
+
+  /* Radius scale (Tailwind theme variables + the two dashboard tokens,
+     which globals.css now emits as variables for exactly this). */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-card: var(--qd-r-xl);
+  --radius-ctl: var(--qd-r-sm);
+
+  --tracking-tight: -0.03em;
+  --tracking-tighter: -0.045em;
+}
+
+/* ── 1b. Tokens — dark (the reference's dark zone) ─────────────────── */
+:root[data-theme="dark"] .qm-dash {
+  --qd-canvas: #0a0a0a;
+  --qd-paper: #141414;
+  --qd-paper-strong: #1f1f1f;
+  --qd-line: #262626;
+  --qd-line-strong: #333333;
+  --qd-field-line: #666666;  /* 3.2:1 on the field */
+  --qd-field: #0f0f0f;
+  --qd-body: #a6a6a6;        /* 7.1:1 on #1a1a1a */
+  --qd-muted: #8c8c8c;       /* 5.2:1 on #1a1a1a */
+  --qd-ink: #ffffff;
+  --qd-ink-soft: #e5e5e5;
+  --qd-on-ink: #000000;
+  --qd-nav-bg: rgba(10, 10, 10, 0.72);
+  --qd-scrim: rgba(0, 0, 0, 0.55);
+  --qd-shadow-pop: 0 24px 48px -24px rgba(0, 0, 0, 0.8);
+  --qd-shadow-chip: 0 3px 8px 1px rgba(0, 0, 0, 0.4);
+  --qd-shadow-float: 0 12px 32px -18px rgba(0, 0, 0, 0.8);
+  --qd-focus: #ffffff;
+
+  --ink-deep: #0f0f0f;
+  --ink: #141414;
+  --ink-card: #1a1a1a;   /* atomos "secondary" */
+  --ink-line: #2a2a2a;
+  --accent-press: #e5e5e5;
+  --teal-glow: #4a4a4a;
+  --teal-deep: #333333;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .qm-dash {
+    --qd-canvas: #0a0a0a;
+    --qd-paper: #141414;
+    --qd-paper-strong: #1f1f1f;
+    --qd-line: #262626;
+    --qd-line-strong: #333333;
+    --qd-field-line: #666666;
+    --qd-field: #0f0f0f;
+    --qd-body: #a6a6a6;
+    --qd-muted: #8c8c8c;
+    --qd-ink: #ffffff;
+    --qd-ink-soft: #e5e5e5;
+    --qd-on-ink: #000000;
+    --qd-nav-bg: rgba(10, 10, 10, 0.72);
+    --qd-scrim: rgba(0, 0, 0, 0.55);
+    --qd-shadow-pop: 0 24px 48px -24px rgba(0, 0, 0, 0.8);
+    --qd-shadow-chip: 0 3px 8px 1px rgba(0, 0, 0, 0.4);
+    --qd-shadow-float: 0 12px 32px -18px rgba(0, 0, 0, 0.8);
+    --qd-focus: #ffffff;
+    --ink-deep: #0f0f0f;
+    --ink: #141414;
+    --ink-card: #1a1a1a;
+    --ink-line: #2a2a2a;
+    --accent-press: #e5e5e5;
+    --teal-glow: #4a4a4a;
+    --teal-deep: #333333;
+  }
+}
+
+@layer components {
+  /* ── 2. Root + base type ────────────────────────────────────────── */
+  .qm-dash {
+    font-family: var(--qd-font);
+    /* Manrope's stylistic alternates (body's ss01/cv11) mean something
+       else in Inter — reset to the face's defaults, as the reference. */
+    font-feature-settings: normal;
+    font-optical-sizing: auto;
+    letter-spacing: -0.011em;
+    color: var(--qd-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  /* The wrapper paints the canvas; portalled overlays must not. */
+  .qm-dash:not(.qm-dash--portal) {
+    min-height: 100vh;
+    background-color: var(--qd-canvas);
+  }
+
+  .qm-dash :where(h1, h2, h3, h4, h5, h6) {
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+  .qm-dash :where(p) { text-wrap: pretty; }
+
+  /* Numbers line up in columns without a monospace face. */
+  .qm-dash :where(.font-mono, .tabular-nums, td, kbd, .qm-hero-num) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* An uppercase label with no tracking utility of its own would inherit
+     the body's negative tracking and set its capitals too tight. The
+     reference's eyebrows run at +0.06–0.08em. (Utilities still win.) */
+  .qm-dash .uppercase { letter-spacing: 0.06em; }
+
+  .qm-dash :where(kbd) {
+    font-family: var(--qd-font);
+    font-weight: 500;
+  }
+
+  /* Nested cards step down a size, the reference's own rhythm: a 24px
+     panel holds 16px inner panels and photos. Set on the children so the
+     outer card keeps its own 24px. */
+  .qm-dash .rounded-card > * { --radius-card: var(--qd-r-md); }
+
+  /* Buttons and button-shaped links read their radius from --radius-ctl,
+     re-pointed here to a pill. 24px, not 100px: a standard 36–48px
+     control renders as a full pill, but a tall multi-line button keeps
+     card-like corners instead of becoming a stadium. */
+  .qm-dash :where(button, a[class*="rounded-ctl"], [role="button"]) {
+    --radius-ctl: var(--qd-r-xl);
+  }
+
+  /* ── 3. Eyebrow badge — two slanted bars + uppercase label ─────── */
+  .qm-dash .qd-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--qd-body);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .qm-dash .qd-eyebrow__mark { display: inline-flex; gap: 3px; }
+  .qm-dash .qd-eyebrow__mark > i {
+    display: block;
+    width: 2px;
+    height: 10px;
+    border-radius: 1px;
+    background: currentColor;
+    transform: rotate(10deg);
+  }
+
+  /* ── 4. Page head (eyebrow → title → lead) ──────────────────────── */
+  .qm-dash .qd-head { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .qm-dash .qd-title {
+    margin: 0;
+    color: var(--qd-ink);
+    font-size: clamp(1.75rem, 1.35rem + 1.1vw, 2.375rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.04em;
+  }
+  .qm-dash .qd-title--sm {
+    font-size: clamp(1.375rem, 1.2rem + 0.6vw, 1.75rem);
+    letter-spacing: -0.035em;
+  }
+  .qm-dash .qd-lead {
+    max-width: 44rem;
+    color: var(--qd-body);
+    font-size: 15px;
+    line-height: 1.55;
+    letter-spacing: -0.012em;
+  }
+
+  /* ── 5. Floating pill nav (the reference's header, as app chrome) ─ */
+  .qm-dash .qd-topbar-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 12px 16px 10px;
+  }
+  @media (min-width: 640px) {
+    .qm-dash .qd-topbar-wrap { padding: 14px 20px 12px; }
+  }
+  .qm-dash .qd-topbar {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 60px;
+    padding: 8px 8px 8px 16px;
+    border: 1px solid var(--qd-line-strong);
+    border-radius: var(--qd-r-pill);
+    /* Shadow grows in as the page scrolls (scroll-driven, no JS). */
+    animation: qd-nav-lift linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 140px;
+  }
+  /* The material sits on a pseudo-element: backdrop-filter on the bar
+     itself would make it the containing block for the profile menu's
+     fixed-position descendants. */
+  .qm-dash .qd-topbar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--qd-nav-bg);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+  }
+  @keyframes qd-nav-lift {
+    from { box-shadow: 0 0 0 rgba(0, 0, 0, 0); }
+    to { box-shadow: var(--qd-shadow-float); }
+  }
+  .qm-dash .qd-wordmark {
+    color: var(--logo-body);
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+
+  /* Search — a pill field that opens the ⌘K palette. */
+  .qm-dash .qd-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 8px 0 14px;
+    border: 1px solid transparent;
+    border-radius: var(--qd-r-pill);
+    background: var(--qd-paper);
+    color: var(--qd-muted);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.2s var(--qd-ease), background-color 0.2s var(--qd-ease);
+  }
+  .qm-dash .qd-search:hover { border-color: var(--qd-line-strong); background: var(--qd-canvas); }
+  .qm-dash .qd-kbd {
+    padding: 2px 7px;
+    border: 1px solid var(--qd-line-strong);
+    border-radius: 6px;
+    background: var(--qd-canvas);
+    color: var(--qd-muted);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  /* Round icon button — bell, theme toggle, burger. */
+  .qm-dash .qd-icon-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border: 1px solid var(--qd-line-strong);
+    border-radius: 50%;
+    background: var(--qd-canvas);
+    color: var(--qd-ink);
+    cursor: pointer;
+    transition: background-color 0.2s var(--qd-ease), border-color 0.2s var(--qd-ease);
+  }
+  .qm-dash .qd-icon-btn:hover { background: var(--qd-paper); }
+
+  /* Profile chip + its round brand avatar. */
+  .qm-dash .qd-profile:hover { border-color: var(--qd-line-strong); background: var(--qd-paper); }
+  .qm-dash .qd-avatar {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--qd-brand);
+    color: var(--qd-brand-ink);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  /* Menus and popovers — the reference's dropdown panel. */
+  .qm-dash .qd-pop {
+    border: 1px solid var(--qd-line);
+    border-radius: var(--qd-r-md);
+    background: var(--ink-card);
+    box-shadow: var(--qd-shadow-pop);
+  }
+
+  /* ── 6. Buttons — the reference's pill, three ranks ─────────────── */
+  .qm-dash .qd-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px 18px;
+    border: 1px solid var(--qd-ink);
+    border-radius: var(--qd-r-pill);
+    background: var(--qd-ink);
+    color: var(--qd-on-ink);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .qm-dash .qd-btn--light { background: var(--qd-canvas); border-color: var(--qd-line-strong); color: var(--qd-ink); }
+  .qm-dash .qd-btn--sm { min-height: 34px; padding: 5px 14px; font-size: 13px; }
+  @media (hover: hover) {
+    .qm-dash .qd-btn:hover { background: var(--qd-brand); border-color: var(--qd-brand); color: var(--qd-brand-ink); }
+    .qm-dash .qd-btn--light:hover { background: var(--qd-ink); border-color: var(--qd-ink); color: var(--qd-on-ink); }
+  }
+
+  /* Quiet text link with an arrow — the reference's "Read full story →". */
+  .qm-dash .qd-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--qd-ink);
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-color: var(--qd-line-strong);
+    text-underline-offset: 4px;
+    transition: text-decoration-color 0.2s var(--qd-ease);
+  }
+  .qm-dash .qd-link:hover { text-decoration-color: currentColor; }
+
+  /* ── 7. Segmented tabs — the reference's widget tabs ─────────────── */
+  .qm-dash .qd-tabs {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--qd-r-pill);
+    background: var(--qd-paper);
+  }
+  .qm-dash .qd-tab {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 6px 16px;
+    border: 0;
+    border-radius: var(--qd-r-pill);
+    background: transparent;
+    color: var(--qd-body);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s var(--qd-ease), background-color 0.2s var(--qd-ease), box-shadow 0.2s var(--qd-ease);
+  }
+  .qm-dash .qd-tab:hover { color: var(--qd-ink); }
+  .qm-dash .qd-tab[aria-selected="true"],
+  .qm-dash .qd-tab[aria-pressed="true"],
+  .qm-dash .qd-tab[aria-current="page"],
+  .qm-dash .qd-tab[data-active="true"] {
+    background: var(--qd-canvas);
+    color: var(--qd-ink);
+    box-shadow: var(--qd-shadow-chip);
+  }
+  /* The glide pill (Overview's section switcher) paints the selected
+     plate itself, so its buttons stay transparent. */
+  .qm-dash .qd-tabs--glide .qd-tab[aria-selected="true"] { background: transparent; box-shadow: none; }
+  .qm-dash .qd-tabs__pill {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 0;
+    border-radius: var(--qd-r-pill);
+    background: var(--qd-canvas);
+    box-shadow: var(--qd-shadow-chip);
+  }
+  .qm-dash .qd-tab__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff6b2c, #ffc400);
+  }
+
+  /* ── 8. Count chip ───────────────────────────────────────────────── */
+  .qm-dash .qd-count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: var(--qd-r-pill);
+    background: var(--qd-paper);
+    color: var(--qd-ink);
+    font-size: 11.5px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+  .qm-dash .qd-count--brand { background: var(--qd-brand); color: var(--qd-brand-ink); }
+
+  /* ── 9. Sidebar rail ─────────────────────────────────────────────── */
+  .qm-dash .qd-rail { background: var(--qd-canvas); }
+  .qm-dash .qd-rail__group {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px 8px;
+    color: var(--qd-muted);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .qm-dash .qd-nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: var(--qd-r-pill);
+    background: transparent;
+    color: var(--qd-body);
+    font-size: 14.5px;
+    font-weight: 400;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.2s var(--qd-ease), color 0.2s var(--qd-ease);
+  }
+  .qm-dash .qd-nav-item:hover { background: var(--qd-paper); color: var(--qd-ink); }
+  .qm-dash .qd-nav-item[aria-current="page"] { background: var(--qd-paper); color: var(--qd-ink); font-weight: 500; }
+  .qm-dash .qd-nav-item__icon { flex: none; color: var(--qd-muted); transition: color 0.2s var(--qd-ease); }
+  .qm-dash .qd-nav-item:hover .qd-nav-item__icon,
+  .qm-dash .qd-nav-item[aria-current="page"] .qd-nav-item__icon { color: var(--qd-ink); }
+  /* The reference marks the current page with a brand dot, not a bar. */
+  .qm-dash .qd-nav-item__dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: var(--qd-brand);
+    transform: scale(0);
+    transition: transform 0.25s var(--qd-ease);
+  }
+  .qm-dash .qd-nav-item[aria-current="page"] .qd-nav-item__dot { transform: scale(1); }
+  .qm-dash .qd-nav-item--collapsed { justify-content: center; padding-inline: 0; }
+  .qm-dash .qd-nav-item--collapsed .qd-nav-item__dot {
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    margin: 0;
+  }
+
+  /* Mobile tab strip — scrolling pill chips under the top bar. */
+  .qm-dash .qd-chipbar {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 16px 10px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  .qm-dash .qd-chipbar::-webkit-scrollbar { display: none; }
+  .qm-dash .qd-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 7px 14px;
+    border: 1px solid var(--qd-line-strong);
+    border-radius: var(--qd-r-pill);
+    background: var(--qd-canvas);
+    color: var(--qd-body);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .qm-dash .qd-chip[aria-current="page"] { border-color: var(--qd-ink); background: var(--qd-ink); color: var(--qd-on-ink); }
+
+  /* ── 10. Stats — "3.2x / Customer engagement" ────────────────────── */
+  .qm-dash .qd-stat__value {
+    color: var(--qd-ink);
+    font-size: clamp(1.75rem, 1.4rem + 1vw, 2.375rem);
+    font-weight: 400;
+    line-height: 1.05;
+    letter-spacing: -0.045em;
+    font-variant-numeric: tabular-nums;
+  }
+  .qm-dash .qd-stat__label { color: var(--qd-body); font-size: 14px; line-height: 1.4; }
+
+  /* Warm floor glow — the reference's widget shadow, used once per view. */
+  .qm-dash .qd-glow {
+    position: absolute;
+    left: -10%;
+    bottom: -60px;
+    z-index: 0;
+    width: 120%;
+    height: 110px;
+    background: var(--qd-glow);
+    filter: blur(34px);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  /* Paper card — the reference's filled card. */
+  .qm-dash .qd-card-paper { border-radius: var(--qd-r-xl); background: var(--qd-paper); }
+
+  /* Hero card — the reference's browser-widget body: a cool-to-warm
+     vertical wash with the brand glow pooled at the floor (.qd-glow sits
+     at z -1 inside this isolated context: above the wash, under content). */
+  .qm-dash .qd-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(180deg, #f6f7fa 0%, #fbf9f7 52%, #fff6ec 100%);
+  }
+  .qm-dash .qd-hero > .qd-glow { z-index: -1; opacity: 0.42; bottom: -78px; }
+  :root[data-theme="dark"] .qm-dash .qd-hero {
+    background: linear-gradient(180deg, #171717 0%, #141414 55%, #1b150d 100%);
+  }
+  :root[data-theme="dark"] .qm-dash .qd-hero > .qd-glow { opacity: 0.32; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Unlayered rules. Each one has to beat either a Tailwind utility or an
+   unlayered rule in globals.css; the comment on each says which.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Selection — yellow is a fill, so it belongs here. */
+.qm-dash ::selection { background: var(--qd-brand); color: var(--qd-brand-ink); }
+
+/* Focus ring: globals.css paints every :focus-visible in --accent-soft,
+   which this kit points at ink (white in dark). Only the colour is
+   restated so widths and offsets stay where each component set them. */
+.qm-dash :focus-visible { outline-color: var(--qd-focus); }
+
+/* Primary actions. Every --accent fill is now ink (black in light, white
+   in dark) with --accent-ink text, which needs no rule. What the
+   reference adds is the HOVER: the primary pill turns brand yellow with
+   dark ink. (0,3,1) beats each button's own `hover:bg-accent-press` /
+   `hover:text-…` utilities. Selected tabs and pressed toggles keep their
+   ink fill on hover — a hover must not read as a second selection. */
+@media (hover: hover) {
+  :root .qm-dash :is(button, a, [role="button"]).bg-accent:hover:not(
+      :disabled,
+      [aria-disabled="true"],
+      [aria-busy="true"],
+      [aria-selected="true"],
+      [aria-current],
+      [aria-pressed="true"]
+    ) {
+    background-color: var(--qd-brand);
+    border-color: var(--qd-brand);
+    color: var(--qd-brand-ink);
+  }
+  :root .qm-dash :is(button, a, [role="button"]).bg-accent:hover:not(
+      :disabled,
+      [aria-disabled="true"],
+      [aria-busy="true"],
+      [aria-selected="true"],
+      [aria-current],
+      [aria-pressed="true"]
+    ) :is(svg, .text-accent-ink, .text-white) {
+    color: inherit;
+  }
+}
+
+/* Button labels: globals.css sets every dashboard button to Manrope 600
+   at (0,3,1). Manrope now resolves to Inter through the token remap; the
+   weight steps down to the reference's 500. The doubled class reaches
+   (0,4,1). */
+.qm-dash.qm-dash :is(button, a.rounded-ctl):not([data-mono]) {
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/* Kit components set lighter than the 500 above: a resting nav row and the
+   search field read as text, not actions. (0,5,0) beats the (0,4,1). */
+.qm-dash.qm-dash :is(.qd-rail .qd-nav-item:not([aria-current="page"]), .qd-topbar .qd-search) {
+  font-weight: 400;
+}
+
+/* Bell + theme toggle as the reference's round icon buttons. Both
+   triggers carry `h-11 w-11 md:h-9 md:w-9 rounded-lg` utilities (the
+   toggle is shared with the auth screens, so its markup stays as is);
+   unlayered, this beats them inside the dashboard top bar only. The
+   placeholder <span> the toggle renders before mount gets the same box so
+   nothing shifts when it hydrates. 44px on touch, 40px from md. */
+.qm-dash .qd-iconset :is(button, span).h-11 {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border-color: var(--qd-line-strong);
+  background-color: var(--qd-canvas);
+  color: var(--qd-ink);
+}
+@media (min-width: 768px) {
+  .qm-dash .qd-iconset :is(button, span).h-11 { width: 40px; height: 40px; }
+}
+.qm-dash .qd-iconset button.h-11:hover { background-color: var(--qd-paper); border-color: var(--qd-line-strong); }
+
+/* The three button ranks (globals.css, (0,2,0)) restated as pills. */
+:root .qm-dash .qm-b1 { background: var(--qd-ink); color: var(--qd-on-ink); font-weight: 500; }
+:root .qm-dash .qm-b2 { background: var(--qd-canvas); border-color: var(--qd-line-strong); color: var(--qd-ink); }
+:root .qm-dash .qm-b3 { color: var(--qd-body); }
+@media (hover: hover) {
+  :root .qm-dash .qm-b1:hover:not(:disabled) { background: var(--qd-brand); color: var(--qd-brand-ink); }
+  :root .qm-dash .qm-b2:hover:not(:disabled) { border-color: var(--qd-ink); }
+  :root .qm-dash .qm-b3:hover:not(:disabled) { color: var(--qd-ink); }
+}
+
+/* Accent text: the light-theme shim in globals.css paints .text-accent in
+   --accent-ink at (0,4,0) — correct when the accent was yellow, but
+   --accent-ink is now the text ON an ink fill (white). Point accent text
+   back at the accent itself, i.e. ink. The doubled class reaches (0,5,0)
+   so the win does not depend on which stylesheet a production build
+   happens to emit first. */
+:root[data-theme] .qm-dash.qm-dash .text-accent { color: var(--accent); }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .qm-dash.qm-dash .text-accent { color: var(--accent); }
+}
+
+/* Section label + hero figure (globals.css, (0,2,0)) in the kit's voice. */
+:root .qm-dash .qm-lbl {
+  font-family: var(--qd-font);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--qd-muted);
+}
+:root .qm-dash .qm-hero-num {
+  font-family: var(--qd-font);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+}
+
+/* Fields. The token remap left their border on --ink-line, a hairline
+   that is ~1.1:1 on white — an empty field would vanish. These restate
+   the neutral border classes only, so error/success borders still win. */
+.qm-dash :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="submit"], [type="button"], [type="image"]), select, textarea):is(.border-ink-line, .border-ink-line\/60, .border-ink-line\/50) {
+  border-color: var(--qd-field-line);
+}
+.qm-dash :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="submit"], [type="button"], [type="image"]), select, textarea):is(.bg-ink-deep, .bg-ink, .bg-ink-card) {
+  background-color: var(--qd-field);
+}
+.qm-dash :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="range"]):focus {
+  border-color: var(--qd-ink);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--qd-ink) 7%, transparent);
+}
+.qm-dash :is(input, select, textarea)::placeholder { color: var(--qd-muted); opacity: 1; }
+.qm-dash :is(input[type="checkbox"], input[type="radio"], input[type="range"]) { accent-color: var(--qd-ink); }
+
+/* The select chevron (globals.css bakes its colour into a data URI per
+   theme, up to (0,5,1)) restated in the kit's neutrals at (0,6,1). */
+:root[data-theme] .qm-dash.qm-dash select:not([multiple]):not([size]),
+:root:not([data-theme]) .qm-dash.qm-dash select:not([multiple]):not([size]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23726e68' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-theme="dark"] .qm-dash.qm-dash.qm-dash select:not([multiple]):not([size]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238c8c8c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Card hover. globals.css lifts `.rounded-card.group` with an accent glow,
+   which is now an ink glow — a grey smudge. The reference's link card
+   only darkens its border and rises 2px. */
+@media (hover: hover) and (pointer: fine) {
+  :root :where(.qm-dash .rounded-card.group):hover {
+    box-shadow: var(--qd-shadow-float);
+  }
+}
+
+/* The ⌘K palette's search field is borderless, autofocused and the dialog's
+   only text input: its blinking caret is the focus indicator (WCAG 2.4.7),
+   so the global ring — which drew a black box INSIDE the search row — is
+   dropped for that one field. Every other control keeps its ring. */
+.qm-dash.qm-dash--portal .qd-pop > label > input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Overlays: a neutral scrim (globals.css has none; dialogs bring their
+   own bg-ink-deep/NN, which is now paper — a white veil instead of a
+   dim). Popover/menus float on the reference's soft drop shadow. */
+.qm-dash .qm-overlay { background-color: var(--qd-scrim); }
+
+/* ── Accessibility preferences ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .qm-dash .qd-topbar { animation: none; }
+  .qm-dash .qd-nav-item__dot { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .qm-dash .qd-topbar::before { background: var(--qd-canvas); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  .qm-dash {
+    --qd-body: #45413b;
+    --qd-muted: #4f4b45;
+    --qd-line: #c9c4bc;
+    --qd-line-strong: #8f8a82;
+  }
+  .qm-dash .qd-topbar::before { background: var(--qd-canvas); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

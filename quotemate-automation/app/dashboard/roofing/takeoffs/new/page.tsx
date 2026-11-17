@@ -143,7 +143,7 @@ function NewTakeoff() {
     <main className="mx-auto max-w-6xl space-y-8 px-5 py-10">
       <header>
         <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-accent">Roofing · Plan takeoffs</div>
-        <h1 className="mt-2 text-3xl font-extrabold uppercase tracking-[-0.02em] text-text-pri">New takeoff</h1>
+        <h1 className="mt-2 text-3xl font-normal tracking-[-0.02em] text-text-pri">New takeoff</h1>
       </header>
       {error ? <Notice tone="danger">{error}</Notice> : null}
       <div className="grid gap-8 lg:grid-cols-2">

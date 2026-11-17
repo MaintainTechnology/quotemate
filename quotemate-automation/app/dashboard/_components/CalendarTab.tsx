@@ -150,72 +150,18 @@ type DayGroup = { key: string; label: string; events: ScheduledEvent[] }
 const SANS = "var(--font-manrope), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif"
 const MONO = "var(--font-jetbrains-mono), ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
 
-/* ── Reference styles (verbatim from the standalone template) ─────────── */
-const EYEBROW: CSSProperties = {
-  fontFamily: MONO,
-  fontSize: '10.5px',
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.18em',
-  color: 'var(--text-dim)',
-}
-const H1: CSSProperties = {
-  fontFamily: SANS,
-  margin: '8px 0 0',
-  fontWeight: 800,
-  textTransform: 'uppercase',
-  letterSpacing: '-0.03em',
-  fontSize: 'clamp(1.8rem,2.6vw,2.7rem)',
-  lineHeight: 1,
-  color: 'var(--text-pri)',
-}
-const BLURB: CSSProperties = {
-  fontFamily: SANS,
-  margin: '9px 0 0',
-  maxWidth: '64ch',
-  fontSize: '13.5px',
-  lineHeight: 1.5,
-  color: 'var(--text-dim)',
-}
-const GHOST_BTN: CSSProperties = {
-  fontFamily: MONO,
-  display: 'inline-flex',
-  alignItems: 'center',
-  border: '1px solid var(--ink-line)',
-  background: 'transparent',
-  color: 'var(--text-sec)',
-  padding: '9px 14px',
-  fontSize: '10px',
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.13em',
-  whiteSpace: 'nowrap',
-  cursor: 'pointer',
-}
-const PRIMARY_BTN: CSSProperties = {
-  fontFamily: SANS,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '8px',
-  border: '1px solid transparent',
-  background: 'var(--accent)',
-  color: 'var(--accent-ink)',
-  padding: '10px 16px',
-  fontWeight: 700,
-  fontSize: '12px',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  whiteSpace: 'nowrap',
-  textDecoration: 'none',
-  cursor: 'pointer',
-}
-// .qm-edge-lit — the reference rounds these cards to 14px and clips overflow
-// so the inner rows / gap seams follow the rounded corner.
+/* ── Reference styles ──────────────────────────────────────────────────
+   The header (eyebrow / title / blurb / Sync / New booking) uses the
+   Dashboard Kit classes (app/dashboard/dash-kit.css) so it matches every
+   other tab's section head; the constants below style the calendar body. */
+// Cards round with the dashboard's card token (24px under the Dashboard Kit,
+// 14px elsewhere) and clip overflow so the inner rows / gap seams follow the
+// rounded corner.
 const CARD: CSSProperties = {
   background: 'var(--ink-card)',
   border: '1px solid var(--ink-line)',
   boxShadow: 'var(--lift)',
-  borderRadius: '14px',
+  borderRadius: 'var(--radius-card)',
   overflow: 'hidden',
 }
 const DAY_LABEL: CSSProperties = {
@@ -416,10 +362,16 @@ export function CalendarTab({
           gap: '16px',
         }}
       >
-        <div style={{ minWidth: 0 }}>
-          <div style={EYEBROW}>Daily · Calendar</div>
-          <h1 style={H1}>Calendar</h1>
-          <p style={BLURB}>Site visits, booked jobs and callbacks. Your week at a glance.</p>
+        <div className="qd-head" style={{ minWidth: 0 }}>
+          <span className="qd-eyebrow">
+            <span aria-hidden="true" className="qd-eyebrow__mark">
+              <i />
+              <i />
+            </span>
+            Daily · Calendar
+          </span>
+          <h1 className="qd-title">Calendar</h1>
+          <p className="qd-lead">Site visits, booked jobs and callbacks. Your week at a glance.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
@@ -428,7 +380,8 @@ export function CalendarTab({
             disabled={loading}
             aria-busy={loading}
             title="Refresh bookings"
-            style={{ ...GHOST_BTN, opacity: loading ? 0.5 : 1 }}
+            className="qd-btn qd-btn--light"
+            style={{ opacity: loading ? 0.5 : 1 }}
           >
             {loading ? 'Syncing…' : 'Sync'}
           </button>
@@ -437,7 +390,8 @@ export function CalendarTab({
             target="_blank"
             rel="noreferrer"
             aria-disabled={!tenantId}
-            style={{ ...PRIMARY_BTN, ...(tenantId ? null : { opacity: 0.4, pointerEvents: 'none' }) }}
+            className="qd-btn"
+            style={tenantId ? undefined : { opacity: 0.4, pointerEvents: 'none' }}
           >
             New booking
           </a>

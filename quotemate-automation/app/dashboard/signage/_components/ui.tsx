@@ -105,7 +105,7 @@ export function SectionHeading({ eyebrow, title, hint }: { eyebrow: string; titl
   return (
     <div>
       <div className=" text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-accent">{eyebrow}</div>
-      <h2 className="mt-3 font-extrabold uppercase leading-[1.1] tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)]">{title}</h2>
+      <h2 className="mt-3 font-normal leading-[1.1] tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)]">{title}</h2>
       {hint && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">{hint}</p>}
     </div>
   )
@@ -297,7 +297,7 @@ export function FleetSnapshot({
 export function NumberedEyebrow({ n, children }: { n: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="font-mono text-4xl font-bold leading-none text-accent">{n}</span>
+      <span className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent">{n}</span>
       <span className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">{children}</span>
     </div>
   )

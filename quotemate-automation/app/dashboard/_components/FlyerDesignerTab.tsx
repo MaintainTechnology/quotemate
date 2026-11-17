@@ -365,7 +365,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
         <section className="flex flex-wrap items-center justify-between gap-4 border border-accent/40 bg-accent/5 p-5">
           <div className="min-w-0">
-            <h3 className="font-extrabold uppercase tracking-[-0.01em] text-lg text-text-pri">Design with Canva</h3>
+            <h3 className="font-medium tracking-[-0.01em] text-lg text-text-pri">Design with Canva</h3>
             <p className="mt-1 text-sm text-text-sec">
               Prefer the full Canva editor? Connect your Canva account, design your flyer there, then import the
               finished PNG &amp; PDF straight back into QuoteMax.
@@ -387,7 +387,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                 onClick={() => createFromTemplate(t.id)}
                 className="rounded-card group flex flex-col items-start gap-3 border border-ink-line bg-ink-card p-5 text-left transition-colors hover:border-accent disabled:opacity-50"
               >
-                <span className="font-extrabold uppercase tracking-[-0.01em] text-lg text-text-pri">{t.name}</span>
+                <span className="font-medium tracking-[-0.01em] text-lg text-text-pri">{t.name}</span>
                 <span className="text-sm leading-relaxed text-text-sec">{t.description}</span>
                 <span className="mt-1 text-xs uppercase tracking-[0.08em] text-accent group-hover:text-accent-press">
                   Use template &rarr;

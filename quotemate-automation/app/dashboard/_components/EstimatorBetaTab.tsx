@@ -113,7 +113,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
         <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
           Plan take-off
         </div>
-        <h3 className="mt-2 max-w-2xl font-extrabold uppercase tracking-tight text-2xl leading-[1.05] text-text-pri sm:text-3xl">
+        <h3 className="mt-2 max-w-2xl font-normal tracking-tight text-2xl leading-[1.05] text-text-pri sm:text-3xl">
           From drawing to <span className="text-accent">counted scope</span> in two minutes
         </h3>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
@@ -242,7 +242,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-accent">
               Run history
             </div>
-            <h3 className="mt-2 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
+            <h3 className="mt-2 font-medium tracking-tight text-xl text-text-pri sm:text-2xl">
               Past analyses
             </h3>
           </div>

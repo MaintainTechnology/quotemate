@@ -1157,11 +1157,11 @@ export default function DashboardPage() {
                   href="/dashboard/aircon"
                   className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
                 >
-                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                  <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
                     AC
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
                       Air-conditioning recommender
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1189,11 +1189,11 @@ export default function DashboardPage() {
                   href="/dashboard/invites"
                   className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
                 >
-                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                  <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
                     QR
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
                       Marketing
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1208,11 +1208,11 @@ export default function DashboardPage() {
                   href="/dashboard/crm"
                   className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
                 >
-                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                  <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
                     CRM
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
                       CRM &amp; Email
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1227,11 +1227,11 @@ export default function DashboardPage() {
                   href="/dashboard/studio"
                   className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
                 >
-                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                  <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
                     STUDIO
                   </span>
                   <div className="flex-1">
-                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                    <h3 className="font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
                       Brand Studio
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -1335,55 +1335,48 @@ function Shell({
   }, [hasTopbar])
 
   return (
-    <main className="min-h-screen app-canvas text-text-pri flex flex-col">
-      {/* Film grain — kills the banding that makes flat dark UIs read as
-          cheap. Fixed + non-interactive, same treatment as the reference
-          dashboard and the marketing canvas. */}
-      <div aria-hidden="true" className="noise-overlay" />
-      <nav className="border-b border-ink-line bg-ink-deep/90 backdrop-blur-md sticky top-0 z-30">
-        {/* No `justify-between` here. That was what pushed the search field
-            into the dead centre of the bar — a marketing-site pattern. In a
-            tool the eye starts top-left and travels right, so search anchors
-            beside the brand and the action group is pushed out with
-            `ml-auto` instead. */}
-        <div
-          className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-5 h-[60px] ${
-            wide ? 'w-full' : 'mx-auto max-w-7xl'
-          }`}
+    <main className="min-h-screen text-text-pri flex flex-col">
+      {/* The reference's floating pill nav, as app chrome: a translucent
+          rounded bar inset from the viewport edge, content scrolling under
+          it (Apple: translucent chrome over content, not an opaque strip).
+          The wrapper owns the sticky offset; .qd-topbar owns the material.
+          The film-grain overlay and radial canvas glow went with the
+          warm-charcoal cockpit — the reference canvas is plain white. */}
+      <div className="qd-topbar-wrap">
+        <nav
+          aria-label="Dashboard toolbar"
+          className={`qd-topbar ${wide ? '' : 'mx-auto max-w-7xl'}`}
         >
-          <Link href="/dashboard" className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
-            <BrandMark className="h-9 w-auto sm:h-10" />
+          {/* No `justify-between` here. That was what pushed the search field
+              into the dead centre of the bar — a marketing-site pattern. In a
+              tool the eye starts top-left and travels right, so search anchors
+              beside the brand and the action group is pushed out with
+              `ml-auto` instead. */}
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 min-w-0 shrink-0 rounded-full pr-1"
+          >
+            <BrandMark className="h-8 w-auto" />
             {/* Reference lockup — mark + wordmark only. The tradie's
                 business name lives in the profile chip (top-right), not
-                here, matching the QuoteMax dashboard reference. */}
-            <span className="hidden sm:inline font-extrabold uppercase tracking-tight text-text-pri shrink-0">
-              QuoteMax
-            </span>
+                here. Sentence case at 500, as the reference sets its own. */}
+            <span className="qd-wordmark hidden sm:inline shrink-0">QuoteMax</span>
           </Link>
 
-          {/* Hairline between identity and tools. Only from lg, where the
-              anchored search sits beside it — below that the bar is too tight
-              to spend 17px on a divider. */}
-          <span aria-hidden="true" className="hidden lg:block h-6 w-px bg-ink-line shrink-0" />
-
-          {/* Search — a field-styled button (not a real input) that opens the
-              ⌘K palette. Fixed width and anchored left: a search that stretches
+          {/* Search — a pill field (not a real input) that opens the ⌘K
+              palette. Fixed width and anchored left: a search that stretches
               to fill the bar reads as the page's main job, which it isn't. */}
           {topbar && (
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="hidden lg:flex w-[320px] shrink-0 items-center gap-2.5 h-9 px-3 rounded-lg bg-ink border border-ink-line text-left transition-colors cursor-pointer hover:border-text-dim"
+              className="qd-search hidden lg:flex w-[320px] shrink-0 lg:ml-3"
               aria-label="Search quotes, customers, jobs"
               aria-haspopup="dialog"
             >
-              <Search size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-text-dim" />
-              <span className="flex-1 truncate text-[0.8rem] text-text-dim">
-                Search quotes, customers, jobs
-              </span>
-              <kbd className="shrink-0 border border-ink-line rounded-[5px] px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold text-text-dim">
-                ⌘K
-              </kbd>
+              <Search size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+              <span className="flex-1 truncate">Search quotes, customers, jobs</span>
+              <kbd className="qd-kbd shrink-0">⌘K</kbd>
             </button>
           )}
 
@@ -1398,39 +1391,36 @@ function Shell({
               onClick={() => setPaletteOpen(true)}
               aria-label="Search quotes, customers, jobs"
               aria-haspopup="dialog"
-              className="lg:hidden flex min-w-0 flex-1 items-center gap-2 h-10 px-3 rounded-lg bg-ink border border-ink-line text-left transition-colors cursor-pointer hover:border-text-dim"
+              className="qd-search lg:hidden min-w-0 flex-1"
             >
-              <Search size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-text-dim" />
-              <span className="truncate text-[0.8rem] text-text-dim">Search</span>
+              <Search size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+              <span className="truncate">Search</span>
             </button>
           )}
 
-          <div className="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* New quote — the reference topbar's primary action. Quotes are
-                drafted from customer SMS/voice, so (like the reference's own
-                goQuotes) this opens the Quotes queue rather than a manual
-                composer. Yellow fill, dark ink — never white on yellow. */}
-            {/* The one rank-1 action in the chrome. Hidden below sm: on a
-                phone it degraded to an unlabelled yellow square that read as
-                a fifth icon, and the same action already sits in the page
-                body and the mobile tab bar. A primary action with no label
-                is not a primary action. */}
+          <div className="ml-auto flex items-center gap-1.5 shrink-0">
+            {/* The one rank-1 action in the chrome — the reference's black
+                pill, brand yellow on hover. Quotes are drafted from customer
+                SMS/voice, so this opens the Quotes queue rather than a manual
+                composer. Hidden below sm: on a phone it degraded to an
+                unlabelled square that read as a fifth icon, and the same
+                action already sits in the page body and the mobile tab bar.
+                A primary action with no label is not a primary action. */}
             {topbar && (
               <button
                 type="button"
                 onClick={() => topbar.setTab('quotes')}
                 aria-label="Review queue"
-                className="hidden sm:inline-flex h-9 items-center gap-2 rounded-ctl bg-accent px-4 text-[13px] font-bold text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                className="qd-btn hidden sm:inline-flex"
               >
-                <FileText size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0" />
+                <FileText size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
                 <span>Review queue</span>
               </button>
             )}
-            {/* Bell + theme are a matched utility PAIR, so they get their own
-                tight group and a gap from the primary above. Previously they
-                sat at the same spacing as everything else, which is why the
-                right-hand end read as four unrelated controls. */}
-            <div className="flex items-center gap-0.5 sm:ml-2">
+            {/* Bell + theme are a matched utility PAIR — round icon buttons
+                in their own tight group (.qd-iconset styles the shared
+                ThemeToggle without changing it for its other callers). */}
+            <div className="qd-iconset flex items-center gap-1.5 sm:ml-1">
               {topbar && (
                 <NotificationsBell
                   quotes={topbar.quotes}
@@ -1441,10 +1431,6 @@ function Shell({
             </div>
             {showProfile ? (
               <>
-                <span
-                  aria-hidden="true"
-                  className="hidden sm:block h-6 w-px bg-ink-line mx-1"
-                />
                 <ProfileChip
                   firstName={ownerFirstName!}
                   businessName={businessName}
@@ -1461,7 +1447,7 @@ function Shell({
                 type="button"
                 onClick={onSignOut}
                 aria-label="Sign out"
-                className="inline-flex items-center gap-2 self-stretch rounded-ctl border border-ink-line px-3.5 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:bg-ink-card hover:text-text-pri"
+                className="qd-btn qd-btn--light"
               >
                 <LogOut
                   size={16}
@@ -1473,8 +1459,8 @@ function Shell({
               </button>
             )}
           </div>
-        </div>
-      </nav>
+        </nav>
+      </div>
       {topbar && (
         <CommandPalette
           open={paletteOpen}
@@ -1554,22 +1540,19 @@ function ProfileChip({
         aria-expanded={open}
         aria-haspopup="true"
         aria-label="Account menu"
-        className="flex h-11 md:h-9 items-center gap-2.5 overflow-hidden rounded-ctl border border-ink-line bg-ink-card/70 pr-2.5 transition-colors cursor-pointer hover:border-text-dim"
+        className="qd-profile flex h-11 md:h-10 items-center gap-2.5 overflow-hidden rounded-full border border-ink-line bg-ink-card pl-1 pr-3 transition-colors cursor-pointer"
       >
-        {/* Avatar — solid accent square, the same mark language as the
-            QuoteMax logo so the identity reads as part of the system. */}
-        <span
-          aria-hidden="true"
-          className="grid h-full w-11 md:w-9 shrink-0 place-items-center bg-accent font-mono text-base font-extrabold text-accent-ink"
-        >
+        {/* Avatar — a round brand-yellow disc (a FILL, so dark ink on it),
+            the reference's round-avatar language. */}
+        <span aria-hidden="true" className="qd-avatar">
           {initial}
         </span>
         <span className="hidden sm:flex min-w-0 flex-col justify-center text-left leading-tight">
-          <span className="truncate text-sm font-bold text-text-pri">
+          <span className="truncate text-sm font-medium text-text-pri">
             {firstName}
           </span>
           {subline && (
-            <span className="mt-0.5 truncate text-[0.55rem] uppercase tracking-[0.08em] text-text-dim">
+            <span className="mt-0.5 max-w-[12rem] truncate text-[0.6875rem] text-text-dim">
               {subline}
             </span>
           )}
@@ -1584,13 +1567,13 @@ function ProfileChip({
         />
       </button>
       {open && (
-        <div className="absolute right-0 top-[calc(100%+10px)] z-40 w-[min(260px,88vw)] overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card shadow-[0_16px_40px_-12px_rgba(11,9,7,0.55)]">
+        <div className="qd-pop absolute right-0 top-[calc(100%+10px)] z-40 w-[min(260px,88vw)] overflow-hidden">
           <div className="border-b border-ink-line px-4 py-3">
-            <div className="truncate text-sm font-extrabold uppercase tracking-[0.02em] text-text-pri">
+            <div className="truncate text-[15px] font-medium tracking-[-0.02em] text-text-pri">
               {firstName}
             </div>
             {businessName && (
-              <div className="mt-0.5 truncate text-[0.58rem] uppercase tracking-[0.08em] text-text-dim">
+              <div className="mt-0.5 truncate text-xs text-text-dim">
                 {businessName}
               </div>
             )}
@@ -1715,7 +1698,7 @@ function NotificationsBell({
         {pending.length > 0 && (
           <span
             aria-hidden="true"
-            className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-accent ring-2 ring-ink-deep"
+            className="absolute top-2 right-2 h-2 w-2 rounded-full bg-(--qd-brand) ring-2 ring-(--qd-canvas)"
           />
         )}
       </button>
@@ -1861,14 +1844,17 @@ function CommandPalette({
   // treatment because one control cannot have two personalities.
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink-deep/60 px-4 pt-[11vh]"
+      // `qm-dash qm-dash--portal`: the palette portals into <body>, outside
+      // the layout's .qm-dash wrapper, so it carries the kit scope itself
+      // (tokens + type) without the wrapper's canvas paint.
+      className="qm-dash qm-dash--portal fixed inset-0 z-50 flex items-start justify-center bg-(--qd-scrim) px-4 pt-[11vh]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Search quotes, customers, jobs"
     >
       <div
-        className="flex w-[min(620px,92vw)] max-h-[64vh] flex-col overflow-hidden rounded-[14px] border border-ink-line bg-ink-card edge-lit shadow-[0_24px_60px_-12px_rgba(11,9,7,0.7)]"
+        className="qd-pop flex w-[min(620px,92vw)] max-h-[64vh] flex-col overflow-hidden rounded-[20px]"
         onClick={(e) => e.stopPropagation()}
       >
         <label className="flex cursor-text items-center gap-3 border-b border-ink-line px-4 py-3.5 sm:px-5">
@@ -2163,26 +2149,30 @@ function Sidebar({
     rows: g.tabs.map((t) => byTab.get(t)).filter(Boolean) as NavItem[],
   })).filter((g) => g.rows.length > 0)
   return (
-    <aside className="hidden lg:block self-stretch border-r border-ink-line bg-ink-deep">
+    <aside className="qd-rail hidden lg:block self-stretch border-r border-ink-line">
       <nav
-        // Flush-left full-height rail (its right border is the divider). The
-        // inner nav sticks just below the 60px topbar and scrolls internally
-        // so a fully-loaded multi-trade rail never overflows the viewport.
+        // Flush-left full-height rail (its right hairline is the divider).
+        // The inner nav sticks just below the floating pill topbar (86px:
+        // its 14px inset + 60px bar + 12px gap) and scrolls internally so a
+        // fully-loaded multi-trade rail never overflows the viewport.
         // Scrollbar hidden in Firefox + Chromium.
-        className="sticky top-[61px] max-h-[calc(100vh-61px)] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="sticky top-[86px] max-h-[calc(100vh-86px)] overflow-y-auto overflow-x-hidden px-3 pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Dashboard sections"
       >
-        {/* Workspace title + collapse toggle — mirrors the reference sidebar
-            header (mono label left, panel button right). The rail folds to
-            icon-only; the button warms its border + glyph to accent on hover. */}
+        {/* Workspace title + collapse toggle. The rail folds to icon-only;
+            the toggle is the reference's round icon button. */}
         {onToggleCollapse && (
           <div
-            className={`flex items-center gap-2 px-3 pt-3 pb-1 ${
-              collapsed ? 'justify-center' : 'justify-between'
+            className={`flex items-center gap-2 pt-1 pb-3 ${
+              collapsed ? 'justify-center' : 'justify-between pl-3'
             }`}
           >
             {!collapsed && (
-              <span className=" text-[10px] font-bold uppercase tracking-[0.08em] text-text-dim">
+              <span className="qd-eyebrow">
+                <span aria-hidden="true" className="qd-eyebrow__mark">
+                  <i />
+                  <i />
+                </span>
                 Workspace
               </span>
             )}
@@ -2191,7 +2181,7 @@ function Sidebar({
               onClick={onToggleCollapse}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-ink-line text-text-sec transition-colors cursor-pointer hover:border-accent/50 hover:bg-ink-card hover:text-accent"
+              className="qd-icon-btn h-8 w-8"
             >
               {collapsed ? (
                 <PanelLeftOpen size={15} strokeWidth={1.75} aria-hidden="true" />
@@ -2202,24 +2192,16 @@ function Sidebar({
           </div>
         )}
         {visibleGroups.map((group, vi) => (
-          <div key={group.label} className={vi > 0 ? 'mt-4' : 'mt-1'}>
-            {/* Hairline between bands (rail direction 2d). The groups were
-                separated by margin alone, so "Daily", "Trades" and "Price
-                book" read as one long list and scanning the rail cost real
-                effort. A 1px rule is the cheapest way to say "new band"
-                without adding weight. Not before the first group, and not
-                when collapsed to icons — there are no headings to divide. */}
-            {vi > 0 && !collapsed && (
-              <div aria-hidden="true" className="mx-3 mb-3 h-px bg-ink-line" />
+          <div key={group.label} className={vi > 0 ? 'mt-5' : 'mt-1'}>
+            {/* Bands are separated by whitespace and a quiet uppercase label
+                — the reference's section rhythm — rather than a rule. When
+                collapsed to icons there are no headings, so a hairline
+                marks the band instead. */}
+            {vi > 0 && collapsed && (
+              <div aria-hidden="true" className="mx-2 mb-3 h-px bg-ink-line" />
             )}
-            {!collapsed && (
-              <div className="px-3 pb-1.5 pt-1">
-                <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-text-dim/80">
-                  {group.label}
-                </span>
-              </div>
-            )}
-            <ul className={`flex flex-col gap-0.5 px-2 ${collapsed ? 'py-1' : 'pb-1'}`}>
+            {!collapsed && <div className="qd-rail__group">{group.label}</div>}
+            <ul className="flex flex-col gap-0.5">
               {group.rows.map((item) => {
                 const active = item.tab === tab
                 const Icon = item.icon
@@ -2231,86 +2213,50 @@ function Sidebar({
                       title={item.label}
                       aria-label={collapsed ? item.label : undefined}
                       aria-current={active ? 'page' : undefined}
-                      style={
-                        active
-                          ? {
-                              borderColor:
-                                'color-mix(in srgb, var(--accent) 32%, var(--ink-line))',
-                            }
-                          : undefined
-                      }
-                      className={`relative w-full text-left flex items-center rounded-lg border text-sm transition-colors cursor-pointer ${
-                        collapsed
-                          ? 'justify-center px-0 py-2.5'
-                          : 'justify-between gap-3 px-[11px] py-[9px]'
-                      } ${
-                        active
-                          ? 'bg-ink-card font-bold text-text-pri'
-                          : 'border-transparent font-medium text-text-sec hover:bg-ink-card/60 hover:text-text-pri'
-                      }`}
+                      className={`qd-nav-item ${collapsed ? 'qd-nav-item--collapsed' : ''}`}
                     >
-                      {/* Left accent tick — the reference's active marker.
-                          Always painted, revealed by scaleY from its centre
-                          rather than swapped from transparent, so moving
-                          between tabs reads as one marker growing into place
-                          instead of two ticks blinking. transform-only. */}
-                      <span
+                      <Icon
+                        size={17}
+                        strokeWidth={1.6}
                         aria-hidden="true"
-                        className="absolute left-0 top-[7px] bottom-[7px] w-[2px] origin-center bg-accent motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
-                        style={{ transform: active ? 'scaleY(1)' : 'scaleY(0)' }}
+                        className="qd-nav-item__icon"
                       />
-                      <span
-                        className={
-                          collapsed
-                            ? 'flex items-center'
-                            : 'flex items-center gap-2.5 min-w-0'
-                        }
-                      >
-                        <Icon
-                          size={17}
-                          strokeWidth={1.75}
-                          aria-hidden="true"
-                          className={`shrink-0 ${active ? 'text-accent' : 'text-text-dim'}`}
-                        />
-                        {!collapsed && <span className="truncate">{item.label}</span>}
-                      </span>
-                      {/* Count chip — solid accent fill with dark ink, the
-                          reference badge treatment (never white-on-yellow). */}
+                      {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+                      {/* Count chip — a quiet paper pill; the current page
+                          is marked by the brand dot, not by colour here. */}
                       {!collapsed &&
                         typeof item.count === 'number' &&
                         item.count > 0 && (
-                          <span className="rounded-[5px] bg-accent px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-accent-ink shrink-0">
-                            {item.count}
-                          </span>
+                          <span className="qd-count">{item.count}</span>
                         )}
+                      {/* The reference marks the current page with a small
+                          brand dot. Always painted, revealed by scale so
+                          moving between tabs reads as one marker settling,
+                          not two blinking. transform-only. */}
+                      <span aria-hidden="true" className="qd-nav-item__dot" />
                     </button>
                   </li>
                 )
               })}
-              {/* Pricing Wizard — guided pricing setup, moved out of the
-                  global top nav into this Pricing-engine band so it sits
-                  with the other pricing tools instead of floating in the
-                  nav. Route link (navigates away), not an in-page tab, so
-                  it renders as an accent CTA rather than a setTab button. */}
+              {/* Pricing Wizard — guided pricing setup, kept with the other
+                  pricing tools in this band. Route link (navigates away), not
+                  an in-page tab. The spark icon carries the brand fill so it
+                  still reads as the guided entry point. */}
               {group.rows.some((r) => r.tab === 'pricing') && (
                 <li>
                   <Link
                     href="/dashboard/pricing-wizard"
                     title="Pricing wizard"
                     aria-label={collapsed ? 'Pricing wizard' : undefined}
-                    className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-sm font-medium text-accent transition-colors hover:bg-ink-card/60 ${
-                      collapsed
-                        ? 'justify-center px-0 py-2.5'
-                        : 'gap-2.5 px-[11px] py-[9px]'
-                    }`}
+                    className={`qd-nav-item ${collapsed ? 'qd-nav-item--collapsed' : ''}`}
                   >
                     <Sparkles
                       size={17}
-                      strokeWidth={1.75}
+                      strokeWidth={1.6}
                       aria-hidden="true"
-                      className="shrink-0 text-accent"
+                      className="qd-nav-item__icon"
                     />
-                    {!collapsed && <span className="truncate">Pricing wizard</span>}
+                    {!collapsed && <span className="min-w-0 flex-1 truncate">Pricing wizard</span>}
                   </Link>
                 </li>
               )}
@@ -2324,43 +2270,25 @@ function Sidebar({
             Quality Agents, etc.) via the tile grid. Single nav entry
             instead of one anchor per admin page. */}
         {isAdmin && (
-          <div className="mt-3">
-            {!collapsed && (
-              <div className="px-3 pb-1.5 pt-1">
-                <span className=" text-[9.5px] font-bold uppercase tracking-[0.08em] text-accent">
-                  Admin
-                </span>
-              </div>
-            )}
-            <ul className={`flex flex-col gap-0.5 px-2 ${collapsed ? 'py-1' : 'pb-1'}`}>
+          <div className="mt-5">
+            {!collapsed && <div className="qd-rail__group">Admin</div>}
+            <ul className="flex flex-col gap-0.5">
               <li>
                 <a
                   href="/admin"
                   title="Admin command centre"
                   aria-label={collapsed ? 'Admin command centre' : undefined}
-                  className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-sm font-medium text-text-sec transition-colors hover:bg-ink-card/60 hover:text-text-pri ${
-                    collapsed
-                      ? 'justify-center px-0 py-2.5'
-                      : 'justify-between gap-3 px-[11px] py-[9px]'
-                  }`}
+                  className={`qd-nav-item ${collapsed ? 'qd-nav-item--collapsed' : ''}`}
                 >
-                  <span
-                    className={
-                      collapsed
-                        ? 'flex items-center'
-                        : 'flex items-center gap-2.5 min-w-0'
-                    }
-                  >
-                    <Shield
-                      size={17}
-                      strokeWidth={1.75}
-                      aria-hidden="true"
-                      className="shrink-0 text-text-dim"
-                    />
-                    {!collapsed && (
-                      <span className="truncate">Admin command centre</span>
-                    )}
-                  </span>
+                  <Shield
+                    size={17}
+                    strokeWidth={1.6}
+                    aria-hidden="true"
+                    className="qd-nav-item__icon"
+                  />
+                  {!collapsed && (
+                    <span className="min-w-0 flex-1 truncate">Admin command centre</span>
+                  )}
                 </a>
               </li>
             </ul>
@@ -2385,20 +2313,17 @@ function MobileTabBar({
   const items = buildNav(quoteCount, trades)
   return (
     <nav
-      // Horizontal-scroll bar keeps all six tabs on one line on
-      // mobile (vs. wrapping to two cluttered rows). Scrollbar is
-      // hidden in both Firefox and Chromium via arbitrary utilities;
-      // the active tab is still tabbable + scrollable into view.
-      // The strip scrolls, but with the scrollbar hidden there was nothing to
-      // say so: at 375px it simply ended mid-word on "Fo…" (Follow-ups) and
-      // read as clipped rather than scrollable. A right-edge mask fades the
-      // last ~30px, which is the standard cue that content continues. It is a
-      // paint-only effect, so it costs no layout and cannot itself overflow.
-      // Sticky under the 60px topbar so switching tabs never needs a scroll up.
-      className="lg:hidden sticky top-[60px] z-20 -mx-4 sm:mx-0 flex overflow-x-auto whitespace-nowrap border-b border-ink-line bg-ink-deep/95 backdrop-blur-md [mask-image:linear-gradient(to_right,#000_calc(100%-30px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      // A horizontal strip of the reference's pill chips keeps every tab on
+      // one line on mobile instead of wrapping into rows. The scrollbar is
+      // hidden; a right-edge mask fades the last ~28px (.qd-chipbar), which
+      // is the standard cue that the strip continues. Sticky just under the
+      // floating topbar (82px: 12px inset + 60px bar + 10px gap) so
+      // switching tabs never needs a scroll back up; the translucent canvas
+      // lets content pass beneath it, like the bar above.
+      className="qd-chipbar lg:hidden sticky top-[82px] z-20 -mx-4 sm:-mx-6 bg-(--qd-nav-bg) backdrop-blur-md"
       aria-label="Dashboard sections"
     >
-      {items.map((item, i) => {
+      {items.map((item) => {
         const active = item.tab === tab
         const Icon = item.icon
         return (
@@ -2406,40 +2331,22 @@ function MobileTabBar({
             key={item.tab}
             type="button"
             onClick={() => setTab(item.tab)}
-            className={`relative shrink-0 inline-flex items-center gap-2 px-4 py-3 text-[0.7rem] uppercase tracking-[0.08em] font-bold cursor-pointer ${
- i === 0 ? 'pl-4 sm:pl-0' : ''
- } ${active ? 'text-accent' : 'text-text-dim hover:text-text-pri'}`}
+            className="qd-chip"
             aria-current={active ? 'page' : undefined}
           >
-            <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+            <Icon size={15} strokeWidth={1.6} aria-hidden="true" />
             <span>{item.label}</span>
             {typeof item.count === 'number' && item.count > 0 && (
-              <span className="ml-1 text-text-sec">({item.count})</span>
+              <span className="tabular-nums opacity-70">{item.count}</span>
             )}
-            {/* Active rule. Always painted and revealed by scaleX rather than
-                toggled via `border-b-2`, so switching tabs draws one bar out
-                from the centre instead of blinking two. transform-only, so it
-                costs no layout — and it also removes the 1px vertical jiggle
-                the old `border-b-2 … -mb-px` gave the whole strip on every
-                switch. Sits at bottom-0, INSIDE the button: the parent nav is
-                `overflow-x-auto`, which computes overflow-y to auto as well,
-                so a bar hung at -1px would be clipped or spawn a scrollbar. */}
-            <span
-              aria-hidden="true"
-              className="absolute inset-x-0 bottom-0 h-[2px] origin-center bg-accent motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
-              style={{ transform: active ? 'scaleX(1)' : 'scaleX(0)' }}
-            />
           </button>
         )
       })}
-      {/* Pricing Wizard — moved here from the top nav. Sits at the end of
-          the mobile strip, right after the pricing-engine tabs. Route
-          link (navigates to the wizard page), not a setTab tab. */}
-      <Link
-        href="/dashboard/pricing-wizard"
-        className="shrink-0 inline-flex items-center gap-2 px-4 py-3 text-[0.7rem] uppercase tracking-[0.08em] font-bold text-accent transition-colors hover:text-accent-press"
-      >
-        <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />
+      {/* Pricing Wizard — sits at the end of the strip, right after the
+          pricing tabs. Route link (navigates to the wizard page), not a
+          setTab tab. */}
+      <Link href="/dashboard/pricing-wizard" className="qd-chip">
+        <Sparkles size={15} strokeWidth={1.6} aria-hidden="true" />
         <span>Pricing wizard</span>
       </Link>
     </nav>
@@ -2557,6 +2464,26 @@ const TAB_META: Record<
   },
 }
 
+/** The sidebar band a tab lives in ("Daily", "Price book", "Business"),
+ *  shown as the page header's eyebrow so the header says where you are in
+ *  the same words as the rail. Tabs outside the bands read "Workspace". */
+function tabBand(tab: Tab): string {
+  return SIDEBAR_GROUPS.find((g) => g.tabs.includes(tab))?.label ?? 'Workspace'
+}
+
+/** The reference's badge eyebrow — two slanted bars + an uppercase label. */
+function Eyebrow({ children }: { children: ReactNode }) {
+  return (
+    <span className="qd-eyebrow">
+      <span aria-hidden="true" className="qd-eyebrow__mark">
+        <i />
+        <i />
+      </span>
+      {children}
+    </span>
+  )
+}
+
 function TabHeader({ tab }: { tab: Exclude<Tab, 'overview' | HubTab> }) {
   const meta = TAB_META[tab]
   return (
@@ -2570,14 +2497,14 @@ function TabHeader({ tab }: { tab: Exclude<Tab, 'overview' | HubTab> }) {
          ascender/descender shapes people read by — on "Historical quotes"
          at 32px that is a headline shouting a filing category.
        · mb-6 → mb-5 with tighter internal rhythm, so the header stops
-         pushing the tab's actual content below the fold on a laptop. */
-    <header className="mb-5">
-      <h1 className="font-extrabold tracking-tight text-text-pri text-[clamp(1.25rem,2.4vw,1.6rem)] leading-[1.15]">
-        {meta.title}
-      </h1>
-      <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-text-sec">
-        {meta.desc}
-      </p>
+         pushing the tab's actual content below the fold on a laptop.
+       The Atomos pass then set it as the reference's section head: an
+       eyebrow naming the rail band, a weight-400 title with tight tracking,
+       and a lead in the body grey. */
+    <header className="qd-head mb-7">
+      <Eyebrow>{tabBand(tab)}</Eyebrow>
+      <h1 className="qd-title">{meta.title}</h1>
+      <p className="qd-lead">{meta.desc}</p>
     </header>
   )
 }
@@ -2719,7 +2646,7 @@ function SectionTabs({
       role="tablist"
       aria-label="Dashboard section"
       onKeyDown={onKeyDown}
-      className="relative inline-flex gap-1 rounded-ctl edge-lit border border-ink-line bg-ink-card p-1 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
+      className="qd-tabs qd-tabs--glide motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
     >
       {/* The one moving part: a single accent pill that glides under the active
           tab. transform + width only, so it stays GPU-composited. Reduced-
@@ -2732,7 +2659,7 @@ function SectionTabs({
       {pill && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-1 top-1 left-0 rounded-[6px] bg-accent will-change-transform motion-safe:transition-[transform,width] motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
+          className="qd-tabs__pill pointer-events-none will-change-transform motion-safe:transition-[transform,width] motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
           style={{ width: pill.width, transform: `translateX(${pill.left}px)` }}
         />
       )}
@@ -2752,10 +2679,10 @@ function SectionTabs({
             tabIndex={on ? 0 : -1}
             onClick={() => onChange(s.id)}
             className={[
-              // z-10 keeps the label above the pill; the active label reads as
-              // dark-on-yellow, the rest as dim text over the bare plate.
-              'relative z-10 rounded-[6px] px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-              on ? 'text-accent-ink' : 'text-text-dim hover:text-text-sec',
+              // .qd-tab stacks the label above the gliding white plate; the
+              // active label reads in ink, the rest in the body grey.
+              'qd-tab focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+              on ? 'text-text-pri' : '',
             ].join(' ')}
           >
             {s.label}
@@ -3075,10 +3002,13 @@ function OverviewTab({
           future edit to the array cannot blank the hero. */}
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div
-          className="qm-rise rounded-card edge-lit border border-ink-line bg-ink-card px-5 py-5 sm:px-7 sm:py-6"
+          className="qm-rise qd-hero rounded-card border border-ink-line px-5 py-5 sm:px-7 sm:py-6"
           style={{ '--i': 0 } as CSSProperties}
         >
-          <div className="text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
+          {/* The reference's widget glow — a warm orange→lime wash along
+              the floor of the one figure that matters. Once per view. */}
+          <span aria-hidden="true" className="qd-glow" />
+          <div className="text-xs font-medium uppercase tracking-[0.08em] text-text-dim">
             {metrics[0]?.k} · {periodLabel(period)}
           </div>
           <div className="qm-hero-num mt-2.5 text-text-pri">{metrics[0]?.v}</div>
@@ -3117,7 +3047,7 @@ function OverviewTab({
                 {m.k}
               </div>
               <div
-                className="mt-1.5 font-mono text-[clamp(1.05rem,1.35vw,1.5rem)] font-extrabold leading-none tabular-nums"
+                className="mt-2 text-[clamp(1.25rem,1.6vw,1.75rem)] font-normal leading-none tracking-[-0.04em] tabular-nums"
                 style={{ color: m.color }}
               >
                 {m.v}
@@ -3138,17 +3068,17 @@ function OverviewTab({
       >
         {/* Recent quotes — numbered header + 5-column table */}
         <section className="min-w-0 rounded-card edge-lit overflow-hidden bg-ink-card border border-ink-line">
-          <header className="flex items-center justify-between border-b border-ink-line px-5 py-3.5">
+          <header className="flex items-center justify-between border-b border-ink-line px-5 py-4">
             <div className="flex items-baseline gap-2.5">
-              <span className="font-mono text-[13px] font-bold text-accent">01</span>
-              <h2 className=" text-xs font-bold uppercase tracking-[0.08em] text-text-pri">
+              <span className="text-[13px] font-medium tabular-nums text-text-dim">01</span>
+              <h2 className="text-base font-medium tracking-[-0.02em] text-text-pri">
                 Recent quotes
               </h2>
             </div>
             <button
               type="button"
               onClick={() => setTab('quotes')}
-              className=" text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+              className="qd-link cursor-pointer text-sm"
             >
               View all {activeQuotes} →
             </button>
@@ -3225,9 +3155,14 @@ function OverviewTab({
                       <span className="hidden text-[9px] font-bold uppercase tracking-[0.08em] text-text-dim sm:block">
                         Tool
                       </span>
+                      {/* A job's headline is text ("$8,400 inc GST", a tender
+                          name), not a bare figure, so it can outrun the 76px
+                          value column. Two lines at most, full text on hover,
+                          instead of stretching the row to four. */}
                       <span
-                        className="text-right font-mono text-[13px] font-bold tabular-nums sm:text-sm"
+                        className="line-clamp-2 text-right text-[13px] font-medium leading-snug tabular-nums sm:text-sm"
                         style={{ color: v.value ? 'var(--text-pri)' : 'var(--text-dim)' }}
+                        title={v.value ?? undefined}
                       >
                         {v.value ?? '—'}
                       </span>
@@ -3566,14 +3501,16 @@ function OverviewHeader({
     hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-      <div className="min-w-0">
+      <div className="qd-head min-w-0">
         {/* The "QuoteMax · Overview" breadcrumb was removed with direction 1b:
             the sidebar already marks the active tab, so it restated known
-            information in the one place a page has to earn attention. */}
-        <h1 className="font-extrabold tracking-tight text-text-pri text-[clamp(1.35rem,2.2vw,1.75rem)] leading-[1.15]">
+            information in the one place a page has to earn attention. The
+            eyebrow that replaces it names the band, as every tab header does. */}
+        <Eyebrow>Daily</Eyebrow>
+        <h1 className="qd-title">
           {greeting}, {firstName}
         </h1>
-        <p className="mt-1.5 max-w-xl text-sm text-text-sec">{subtitle}</p>
+        <p className="qd-lead">{subtitle}</p>
       </div>
       <div className="flex items-center gap-2.5 shrink-0">
         {/* Period filter — the reference's "This month" slot, now a live
@@ -3587,9 +3524,9 @@ function OverviewHeader({
         <button
           type="button"
           onClick={onNewQuote}
-          className="inline-flex items-center gap-2 rounded-ctl border border-ink-line bg-ink-card px-4 py-2.5 text-[13px] font-semibold text-text-pri transition-colors cursor-pointer hover:border-accent/50 hover:text-accent"
+          className="qd-btn qd-btn--light"
         >
-          <FileText size={15} strokeWidth={2} aria-hidden="true" />
+          <FileText size={15} strokeWidth={1.75} aria-hidden="true" />
           Review queue
         </button>
       </div>
@@ -3641,7 +3578,7 @@ function PeriodPicker({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Reporting period: ${periodLabel(period)}`}
-        className="inline-flex items-center gap-2 rounded-ctl border border-ink-line px-3.5 py-2 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:text-text-pri"
+        className="qd-btn qd-btn--light"
       >
         <CalendarDays
           size={14}
@@ -3660,7 +3597,7 @@ function PeriodPicker({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+8px)] z-40 min-w-[168px] overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card py-1 shadow-[0_16px_40px_-12px_rgba(11,9,7,0.55)]"
+          className="qd-pop absolute right-0 top-[calc(100%+8px)] z-40 min-w-[180px] overflow-hidden p-1.5"
         >
           {PERIODS.map((p) => {
             const active = p.key === period
@@ -3675,10 +3612,10 @@ function PeriodPicker({
                   setOpen(false)
                   btnRef.current?.focus()
                 }}
-                className={`flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left text-[0.62rem] font-bold uppercase tracking-[0.08em] transition-colors ${
+                className={`flex w-full items-center justify-between gap-3 rounded-[10px] px-3 py-2 text-left text-sm transition-colors ${
  active
- ? 'text-accent'
- : 'text-text-sec hover:bg-ink-deep/40 hover:text-text-pri'
+ ? 'bg-ink-deep text-text-pri'
+ : 'text-text-sec hover:bg-ink-deep hover:text-text-pri'
  }`}
               >
                 {p.label}
@@ -5561,7 +5498,7 @@ function ConfirmRemoveTrade({
           nothing in the real world appears out of a zero-size point. Origin
           stays centre: a modal is not anchored to a trigger. */}
       <div className="qm-panel rounded-card w-full max-w-md bg-ink-card border border-ink-line p-6 space-y-4">
-        <h3 className="font-extrabold uppercase text-lg tracking-[-0.02em]">
+        <h3 className="font-medium text-lg tracking-[-0.02em]">
           Remove {list}?
         </h3>
         <p className="text-sm text-text-sec leading-relaxed">
@@ -9331,7 +9268,7 @@ function JobQueueDetail({
               {tradeLabel} · Measure-tool estimate
               {job.createdAt ? ` · ${formatDate(job.createdAt)}` : ''}
             </div>
-            <h2 className="mt-1.5 font-extrabold uppercase leading-none tracking-tight text-text-pri text-[clamp(1.25rem,2.2vw,1.6rem)]">
+            <h2 className="mt-1.5 font-normal leading-[1.1] tracking-tight text-text-pri text-[clamp(1.25rem,2.2vw,1.6rem)]">
               {job.address ?? 'No address'}
             </h2>
             {job.href && (
@@ -9565,7 +9502,7 @@ function QuoteDetail({
               Drafted · {formatDate(q.created_at)}
               {q.channel ? ` · ${q.channel === 'voice' ? 'Voice' : 'SMS'}` : ''}
             </div>
-            <h2 className="mt-1.5 font-extrabold uppercase leading-none tracking-tight text-text-pri text-[clamp(1.25rem,2.2vw,1.6rem)]">
+            <h2 className="mt-1.5 font-normal leading-[1.1] tracking-tight text-text-pri text-[clamp(1.25rem,2.2vw,1.6rem)]">
               {customerLabel}
             </h2>
             <p className="mt-1.5 text-sm text-text-sec">
@@ -15044,7 +14981,7 @@ function FollowupTextModal({
   // so the FULL text thread is reachable and the modal never overflows.
   const overlay = (
     <div
-      className="qm-overlay fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
+      className="qm-dash qm-dash--portal qm-overlay fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
       onClick={() => { if (!sending && (text === defaultMsg || window.confirm('Discard this unsent message?'))) onClose() }}
     >
       <div
@@ -15759,7 +15696,7 @@ function ChatRailRow({
       <div className="flex items-center gap-[11px]">
         <span
           aria-hidden="true"
-          className={`inline-grid h-[34px] w-[34px] shrink-0 place-items-center border font-mono text-[13px] font-bold ${
+          className={`inline-grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border text-[13px] font-medium ${
             active
               ? 'border-transparent bg-accent text-accent-ink'
               : fallbackActive
@@ -15953,10 +15890,10 @@ function ChatThread({
               >
                 <div
                   title={`${formatDate(m.created_at)} ${formatTime(m.created_at)}`}
-                  className={`max-w-[86%] whitespace-pre-wrap break-words px-[13px] py-2.5 text-sm leading-[1.45] ${
+                  className={`max-w-[86%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-[1.45] ${
                     inbound
-                      ? 'border border-ink-line bg-ink-deep text-text-sec'
-                      : 'border border-accent/35 bg-accent/10 text-text-pri'
+                      ? 'rounded-bl-md bg-ink-deep text-text-sec'
+                      : 'rounded-br-md border border-ink-line bg-ink-card text-text-pri shadow-(--qd-shadow-chip)'
                   }`}
                 >
                   {!inbound && (
@@ -15982,13 +15919,13 @@ function ChatThread({
                 placeholder="Reply by SMS"
                 aria-label="Reply by SMS"
                 disabled={sending}
-                className="h-11 min-w-0 flex-1 border border-ink-line bg-ink px-3.5 text-sm text-text-pri outline-none transition-colors placeholder:text-text-dim focus:border-accent disabled:opacity-60"
+                className="h-11 min-w-0 flex-1 rounded-full border border-ink-line bg-ink px-4 text-sm text-text-pri outline-none transition-colors placeholder:text-text-dim focus:border-accent disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={sending || !draft.trim()}
                 aria-busy={sending}
-                className="inline-flex h-11 cursor-pointer items-center gap-2 bg-accent px-[18px] text-xs font-bold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {sending ? 'Sending…' : 'Send'}
               </button>
@@ -16115,26 +16052,21 @@ function Card({
 }) {
   const hasHeader = !!title || !!subtitle
   return (
+    // The reference's outline card: white, hairline border, 24px radius.
+    // The header is a quiet title + body-grey subtitle — the accent tick and
+    // the ALL-CAPS title went with the warm-charcoal cockpit.
     <div className="rounded-card bg-ink-card border border-ink-line">
       {hasHeader && (
-        <div className="border-b border-ink-line bg-ink-deep/35 px-4 sm:px-6 py-4 sm:py-5">
+        <div className="border-b border-ink-line px-5 sm:px-7 py-5 sm:py-6">
           {title && (
-            <div className="flex items-center gap-2.5">
-              {/* Accent tick — a small, functional brand marker that
-                  gives every card header a finished, deliberate edge. */}
-              <span
-                aria-hidden="true"
-                className="h-4 w-1 shrink-0 bg-accent"
-              />
-              <h2 className="font-extrabold uppercase text-base tracking-[-0.01em] text-text-pri">
-                {title}
-              </h2>
-            </div>
+            <h2 className="text-lg font-medium leading-snug tracking-[-0.03em] text-text-pri">
+              {title}
+            </h2>
           )}
           {subtitle && (
             <p
-              className={`text-text-sec text-sm${
-                title ? ' mt-2 pl-3.5' : ''
+              className={`max-w-3xl text-text-sec text-sm leading-relaxed${
+                title ? ' mt-1.5' : ''
               }`}
             >
               {subtitle}
@@ -16142,7 +16074,7 @@ function Card({
           )}
         </div>
       )}
-      <div className="px-4 sm:px-6 py-5 sm:py-6">{children}</div>
+      <div className="px-5 sm:px-7 py-5 sm:py-6">{children}</div>
     </div>
   )
 }
@@ -16383,7 +16315,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1] text-text-pri">
+        <h2 className="font-normal tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1] text-text-pri">
           Signage compliance
         </h2>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
@@ -16408,12 +16340,12 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
           href="/dashboard/signage"
           className="rounded-card group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
         >
-          <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">01</span>
+          <span className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-5xl">01</span>
           <div className="flex-1">
             <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
               Compliance sweep
             </div>
-            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
+            <h3 className="mt-2 font-medium tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
               Run a sweep
             </h3>
             <p className="mt-3 text-sm leading-relaxed text-text-sec">
@@ -16430,12 +16362,12 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
           href="/dashboard/signage/queue"
           className="rounded-card group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
         >
-          <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">02</span>
+          <span className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-5xl">02</span>
           <div className="flex-1">
             <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
               Human review
             </div>
-            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
+            <h3 className="mt-2 font-medium tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
               Review queue
             </h3>
             <p className="mt-3 text-sm leading-relaxed text-text-sec">
@@ -16632,14 +16564,14 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
         href="/dashboard/painting"
         className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
       >
-        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+        <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
           01
         </span>
         <div className="flex-1">
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
             Address estimate
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+          <h3 className="mt-2 font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
             Estimate a paint job
           </h3>
           <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -16844,14 +16776,14 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
         href="/dashboard/roofing/measure"
         className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
       >
-        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+        <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
           01
         </span>
         <div className="flex-1">
           <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
             Address measurement
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+          <h3 className="mt-2 font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
             Measure a roof
           </h3>
           <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -16873,14 +16805,14 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
           href="/dashboard/roofing/takeoffs"
           className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
         >
-          <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+          <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
             02
           </span>
           <div className="flex-1">
             <div className=" text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
               Plan takeoff
             </div>
-            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+            <h3 className="mt-2 font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
               Measure from plans
             </h3>
             <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -17140,11 +17072,11 @@ function JobQuoterCard({ trade }: { trade: 'electrical' | 'plumbing' }) {
       href={`/dashboard/job/${trade}`}
       className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
     >
-      <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+      <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
         {trade === 'electrical' ? 'EL' : 'PL'}
       </span>
       <div className="flex-1">
-        <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+        <h3 className="font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
           Quote {trade === 'electrical' ? 'an' : 'a'} {trade} job
         </h3>
         <p className="mt-4 text-base leading-relaxed text-text-sec">
@@ -17201,37 +17133,32 @@ function TradeHub({
       className="-mx-4 -mb-20 min-h-[calc(100dvh-4rem)] sm:-mx-6 lg:-mx-8 lg:-mt-6"
       aria-labelledby={`trade-hub-title-${trade}`}
     >
-      <header className="border-b border-ink-line bg-ink-deep px-4 pt-6 sm:px-6 sm:pt-7 lg:px-8 lg:pt-8 xl:px-10">
-        {/* Same treatment the shared TabHeader got — the trade hubs render
-            their own header, so they were missed by that pass and ended up
-            the only surfaces still opening with a breadcrumb and a 48px
-            ALL-CAPS title. "QuoteMax · Dashboard · Trades" was identical on
-            every hub and the sidebar already marks the active trade. */}
-        <h1
-          id={`trade-hub-title-${trade}`}
-          className="font-extrabold leading-[1.15] tracking-tight text-text-pri text-[clamp(1.35rem,2.6vw,1.85rem)]"
-        >
-          {label}
-        </h1>
-        <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-text-sec">
-          Everything for your {label.toLowerCase()} work in one place — quotes,{' '}
-          {hasTools ? 'tools, ' : ''}pricing, services, brands, catalogue, recipes
-          and estimating.
-        </p>
-        <dl className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-2 border-y border-ink-line py-3">
-          <div className="flex items-baseline gap-2">
-            <dt className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
-              Sections
-            </dt>
-            <dd className="font-mono text-sm font-bold tabular-nums text-text-pri">
+      <header className="px-4 pt-2 sm:px-6 lg:px-8 lg:pt-6 xl:px-10">
+        {/* The reference's section head, as every tab opens: an eyebrow
+            naming the rail band, a weight-400 title, a body-grey lead. The
+            breadcrumb and ALL-CAPS title were dropped in an earlier pass;
+            the sidebar already marks the active trade. */}
+        <div className="qd-head">
+          <Eyebrow>Trades</Eyebrow>
+          <h1 id={`trade-hub-title-${trade}`} className="qd-title">
+            {label}
+          </h1>
+          <p className="qd-lead">
+            Everything for your {label.toLowerCase()} work in one place — quotes,{' '}
+            {hasTools ? 'tools, ' : ''}pricing, services, brands, catalogue, recipes
+            and estimating.
+          </p>
+        </div>
+        <dl className="mt-5 flex flex-wrap items-center gap-2">
+          <div className="flex items-baseline gap-2 rounded-full bg-ink-deep px-3.5 py-1.5">
+            <dt className="text-[13px] text-text-dim">Sections</dt>
+            <dd className="text-[13px] font-medium tabular-nums text-text-pri">
               {String(sections.length).padStart(2, '0')}
             </dd>
           </div>
-          <div className="flex items-baseline gap-2">
-            <dt className=" text-xs font-semibold uppercase tracking-[0.08em] text-text-dim">
-              Quotes
-            </dt>
-            <dd className="font-mono text-sm font-bold tabular-nums text-text-pri">
+          <div className="flex items-baseline gap-2 rounded-full bg-ink-deep px-3.5 py-1.5">
+            <dt className="text-[13px] text-text-dim">Quotes</dt>
+            <dd className="text-[13px] font-medium tabular-nums text-text-pri">
               {String(quoteCount).padStart(2, '0')}
             </dd>
           </div>
@@ -17239,74 +17166,38 @@ function TradeHub({
 
         {/* Section filters stay as aria-pressed buttons instead of a tablist:
             the existing interaction uses normal document tab order rather
-            than roving arrow-key focus. */}
-        {/* Seven sections in a 2-column grid meant FOUR rows of buttons on a
-            phone before any content appeared. Below sm this is now one
-            horizontal line that scrolls, with the same right-edge fade the
-            dashboard tab strip and the status chips use — so every scrolling
-            rail in the product behaves identically. The negative margin lets
-            it bleed to the viewport edge, so the fade lands at the screen
-            boundary rather than inside the gutter. From sm up it wraps as
-            before, where there is room for it. */}
-        <nav
-          className="-mx-4 flex gap-2 overflow-x-auto px-4 py-4 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:[mask-image:none]"
-          aria-label={`${label} sections`}
-        >
-          {sections.map((s) => {
-            const active = s === section
-            const Icon = HUB_SECTION_ICONS[s]
-            return (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={active}
-                aria-controls={`trade-hub-panel-${trade}`}
-                onClick={() => setSection(s)}
-                // `rounded-ctl` + `shrink-0 whitespace-nowrap`.
-                //
-                // These buttons were SQUARE while every other surface in the
-                // cockpit rounds — DESIGN.md is explicit that the dashboard
-                // uses 14px cards / 9px controls and says "do not square any
-                // surface", so the section nav was the piece breaking the
-                // system, not the filter chips beneath it. Rounding it is what
-                // makes the two read as one family.
-                //
-                // They stay one RANK heavier than the filters on purpose:
-                // 44px, an icon, and a solid accent fill when active, against
-                // the filters' 34px, no icon, 10% tint. Navigation changes
-                // which surface you are on; a filter narrows the list already
-                // in front of you. Matching them exactly would flatten that.
-                className={`inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-start gap-2 whitespace-nowrap rounded-ctl border px-3.5 py-2.5 text-left text-xs font-bold uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep sm:justify-center sm:px-4 ${
- active
- ? 'border-accent bg-accent text-accent-ink'
- : 'border-ink-line bg-transparent text-text-sec hover:border-text-dim hover:bg-ink-card hover:text-text-pri'
- }`}
-              >
-                <Icon
-                  size={16}
-                  strokeWidth={1.75}
-                  aria-hidden="true"
-                  className="shrink-0"
-                />
-                <span>{HUB_SECTION_LABELS[s]}</span>
-                {s === 'quotes' && quoteCount > 0 && (
-                  <span
-                    // Rounded to match its parent button and the count chips
-                    // in the sidebar rail — it was the last square element in
-                    // the cockpit. Stays mono: it is a number.
-                    className={`rounded-[5px] border px-1.5 py-0.5 font-mono text-[0.65rem] tabular-nums ${
-                      active
-                        ? 'border-accent-ink/35 text-accent-ink'
-                        : 'border-ink-line text-text-pri'
-                    }`}
-                  >
-                    {quoteCount}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
+            than roving arrow-key focus. They sit in the reference's tab
+            track — a paper pill with a raised white chip for the active
+            section — which scrolls sideways when the sections outrun the
+            width (same right-edge fade as every scrolling rail), instead of
+            stacking into rows of buttons before any content appears. */}
+        <div className="mt-6 border-b border-ink-line pb-5">
+          <nav
+            className="qd-tabs max-w-full overflow-x-auto [mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:[mask-image:none]"
+            aria-label={`${label} sections`}
+          >
+            {sections.map((s) => {
+              const active = s === section
+              const Icon = HUB_SECTION_ICONS[s]
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  aria-pressed={active}
+                  aria-controls={`trade-hub-panel-${trade}`}
+                  onClick={() => setSection(s)}
+                  className="qd-tab shrink-0"
+                >
+                  <Icon size={15} strokeWidth={1.6} aria-hidden="true" className="shrink-0" />
+                  <span>{HUB_SECTION_LABELS[s]}</span>
+                  {s === 'quotes' && quoteCount > 0 && (
+                    <span className="qd-count bg-ink-card">{quoteCount}</span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
       </header>
 
       {/* No key and no per-switch fade (spec R3) — keying by section
@@ -17354,11 +17245,11 @@ function TradeHub({
               href="/dashboard/aircon"
               className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
             >
-              <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+              <span className="text-5xl font-normal leading-none tracking-[-0.045em] text-accent sm:text-6xl">
                 AC
               </span>
               <div className="flex-1">
-                <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                <h3 className="font-medium tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
                   Air-conditioning recommender
                 </h3>
                 <p className="mt-4 text-base leading-relaxed text-text-sec">

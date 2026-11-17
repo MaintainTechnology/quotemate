@@ -55,7 +55,7 @@ function RoofingTopologyEvidencePageInner() {
   }, [measurementId])
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
+    <main className="min-h-screen bg-(--qd-canvas) text-text-pri">
       <section className="mx-auto max-w-7xl px-6 py-14 sm:px-10 md:py-20">
         <nav className="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-dim" aria-label="Breadcrumb">
           <Link href="/dashboard" className="transition-colors hover:text-text-pri">Dashboard</Link>
@@ -72,7 +72,7 @@ function RoofingTopologyEvidencePageInner() {
             <div className="mt-9 grid gap-8 border-b border-ink-line pb-9 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
               <div>
                 <div className=" text-xs font-semibold uppercase tracking-[0.08em] text-accent">Saved roofing measurement</div>
-                <h1 className="mt-3 max-w-4xl font-extrabold uppercase leading-[0.96] tracking-[-0.04em] text-[clamp(2.5rem,5.2vw,4.5rem)]">
+                <h1 className="mt-3 max-w-4xl font-normal leading-[0.96] tracking-[-0.04em] text-[clamp(2.5rem,5.2vw,4.5rem)]">
                   Roof <span className="text-accent">topology</span> evidence
                 </h1>
               </div>

@@ -468,7 +468,7 @@ export default function PricingWizardPage() {
         <span className=" text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-text-dim">
           QuoteMax · {loaded.tenant.business_name ?? 'Tradie'}
         </span>
-        <h1 className="mt-4 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.25rem,5vw,3.5rem)]">
+        <h1 className="mt-4 font-normal leading-[1.05] tracking-[-0.035em] text-[clamp(2.25rem,5vw,3.5rem)]">
           Pricing <span className="text-accent">wizard</span>
         </h1>
         <p className="mt-5 max-w-[58ch] leading-relaxed text-text-sec">
@@ -668,7 +668,7 @@ export default function PricingWizardPage() {
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+    <main className="relative min-h-screen overflow-hidden bg-(--qd-canvas) text-text-pri">
       <nav className="relative z-10 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
           <a href="/dashboard" className="flex min-w-0 items-center gap-2.5">
@@ -742,10 +742,10 @@ function StepCard({
   return (
     <section className="rounded-card mt-8 border border-ink-line bg-ink-card">
       <header className="flex items-center gap-5 border-b border-ink-line px-6 py-5 md:px-8">
-        <span className="font-mono text-4xl font-bold leading-none text-accent md:text-5xl">
+        <span className="text-4xl font-normal leading-none tracking-[-0.045em] text-accent md:text-5xl">
           {n}
         </span>
-        <h2 className="font-extrabold uppercase tracking-tight text-lg md:text-xl">
+        <h2 className="font-medium tracking-tight text-lg md:text-xl">
           {title}
         </h2>
       </header>

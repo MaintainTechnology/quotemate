@@ -261,7 +261,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
-                <span className="font-extrabold uppercase tracking-tight text-text-pri text-xl">
+                <span className="font-medium tracking-tight text-text-pri text-xl">
                   {currentPlan
                     ? currentPlan[0].toUpperCase() + currentPlan.slice(1)
                     : 'Subscribed'}
@@ -370,7 +370,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
               }`}
             >
               <div className="flex items-center justify-between">
-                <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-lg">
+                <h3 className="font-medium tracking-tight text-text-pri text-lg">
                   {plan.name}
                 </h3>
                 {plan.featured && (
