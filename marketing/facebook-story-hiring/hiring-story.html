@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>QuoteMax Facebook story, hiring: Senior AI Engineer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   FACEBOOK STORY · HIRING. 1080 x 1920, one frame per role.
+
+   DESIGN READ: a job ad that has to work in two passes. The glance (about
+   five seconds, the time a photo story is on screen) must land the role,
+   the employer and the pay. The hold (a viewer pressing on the story to
+   read) carries the stack, the requirements and how to apply.
+
+   The frame is the SPLIT docket from ../linkedin-dockets-b and
+   ../linkedin-payment-terms, stretched to 9:16: type on its own dark
+   ground on the left, the photograph hard to the right edge. Neither side
+   is dimmed to rescue the other. builder-tablet is 1536x2752, which is
+   almost exactly 9:16, so the right column shows the whole frame.
+
+   ┌──────────────┬───────────┐ 0
+   │ (FB bar)     │           │
+   │ lockup       │           │ 250   safe line, Facebook UI above it
+   │              │  photo    │
+   │ ● NOW HIRING │  500 wide │
+   │ SENIOR       │  full     │
+   │ AI           │  height   │
+   │ ENGINEER     │           │
+   │ lead         │           │
+   ├──────────────┴───────────┤ 940   --split
+   │ PAY        │ EXPERIENCE   │       stats
+   │ THE STACK  chips          │
+   │ YOU BRING  → → →          │
+   │ [ MESSAGE US TO APPLY  → ]│ 1670  safe line, reply bar below it
+   │ quotemax.com.au           │       sign-off, may sit under the bar
+   └───────────────────────────┘ 1920
+
+   SAFE ZONES: Facebook lays its progress bar, page name and close button
+   over roughly the top 250px, and the "Send message" bar and reactions
+   over roughly the bottom 250px. Meta's guidance is to keep the top and
+   bottom 14% clear of text and logos. Nothing that has to be read sits
+   outside 250 to 1670. Only the photograph and the sign-off go there.
+   Render with ?guides=1 to see the zones drawn over the frame.
+
+   BRAND, from DESIGN.md: canvas #16120F, ONE accent #FFC400, dark ink
+   #1C1812 on every yellow fill (never white), Manrope 800 all-caps display,
+   JetBrains Mono for labels and figures, square corners, hairlines instead
+   of shadows, film grain. Australian English, no em dashes, no exclamation
+   marks, no emoji.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --canvas:#16120F; --surface:#1E1813; --card:#2B2422; --hair:#3A322C;
+  --accent:#FFC400; --on-accent:#1C1812;
+  --pri:#F6F1EA; --sec:#C3B8AC; --dim:#A2968A;
+  --W:1080px; --H:1920px;
+  --M:76px;          /* outer margin                                   */
+  --safeT:250px;     /* Facebook's top bar sits above this             */
+  --safeB:250px;     /* Facebook's reply bar sits below 1920 - this    */
+  --photoX:580px;    /* left edge of the photo column                  */
+  --gut:40px;        /* air between the type column and the photo      */
+  --split:940px;     /* where the hero ends and the details plate starts */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0908;font-family:'Manrope',sans-serif;display:flex;justify-content:center;padding:46px 0;
+  -webkit-font-smoothing:antialiased;font-feature-settings:'ss01','cv11'}
+body.one{padding:0}
+.s{position:relative;width:var(--W);height:var(--H);overflow:hidden;background:var(--canvas);color:var(--pri);flex:0 0 auto;
+  background-image:
+    radial-gradient(60% 22% at 0% 0%, rgba(110,99,84,.20), transparent 64%),
+    radial-gradient(70% 18% at 30% 100%, rgba(255,196,0,.07), transparent 62%);}
+.grain{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:.05;mix-blend-mode:soft-light}
+
+/* ── the photograph ───────────────────────────────────────────────────
+   Hard to the right edge from the top of the frame to the split. Sized by
+   height, so the whole 9:16 source shows, then centred on the builder (fx
+   in ROLES) so he, his tablet and his hard hat all sit inside the 500px
+   column. Kept bright:
+   light desaturation and one warm accent pass, the same treatment as the
+   LinkedIn sets, so this reads as the same brand in a different format. */
+.photo{position:absolute;left:var(--photoX);top:0;right:0;height:var(--split);overflow:hidden;z-index:2;
+  border-left:1px solid var(--hair)}
+.photo img{position:absolute;top:0;height:100%;width:auto;left:50%;transform:translateX(calc(var(--fx,52%) * -1));
+  filter:grayscale(.10) saturate(.97) contrast(1.04) brightness(1.02) sepia(.07)}
+.photo::after{content:"";position:absolute;inset:0;background:var(--accent);mix-blend-mode:soft-light;opacity:.11;pointer-events:none;z-index:2}
+/* Facebook draws white icons over the top right. A light scrim keeps them
+   readable against the sky without visibly darkening the photograph. */
+.photo .top{position:absolute;left:0;right:0;top:0;height:230px;z-index:3;
+  background:linear-gradient(180deg,rgba(22,18,15,.55) 0%,rgba(22,18,15,0) 100%)}
+.photo .cap{position:absolute;left:0;right:0;bottom:0;z-index:3;padding:90px 28px 26px;
+  background:linear-gradient(0deg,rgba(15,12,10,.82) 0%,rgba(15,12,10,.42) 55%,transparent 100%);
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;letter-spacing:.18em;text-transform:uppercase;color:var(--pri)}
+.photo .cap b{color:var(--accent);font-weight:700}
+
+/* ── the type column ──────────────────────────────────────────────── */
+.col{position:absolute;left:var(--M);top:calc(var(--safeT) + 16px);width:calc(var(--photoX) - var(--gut) - var(--M));
+  bottom:calc(var(--H) - var(--split));z-index:5;display:flex;flex-direction:column;padding-bottom:44px}
+.lockup{height:76px;width:auto;display:block;align-self:flex-start}
+.hook{margin-top:auto}
+.live{display:flex;align-items:center;gap:14px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:24px;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+/* A status dot is one of the two round things the brand allows. */
+.live i{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(255,196,0,.16);flex:0 0 auto}
+.title{margin-top:22px;font-weight:800;font-size:var(--title,100px);line-height:.9;letter-spacing:-.045em;text-transform:uppercase;color:var(--pri)}
+.title span{display:block;white-space:nowrap}
+.title em{color:var(--accent);font-style:normal}
+.lead{margin-top:28px;font-weight:500;font-size:29px;line-height:1.36;color:var(--sec);text-wrap:pretty}
+.lead em{color:var(--pri);font-weight:700;font-style:normal}
+
+/* ── the details plate ────────────────────────────────────────────── */
+.plate{position:absolute;left:var(--M);right:var(--M);top:var(--split);bottom:var(--safeB);z-index:5;display:flex;flex-direction:column}
+/* The split runs the full width, so the hero and the plate read as one
+   docket with a tear line, not two stacked cards. */
+.rule{position:absolute;left:0;right:0;top:var(--split);height:1px;background:var(--hair);z-index:6}
+
+/* stats: the two numbers the user asked for, set as figures, not prose */
+.stats{display:flex;border-bottom:1px solid var(--hair)}
+.stat{padding:28px 0 26px}
+/* The pay cell ends exactly where the photo column starts, so the divider
+   continues the photo's left edge down through the figures: one vertical
+   line through the frame, not two that nearly meet. */
+.stat.pay{flex:0 0 calc(var(--photoX) - var(--M))}
+.stat.exp{flex:1 1 auto;padding-left:40px;border-left:1px solid var(--hair)}
+/* nowrap is load-bearing: a figure must never wrap. If it is too wide it
+   overflows visibly and the QA pass below fails the render. */
+.stat .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:66px;line-height:.9;letter-spacing:-.05em;word-spacing:-.32em;text-transform:uppercase;white-space:nowrap}
+.stat.pay .n{color:var(--accent)}
+.stat.exp .n{color:var(--pri)}
+.stat .l{margin-top:14px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:19px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+
+.k{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:19px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+.stack{margin-top:32px}
+.chips{margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;list-style:none}
+/* Mono, in the tools' own casing, because to this audience they are code. */
+.chips li{padding:9px 16px 10px;border:1px solid var(--hair);background:var(--surface);box-shadow:inset 0 1px 0 0 rgba(255,255,255,.06);
+  font-family:'JetBrains Mono',monospace;font-weight:500;font-size:26px;line-height:1.2;color:var(--pri);white-space:nowrap}
+.chips li.ai{border-color:rgba(255,196,0,.55);color:var(--accent)}
+
+.need{margin-top:32px}
+.need ul{margin-top:10px;list-style:none}
+.need li{display:flex;gap:18px;align-items:baseline;padding:9px 0;font-weight:600;font-size:30px;line-height:1.25;color:var(--pri)}
+.need li::before{content:"\2192";font-family:'JetBrains Mono',monospace;font-weight:700;font-size:28px;color:var(--accent);flex:0 0 auto}
+
+/* The call to action is the one yellow block on the frame. Dark ink on
+   yellow, always. It is pinned to the safe line so nothing above can push
+   it under Facebook's reply bar without the QA pass catching it. */
+.cta{margin-top:auto;background:var(--accent);color:var(--on-accent);padding:22px 34px 24px;
+  display:flex;align-items:center;justify-content:space-between;gap:24px}
+.cta .say{font-weight:800;font-size:44px;line-height:1;letter-spacing:-.025em;text-transform:uppercase;white-space:nowrap}
+.cta .how{margin-top:10px;font-family:'JetBrains Mono',monospace;font-weight:600;font-size:18px;letter-spacing:.1em;text-transform:uppercase;opacity:.82;white-space:nowrap}
+.cta .go{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:54px;line-height:1}
+
+/* sign-off: below the safe line, so it is allowed to sit under the reply bar */
+.sign{position:absolute;left:var(--M);right:var(--M);top:calc(var(--H) - var(--safeB) + 34px);z-index:5;
+  display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.sign span:first-child{color:var(--pri)}
+
+/* ── review guides, only with ?guides=1. Never in the exported post. ── */
+.guide{position:absolute;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:center;
+  background:repeating-linear-gradient(135deg,rgba(255,40,40,.20) 0 14px,rgba(255,40,40,.10) 14px 28px);
+  border:2px dashed rgba(255,80,80,.9);font:700 20px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#fff;text-shadow:0 1px 3px #000}
+.guide.t{top:0;height:var(--safeT)}
+.guide.b{bottom:0;height:var(--safeB)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO = 'logo/quote-max-logo-dark.svg';
+const GRAIN = `<svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.86" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
+// {braces} lift a phrase to the accent (title) or to full-strength text (lead).
+const hl = (s) => String(s).replace(/\{([^}]+)\}/g, '<em>$1</em>');
+
+/* ════════════════════════════════════════════════════════════════════
+   ROLES. One entry per story frame. Adding a role is adding an entry;
+   render.mjs counts them from this array, so nothing else changes.
+
+   Copy rules (DESIGN.md): Australian English, no em dashes, no
+   exclamation marks, no emoji, no fluff words. Every product claim is a
+   real one: QuoteMax answers by SMS and voice, quotes in under a minute,
+   and serves Australian tradies.
+   ════════════════════════════════════════════════════════════════════ */
+const ROLES = [
+{
+  id: 'senior-ai-engineer',
+  title: ['Senior', '{AI}', 'Engineer'],
+  // At 100px ENGINEER ends 7px inside the 464px column, 47px clear of the
+  // photo. Measured, not guessed; the QA pass fails the render if it overruns.
+  titleSize: 100,
+  // 'Australian' lives in the sign-off; dropping it here keeps the lead to
+  // three lines instead of orphaning 'minute.' on a fourth.
+  lead: 'Build the AI that answers tradies’ calls and texts, and {quotes the job in under a minute}.',
+  // Pay is shown exactly as supplied. No currency code was given, so none is
+  // invented here. See README.md before posting.
+  pay: ['$3,000–$4,500', 'Per month'],
+  exp: ['5+ years', 'Experience'],
+  // The brief's stack in its own words, plus TypeScript (what the QuoteMax
+  // app is written in). 'ai' marks the chips set in the accent.
+  stack: [['Claude', 'ai'], ['Codex', 'ai'], ['AI agents', 'ai'], ['Automation', 'ai'],
+          ['JavaScript'], ['TypeScript'], ['Python'], ['REST APIs'], ['React Native'], ['Expo']],
+  needs: [
+    'LLM features shipped to real users, with evals',
+    'React Native + Expo apps in production',
+    'Clear written English. You own it end to end.',
+  ],
+  cta: ['Message us to apply', 'Send your CV + one thing you built with AI'],
+  // The photo is sized by height, so it is wider than its column. fx is the
+  // point across the source (0 to 100%) that lands in the column's centre:
+  // 52% is the builder's sternum, which keeps the tablet and the hard hat in.
+  photo: { src: 'img/builder-tablet.jpg', fx: '52%', cap: 'Who you <b>build for</b>' },
+},
+];
+
+function render(R, guides) {
+  const title = R.title.map((l) => `<span>${hl(l)}</span>`).join('');
+  const chips = R.stack.map(([t, k]) => `<li${k ? ` class="${k}"` : ''}>${t}</li>`).join('');
+  return `<div class="s" data-role="${R.id}">
+    <div class="photo"><img src="${R.photo.src}" alt="" style="--fx:${R.photo.fx}"><div class="top"></div>
+      <div class="cap">${R.photo.cap}</div></div>
+    <div class="col">
+      <img class="lockup" src="${LOGO}" alt="QuoteMax">
+      <div class="hook">
+        <div class="live"><i></i>Now hiring</div>
+        <h1 class="title" data-fit style="--title:${R.titleSize}px">${title}</h1>
+        <p class="lead">${hl(R.lead)}</p>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <div class="plate">
+      <div class="stats">
+        <div class="stat pay"><div class="n" data-fit>${R.pay[0]}</div><div class="l">${R.pay[1]}</div></div>
+        <div class="stat exp"><div class="n" data-fit>${R.exp[0]}</div><div class="l">${R.exp[1]}</div></div>
+      </div>
+      <div class="stack"><div class="k">The stack</div><ul class="chips">${chips}</ul></div>
+      <div class="need"><div class="k">You bring</div><ul>${R.needs.map((n) => `<li data-fit>${n}</li>`).join('')}</ul></div>
+      <div class="cta"><div><div class="say" data-fit>${R.cta[0]}</div><div class="how" data-fit>${R.cta[1]}</div></div><div class="go">&rarr;</div></div>
+    </div>
+    <div class="sign"><span>quotemax.com.au</span><span>AI quoting for Australian tradies</span></div>
+    ${guides ? '<div class="guide t">FACEBOOK UI · KEEP CLEAR</div><div class="guide b">REPLY BAR · KEEP CLEAR</div>' : ''}
+    ${GRAIN}
+  </div>`;
+}
+
+/* QA, run by render.mjs before every shot and readable at window.__qa.
+   Fails on: a line wider than its box, readable content outside the safe
+   zones, text crossing into the photo column, a photo or font that did not
+   load. Looking at the PNG is still the final check; this catches the
+   regressions that are easy to miss by eye. */
+async function qa() {
+  await document.fonts.ready;
+  await Promise.all([...document.images].map((im) => (im.complete ? 1 : new Promise((r) => { im.onload = im.onerror = r; }))));
+  const issues = [];
+  const frame = document.querySelector('.s').getBoundingClientRect();
+  const rel = (el) => { const r = el.getBoundingClientRect(); return { l: r.left - frame.left, r: r.right - frame.left, t: r.top - frame.top, b: r.bottom - frame.top }; };
+  const W = 1080, H = 1920, M = 76, safeT = 250, safeB = H - 250, photoX = 580;
+  if (!document.fonts.check('800 40px Manrope')) issues.push('Manrope 800 did not load');
+  if (!document.fonts.check('700 20px "JetBrains Mono"')) issues.push('JetBrains Mono 700 did not load');
+  for (const im of document.images) if (!im.naturalWidth) issues.push(`image failed: ${im.getAttribute('src')}`);
+  for (const el of document.querySelectorAll('[data-fit]')) {
+    if (el.scrollWidth > el.clientWidth + 1) issues.push(`overflows its box by ${el.scrollWidth - el.clientWidth}px: "${el.textContent.trim()}"`);
+    for (const span of el.children.length ? el.children : [el]) {
+      // measure the ink, not the block: a Range hugs the glyphs
+      const range = document.createRange(); range.selectNodeContents(span);
+      const g = range.getBoundingClientRect();
+      const right = g.right - frame.left;
+      const limit = el.closest('.col') ? photoX - 1 : W - M + 1;
+      if (right > limit) issues.push(`runs past x=${limit} (to ${Math.round(right)}): "${span.textContent.trim()}"`);
+    }
+  }
+  // Everything readable lives between the safe lines.
+  for (const sel of ['.lockup', '.live', '.title', '.lead', '.stats', '.stack', '.need', '.cta']) {
+    const r = rel(document.querySelector(sel));
+    if (r.t < safeT - 1) issues.push(`${sel} starts at y=${Math.round(r.t)}, above the ${safeT}px safe line`);
+    if (r.b > safeB + 1) issues.push(`${sel} ends at y=${Math.round(r.b)}, below the ${safeB}px safe line`);
+  }
+  const ph = rel(document.querySelector('.photo')), pi = rel(document.querySelector('.photo img'));
+  if (pi.l > ph.l + 1 || pi.r < ph.r - 1 || pi.b < ph.b - 1) issues.push('photo does not cover its column');
+  // Nothing in the plate may collide with the next block.
+  const order = ['.stats', '.stack', '.need', '.cta'].map((s) => rel(document.querySelector(s)));
+  for (let i = 1; i < order.length; i++) if (order[i].t < order[i - 1].b) issues.push(`plate blocks overlap at y=${Math.round(order[i].t)}`);
+  const lines = [...document.querySelectorAll('.title span')].length;
+  window.__qa = { ok: issues.length === 0, issues, cta: rel(document.querySelector('.cta')), lead: rel(document.querySelector('.lead')), title: rel(document.querySelector('.title')), lines };
+  return window.__qa;
+}
+
+const q = new URLSearchParams(location.search);
+const one = q.get('r');
+const guides = q.get('guides') === '1';
+if (one !== null) {
+  document.body.classList.add('one');
+  document.getElementById('app').innerHTML = render(ROLES[Number(one)], guides);
+} else {
+  document.getElementById('app').outerHTML = ROLES.map((R) => render(R, guides)).join('');
+}
+window.__ready = qa();
+</script>
+</body>
+</html>
